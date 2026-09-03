@@ -1,0 +1,58 @@
+{% extends "admin/base.html" %}{% block title %}{{ post.title if post and post.id else 'New ' ~ pt.name }}{% endblock %}
+{% block content %}
+<h1>{% if post and post.id %}Edit: {{ post.title }}{% else %}New {{ pt.name }}{% endif %}</h1>
+{% if errors %}<div class="error"><strong>Not saved.</strong><ul>{% for k, v in errors.items() %}<li><code>{{ k }}</code>: {{ v if v is string else v|join('; ') }}</li>{% endfor %}</ul></div>{% endif %}
+{% set p = post or {} %}
+{% set meta = p.meta or {} %}{% set seo = p.seo or {} %}
+<form method="post" class="grid">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div>
+    <div class="card">
+      <label>Title <input type="text" name="title" value="{{ p.title or '' }}" required></label>
+      <label>Slug <small>(leave empty to generate from the title)</small> <input type="text" name="slug" value="{{ p.slug or '' }}"></label>
+      <label>Excerpt <small>(used as the meta description and in lists)</small> <textarea name="excerpt">{{ p.excerpt or '' }}</textarea></label>
+      {% for f in pt.field_schema or [] %}
+        <label>{{ f.label }}{% if f.required %} *{% endif %}
+        {% set v = meta.get(f.key) %}
+        {% if f.type == 'textarea' %}<textarea name="meta_{{ f.key }}">{{ v or '' }}</textarea>
+        {% elif f.type == 'json' %}<textarea name="meta_{{ f.key }}" class="code" style="min-height:6rem">{{ v|tojson(indent=2) if v is not none and v is not string else (v or '') }}</textarea>
+        {% elif f.type == 'media' %}<select name="meta_{{ f.key }}"><option value="">— none —</option>{% for m in media %}<option value="{{ m.id }}" {{ 'selected' if v|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select>
+        {% elif f.type == 'number' %}<input type="number" step="any" name="meta_{{ f.key }}" value="{{ v if v is not none else '' }}">
+        {% elif f.type == 'date' %}<input type="date" name="meta_{{ f.key }}" value="{{ v or '' }}">
+        {% elif f.type == 'url' %}<input type="url" name="meta_{{ f.key }}" value="{{ v or '' }}">
+        {% else %}<input type="text" name="meta_{{ f.key }}" value="{{ v or '' }}">{% endif %}
+        </label>
+      {% endfor %}
+    </div>
+    <div class="card">
+      <label>Content blocks <small>(JSON list of {"type", "data"}; see the block reference on the right)</small>
+      <textarea name="blocks" class="code">{{ p.blocks_text if p.blocks_text is defined else blocks_json }}</textarea></label>
+    </div>
+    <div class="card">
+      <details><summary>SEO overrides</summary>
+        {% for k in seo_keys %}<label>{{ k }} <input type="text" name="seo_{{ k }}" value="{{ seo.get(k, '') }}"></label>{% endfor %}
+        <small>robots e.g. <code>noindex,follow</code>; og_image is a full image URL.</small>
+      </details>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <label>Status <select name="status">{% for s in ('draft','published') %}<option value="{{ s }}" {{ 'selected' if (p.status or 'draft')==s }}>{{ s }}</option>{% endfor %}</select></label>
+      <label>Publish date <small>(empty = now when published; future = scheduled)</small> <input type="datetime-local" name="published_at" value="{{ (p.published_at or '')[:16] }}"></label>
+      {% if pt.hierarchical %}<label>Parent <select name="parent_id"><option value="">— top level —</option>{% for par in parents %}<option value="{{ par.id }}" {{ 'selected' if p.parent_id|string == par.id|string }}>{{ par.title }}</option>{% endfor %}</select></label>{% endif %}
+      <label>Menu order <input type="number" name="menu_order" value="{{ p.menu_order or 0 }}"></label>
+      <label>Featured image <select name="featured_media_id"><option value="">— none —</option>{% for m in media if m.mime.startswith('image/') %}<option value="{{ m.id }}" {{ 'selected' if p.featured_media_id|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select></label>
+      {% for tax in taxonomies %}<label>{{ tax.name }}</label>{% for t in tax.terms|sort(attribute='name') %}<div><label class="inline" style="font-weight:400"><input type="checkbox" name="terms" value="{{ t.id }}" {{ 'checked' if t.id in term_ids }}> {{ t.name }}</label></div>{% else %}<small>No terms yet — add them via the API or Supabase Studio.</small>{% endfor %}{% endfor %}
+      <p style="margin-top:1rem"><button type="submit">Save</button>
+      {% if p.id %}<a class="btn secondary" href="{{ p.path }}" target="_blank">View</a>{% endif %}</p>
+    </div>
+    {% if p.id and admin_user.role == 'admin' %}
+    <form method="post" action="{{ url_for('admin_ui.delete_post', pk=p.id) }}" onsubmit="return confirm('Delete this permanently?')" class="card" style="text-align:right"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="danger">Delete</button></form>
+    {% endif %}
+    <div class="card"><details><summary>Block reference</summary>
+      {% for name, (req, opt) in blocks.items() %}<p><code>{{ name }}</code><br><small>required: {{ req|join(', ') or '—' }}<br>optional: {{ opt|join(', ') or '—' }}</small></p>{% endfor %}
+      <small>Example: <code>[{"type":"hero","data":{"heading":"NAS"}},{"type":"rich_text","data":{"html":"&lt;p&gt;…&lt;/p&gt;"}}]</code></small>
+    </details></div>
+  </div>
+</form>
+{% endblock %}

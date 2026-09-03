@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap">
+  {% if crumbs|length > 1 %}<nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav>{% endif %}
+  <div class="page-head"><h1 class="page-title">{{ title or site.name }}</h1>{% if description %}<p class="lead">{{ description }}</p>{% endif %}</div>
+  <section class="section" style="padding-top:1.5rem">
+    <div class="cards">
+      {% for p in posts %}<a class="card" href="{{ p.path }}">{% if p.post_type.slug == 'post' and p.published_at %}<span class="date">{{ p.published_at[:10] }}</span>{% endif %}<h3>{{ p.title }}</h3>{% if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}</a>
+      {% else %}<p class="lead">Nothing published here yet.</p>{% endfor %}
+    </div>
+    {% if page > 1 or has_next %}<nav class="pagination" aria-label="Pages">
+      {% if page > 1 %}<a class="btn ghost" rel="prev" href="?page={{ page - 1 }}">Previous</a>{% endif %}
+      {% if has_next %}<a class="btn" rel="next" href="?page={{ page + 1 }}">Next</a>{% endif %}
+    </nav>{% endif %}
+  </section>
+</div>
+{% endblock %}

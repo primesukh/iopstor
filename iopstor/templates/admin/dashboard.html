@@ -1,0 +1,9 @@
+{% extends "admin/base.html" %}{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="cards">
+  {% for t in post_types %}<div class="card"><h3>{{ t.name }}</h3><p><strong>{{ counts[t.slug] }}</strong> items</p>
+    <p><a class="btn" href="{{ url_for('admin_ui.new_post', type=t.slug) }}">+ New</a> <a class="btn secondary" href="{{ url_for('admin_ui.posts', type=t.slug) }}">List</a></p></div>{% endfor %}
+  <div class="card"><h3>Leads</h3><p><strong>{{ new_leads }}</strong> new</p><p><a class="btn secondary" href="{{ url_for('admin_ui.leads', status='new') }}">Open</a></p></div>
+</div>
+{% endblock %}

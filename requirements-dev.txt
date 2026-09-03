@@ -1,0 +1,7 @@
+-r requirements.txt
+-i https://pypi.org/simple
+iniconfig==2.3.0; python_version >= '3.10'
+packaging==26.3; python_version >= '3.9'
+pluggy==1.6.0; python_version >= '3.9'
+pygments==2.21.0; python_version >= '3.9'
+pytest==9.1.1; python_version >= '3.10'

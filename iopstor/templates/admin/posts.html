@@ -1,0 +1,22 @@
+{% extends "admin/base.html" %}{% block title %}{{ current_type.name if current_type else 'All content' }}{% endblock %}
+{% block content %}
+<h1>{{ current_type.name if current_type else 'All content' }} <small>{{ result.total }}</small></h1>
+<form method="get" class="card toolbar">
+  {% if current_type %}<input type="hidden" name="type" value="{{ current_type.slug }}">{% endif %}
+  <div><label>Search <input type="text" name="q" value="{{ request.args.get('q','') }}"></label></div>
+  <div><label>Status <select name="status"><option value="">any</option>{% for s in ('draft','published') %}<option value="{{ s }}" {{ 'selected' if request.args.get('status')==s }}>{{ s }}</option>{% endfor %}</select></label></div>
+  <div><button type="submit" class="secondary">Filter</button></div>
+  <span class="spacer"></span>
+  {% if current_type %}<div><a class="btn" href="{{ url_for('admin_ui.new_post', type=current_type.slug) }}">+ New {{ current_type.name }}</a></div>{% endif %}
+</form>
+<table>
+  <tr><th>Title</th>{% if not current_type %}<th>Type</th>{% endif %}<th>Path</th><th>Status</th><th>Updated</th></tr>
+  {% for p in result['items'] %}
+  <tr><td><a href="{{ url_for('admin_ui.edit_post', pk=p.id) }}">{{ p.title }}</a></td>{% if not current_type %}<td>{{ p.post_type.name }}</td>{% endif %}
+      <td><a href="{{ p.path }}" target="_blank" class="muted">{{ p.path }}</a></td>
+      <td><span class="pill {{ p.status }}">{{ p.status }}</span></td><td><small>{{ p.updated_at[:16].replace('T',' ') }}</small></td></tr>
+  {% else %}<tr><td colspan="5" class="muted">Nothing here yet.</td></tr>{% endfor %}
+</table>
+<p>{% if page > 1 %}<a class="btn secondary" href="?{{ request.query_string.decode() | replace('page='~page, '') }}&page={{ page-1 }}">Previous</a>{% endif %}
+   {% if has_next %}<a class="btn secondary" href="?{{ request.query_string.decode() | replace('page='~page, '') }}&page={{ page+1 }}">Next</a>{% endif %}</p>
+{% endblock %}
