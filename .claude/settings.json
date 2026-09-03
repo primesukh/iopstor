@@ -9,7 +9,10 @@
       "Bash(pipenv run flask*)",
       "Bash(pipenv run dev*)",
       "Bash(pipenv run test*)",
-      "Bash(pipenv requirements*)"
+      "Bash(pipenv requirements*)",
+      "Bash(graphify query*)",
+      "Bash(graphify path*)",
+      "Bash(graphify explain*)"
     ]
   }
 }
