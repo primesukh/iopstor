@@ -1,0 +1,13 @@
+.git
+.venv
+.env
+.pytest_cache
+__pycache__
+*.pyc
+instance
+media
+tests
+graphify-out
+website_assets
+.claude
+.vscode

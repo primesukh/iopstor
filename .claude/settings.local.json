@@ -1,3 +1,11 @@
 {
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:supabase.com)",
+      "WebFetch(domain:github.com)",
+      "WebSearch"
+    ]
+  },
   "spinnerTipsEnabled": false
 }

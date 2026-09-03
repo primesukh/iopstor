@@ -1,5 +1,15 @@
 {
   "enabledPlugins": {
     "ponytail@ponytail": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(pipenv install*)",
+      "Bash(pipenv run pytest*)",
+      "Bash(pipenv run flask*)",
+      "Bash(pipenv run dev*)",
+      "Bash(pipenv run test*)",
+      "Bash(pipenv requirements*)"
+    ]
   }
 }

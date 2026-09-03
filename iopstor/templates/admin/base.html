@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{% block title %}Admin{% endblock %} · IOPSTOR</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body class="admin">
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="{{ url_for('admin_ui.dashboard') }}">IOPSTOR <span class="brand-tag">admin</span></a>
+    {% if admin_user %}
+    <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
+    <label for="nav-toggle" class="nav-toggle-label" aria-label="Menu">&#9776;</label>
+    <nav class="site-nav" aria-label="Admin">
+      <ul>
+        <li><a href="{{ url_for('admin_ui.posts') }}">Content</a><ul>{% for t in post_types %}<li><a href="{{ url_for('admin_ui.posts', type=t.slug) }}">{{ t.name }}</a></li>{% endfor %}</ul></li>
+        <li><a href="{{ url_for('admin_ui.media') }}">Media</a></li>
+        <li><a href="{{ url_for('admin_ui.leads') }}">Leads</a></li>
+        {% if admin_user.role == 'admin' %}<li><a href="{{ url_for('admin_ui.settings') }}">Settings</a></li><li><a href="{{ url_for('admin_ui.users') }}">Users</a></li>{% endif %}
+        <li><a href="/" target="_blank" rel="noopener">View site &#8599;</a></li>
+        <li class="nav-user"><a href="{{ url_for('admin_ui.logout') }}">Log out <small>{{ admin_user.email }}</small></a></li>
+      </ul>
+    </nav>
+    {% endif %}
+  </div>
+</header>
+<main id="main" class="wrap admin-main">
+  {% for m in get_flashed_messages() %}<div class="flash">{{ m }}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>
