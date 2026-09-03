@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+{% set pt = post.post_type %}{% set meta_ = post.meta or {} %}
+{% set has_hero = post.blocks and post.blocks[0].type == 'hero' %}
+{% if crumbs|length > 1 %}<div class="wrap"><nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav></div>{% endif %}
+<article>
+  {% if not has_hero %}
+  <div class="wrap page-head">
+    <h1 class="page-title">{{ post.title }}</h1>
+    {% if post.excerpt %}<p class="lead">{{ post.excerpt }}</p>{% endif %}
+    {% if pt.slug == 'post' and post.published_at %}<p class="post-meta"><time datetime="{{ post.published_at }}">{{ post.published_at[:10] }}</time></p>{% endif %}
+    {% if post.featured_media %}<img class="featured" src="{{ post.featured_media.url }}" alt="{{ post.featured_media.alt or post.title }}">{% endif %}
+  </div>
+  {% endif %}
+  {% set fields = (pt.field_schema or [])|selectattr('key', 'in', meta_)|list %}
+  {% set simple = fields|rejectattr('type', 'equalto', 'json')|list %}
+  {% if simple %}<div class="wrap"><dl class="details">{% for f in simple if meta_[f.key] not in (none, '', [], {}) %}
+    <div><dt>{{ f.label }}</dt><dd>{% if f.type == 'media' %}<a href="{{ media_url(meta_[f.key]) }}" target="_blank" rel="noopener">Download</a>{% elif f.type == 'url' %}<a href="{{ meta_[f.key] }}" rel="noopener">{{ meta_[f.key] }}</a>{% elif f.key == 'price' %}{{ meta_.get('currency', 'INR') }} {{ '{:,.0f}'.format(meta_[f.key]|float) if meta_[f.key] is number else meta_[f.key] }}{% else %}{{ meta_[f.key] }}{% endif %}</dd></div>
+  {% endfor %}</dl>
+  {% if pt.slug == 'product' %}<p><a class="btn" href="/contact-us?product={{ post.slug }}">Request a quote</a></p>{% endif %}</div>{% endif %}
+  {{ render_blocks(post.blocks or []) }}
+  {% for f in fields if f.type == 'json' and meta_[f.key] is mapping and meta_[f.key] %}
+  <div class="wrap"><table class="specs"><caption>{{ f.label }}</caption><tbody>{% for k, v in meta_[f.key].items() %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}</tbody></table></div>
+  {% endfor %}
+  {% if children %}
+  <section class="section"><div class="wrap">
+    <h2 class="section-title">{{ post.title }} solutions</h2>
+    <div class="cards">{% for c in children %}<a class="card" href="{{ c.path }}"><h3>{{ c.title }}</h3>{% if c.excerpt %}<p>{{ c.excerpt }}</p>{% endif %}</a>{% endfor %}</div>
+  </div></section>
+  {% endif %}
+  {% if post.terms %}<div class="wrap"><p class="terms">{% for t in post.terms %}<a href="/{{ t.taxonomy.slug }}/{{ t.slug }}">{{ t.name }}</a>{% endfor %}</p></div>{% endif %}
+</article>
+{% endblock %}

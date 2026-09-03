@@ -1,0 +1,12 @@
+{% extends "admin/base.html" %}{% block title %}Log in{% endblock %}
+{% block content %}
+<div class="card login-card">
+  <h1>Log in</h1>
+  <p class="muted">Use your Supabase Auth email and password.</p>
+  <form method="post">
+    <label>Email <input type="email" name="email" required autofocus></label>
+    <label>Password <input type="password" name="password" required></label>
+    <p style="margin-top:1.25rem"><button type="submit">Log in</button></p>
+  </form>
+</div>
+{% endblock %}

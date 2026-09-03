@@ -1,0 +1,18 @@
+{% extends "admin/base.html" %}{% block title %}Users{% endblock %}
+{% block content %}
+<h1>Users</h1>
+<table>
+  <tr><th>Email</th><th>Name</th><th>Role</th><th></th></tr>
+  {% for u in users %}<tr><td>{{ u.email }}</td><td>{{ u.name }}</td><td>{{ u.role }}</td>
+    <td>{% if u.id != admin_user.id %}<form method="post" action="{{ url_for('admin_ui.user_delete', pk=u.id) }}" onsubmit="return confirm('Remove this user?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="secondary">Remove</button></form>{% endif %}</td></tr>{% endfor %}
+</table>
+<h2>Add a user</h2>
+<form method="post" class="card" style="max-width:520px">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label>Email <input type="email" name="email" required></label>
+  <label>Name <input type="text" name="name"></label>
+  <label>Password <input type="password" name="password" required minlength="8"></label>
+  <label>Role <select name="role"><option value="editor">editor (create and edit content)</option><option value="admin">admin (everything, incl. delete, settings, users)</option></select></label>
+  <p><button type="submit">Create login</button></p>
+</form>
+{% endblock %}

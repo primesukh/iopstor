@@ -1,0 +1,10 @@
+{% extends "admin/base.html" %}{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Site settings</h1>
+<form method="post" class="card" style="max-width:720px">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% for k in keys %}<label>{{ k.replace('_',' ') }}{% if k in ('social_links','address','robots_extra') %}<textarea name="{{ k }}">{{ s.get(k) or '' }}</textarea>{% else %}<input type="text" name="{{ k }}" value="{{ s.get(k) or '' }}">{% endif %}</label>{% endfor %}
+  <small>social_links: one URL per line. robots_extra: extra lines appended to robots.txt.</small>
+  <p><button type="submit">Save</button></p>
+</form>
+{% endblock %}

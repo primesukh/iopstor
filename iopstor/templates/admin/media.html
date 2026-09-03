@@ -1,0 +1,20 @@
+{% extends "admin/base.html" %}{% block title %}Media{% endblock %}
+{% block content %}
+<h1>Media <small>{{ result.total }}</small></h1>
+<form method="post" enctype="multipart/form-data" class="card toolbar">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div><label>File <small>(jpg, png, webp, gif, svg, pdf)</small> <input type="file" name="file" required></label></div>
+  <div style="flex:1"><label>Alt text <input type="text" name="alt"></label></div>
+  <div><button type="submit">Upload</button></div>
+</form>
+<div class="cards">
+{% for m in result['items'] %}
+  <div class="card">
+    {% if m.mime.startswith('image/') %}<a href="{{ m.url }}" target="_blank"><img src="{{ m.url }}" alt="{{ m.alt }}" style="max-width:100%;max-height:120px"></a>{% else %}<a href="{{ m.url }}" target="_blank">{{ m.mime }}</a>{% endif %}
+    <p><strong>#{{ m.id }}</strong> {{ m.filename }}<br><small>{{ (m.size/1024)|round(1) }} KB · {{ m.alt or 'no alt' }}</small></p>
+    <form method="post" action="{{ url_for('admin_ui.media_delete', pk=m.id) }}" onsubmit="return confirm('Delete this file?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="secondary">Delete</button></form>
+  </div>
+{% else %}<p class="muted">No uploads yet.</p>{% endfor %}
+</div>
+<p>{% if page > 1 %}<a class="btn secondary" href="?page={{ page-1 }}">Previous</a>{% endif %} {% if has_next %}<a class="btn secondary" href="?page={{ page+1 }}">Next</a>{% endif %}</p>
+{% endblock %}
