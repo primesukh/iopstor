@@ -3,6 +3,7 @@
 WordPress + Elementor-Pro-style CMS in Python Flask for IOPSTOR (software-defined storage / cloud / HCI vendor).
 Phase 1 = backend + a basic theme: one stylesheet (`iopstor/static/site.css`), block templates rendered as full-width sections, a browser admin at `/admin`. The drag-and-drop page builder is still to come (blocks are edited as JSON in the admin).
 Client requirements: `.claude/docs/requirements.md`. Architecture spec: `.claude/docs/design.md`.
+Living documentation: `docs/TECHNICAL.md` (developers) and `docs/NON-TECHNICAL.md` (editors) — **both are updated with every feature**.
 
 ## Stack
 
@@ -36,6 +37,7 @@ iopstor/static/site.css  the whole public theme: CSS variables at the top, heade
 iopstor/static/admin.css admin-only rules (tables, forms, pills) layered on site.css so /admin shares the theme
 migrations/              0000_bootstrap.sql (run once by hand in Studio) + NNNN_name.sql applied by `flask migrate` through the apply_migration RPC
 tests/                   pytest: test_offline.py always; the rest run against the Supabase in .env and skip without it
+docs/                    TECHNICAL.md + NON-TECHNICAL.md — the two docs every change keeps current
 ```
 
 ## Commands
@@ -48,6 +50,43 @@ pipenv run flask seed                       # idempotent site-map seed (post typ
 pipenv run flask create-admin EMAIL PASS    # Supabase Auth user + CMS admin row
 pipenv run pytest
 ```
+
+## Workflow (non-negotiable)
+
+**1. Explore with graphify first, then grep.**
+Before answering an architecture question or touching an unfamiliar area, query the knowledge graph — it is already built at `graphify-out/graph.json`:
+
+```
+graphify query "<question>"          # BFS traversal, broad context
+graphify path "AuthModule" "db.py"   # shortest path between two concepts
+graphify explain "apply_post"        # plain-language explanation of one node
+```
+
+The graph gives the shape: which modules connect, which communities a symbol bridges, where the god nodes are (`table()`, `require_role()`, `one()`, `apply_post()`, `render_blocks()`). *Then* grep and read the actual files to confirm the detail — the graph is the map, the source is the territory. Never skip straight to grep on a question the graph can answer, and never trust the graph alone for a claim you are about to write down.
+
+**Never rebuild the graph during feature work.** The graph is refreshed at merge time only — see rule 2. A branch may be abandoned or reworked, so indexing it mid-flight burns tokens on a shape that may never reach `main`. Query a slightly stale graph, then confirm against source; that is what step 1 is for.
+
+**2. Every feature goes on its own branch and PR. Never merge without being told.**
+
+```
+git checkout -b <type>/<short-name>    # feat/, fix/, docs/, chore/
+# ... work, commit ...
+git push -u origin <branch>            # then open the PR
+```
+
+Open the PR and **stop there**. Do not merge, do not squash, do not push to `main` — even when tests pass and the work is obviously finished. Merging happens only when the user explicitly says so, on that specific PR. `gh` is not installed on this machine; PRs go through the GitHub API using the existing git credential.
+
+**Rebuild the graph as the last step of a merge, and only then:**
+
+```
+git checkout main && git pull        # after the PR is merged
+/graphify . --update                 # re-extract only new/changed files
+```
+
+So the full order is: branch → work → both docs → push → open PR → **stop**. Then, once the user says merge: merge → pull `main` → `/graphify . --update`. The graph therefore always describes what is on `main`, never a half-finished branch.
+
+**3. Every feature updates both docs, in the same PR.**
+`docs/TECHNICAL.md` for developers (modules, schema, endpoints, contracts, ceilings) and `docs/NON-TECHNICAL.md` for editors (what it does, in plain English, no jargon). A feature is not finished until both reflect it. If a change genuinely affects only one audience, say so in the PR body rather than silently skipping the other.
 
 ## Hard rules
 
