@@ -1,0 +1,325 @@
+# IOPSTOR CMS — Technical Documentation
+
+A WordPress-shaped CMS for IOPSTOR (software-defined storage / cloud / HCI), written in Flask on top of a self-hosted Supabase.
+
+Companion documents: [NON-TECHNICAL.md](NON-TECHNICAL.md) for editors, [`.claude/docs/design.md`](../.claude/docs/design.md) for the architecture spec, [`.claude/docs/requirements.md`](../.claude/docs/requirements.md) for the client brief.
+
+---
+
+## 1. Stack and constraints
+
+| | |
+|---|---|
+| Language | Python 3.13 |
+| Web | Flask 3.1, gunicorn, Jinja2 |
+| Data / Auth / Files | Self-hosted **Supabase** via **supabase-py 2.x** — PostgREST, GoTrue, Storage, all through the Kong gateway |
+| Tokens | PyJWT (local HS256 verification) |
+| Packaging | pipenv (`Pipfile` + `Pipfile.lock`); `requirements*.txt` are generated from the lock and are what Docker installs |
+| Tests | pytest |
+| Deploy | Dokploy, Dockerfile + gunicorn |
+
+Three constraints shape everything below:
+
+1. **Supabase is the only backend, reached only through Kong.** No `DATABASE_URL`, no psycopg, no SQLAlchemy, no ORM. Rows are plain dicts.
+2. **Content types are rows, not code.** Adding "Job Openings" is a `post_types` row, not a table and not a model class.
+3. **Ponytail mode.** Fewest files, stdlib first, deliberate ceilings marked with `# ponytail:` comments.
+
+---
+
+## 2. Module map
+
+```
+iopstor/__init__.py   create_app(), /healthz, blueprint + CLI registration, Jinja globals.
+                      Refuses to start without SUPABASE_URL, both keys and the JWT secret.
+iopstor/config.py     env → Flask config. A plain module, not a class.
+iopstor/db.py         supabase-py clients + every query helper. The single data-access seam.
+iopstor/auth.py       GoTrue login/refresh/logout, verify_jwt(), require_role(), create_auth_user()
+iopstor/storage.py    save_upload() / delete_media() → Supabase Storage bucket + media table
+iopstor/blocks.py     BLOCKS registry, validate_blocks(), render_blocks(), blocks_text()
+iopstor/seo.py        site(), build_meta(), jsonld()
+iopstor/payments.py   PaymentGateway ABC, DummyGateway, GATEWAYS
+iopstor/admin_api.py  /api/admin/v1 — JWT-protected REST. apply_post() is the single validation path.
+iopstor/admin_ui.py   /admin — session-based browser admin, reusing admin_api's validation
+iopstor/public.py     catch-all resolver, crawler endpoints, /api/v1 public read API, leads, checkout
+iopstor/cli.py        flask migrate | seed | create-admin
+iopstor/templates/    base/post/archive/404, blocks/<type>.html, admin/*.html
+iopstor/static/       site.css (the whole public theme) + admin.css (admin extras, layered on top)
+migrations/           0000_bootstrap.sql (run once by hand) + NNNN_name.sql applied by `flask migrate`
+tests/                test_offline.py always runs; the rest need a live Supabase and skip without it
+docs/                 this file + NON-TECHNICAL.md
+```
+
+Dependency direction: `public.py` and `admin_ui.py` both import from `admin_api.py` (for `apply_post`, error handlers and pagination helpers); everything imports `db.py`; `db.py` imports nothing from the app.
+
+---
+
+## 3. Data model
+
+Eleven tables, created by `migrations/0001_initial.sql`.
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `post_types` | Content types **as data** | `slug`, `url_prefix`, `hierarchical`, `field_schema` (JSONB), `taxonomies` (JSONB), `jsonld_type`, `in_sitemap` |
+| `posts` | Every piece of content | `post_type_id`, `parent_id`, `slug`, `title`, `excerpt`, `blocks` (JSONB), `meta` (JSONB), `seo` (JSONB), `status`, `published_at`, `featured_media_id`, `author_id`, `menu_order` |
+| `taxonomies` / `terms` / `post_terms` | Classification, many-to-many | `terms` unique on `(taxonomy_id, slug)` |
+| `media` | Uploads | `key`, `url`, `mime`, `size`, `alt`, `uploaded_by` |
+| `users` | CMS roles. `id` **is** the GoTrue `sub` | `email`, `name`, `role` |
+| `leads` | Form submissions | `kind`, contact fields, `data` (JSONB), `status` |
+| `payments` | Orders | `provider`, `provider_ref`, `amount`, `currency`, `status`, `raw` |
+| `menus` | Header/footer nav | `items` (JSONB, one level of `children`) |
+| `settings` | Key/value site config | `key`, `value` (JSONB) |
+| `redirects` | Legacy URL mapping | `from_path` (unique), `to_url`, `code`, `hits` |
+| `schema_migrations` | Applied migration names | created by `0000_bootstrap.sql` |
+
+Indexes: `posts (post_type_id, status, published_at)`, `leads (status, created_at)`, `payments (provider, provider_ref)`. `posts` is unique on `(post_type_id, slug)` — slugs are unique *per type*, not globally.
+
+**Where per-type data lives.** `posts.meta` is a JSON bag described by `post_types.field_schema` — a list of `{key, label, type, required}` descriptors that the admin form renders and the detail template reads back. `posts.blocks` is the ordered page content, `[{type, data}, ...]`.
+
+**Seeded types:** `page` (prefix `""`), `post` (`blog`, BlogPosting), `service` (`services`, hierarchical, Service), `case_study` (`case-studies`, Article), `event` (`events`, Event), `partner` (`partners`, Organization), `datasheet` (`datasheets`), `product` (`products`).
+
+---
+
+## 4. Data access (`db.py`)
+
+Every query goes through this module. Nothing else builds a PostgREST query.
+
+| Helper | Contract |
+|---|---|
+| `table(name)` | Service-role PostgREST query builder |
+| `one(q)` / `rows(q)` | Single dict-or-`None` / list of dicts |
+| `insert()` / `update()` | Write helpers returning the row |
+| `live(q)` | **The public visibility filter**: `status='published' AND published_at <= now()`. A future `published_at` is a scheduled post |
+| `select_posts()` | The canonical post select — embeds `post_type`, `featured_media`, `terms` in one round trip |
+| `with_paths()` / `ancestors()` | Attach the computed `path` to posts; builds one per-request hierarchy index rather than walking parents per row |
+| `unique_slug()` | Slug collision resolution within a post type |
+| `paginate()` | Offset/limit + exact count |
+| `post_types()` / `settings()` | Process-level caches, invalidated with `uncache()` |
+
+Two hard rules:
+
+- **Never call `.delete()` without a filter** — PostgREST interprets an unfiltered delete as "the whole table".
+- Anything user-facing goes through `db.live(q)`. A public query that skips it will serve drafts.
+
+---
+
+## 5. URL scheme and the resolver
+
+`public.resolve()` is a catch-all (`/<path:path>`) that tries, strictly in this order:
+
+1. **Trailing slash** → 301 to the unslashed path
+2. **`redirects` table** → hit counter incremented, then redirect with the stored code
+3. **Empty path** → the `page` post with slug `home`; if none exists, an archive of everything
+4. **First segment matches a `post_types.url_prefix`** → the type archive (`/services`), or a post inside it. Hierarchical types are matched on the **full computed path**, so `/services/storage/nas` resolves and `/services/nas` 404s
+5. **Single segment, `page` type** → `/about-us`. `/home` 301s to `/`
+6. **Two segments matching taxonomy + term** → `/industry/finance` term archive
+7. Otherwise `abort(404)`
+
+Resulting scheme:
+
+```
+/                       home page (page/home)
+/<slug>                 page
+/<prefix>/<slug>        post of that type
+/<prefix>/<parent>/…    hierarchical type, full ancestry in the path
+/<taxonomy>/<term>      term archive
+```
+
+---
+
+## 6. Blocks
+
+`iopstor/blocks.py` is the only place a block type is declared:
+
+```python
+BLOCKS = {  # type: (required fields, optional fields)
+    "hero": (["heading"], ["subheading", "image", "cta_label", "cta_url"]),
+    ...
+}
+```
+
+Thirteen types ship: `hero`, `rich_text`, `image`, `gallery`, `cards`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`.
+
+**Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section"><div class="wrap">…`. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
+
+Two behaviours worth knowing:
+
+- **`hero` is the only block that renders its own `<h1>`.** `post.html` skips the page title when a post's first block is a hero.
+- **`post_list` is queried at render time.** `render_blocks()` special-cases it, calling `_post_list()` to fetch live posts and passing them in as `posts`.
+
+`blocks_text()` flattens all block content to plain text for `llms-full.txt` and admin search. Because JSONB does not preserve key order, it walks fields in a fixed reading order (`_TEXT_ORDER`), with unknown keys appended alphabetically, so output is deterministic.
+
+---
+
+## 7. Auth
+
+Two surfaces, one verification path.
+
+```
+Admin API   Authorization: Bearer <Supabase JWT>
+Browser     tokens in the signed Flask session cookie, refreshed on expiry
+            + a per-session `csrf` field on every POST, checked by ui_required
+```
+
+Both verify **locally** with `SUPABASE_JWT_SECRET` (HS256) — no network round trip per request. `users.id` equals the GoTrue `sub`, which is how a token becomes a CMS user.
+
+**Roles are a ladder:** `ROLES = {"editor": 1, "admin": 2}`, enforced by `require_role(min_role)`. A valid GoTrue login with **no `users` row gets 403** — authentication and authorization are deliberately separate.
+
+Login goes through a throwaway anon client (`auth.anon()`); the service-role client is never used for password sign-in.
+
+---
+
+## 8. HTTP surface
+
+### `/api/admin/v1` — JWT-protected, `admin_api.py`
+
+| Group | Endpoints |
+|---|---|
+| Auth | `POST /auth/login`, `/auth/refresh`, `/auth/logout`; `GET /auth/me` |
+| Post types | `GET|POST /post-types`, `GET|PATCH|DELETE /post-types/<slug>` |
+| Posts | `GET|POST /posts`, `GET|PATCH|DELETE /posts/<id>` |
+| Taxonomies | `GET|POST /taxonomies`, `PATCH|DELETE /taxonomies/<slug>`, `GET|POST /taxonomies/<slug>/terms`, `PATCH|DELETE /terms/<id>` |
+| Media | `GET|POST /media`, `PATCH|DELETE /media/<id>` |
+| Leads | `GET /leads`, `GET|PATCH|DELETE /leads/<id>` |
+| Site | `GET|PUT /settings`, `GET /menus`, `PUT /menus/<slug>`, `GET|POST /redirects`, `DELETE /redirects/<id>` |
+| Users | `GET|POST /users`, `PATCH|DELETE /users/<uuid>` |
+| Introspection | `GET /blocks`, `GET /payments` |
+
+**`apply_post(existing, b)` is the single validation path** for every post write — create, PATCH, and the browser admin form all funnel through it. It returns `(changes, term_ids)`, validates blocks, resolves slugs, parses datetimes and enforces the field schema. Do not add a second one.
+
+Errors are normalised by three handlers: `HTTPException`, PostgREST `APIError`, and GoTrue `AuthError` all become consistent JSON.
+
+### `/api/v1` — public read-only, `public.py`
+
+`GET /post-types`, `/posts`, `/posts/<type>/<slug>`, `/taxonomies/<slug>/terms`, `/menus/<slug>`, `/settings` — all filtered through `db.live()`.
+
+Writes: `POST /leads` (also the target of the HTML contact form — plain form POST, honeypot `website` field, redirect back with `?sent=1`), `POST /payments/checkout`, `POST /payments/webhook/<provider>`.
+
+### `/admin` — browser, `admin_ui.py`
+
+`/login`, `/logout`, `/` (dashboard), `/posts`, `/posts/new`, `/posts/<id>`, `/posts/<id>/delete`, `/media`, `/media/<id>/delete`, `/leads`, `/leads/<id>/status`, `/settings`, `/users`, `/users/<uuid>/delete`. Server-rendered forms; `_form_body()` turns form fields into the same body dict the JSON API accepts, so both surfaces share validation. `_safe_next()` restricts post-login redirects to relative same-origin paths.
+
+### Crawler endpoints
+
+`/sitemap.xml`, `/robots.txt`, `/feed.xml`, `/llms.txt`, `/llms-full.txt`, plus `/healthz`.
+
+---
+
+## 9. SEO
+
+Everything is server-rendered from `seo.py` + `public.py`; keep it there.
+
+- `build_meta()` — title, description, canonical, Open Graph, robots
+- `jsonld()` — structured data driven by `post_types.jsonld_type` plus BreadcrumbList from the resolver's crumbs
+- `_indexable()` — a post whose `seo.robots` starts with `noindex` is kept out of the sitemap
+
+> **Known gap.** The `faq` block emits Q&A markup but is not currently wired into FAQPage JSON-LD. The knowledge graph flagged this edge as AMBIGUOUS; it is a genuine, unimplemented opportunity.
+
+---
+
+## 10. Migrations
+
+Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in name order and tracked in `schema_migrations`.
+
+`0000_bootstrap.sql` is pasted **once** into Supabase Studio's SQL editor. It creates `apply_migration(name, sql)` — `SECURITY DEFINER`, executable by `service_role` only — which `flask migrate` calls per file over Kong. Each file runs in one transaction.
+
+**Workflow for a schema change:**
+
+1. Write the `ALTER`/`CREATE` as a new numbered file
+2. `pipenv run flask migrate`
+3. Update the code that reads/writes those columns
+4. Commit both together
+
+`0002_enable_rls.sql` enables RLS on every app table, so the anon key cannot read drafts or leads. The app's service-role key bypasses RLS by design.
+
+---
+
+## 11. Payments
+
+`payments.py` defines the `PaymentGateway` interface (`create_checkout()`, `handle_webhook()`) and `DummyGateway`, selected by the `PAYMENT_PROVIDER` env var through `GATEWAYS`. `dummy` records the payment row and exposes `/api/v1/payments/dummy/<id>` to mark it paid, without charging anything. A real provider is a new subclass plus an env change.
+
+---
+
+## 12. Theme
+
+One stylesheet, `static/site.css`, with CSS variables at the top, then header/footer, then `.cards` / `.card` / `.btn` / `.section`, then one rule-group per block. `static/admin.css` layers admin-only rules on top, so `/admin` inherits the public theme.
+
+No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS.
+
+---
+
+## 13. Tests
+
+```
+tests/test_offline.py    always runs — slugify, validate_blocks, render_blocks, JWT matrix
+tests/conftest.py        app/client fixtures, admin_headers/editor_headers, seeded corpus, cleanup
+tests/test_auth.py       JWT matrix, mocked GoTrue login, real bad-password rejection
+tests/test_admin_api.py  create/publish visibility, scheduled-post hiding, terms/settings/menus
+tests/test_admin_ui.py   browser login and post creation
+tests/test_public.py     hierarchical URLs + breadcrumbs, leads, redirects, sitemap/feed/llms, upload, checkout, seed idempotency
+```
+
+Everything except `test_offline.py` is marked `live` and skips when `.env` has no Supabase.
+
+---
+
+## 14. Configuration
+
+`SECRET_KEY`, `SITE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `MEDIA_BUCKET`, `PAYMENT_PROVIDER`. `FLASK_DEBUG=1` in `.env` gives the dev server the debugger and auto-reload.
+
+`SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are the same values as `JWT_SECRET`, `ANON_KEY` and `SERVICE_ROLE_KEY` in the Supabase compose environment.
+
+Dev gateway: `http://developmentserver-supabase-9f7088-111-125-233-170.sslip.io` — LAN, self-signed cert on https, so use http until a real certificate exists.
+
+---
+
+## 15. Running it
+
+```bash
+pipenv install --dev                        # pipenv auto-loads .env
+pipenv run dev                              # flask run --debug
+pipenv run flask migrate                    # apply migrations/*.sql through Supabase
+pipenv run flask seed                       # idempotent site-map seed; --reset-content overwrites seed blocks
+pipenv run flask create-admin EMAIL PASS    # Supabase Auth user + CMS admin row
+pipenv run pytest
+```
+
+**First-time setup on a Supabase instance:**
+
+1. Studio → SQL editor: run `migrations/0000_bootstrap.sql`
+2. Studio → Storage: create a **public** bucket named `media`
+3. `flask migrate` → `flask seed` → `flask create-admin`
+
+After any `Pipfile` change, regenerate both lockfile exports:
+
+```bash
+pipenv requirements > requirements.txt
+pipenv requirements --dev-only > requirements-dev.txt
+```
+
+---
+
+## 16. Extending it
+
+| Task | What to touch |
+|---|---|
+| New content type | A `post_types` row — seed entry or admin API call. No table, no model |
+| New per-type field | Add to that type's `field_schema`; the admin form and detail list follow |
+| New block | One `BLOCKS` entry + `templates/blocks/<type>.html` |
+| New taxonomy | A `taxonomies` row + the type's `taxonomies` array |
+| Schema change | A new `migrations/NNNN_*.sql`, then `flask migrate`, then the code |
+| New payment provider | A `PaymentGateway` subclass in `payments.py` + `PAYMENT_PROVIDER` |
+| Theme change | `static/site.css` (admin extras in `static/admin.css`) |
+
+---
+
+## 17. Known ceilings
+
+Marked in code with `# ponytail:` comments.
+
+- `rich_text` and `embed_html` render raw HTML with `|safe`. Fine for trusted staff; add `nh3` sanitising if untrusted authors are ever given accounts.
+- The drag-and-drop page builder is phase 2. Blocks are edited as JSON in a textarea with a reference panel.
+- `DummyGateway` moves no money.
+- `post_types` and `settings` are cached per process, not per cluster. A multi-worker deployment sees an update after `uncache()` runs in *that* worker.
+- FAQPage JSON-LD is not wired up (§9).
+
+Run `/ponytail-debt` to harvest the current ledger from source.
