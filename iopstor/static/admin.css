@@ -33,3 +33,26 @@
 .admin .login-card{max-width:420px;margin:4rem auto}
 .admin .login-card h1{margin-bottom:.25rem}
 .admin form.inline{display:inline}
+/* --- post form: slug, media picker, block editor (see static/admin.js) --- */
+.slug-field{display:flex;align-items:center;gap:.4rem}
+.slug-field .slug-prefix{color:var(--muted);font-weight:400;white-space:nowrap}
+.admin .slug-field input[readonly]{background:#f8fafc;color:var(--muted)}
+.admin button.tiny{padding:.25rem .55rem;font-size:.8rem;font-weight:600;line-height:1.2}
+.media-field{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.media-field select{flex:1;min-width:12rem}
+.media-thumb img{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block}
+.media-thumb span{font-size:.8rem;color:var(--muted)}
+.media-note{flex-basis:100%}
+.blk{border:1px solid var(--line);border-radius:var(--radius);margin-bottom:.9rem;background:#fff}
+.blk-head{display:flex;align-items:center;gap:.35rem;padding:.5rem .75rem;background:#f1f5f9;border-bottom:1px solid var(--line);border-radius:var(--radius) var(--radius) 0 0}
+.blk-head .spacer{flex:1}
+.blk-fields{padding:.25rem .75rem .9rem}
+.blk-fields>label:first-child,.blk-fields>div:first-child{margin-top:.4rem}
+.rep-row{display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap;border-left:3px solid var(--line);padding:0 0 .4rem .6rem;margin:.4rem 0}
+.rep-row>label{flex:1;min-width:8rem;margin-top:.3rem}
+.rep-controls{display:flex;gap:.25rem;padding-bottom:.35rem}
+.rt-toolbar{display:flex;gap:.25rem;flex-wrap:wrap;margin:.25rem 0}
+.rt-toolbar .rt-toggle{margin-left:auto}
+.rt-body{min-height:8rem;padding:.6rem .7rem;border:1px solid #cbd5e1;border-radius:8px;background:#fff;overflow-wrap:anywhere}
+.rt-body:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+.rt-body>*:first-child{margin-top:0}

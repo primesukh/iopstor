@@ -32,3 +32,16 @@ def test_blocks_text_flattens():
 def test_jwt_matrix_without_db(client):
     assert client.get("/api/admin/v1/posts").status_code == 401
     assert client.get("/api/admin/v1/posts", headers={"Authorization": "Bearer nope"}).status_code == 401
+
+
+def test_editor_metadata_covers_every_block():
+    """Adding a block without editor metadata leaves /admin unable to render its fields."""
+    from iopstor.blocks import BLOCKS, EDITOR, REPEATERS
+
+    for name, (required, optional) in BLOCKS.items():
+        for field in required + optional:
+            widget = EDITOR["widgets"].get(f"{name}.{field}") or EDITOR["widgets"].get(field) or "text"
+            assert widget in ("text", "textarea", "code", "richtext", "media", "url", "number", "checkbox", "post_type", "kind"), (name, field)
+            if field in REPEATERS:
+                assert EDITOR["items"].get(name), f"{name}.{field} is a repeater with no EDITOR['items'] entry"
+    assert set(EDITOR["items"]) <= set(BLOCKS)

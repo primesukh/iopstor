@@ -32,6 +32,17 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
     assert bad.status_code == 400 and b"Not saved" in bad.data and b"blocks" in bad.data
     assert client.post("/admin/posts/new?type=post", data={"title": "zz-test nope"}).status_code == 400  # missing CSRF token
 
+    # inline uploader used by the post form's media pickers: JSON in, JSON out, CSRF enforced
+    from io import BytesIO
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+    up = client.post("/admin/media/upload", data={"csrf": csrf, "alt": "zz-test dot", "file": (BytesIO(png), "zz-test-inline.png")},
+                     content_type="multipart/form-data")
+    assert up.status_code == 201 and up.json["url"] and up.json["alt"] == "zz-test dot"
+    client.post(f"/admin/media/{up.json['id']}/delete", data={"csrf": csrf})
+    assert client.post("/admin/media/upload", data={"csrf": csrf}, content_type="multipart/form-data").status_code == 400
+    assert client.post("/admin/media/upload", data={"csrf": csrf, "file": (BytesIO(b"x"), "zz.exe")},
+                       content_type="multipart/form-data").status_code == 400
+
     product_form = client.get("/admin/posts/new?type=product")
     assert b'name="meta_price"' in product_form.data and b'name="meta_sku"' in product_form.data
     for path in ("/admin/posts?type=service", "/admin/media", "/admin/leads", "/admin/settings", "/admin/users"):

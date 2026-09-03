@@ -79,7 +79,20 @@ The available blocks:
 
 **Rule of thumb:** if a page starts with a Hero block, the Hero supplies the page's main headline. Otherwise the page title is shown at the top.
 
-> **Today's limitation.** The drag-and-drop builder is phase 2. Right now blocks are entered in the admin as a structured text field, with a reference panel listing every block and the fields it needs. The blocks themselves and how they look on the site are already finished — only the editing experience is due to be upgraded.
+### Editing the blocks
+
+Under **Content** on the edit screen you get one panel per block, stacked in the order they appear on the page. Each panel has a plain form — a box per thing the block needs, labelled in English, with a `*` on the ones that cannot be left empty.
+
+- **Add a block** — the *“+ Add a section…”* menu at the bottom. Pick a type and an empty panel appears.
+- **Reorder** — the **↑** and **↓** buttons in a block's grey title bar move it up or down the page.
+- **Remove** — the **✕** button, which asks you to confirm first.
+- **Lists inside a block** — Cards, FAQ, Stats, Spec table and Gallery hold a list of rows. Each row has its own **+ Add**, its own ↑ ↓ to reorder, and its own ✕ to remove.
+
+**Writing prose.** The Rich text block gives you a small toolbar — **B**, *I*, headings, bulleted and numbered lists, a link button and *clear formatting* — and you type straight into the box the way you would in Word. Pasting from Word or Google Docs deliberately drops their formatting and keeps your words, so nothing strange leaks into the page. If you would rather work in HTML, the **HTML** button on the right of that toolbar swaps the box for the raw markup and back again.
+
+Nothing is saved until you press **Save**. If something required is missing, the page comes back with the problem listed at the top and your work still in place.
+
+> **Today's limitation.** The full drag-and-drop builder is phase 2 — you reorder blocks with the arrow buttons rather than by dragging them. There is also an *Advanced — edit as JSON* panel under the blocks; that is for developers, and you never need to open it.
 
 ---
 
@@ -100,6 +113,8 @@ The **Media** section is the shared library for every image, logo and PDF.
 1. Go to Media and upload the file.
 2. Give it **alt text** — a short description of what is in the picture. This is what a blind visitor's screen reader reads out, and it is one of the things Google looks at. Please do not skip it.
 3. The file is then selectable anywhere the site asks for an image.
+
+**You do not have to go to Media first.** Anywhere a page asks for a picture — a Hero image, an Image or Gallery block, the Featured image in the sidebar — there is a **Choose file** button right there. Pick a file and it uploads straight away, gets used on the spot, and joins the Media library so you can reuse it elsewhere. A small thumbnail next to it shows what is currently selected. Uploads made this way have no alt text yet, so add it in the Media section afterwards for anything important.
 
 ---
 
@@ -148,13 +163,15 @@ Products can carry a price and a checkout button. The payment step is currently 
 
 **Done:** the content system, the public website with its theme, the admin panel, search-engine and AI output, enquiry capture, media library, users and roles, and the payment placeholder.
 
-**Still to come:** the drag-and-drop page builder (phase 2) and a live payment provider.
+**Still to come:** dragging blocks to reorder them (phase 2 — the arrow buttons do the job today) and a live payment provider.
 
 ---
 
 ## 12. Quick answers
 
 **I changed something and the website looks the same.** Check the status is *Published* and the publish date is not in the future. Then refresh with Ctrl+F5.
+
+**Can I change a page's web address?** The address is made from the title automatically, and the box is locked so it cannot be changed by accident — an address that changes breaks every link and bookmark pointing at the old one, and search engines drop the page. If you genuinely need to change it, the small **Edit** button beside the box unlocks it and warns you first.
 
 **A page gives "not found".** Its address is built from its slug and its type. A Service named *NAS* filed under *Storage* lives at `/services/storage/nas`, not `/services/nas`. Check the parent is set correctly.
 

@@ -146,6 +146,21 @@ Two behaviours worth knowing:
 - **`hero` is the only block that renders its own `<h1>`.** `post.html` skips the page title when a post's first block is a hero.
 - **`post_list` is queried at render time.** `render_blocks()` special-cases it, calling `_post_list()` to fetch live posts and passing them in as `posts`.
 
+**Editor metadata.** Alongside `BLOCKS`, `blocks.py` exports `EDITOR` — how each field is edited in the browser admin, so the field shapes that used to live only in comments are data:
+
+```python
+EDITOR = {
+    "widgets": {...},   # field key -> text | textarea | code | richtext | media | url | number | checkbox | post_type | kind
+                        # "<block>.<field>" overrides the bare key (e.g. "embed_html.html": "code")
+    "items":   {...},   # block type -> the subfields of one repeater row (items / images / rows)
+    "labels":  {...},   # friendlier field labels; missing keys fall back to the key itself
+    "kinds":   [...],   # contact_form.kind options
+}
+REPEATERS = ("items", "images", "rows")
+```
+
+`EDITOR` is metadata only — nothing on the render or validation path reads it, and an unknown widget just degrades to a text input. `tests/test_offline.py::test_editor_metadata_covers_every_block` fails if a new block's fields have no widget, or if a repeater field has no `EDITOR["items"]` entry.
+
 `blocks_text()` flattens all block content to plain text for `llms-full.txt` and admin search. Because JSONB does not preserve key order, it walks fields in a fixed reading order (`_TEXT_ORDER`), with unknown keys appended alphabetically, so output is deterministic.
 
 ---
@@ -196,7 +211,9 @@ Writes: `POST /leads` (also the target of the HTML contact form — plain form P
 
 ### `/admin` — browser, `admin_ui.py`
 
-`/login`, `/logout`, `/` (dashboard), `/posts`, `/posts/new`, `/posts/<id>`, `/posts/<id>/delete`, `/media`, `/media/<id>/delete`, `/leads`, `/leads/<id>/status`, `/settings`, `/users`, `/users/<uuid>/delete`. Server-rendered forms; `_form_body()` turns form fields into the same body dict the JSON API accepts, so both surfaces share validation. `_safe_next()` restricts post-login redirects to relative same-origin paths.
+`/login`, `/logout`, `/` (dashboard), `/posts`, `/posts/new`, `/posts/<id>`, `/posts/<id>/delete`, `/media`, `/media/upload`, `/media/<id>/delete`, `/leads`, `/leads/<id>/status`, `/settings`, `/users`, `/users/<uuid>/delete`. Server-rendered forms; `_form_body()` turns form fields into the same body dict the JSON API accepts, so both surfaces share validation. `_safe_next()` restricts post-login redirects to relative same-origin paths.
+
+`POST /admin/media/upload` is the one exception to "server-rendered forms": it takes the same multipart body as `POST /admin/media` (`csrf`, `file`, optional `alt`) through the shared `_upload()` helper, and answers `201 {id, url, filename, mime, alt}` or `4xx {error}` instead of redirecting. It exists so the post form's media pickers can upload without leaving the page; session auth and CSRF come from `ui_required()` unchanged.
 
 ### Crawler endpoints
 
@@ -243,7 +260,15 @@ Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in nam
 
 One stylesheet, `static/site.css`, with CSS variables at the top, then header/footer, then `.cards` / `.card` / `.btn` / `.section`, then one rule-group per block. `static/admin.css` layers admin-only rules on top, so `/admin` inherits the public theme.
 
-No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS.
+No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS, and the public site ships no JavaScript at all.
+
+`static/admin.js` is the single exception, loaded only by `templates/admin/base.html`. It is plain ES5-ish browser JavaScript — no framework, no bundler, no CDN (the CMS runs on a LAN) — and it is **progressive enhancement only**: every part is a no-op when its hook is missing, and the plain form underneath still saves with JavaScript disabled. Three parts:
+
+- **Slug** — `#post-slug` is `readonly`; typing in `#post-title` live-fills it with a JS mirror of `db.slugify()` while the post has no saved slug. An *Edit* button unlocks the field after a confirm, for the deliberate URL change. Nothing server-side changed: `apply_post()` already generates the slug from the title when the submitted one is empty, and leaves an existing slug alone.
+- **Media pickers** — one `mediaWidget()` renders a thumbnail, a "choose existing" select and a file input that uploads to `/admin/media/upload` and appends the new row to *every* picker on the page. It is applied to `select[data-media]` (featured image, per-type `media` fields) and to media fields inside blocks, so there is one code path rather than three. `data-media="images"` filters non-images out.
+- **Block editor** — parses the `blocks` textarea, renders a card per block with labelled inputs driven by `BLOCKS` + `EDITOR`, with ↑ ↓ ✕ controls and repeaters for `items`/`images`/`rows`, then serializes back into that same textarea on submit. `_form_body()` and `validate_blocks()` are untouched — the editor only ever writes the JSON a human could have typed. It mutates the parsed objects in place, so **keys it does not render survive**, and an unknown block type falls back to a "edit it as JSON" note. If the textarea holds unparseable JSON (a rejected save round-trip), the editor stands down and opens the *Advanced — edit as JSON* panel instead.
+
+`rich_text` fields get a `contenteditable` box with a bold/italic/H2/H3/list/link/clear toolbar plus an *HTML* toggle for the raw markup; paste is inserted as plain text so Word markup does not leak in.
 
 ---
 
@@ -317,7 +342,9 @@ pipenv requirements --dev-only > requirements-dev.txt
 Marked in code with `# ponytail:` comments.
 
 - `rich_text` and `embed_html` render raw HTML with `|safe`. Fine for trusted staff; add `nh3` sanitising if untrusted authors are ever given accounts.
-- The drag-and-drop page builder is phase 2. Blocks are edited as JSON in a textarea with a reference panel.
+- The drag-and-drop page builder is phase 2. The admin block editor is a form per block with ↑ ↓ ✕ controls; the JSON textarea survives underneath it as the escape hatch.
+- The rich-text toolbar uses `document.execCommand` — deprecated but universally implemented, and 40 lines against a bundled editor. Swap for a real editor if a browser drops it.
+- `admin.js` re-renders whole lists on every reorder, and media pickers are refreshed by iterating every picker on the page. Fine at page scale; revisit only if a page grows to hundreds of blocks.
 - `DummyGateway` moves no money.
 - `post_types` and `settings` are cached per process, not per cluster. A multi-worker deployment sees an update after `uncache()` runs in *that* worker.
 - FAQPage JSON-LD is not wired up (§9).

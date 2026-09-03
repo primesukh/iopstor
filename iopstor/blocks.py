@@ -19,6 +19,25 @@ BLOCKS = {  # type: (required fields, optional fields)
     "spec_table": (["rows"], ["heading"]),  # rows: [{k, v}]
     "contact_form": (["kind"], ["heading"]),  # kind: contact | quote | career → POST /api/v1/leads
 }
+# Admin editor metadata: how each field is edited in /admin (iopstor/static/admin.js).
+# Field shapes that used to live in the comments above are data here so the editor has one source of truth.
+EDITOR = {
+    # widget per field key; "<block>.<field>" overrides the bare key. Default: text.
+    "widgets": {"html": "richtext", "embed_html.html": "code", "text": "textarea", "a": "textarea", "subheading": "textarea",
+                "caption": "textarea", "quote": "textarea", "image": "media", "media_id": "media",
+                "url": "url", "cta_url": "url", "button_url": "url", "limit": "number",
+                "top_level": "checkbox", "post_type": "post_type", "kind": "kind"},
+    # repeater fields (items/images/rows) -> the subfields of one row
+    "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label"],
+              "spec_table": ["k", "v"], "gallery": ["media_id", "alt"]},
+    # friendlier labels; anything missing is the key with underscores as spaces
+    "labels": {"q": "Question", "a": "Answer", "k": "Label", "v": "Value", "html": "Content", "kind": "Form type",
+               "cta_url": "Button link", "cta_label": "Button text", "top_level": "Top-level only",
+               "media_id": "Image", "image": "Image", "post_type": "Content type", "term": "Term slug"},
+    "kinds": ["contact", "quote", "career"],
+}
+REPEATERS = ("items", "images", "rows")
+
 _NON_TEXT_KEYS = {"url", "cta_url", "button_url", "icon", "image", "media_id", "post_type", "term", "limit", "kind", "top_level"}
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
 _TEXT_ORDER = ("heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company", "value", "label", "k", "v",
