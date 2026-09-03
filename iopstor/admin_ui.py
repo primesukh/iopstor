@@ -5,7 +5,7 @@ import secrets
 from functools import wraps
 from urllib.parse import urlparse
 
-from flask import Blueprint, abort, flash, g, has_request_context, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, flash, g, has_request_context, jsonify, redirect, render_template, request, session, url_for
 from postgrest import APIError
 from supabase_auth.errors import AuthError
 from werkzeug.exceptions import HTTPException
@@ -13,7 +13,7 @@ from werkzeug.exceptions import HTTPException
 from . import db
 from .admin_api import apply_post
 from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login
-from .blocks import BLOCKS
+from .blocks import BLOCKS, EDITOR
 from .storage import delete_media, save_upload
 
 ui = Blueprint("admin_ui", __name__, url_prefix="/admin", template_folder="templates")
@@ -143,10 +143,10 @@ def _form_body(pt, existing):
 def _form_context(pt, post, errors=None):
     taxonomies = [t for t in db.rows(db.table("taxonomies").select("*, terms(*)").order("id")) if t["slug"] in (pt.get("taxonomies") or [])]
     parents = db.rows(db.table("posts").select("id,title,slug").eq("post_type_id", pt["id"]).order("title")) if pt["hierarchical"] else []
-    media = db.rows(db.table("media").select("id,filename,url,mime").order("id", desc=True).limit(200))
+    media = db.rows(db.table("media").select("id,filename,url,mime,alt").order("id", desc=True).limit(200))
     term_ids = {t["id"] for t in (post or {}).get("terms") or []}
     return dict(pt=pt, post=post, errors=errors or {}, taxonomies=taxonomies, parents=[p for p in parents if not post or p["id"] != post["id"]],
-                media=media, term_ids=term_ids, blocks=BLOCKS, blocks_json=json.dumps((post or {}).get("blocks") or [], indent=2, ensure_ascii=False),
+                media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, blocks_json=json.dumps((post or {}).get("blocks") or [], indent=2, ensure_ascii=False),
                 seo_keys=SEO_KEYS)
 
 
@@ -211,6 +211,14 @@ def delete_post(pk):
 
 # ---- media, leads, settings, users ----------------------------------------
 
+def _upload(fs, alt=""):
+    """Store one upload and return the media row. Raises HTTPException(400) on a rejected file type."""
+    m = save_upload(fs, g.user["id"])
+    if alt:
+        m = db.update("media", m["id"], {"alt": alt[:300]}) or m
+    return m
+
+
 @ui.route("/media", methods=["GET", "POST"])
 @ui_required()
 def media():
@@ -220,12 +228,10 @@ def media():
             flash("Choose a file first.")
         else:
             try:
-                m = save_upload(fs, g.user["id"])
+                m = _upload(fs, request.form.get("alt", ""))
             except HTTPException as e:
                 flash(e.description)
             else:
-                if request.form.get("alt"):
-                    db.update("media", m["id"], {"alt": request.form["alt"][:300]})
                 flash(f"Uploaded {m['filename']} (id {m['id']}).")
         return redirect(url_for("admin_ui.media"))
     page = max(request.args.get("page", 1, type=int) or 1, 1)
@@ -240,6 +246,20 @@ def media_delete(pk):
     delete_media(m)
     flash("Deleted.")
     return redirect(url_for("admin_ui.media"))
+
+
+@ui.post("/media/upload")
+@ui_required()
+def media_upload():
+    """Inline uploader used by the post form (admin.js); same storage path as the media page."""
+    fs = request.files.get("file")
+    if not fs or not fs.filename:
+        return jsonify({"error": "Choose a file first."}), 400
+    try:
+        m = _upload(fs, request.form.get("alt", ""))
+    except HTTPException as e:  # save_upload rejects unsupported types
+        return jsonify({"error": e.description}), e.code
+    return jsonify({k: m.get(k) for k in ("id", "url", "filename", "mime", "alt")}), 201
 
 
 @ui.get("/leads")
