@@ -64,7 +64,7 @@ graphify explain "apply_post"        # plain-language explanation of one node
 
 The graph gives the shape: which modules connect, which communities a symbol bridges, where the god nodes are (`table()`, `require_role()`, `one()`, `apply_post()`, `render_blocks()`). *Then* grep and read the actual files to confirm the detail — the graph is the map, the source is the territory. Never skip straight to grep on a question the graph can answer, and never trust the graph alone for a claim you are about to write down.
 
-Rebuild it after significant changes: `/graphify . --update`.
+**Never rebuild the graph during feature work.** The graph is refreshed at merge time only — see rule 2. A branch may be abandoned or reworked, so indexing it mid-flight burns tokens on a shape that may never reach `main`. Query a slightly stale graph, then confirm against source; that is what step 1 is for.
 
 **2. Every feature goes on its own branch and PR. Never merge without being told.**
 
@@ -75,6 +75,15 @@ git push -u origin <branch>            # then open the PR
 ```
 
 Open the PR and **stop there**. Do not merge, do not squash, do not push to `main` — even when tests pass and the work is obviously finished. Merging happens only when the user explicitly says so, on that specific PR. `gh` is not installed on this machine; PRs go through the GitHub API using the existing git credential.
+
+**Rebuild the graph as the last step of a merge, and only then:**
+
+```
+git checkout main && git pull        # after the PR is merged
+/graphify . --update                 # re-extract only new/changed files
+```
+
+So the full order is: branch → work → both docs → push → open PR → **stop**. Then, once the user says merge: merge → pull `main` → `/graphify . --update`. The graph therefore always describes what is on `main`, never a half-finished branch.
 
 **3. Every feature updates both docs, in the same PR.**
 `docs/TECHNICAL.md` for developers (modules, schema, endpoints, contracts, ceilings) and `docs/NON-TECHNICAL.md` for editors (what it does, in plain English, no jargon). A feature is not finished until both reflect it. If a change genuinely affects only one audience, say so in the PR body rather than silently skipping the other.
