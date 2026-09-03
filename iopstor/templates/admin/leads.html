@@ -1,0 +1,16 @@
+{% extends "admin/base.html" %}{% block title %}Leads{% endblock %}
+{% block content %}
+<h1>Leads <small>{{ result.total }}</small> <a class="btn secondary" href="?status=new">new</a> <a class="btn secondary" href="?status=handled">handled</a> <a class="btn secondary" href="?">all</a></h1>
+<table>
+  <tr><th>When</th><th>Kind</th><th>Who</th><th>Message</th><th>About</th><th>Status</th></tr>
+  {% for l in result['items'] %}
+  <tr><td><small>{{ l.created_at[:16].replace('T',' ') }}</small></td><td>{{ l.kind }}</td>
+      <td>{{ l.name }}<br><a href="mailto:{{ l.email }}">{{ l.email }}</a>{% if l.phone %}<br>{{ l.phone }}{% endif %}{% if l.company %}<br><small>{{ l.company }}</small>{% endif %}</td>
+      <td>{{ l.message }}{% if l.data %}<br><small>{{ l.data|tojson }}</small>{% endif %}</td>
+      <td>{{ l.post.title if l.post else '' }}</td>
+      <td><form method="post" action="{{ url_for('admin_ui.lead_status', pk=l.id, **request.args) }}"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="status" value="{{ 'new' if l.status == 'handled' else 'handled' }}"><button type="submit" class="secondary">{{ 'Reopen' if l.status == 'handled' else 'Mark handled' }}</button></form></td></tr>
+  {% else %}<tr><td colspan="6" class="muted">No leads.</td></tr>{% endfor %}
+</table>
+<p>{% if page > 1 %}<a class="btn secondary" href="?page={{ page-1 }}">Previous</a>{% endif %} {% if has_next %}<a class="btn secondary" href="?page={{ page+1 }}">Next</a>{% endif %}</p>
+{% endblock %}
