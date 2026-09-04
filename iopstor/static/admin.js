@@ -741,11 +741,19 @@
     return true;
   }
 
-  // The block element the caret sits in, bounded by the field. sel="…" asks for the nearest
-  // matching ancestor instead. Returns the field itself when the text has no wrapper of its own.
+  /* The block element the caret sits in, bounded by the field. sel="…" asks for the nearest
+     matching ancestor instead. Returns the field itself only when the text really has no wrapper.
+
+     The descent matters: at a block boundary — the caret at the end of a line, which is where it
+     is after you type — Gecko reports the range's container as the editing HOST, not the block.
+     Taken at face value that makes quote-off undetectable (closest("blockquote") from the host is
+     null) and reads alignment off the wrong element. Resolve through startOffset first. */
   function caretBlock(sel) {
     if (!liveField()) return null;
     var n = savedRange.startContainer;
+    if (n === savedField && n.childNodes.length) {
+      n = n.childNodes[Math.min(savedRange.startOffset, n.childNodes.length - 1)];
+    }
     n = n.nodeType === 1 ? n : n.parentNode;
     if (!n || !savedField.contains(n)) return null;
     if (sel) { var hit = n.closest(sel); return hit && savedField.contains(hit) ? hit : null; }
