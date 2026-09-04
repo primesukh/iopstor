@@ -23,6 +23,22 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
     for hook in (b'id="canvas"', b'id="doc-toolbar"', b'id="advanced"', b'name="blocks"', b'"layouts"', b'"seed"', b'"names"'):
         assert hook in form.data, hook
     csrf = re.search(r'name="csrf" value="([^"]+)"', form.text).group(1)
+    assert b'id="slug-hint"' in form.data          # where admin.js says an address is taken
+    assert b'data-taken=""' in form.data            # nothing seeded under Blog, so nothing to clash with
+
+    # Services are seeded and hierarchical: the field carries their slugs for admin.js to check against.
+    svc = client.get("/admin/posts/new?type=service")
+    assert re.search(r'data-taken="[a-z0-9][^"]*"', svc.text)
+    # the same name twice never blocks the second one — it takes three random letters instead
+    first = client.post("/admin/posts/new?type=service", data={"csrf": csrf, "title": "zz-test Dup", "blocks": "[]"})
+    second = client.post("/admin/posts/new?type=service", data={"csrf": csrf, "title": "zz-test Dup", "blocks": "[]"})
+    assert first.status_code == 302 and second.status_code == 302
+    made = client.get(second.headers["Location"])
+    assert re.search(r'id="post-slug" value="zz-test-dup-[a-z]{3}"', made.text), made.text[:200]
+    # a rejected save of a *new* post used to 500: _form_context() filtered the parent dropdown on
+    # post["id"], and the draft rebuilt for a post that was never created has no id
+    bad_svc = client.post("/admin/posts/new?type=service", data={"csrf": csrf, "title": "zz-test bad", "blocks": "not json"})
+    assert bad_svc.status_code == 400 and b"Not saved" in bad_svc.data
     r = client.post("/admin/posts/new?type=post", data={"csrf": csrf, "title": "zz-test UI Post", "status": "published", "excerpt": "From the browser",
                                                         "blocks": '[{"type":"hero","data":{"heading":"Hi from the form"}}]'})
     assert r.status_code == 302 and "/admin/posts/" in r.headers["Location"]

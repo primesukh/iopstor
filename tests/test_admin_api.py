@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 
 from conftest import live
@@ -20,8 +21,14 @@ def test_post_create_publish_visible(client, editor_headers):
     assert page.status_code == 200 and b"<p>hi there</p>" in page.data and b'"BlogPosting"' in page.data
     assert b'<link rel="canonical" href="http://test/blog/zz-test-hello-world">' in page.data
 
-    assert client.post(POSTS, headers=editor_headers, json={"post_type": "post", "title": "zz-test Hello World"}).json["slug"] == "zz-test-hello-world-2"
-    assert client.post(POSTS, headers=editor_headers, json={"post_type": "post", "title": "zz-test x", "slug": "zz-test-hello-world"}).status_code == 409
+    # a second page of the same name is never blocked: it takes the title's address plus three random letters
+    dup = client.post(POSTS, headers=editor_headers, json={"post_type": "post", "title": "zz-test Hello World"})
+    assert dup.status_code == 201 and re.fullmatch(r"zz-test-hello-world-[a-z]{3}", dup.json["slug"]), dup.json
+    taken = client.post(POSTS, headers=editor_headers, json={"post_type": "post", "title": "zz-test x", "slug": "zz-test-hello-world"})
+    assert taken.status_code == 201 and re.fullmatch(r"zz-test-hello-world-[a-z]{3}", taken.json["slug"]), taken.json
+    # renaming an existing post onto a taken address is deliberate, so it is refused rather than guessed at
+    clash = client.patch(f"{POSTS}/{dup.json['id']}", headers=editor_headers, json={"slug": "zz-test-hello-world"})
+    assert clash.status_code == 409 and "already in use" in clash.json["fields"]["slug"]
     bad = client.post(POSTS, headers=editor_headers, json={"post_type": "nope", "blocks": [{"type": "zzz", "data": {}}]})
     assert bad.status_code == 400 and set(bad.json["fields"]) == {"post_type", "title", "blocks"}
     assert client.delete(f"{POSTS}/{r.json['id']}", headers=editor_headers).status_code == 403  # editors cannot delete

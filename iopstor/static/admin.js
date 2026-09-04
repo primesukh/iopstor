@@ -82,19 +82,62 @@
                .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   }
 
+  // mirrors iopstor/db.py unique_slug(): base if nobody holds it, else base + three random letters.
+  // Memoised per base, so the address does not reshuffle under you on the next keystroke.
+  var LETTERS = "abcdefghijklmnopqrstuvwxyz";
+  function freeSlug(base, taken, seen) {
+    if (!seen[base]) {
+      var s = base;
+      while (taken.indexOf(s) > -1) {
+        s = base + "-";
+        for (var i = 0; i < 3; i++) s += LETTERS[Math.floor(Math.random() * 26)];
+      }
+      seen[base] = s;
+    }
+    return seen[base];
+  }
+
   function initSlug() {
     var title = document.getElementById("post-title"), slug = document.getElementById("post-slug");
     if (!title || !slug) return;
-    var saved = slug.value, unlocked = false;
+    var saved = slug.value, unlocked = false,
+        hint = document.getElementById("slug-hint"),
+        madeFrom = hint ? hint.textContent : "",
+        seen = {},
+        // ponytail: a page-load snapshot of this type's slugs. A post created in another tab meanwhile
+        // still lands on apply_post(), which resolves it the same way on create.
+        taken = (slug.getAttribute("data-taken") || "").split(" ").filter(Boolean);
+
+    function check() {
+      var v = slugify(slug.value),
+          clash = !!v && taken.indexOf(v) > -1,
+          fromTitle = slugify(title.value),
+          suffixed = !clash && !!v && !saved && !unlocked && v !== fromTitle;   // the title's address was taken
+      if (hint) {
+        hint.textContent = clash ? "That address is already used \u2014 try \u201c" + freeSlug(v, taken, seen) + "\u201d."
+                         : suffixed ? "\u201c" + fromTitle + "\u201d is already used, so this page is at \u201c" + v + "\u201d."
+                         : madeFrom;
+        hint.className = clash ? "slug-taken" : "";
+      }
+      // ponytail: a readonly input is barred from constraint validation, so this only blocks Save once
+      // Edit has unlocked the field. The message above shows either way.
+      slug.setCustomValidity(clash ? "This web address is already used. Pick another one." : "");
+    }
+
     title.addEventListener("input", function () {
-      if (!saved && !unlocked) slug.value = slugify(title.value);
+      // A new post takes the first free address outright — nobody should be stopped from writing a
+      // page because someone else used the title. A deliberate rename (below) still gets the warning.
+      if (!saved && !unlocked) slug.value = freeSlug(slugify(title.value), taken, seen);
+      check();
     });
+    slug.addEventListener("input", check);
     slug.parentNode.appendChild(btn("Edit", "Change the web address", function () {
       if (saved && !confirm("Changing the web address breaks any existing link to this page. Continue?")) return;
       unlocked = true;
       slug.readOnly = false;
       slug.focus();
     }));
+    check();   // a rejected save comes back with the clashing slug already in the field
   }
 
   // ---- media ----------------------------------------------------------------

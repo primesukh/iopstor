@@ -236,13 +236,15 @@ def apply_post(existing, b):
     if errors:
         fail("validation failed", **errors)
     exclude = existing["id"] if existing else None
-    if b.get("slug"):
-        wanted = db.slugify(b["slug"])
-        if db.unique_slug(type_id, wanted, exclude) != wanted:
-            fail("slug already in use", 409, slug=wanted)
-        changes["slug"] = wanted
-    elif create:
-        changes["slug"] = db.unique_slug(type_id, db.slugify(changes["title"]))
+    if b.get("slug") or create:
+        wanted = db.slugify(b.get("slug") or changes["title"])   # no slug sent => create, so title is set and valid
+        free = db.unique_slug(type_id, wanted, exclude)
+        # Creating: take whatever is free, so a page is never blocked by a name someone else used.
+        # Renaming an existing post is deliberate, so say it instead of guessing. The message is a
+        # sentence, like every other field: the browser form prints fields[k] straight out.
+        if free != wanted and not create:
+            fail("slug already in use", 409, slug=f"\u201c{wanted}\u201d is already in use \u2014 try \u201c{free}\u201d")
+        changes["slug"] = free
     status = changes.get("status", existing["status"] if existing else "draft")
     published_at = changes["published_at"] if "published_at" in changes else (existing["published_at"] if existing else None)
     if status == "published" and not published_at:

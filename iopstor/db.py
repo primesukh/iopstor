@@ -1,6 +1,8 @@
 """All data access: Supabase PostgREST over Kong with the service-role key (bypasses RLS).
 No direct Postgres connection anywhere. Rows are plain dicts."""
+import random
 import re
+import string
 import unicodedata
 from datetime import datetime, timezone
 
@@ -163,11 +165,12 @@ def hydrate(post):
 
 
 def unique_slug(post_type_id, base, exclude_id=None):
+    """base if it is free, else base-xyz. Three random letters rather than -2: a second "Testing" is a
+    different page, not the second part of one, and the suffix does not leak how many there are."""
     taken = {r["slug"] for r in rows(table("posts").select("id,slug").eq("post_type_id", post_type_id).like("slug", f"{base}%")) if r["id"] != exclude_id}
-    slug, n = base, 1
-    while slug in taken:
-        n += 1
-        slug = f"{base}-{n}"
+    slug = base
+    while slug in taken:   # ponytail: 17576 combinations, so the retry is the collision handler, not a hot path
+        slug = f"{base}-{''.join(random.choices(string.ascii_lowercase, k=3))}"
     return slug
 
 

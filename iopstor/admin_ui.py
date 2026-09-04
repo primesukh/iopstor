@@ -143,10 +143,15 @@ def _form_body(pt, existing):
 
 def _form_context(pt, post, errors=None):
     taxonomies = [t for t in db.rows(db.table("taxonomies").select("*, terms(*)").order("id")) if t["slug"] in (pt.get("taxonomies") or [])]
-    parents = db.rows(db.table("posts").select("id,title,slug").eq("post_type_id", pt["id"]).order("title")) if pt["hierarchical"] else []
+    # ponytail: assumes < 2000 posts per type, like db._index(); one select feeds both the parent
+    # dropdown and the slug list the form warns against.
+    siblings = db.rows(db.table("posts").select("id,title,slug").eq("post_type_id", pt["id"]).order("title").limit(2000))
     media = db.rows(db.table("media").select("id,filename,url,mime,alt").order("id", desc=True).limit(200))
     term_ids = {t["id"] for t in (post or {}).get("terms") or []}
-    return dict(pt=pt, post=post, errors=errors or {}, taxonomies=taxonomies, parents=[p for p in parents if not post or p["id"] != post["id"]],
+    pk = (post or {}).get("id")   # .get(): a rejected save of a *new* post renders a draft dict with no id
+    return dict(pt=pt, post=post, errors=errors or {}, taxonomies=taxonomies,
+                parents=[p for p in siblings if p["id"] != pk] if pt["hierarchical"] else [],
+                taken_slugs=[s["slug"] for s in siblings if s["id"] != pk],
                 media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps((post or {}).get("blocks") or [], indent=2, ensure_ascii=False),
                 seo_keys=SEO_KEYS)
 
