@@ -4,7 +4,7 @@
 {% if errors %}<div class="error"><strong>Not saved.</strong><ul>{% for k, v in errors.items() %}<li><code>{{ k }}</code>: {{ v if v is string else v|join('; ') }}</li>{% endfor %}</ul></div>{% endif %}
 {% set p = post or {} %}
 {% set meta = p.meta or {} %}{% set seo = p.seo or {} %}
-<script type="application/json" id="editor-data">{{ {"blocks": blocks, "ui": blocks_ui, "media": media, "post_types": post_types|map(attribute='slug')|list}|tojson }}</script>
+<script type="application/json" id="editor-data">{{ {"blocks": blocks, "ui": blocks_ui, "layouts": layouts, "media": media, "post_types": post_types|map(attribute='slug')|list}|tojson }}</script>
 <form method="post" class="grid" id="post-form">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <div>
@@ -28,11 +28,23 @@
     </div>
     <div class="card">
       <h2>Content</h2>
-      <div id="blocks-editor"></div>
-      <details id="blocks-json"><summary>Advanced — edit as JSON</summary>
-      <label><small>JSON list of {"type", "data"}; see the block reference on the right.</small>
-      <textarea name="blocks" class="code">{{ p.blocks_text if p.blocks_text is defined else blocks_json }}</textarea></label>
-      </details>
+      {# Three views of one array. Without JavaScript the tabs stay hidden and the JSON pane —
+         the only thing that actually POSTs — is what you get. admin.js reveals the other two. #}
+      <div class="tabs" id="content-tabs" hidden>
+        <button type="button" data-tab="visual" class="on">Visual</button>
+        <button type="button" data-tab="form">Form</button>
+        <button type="button" data-tab="json">Advanced</button>
+      </div>
+      <div id="pane-visual" hidden>
+        <div id="doc-toolbar" class="doc-toolbar"></div>
+        <iframe id="canvas" title="Your page, as a visitor will see it"></iframe>
+        <small>Just start typing. Press <kbd>/</kbd> on an empty line to drop in a section.</small>
+      </div>
+      <div id="pane-form" hidden><div id="blocks-editor"></div></div>
+      <div id="pane-json">
+        <label><small>JSON list of {"type", "data"}; see the block reference on the right.</small>
+        <textarea name="blocks" class="code">{{ p.blocks_text if p.blocks_text is defined else blocks_json }}</textarea></label>
+      </div>
     </div>
     <div class="card">
       <details><summary>SEO overrides</summary>
@@ -42,6 +54,10 @@
     </div>
   </div>
   <div>
+    <div class="card" id="settings-card">
+      <h2>Section settings</h2>
+      <div id="block-settings"></div>
+    </div>
     <div class="card">
       <label>Status <select name="status">{% for s in ('draft','published') %}<option value="{{ s }}" {{ 'selected' if (p.status or 'draft')==s }}>{{ s }}</option>{% endfor %}</select></label>
       <label>Publish date <small>(empty = now when published; future = scheduled)</small> <input type="datetime-local" name="published_at" value="{{ (p.published_at or '')[:16] }}"></label>

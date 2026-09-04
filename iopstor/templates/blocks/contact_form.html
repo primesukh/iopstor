@@ -1,5 +1,5 @@
-<section class="section"><div class="wrap">
-  {% if data.heading %}<h2 class="section-title">{{ data.heading }}</h2>{% endif %}
+<section class="section"{{ fe() }}><div class="wrap">
+  {% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}
   {% if request.args.get('sent') %}<div class="notice">Thank you — we have received your message and will get back to you shortly.</div>{% endif %}
   <form class="lead-form" method="post" action="/api/v1/leads">
     <input type="hidden" name="kind" value="{{ data.kind }}">

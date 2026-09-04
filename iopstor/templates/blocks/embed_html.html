@@ -1,1 +1,1 @@
-<section class="section"><div class="wrap embed">{{ data.html|safe }}</div></section>
+{% if edit %}<section class="section"{{ fe() }}><div class="wrap embed"><p class="iop-ph">Embedded code — it runs on the published page, not here. Edit it under “Section settings”.</p></div></section>{% else %}<section class="section"><div class="wrap embed">{{ data.html|safe }}</div></section>{% endif %}

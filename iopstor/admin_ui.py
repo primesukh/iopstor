@@ -13,7 +13,7 @@ from werkzeug.exceptions import HTTPException
 from . import db
 from .admin_api import apply_post
 from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login
-from .blocks import BLOCKS, EDITOR
+from .blocks import BLOCKS, EDITOR, LAYOUTS, render_blocks
 from .storage import delete_media, save_upload
 
 ui = Blueprint("admin_ui", __name__, url_prefix="/admin", template_folder="templates")
@@ -146,7 +146,7 @@ def _form_context(pt, post, errors=None):
     media = db.rows(db.table("media").select("id,filename,url,mime,alt").order("id", desc=True).limit(200))
     term_ids = {t["id"] for t in (post or {}).get("terms") or []}
     return dict(pt=pt, post=post, errors=errors or {}, taxonomies=taxonomies, parents=[p for p in parents if not post or p["id"] != post["id"]],
-                media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, blocks_json=json.dumps((post or {}).get("blocks") or [], indent=2, ensure_ascii=False),
+                media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps((post or {}).get("blocks") or [], indent=2, ensure_ascii=False),
                 seo_keys=SEO_KEYS)
 
 
@@ -207,6 +207,26 @@ def delete_post(pk):
     db.table("posts").delete().eq("id", pk).execute()
     flash(f"Deleted “{post['title']}”.")
     return redirect(url_for("admin_ui.posts", type=post["post_type"]["slug"]))
+
+
+@ui.post("/canvas")
+@ui_required()
+def canvas():
+    """The visual editor's iframe. Renders the blocks the browser currently holds — unsaved ones
+    included — through the same render_blocks() the public site uses, with edit markers on.
+    With ?i=N it returns just that one block, so an edit swaps one <section> instead of reloading."""
+    try:
+        blocks = json.loads(request.form.get("blocks") or "[]")
+    except ValueError:
+        blocks = []
+    if not isinstance(blocks, list):
+        blocks = []
+    i = request.form.get("i", type=int)
+    if i is not None:
+        return render_blocks(blocks[i:i + 1], edit=True) if 0 <= i < len(blocks) else ""
+    return render_template("admin/canvas.html", body=render_blocks(blocks, edit=True),
+                           title=request.form.get("title", ""), excerpt=request.form.get("excerpt", ""),
+                           has_hero=bool(blocks) and isinstance(blocks[0], dict) and blocks[0].get("type") == "hero")
 
 
 # ---- media, leads, settings, users ----------------------------------------

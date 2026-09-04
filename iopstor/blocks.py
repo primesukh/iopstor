@@ -1,8 +1,9 @@
 """Block registry. Adding a block = one entry in BLOCKS + templates/blocks/<type>.html."""
 import re
+from copy import deepcopy
 
 from flask import render_template
-from markupsafe import Markup
+from markupsafe import Markup, escape
 
 BLOCKS = {  # type: (required fields, optional fields)
     "hero": (["heading"], ["subheading", "image", "cta_label", "cta_url"]),
@@ -35,8 +36,63 @@ EDITOR = {
                "cta_url": "Button link", "cta_label": "Button text", "top_level": "Top-level only",
                "media_id": "Image", "image": "Image", "post_type": "Content type", "term": "Term slug"},
     "kinds": ["contact", "quote", "career"],
+    # order the section picker offers them in, commonest first (Jinja's tojson sorts dict keys,
+    # so BLOCKS' own order does not survive the trip to the browser)
+    "order": ["hero", "rich_text", "cards", "cta", "faq", "stats", "testimonial", "spec_table",
+              "image", "gallery", "post_list", "contact_form", "embed_html"],
+    # the visual inserter: icon, plain-English name, one line on what the visitor sees
+    "names": {
+        "hero": ("\U0001F3D4", "Hero", "The big opening band: headline, one line of text, one button."),
+        "rich_text": ("\u00B6", "Rich text", "Words, headings and lists \u2014 type into it like a Word document."),
+        "cards": ("\u25A4", "Cards", "A row of boxes, each with a title, a line of text and an optional link."),
+        "cta": ("\U0001F4E3", "Call to action", "A coloured band that asks the visitor to do one thing."),
+        "faq": ("\u2753", "Questions & answers", "Questions that open to reveal the answer. Google shows these too."),
+        "stats": ("\U0001F4CA", "Numbers", "A row of big figures with a label under each one."),
+        "testimonial": ("\U0001F4AC", "Customer quote", "Something a customer said, with their name and company."),
+        "spec_table": ("\U0001F4CB", "Specification table", "A two-column table of labels and values."),
+        "image": ("\U0001F5BC", "Picture", "One picture across the page, with an optional caption."),
+        "gallery": ("\U0001F5C2", "Picture grid", "Several pictures laid out in a grid."),
+        "post_list": ("\U0001F4D1", "Automatic list", "Lists pages of a type you choose, and keeps itself up to date."),
+        "contact_form": ("\u2709", "Contact form", "A form visitors fill in. Replies arrive under Leads."),
+        "embed_html": ("</>", "Embedded code", "Paste code from YouTube, a map or another service."),
+    },
+    # starting content for a freshly inserted block, so a new section is visible and clickable.
+    # Anything with placeholder copy also passes validate_blocks(), so the page saves straight away.
+    "seed": {
+        "hero": {"heading": "A headline that says what you do", "subheading": "One or two lines explaining it in plain English.",
+                 "cta_label": "Talk to us", "cta_url": "/contact-us"},
+        "rich_text": {"html": "<p>Write your text here.</p>"},
+        "cards": {"heading": "What we do", "items": [{"title": "First thing", "text": "A sentence about it.", "icon": "", "url": ""},
+                                                     {"title": "Second thing", "text": "A sentence about it.", "icon": "", "url": ""},
+                                                     {"title": "Third thing", "text": "A sentence about it.", "icon": "", "url": ""}]},
+        "cta": {"heading": "Ready to talk?", "text": "Tell us what you need and we will come back to you.",
+                "button_label": "Contact us", "button_url": "/contact-us"},
+        "faq": {"heading": "Questions", "items": [{"q": "Your question here?", "a": "<p>And the answer here.</p>"}]},
+        "stats": {"items": [{"value": "99.999%", "label": "uptime"}, {"value": "5 PB", "label": "per rack"},
+                            {"value": "24\u00D77", "label": "support"}]},
+        "testimonial": {"quote": "What a customer said about working with you.", "author": "Their name",
+                        "role": "Job title", "company": "Company"},
+        "spec_table": {"heading": "Specifications", "rows": [{"k": "Capacity", "v": "Up to 5 PB"}, {"k": "Interface", "v": "NFS, SMB, S3"}]},
+        "contact_form": {"kind": "contact", "heading": "Get in touch"},
+        "post_list": {"post_type": "post", "heading": "Latest"},
+        "embed_html": {"html": "<!-- paste the embed code from YouTube, Google Maps, etc. here -->"},
+        "image": {"caption": ""},      # media_id must be chosen: no placeholder can stand in for a picture
+        "gallery": {"images": []},
+    },
 }
 REPEATERS = ("items", "images", "rows")
+# Starting points offered on a new post, as block types expanded through EDITOR["seed"].
+# Only types whose seed passes validate_blocks() belong here (so: no picture blocks).
+LAYOUTS = {
+    "Product page": ["hero", "stats", "spec_table", "faq", "cta"],
+    "Service page": ["hero", "rich_text", "cards", "testimonial", "cta"],
+    "Landing page": ["hero", "cards", "stats", "contact_form"],
+}
+
+
+def layout(name):
+    """Expand a LAYOUTS entry into real blocks. Unknown name -> a blank page."""
+    return [{"type": t, "data": deepcopy(EDITOR["seed"].get(t) or {})} for t in LAYOUTS.get(name, [])]
 
 _NON_TEXT_KEYS = {"url", "cta_url", "button_url", "icon", "image", "media_id", "post_type", "term", "limit", "kind", "top_level"}
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
@@ -63,13 +119,44 @@ def validate_blocks(blocks):
     return errors
 
 
-def render_blocks(blocks):
+def _no_fe(*_a, **_k):
+    return ""
+
+
+def _fe(i):
+    """Edit markers for blocks/<type>.html, handed in by render_blocks(edit=True) and only then —
+    the public site is passed _no_fe, so data-* attributes cannot leak into it.
+      fe()                -> the block root          data-b="2"
+      fe("heading")       -> a text field            data-f="heading" data-ph="Heading"
+      fe("items", 0)      -> one repeater row        data-r="items" data-i="0"
+      fe("html", rich=1)  -> value is innerHTML      ... data-rich="1"
+      fe("html", ph="…")  -> override the empty-state placeholder
+    Write it tight against the tag (<h1{{ fe('heading') }}>) so the public render is plain <h1>."""
+
+    def fe(field=None, row=None, rich=False, ph=None):
+        if field is None:
+            return Markup(f' data-b="{i}"')
+        if row is not None:
+            return Markup(f' data-r="{escape(field)}" data-i="{int(row)}"')
+        ph = ph or EDITOR["labels"].get(field) or field.replace("_", " ").capitalize()
+        out = f' data-f="{escape(field)}" data-ph="{escape(ph)}"'
+        return Markup(out + ' data-rich="1"' if rich else out)
+
+    return fe
+
+
+def render_blocks(blocks, edit=False):
     out = []
-    for b in blocks:
-        extra = {}
-        if b["type"] == "post_list":
-            extra["posts"] = _post_list(b["data"])
-        out.append(render_template(f"blocks/{b['type']}.html", data=b["data"], **extra))
+    for i, b in enumerate(blocks):
+        try:
+            extra = {"posts": _post_list(b["data"])} if b["type"] == "post_list" else {}
+            out.append(render_template(f"blocks/{b['type']}.html", data=b["data"], edit=edit,
+                                       fe=_fe(i) if edit else _no_fe, **extra))
+        except Exception as e:
+            if not edit:
+                raise  # a public page that cannot render should fail loudly, not hide it
+            out.append(Markup(f'<section class="section" data-b="{i}"><div class="wrap">'
+                              f'<p class="iop-err">This section is not finished yet \u2014 {escape(e)}</p></div></section>'))
     return Markup("".join(out))
 
 

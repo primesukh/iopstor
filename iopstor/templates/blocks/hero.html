@@ -1,6 +1,6 @@
-<section class="hero"><div class="wrap">
-  <h1>{{ data.heading }}</h1>
-  {% if data.subheading %}<p>{{ data.subheading }}</p>{% endif %}
-  {% if data.cta_url %}<a class="btn" href="{{ data.cta_url }}">{{ data.cta_label or 'Learn more' }}</a>{% endif %}
+<section class="hero"{{ fe() }}><div class="wrap">
+  <h1{{ fe('heading') }}>{{ data.heading }}</h1>
+  {% if data.subheading or edit %}<p{{ fe('subheading') }}>{{ data.subheading }}</p>{% endif %}
+  {% if data.cta_url %}<a class="btn" href="{{ data.cta_url }}"{{ fe('cta_label') }}>{{ data.cta_label or 'Learn more' }}</a>{% endif %}
   {% if data.image %}<img src="{{ media_url(data.image) }}" alt="{{ data.heading }}">{% endif %}
 </div></section>

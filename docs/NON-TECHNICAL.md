@@ -55,16 +55,17 @@ Some types ask for a few extra details. A Case Study asks for Client, Challenge,
 
 ---
 
-## 4. Building a page out of blocks
+## 4. Writing a page
 
-A page is not one big text box. It is a **stack of blocks**, each one a full-width band down the page. You choose the blocks and the order; the design is applied for you, so every page looks consistent and works on phones.
+**Open a page and start typing.** Under **Content** you get a blank white page with the cursor already in it and a toolbar across the top — the same as Word or Google Docs. You do not have to choose anything, set anything up, or understand anything first. Type.
 
-The available blocks:
+Most pages are exactly that: words. When you want something fancier than words — a row of boxes, a strip of big numbers, a coloured band with a button — you drop one in without leaving the keyboard. Those are called **sections**, and the design is applied for you, so they always look right and work on phones.
 
-| Block | What the visitor sees |
+The sections available:
+
+| Section | What the visitor sees |
 |---|---|
 | **Hero** | The big banner at the top: headline, sub-headline, optional image and button |
-| **Rich text** | A normal paragraph area for prose |
 | **Image** | One picture with a caption |
 | **Gallery** | A grid of pictures |
 | **Cards** | A row of boxes, each with a title, short text, icon and link |
@@ -77,22 +78,54 @@ The available blocks:
 | **Contact form** | An enquiry form. Choose *contact*, *quote* or *career* |
 | **Embed HTML** | For dropping in code from another service, like a map or a video |
 
-**Rule of thumb:** if a page starts with a Hero block, the Hero supplies the page's main headline. Otherwise the page title is shown at the top.
+**Rule of thumb:** if a page starts with a Hero, the Hero supplies the page's main headline. Otherwise the page title is shown at the top, above whatever you have written.
 
-### Editing the blocks
+### Writing
 
-Under **Content** on the edit screen you get one panel per block, stacked in the order they appear on the page. Each panel has a plain form — a box per thing the block needs, labelled in English, with a `*` on the ones that cannot be left empty.
+**Just type.** The page opens with the cursor in it. Everything you write goes down the page the way it does in a Word document — press Enter for a new paragraph and keep going.
 
-- **Add a block** — the *“+ Add a section…”* menu at the bottom. Pick a type and an empty panel appears.
-- **Reorder** — the **↑** and **↓** buttons in a block's grey title bar move it up or down the page.
-- **Remove** — the **✕** button, which asks you to confirm first.
-- **Lists inside a block** — Cards, FAQ, Stats, Spec table and Gallery hold a list of rows. Each row has its own **+ Add**, its own ↑ ↓ to reorder, and its own ✕ to remove.
+**The toolbar** across the top works the way you would expect:
 
-**Writing prose.** The Rich text block gives you a small toolbar — **B**, *I*, headings, bulleted and numbered lists, a link button and *clear formatting* — and you type straight into the box the way you would in Word. Pasting from Word or Google Docs deliberately drops their formatting and keeps your words, so nothing strange leaks into the page. If you would rather work in HTML, the **HTML** button on the right of that toolbar swaps the box for the raw markup and back again.
+| | |
+|---|---|
+| **↶ ↷** | Undo and redo |
+| **Normal text ▾** | Turn a line into a *Heading*, *Sub-heading* or *Small heading*. (There is no “Heading 1” on purpose — the page title at the top is already the main heading, and having two confuses Google.) |
+| **B** *I* <u>U</u> | Bold, italic, underline, and a button to strip formatting off |
+| **• 1.** | Bulleted and numbered lists |
+| **❝ —** | A pull quote, and a dividing line |
+| **🔗 🖼 ▦ </>** | A link; a picture; a table; or code embedded from another service like YouTube or Google Maps |
+| **⇤ ↔ ⇥** and the two colour squares | Alignment, text colour and highlight |
 
-Nothing is saved until you press **Save**. If something required is missing, the page comes back with the problem listed at the top and your work still in place.
+**Pasting from Word or Google Docs works properly.** Draft wherever you like, copy the whole thing, paste it in — your headings stay headings and your bullets stay bullets. Word's own invisible junk is dropped on the way in, so nothing strange leaks into the site.
 
-> **Today's limitation.** The full drag-and-drop builder is phase 2 — you reorder blocks with the arrow buttons rather than by dragging them. There is also an *Advanced — edit as JSON* panel under the blocks; that is for developers, and you never need to open it.
+**Pictures go in the flow.** Press **🖼**, choose a file, and it uploads and lands where the cursor was. You are then offered a box to describe the picture for blind visitors — worth thirty seconds, and good for Google too.
+
+### Adding a section
+
+**Press `/` on an empty line.** A short list appears under the cursor. Type a few letters to narrow it — “num” finds Numbers, “quo” finds Customer quote — and press Enter. The section drops in right there, already filled with stand-in wording, and the cursor lands on a fresh line underneath so you can carry on writing.
+
+You can also use **+ Section** on the toolbar, which opens the same list with a description of each one. The same menu has *“Start from a layout…”* if you would rather begin from a ready-made Product, Service or Landing page and replace the wording.
+
+### Changing a section
+
+Click any wording inside a section and type over it — headline, button label, a question in the FAQ, a number in the numbers strip. Hover a section and a small dark toolbar appears in its top-right corner:
+
+| Button | What it does |
+|---|---|
+| **⠿** | Hold and drag to move the whole section up or down the page |
+| **↑ ↓** | Move it one place up or down, if you prefer buttons to dragging |
+| **⧉** | Make a copy of the section, just below |
+| **⚙** | Open its settings on the right — pictures, links, and the choices that are not words on the page |
+| **✕** | Remove the section (it asks first) |
+
+Ordinary paragraphs deliberately have no toolbar hovering over them. They are just writing.
+
+**Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live in the **Section settings** panel on the right, which fills in when you click a section. Any picture field there has a **Choose file** button that uploads on the spot.
+
+Nothing is saved until you press **Save**. If you try to leave with unsaved changes, your browser will warn you. If something required is missing, the page comes back with the problem listed at the top and your work still in place.
+
+> **The other two tabs.** Above the page there are three tabs. **Visual** is the one described above and the one to use. **Form** is the older view — the same content as a list of labelled boxes — which some people find quicker for bulk typing. **Advanced** shows the raw data for developers; you never need to open it.
+
 
 ---
 
@@ -163,7 +196,7 @@ Products can carry a price and a checkout button. The payment step is currently 
 
 **Done:** the content system, the public website with its theme, the admin panel, search-engine and AI output, enquiry capture, media library, users and roles, and the payment placeholder.
 
-**Still to come:** dragging blocks to reorder them (phase 2 — the arrow buttons do the job today) and a live payment provider.
+**Still to come:** a live payment provider.
 
 ---
 

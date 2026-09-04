@@ -56,3 +56,53 @@
 .rt-body{min-height:8rem;padding:.6rem .7rem;border:1px solid #cbd5e1;border-radius:8px;background:#fff;overflow-wrap:anywhere}
 .rt-body:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
 .rt-body>*:first-child{margin-top:0}
+/* --- visual editor: tabs, canvas frame, section picker (see static/admin.js) --- */
+.admin-main:has(#post-form){max-width:1560px}   /* the canvas needs more room than a form does */
+.admin .card>h2:first-child{margin-top:0}
+.tabs:not([hidden]){display:flex}
+.tabs{gap:.3rem;margin-bottom:.9rem;border-bottom:1px solid var(--line);padding-bottom:.6rem}
+.tabs button{background:transparent;color:var(--muted);padding:.4rem .9rem;font-size:.9rem}
+.tabs button:hover{background:#f1f5f9;color:var(--navy)}
+.tabs button.on{background:var(--accent);color:#fff}
+/* :not([hidden]) matters: an id selector otherwise outranks [hidden] and the frame never hides */
+#canvas:not([hidden]){display:block}
+#canvas{width:100%;height:76vh;min-height:30rem;border:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius);background:#fff}
+#pane-visual>small{display:block;margin-top:.5rem}
+#block-settings .blk{border:0;margin:0}
+#block-settings .blk-head{border-radius:8px;border-bottom:0}
+#block-settings .blk-fields{padding-left:0;padding-right:0}
+/* the section picker and the "start with…" chooser share one card grid */
+.iop-modal{position:fixed;inset:0;background:rgba(15,27,45,.45);z-index:100;display:flex;align-items:flex-start;justify-content:center;padding:4vh 1rem}
+.iop-modal-in{background:var(--card);border-radius:var(--radius);padding:1.1rem;width:min(56rem,100%);max-height:88vh;overflow:auto;box-shadow:0 18px 50px rgba(15,27,45,.35)}
+.iop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));gap:.7rem;margin-top:.8rem}
+.admin button.iop-pick{display:block;text-align:left;background:#fff;color:var(--text);border:1px solid var(--line);
+                       border-radius:10px;padding:.8rem;font-weight:400;line-height:1.35}
+.admin button.iop-pick:hover{background:#f0f9ff;border-color:var(--accent)}
+.iop-pick .iop-icon{display:block;font-size:1.5rem;line-height:1;margin-bottom:.4rem}
+.iop-pick strong{display:block;color:var(--navy)}
+.iop-pick small{display:block;color:var(--muted);margin-top:.15rem}
+/* --- the document toolbar: sticky above the canvas, drives the canvas document --- */
+.doc-toolbar{position:sticky;top:66px;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:.1rem;
+             background:var(--card);border:1px solid var(--line);border-bottom:0;
+             border-radius:var(--radius) var(--radius) 0 0;padding:.4rem .5rem}
+.tb-group{display:flex;align-items:center;gap:.1rem;padding:0 .4rem;border-right:1px solid var(--line)}
+.tb-group:last-of-type{border-right:0}
+.admin .doc-toolbar button.tb{background:transparent;color:var(--navy);padding:.3rem .5rem;border-radius:6px;
+                              font-size:.9rem;font-weight:600;min-width:1.9rem;line-height:1.2}
+.admin .doc-toolbar button.tb:hover{background:#f1f5f9}
+.admin .doc-toolbar button.tb.on{background:var(--accent);color:#fff}
+.admin .doc-toolbar button.tb-wide{background:var(--accent);color:#fff;font-size:.85rem;min-width:0}
+.admin .doc-toolbar button.tb-wide:hover{background:var(--accent-2)}
+.admin .doc-toolbar select.tb-style{width:auto;min-width:9.5rem;padding:.3rem .5rem;font-size:.9rem}
+.admin .doc-toolbar input.tb-colour{width:1.9rem;height:1.9rem;padding:0;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer}
+.tb-b{font-weight:800}.tb-i{font-style:italic}.tb-u{text-decoration:underline}
+.tb-note{flex-basis:100%}
+.tb-alt{flex-basis:100%;display:flex;gap:.4rem;align-items:center;margin-top:.4rem;padding-top:.4rem;border-top:1px solid var(--line)}
+.admin .tb-alt input{flex:1}
+/* the "/" menu, positioned over the canvas at the caret */
+.iop-slash{position:absolute;z-index:110;background:var(--card);border:1px solid var(--line);border-radius:10px;
+           box-shadow:0 12px 32px rgba(15,27,45,.22);padding:.3rem;min-width:16rem;max-height:19rem;overflow:auto}
+.admin button.iop-slash-row{display:flex;align-items:center;gap:.55rem;width:100%;text-align:left;background:transparent;
+                            color:var(--text);font-weight:400;padding:.42rem .55rem;border-radius:7px}
+.admin button.iop-slash-row:hover,.admin button.iop-slash-row.on{background:#f0f9ff}
+.iop-slash-row .iop-icon{font-size:1.1rem;line-height:1}
