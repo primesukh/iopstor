@@ -225,6 +225,11 @@
                      ["h3", "H3 \u2014 Sub-heading"], ["h4", "H4 \u2014 Small heading"],
                      ["h5", "H5 \u2014 Smaller"], ["h6", "H6 \u2014 Smallest"]];
   var HEAD_TAGS = HEAD_LEVELS.map(function (o) { return o[0]; });
+  /* Size is separate from level on purpose: a level says what a line *is* (and Google reads it),
+     a size only says how big it looks. Values are absolute rem, so a size inside a size does not
+     compound. "normal" removes the wrapper instead of writing one, which is a true reset. */
+  var TEXT_SIZES = [["0.875rem", "Small"], ["normal", "Normal"], ["1.25rem", "Large"],
+                    ["1.5rem", "Larger"], ["2rem", "Huge"]];
   var BLOCK_NAMES = { cta: "CTA", faq: "FAQ", embed_html: "Embed HTML", rich_text: "Rich text" };
   function nameFor(type) {
     var n = SPEC && SPEC.ui.names && SPEC.ui.names[type];
@@ -813,20 +818,24 @@
     return true;
   }
 
-  /* The block element the caret sits in, bounded by the field. sel="…" asks for the nearest
-     matching ancestor instead. Returns the field itself only when the text really has no wrapper.
-
-     The descent matters: at a block boundary — the caret at the end of a line, which is where it
-     is after you type — Gecko reports the range's container as the editing HOST, not the block.
-     Taken at face value that makes quote-off undetectable (closest("blockquote") from the host is
-     null) and reads alignment off the wrong element. Resolve through startOffset first. */
-  function caretBlock(sel) {
-    if (!liveField()) return null;
+  /* The element the caret is actually in. At a block boundary — the caret at the end of a line,
+     which is where it is after you type — Gecko names the range's container as the *parent* (the
+     block, or the editing host) with an offset, not the node you are standing in. Walking up from
+     that misses everything below it: quote-off goes undetectable, alignment reads off the wrong
+     element, an inline size is invisible. Resolve through startOffset before walking anywhere. */
+  function caretNode() {
     var n = savedRange.startContainer;
-    if (n === savedField && n.childNodes.length) {
+    if (n.nodeType === 1 && n.childNodes.length) {
       n = n.childNodes[Math.min(savedRange.startOffset, n.childNodes.length - 1)];
     }
-    n = n.nodeType === 1 ? n : n.parentNode;
+    return n.nodeType === 1 ? n : n.parentNode;
+  }
+
+  /* The block element the caret sits in, bounded by the field. sel="…" asks for the nearest
+     matching ancestor instead. Returns the field itself only when the text really has no wrapper. */
+  function caretBlock(sel) {
+    if (!liveField()) return null;
+    var n = caretNode();
     if (!n || !savedField.contains(n)) return null;
     if (sel) { var hit = n.closest(sel); return hit && savedField.contains(hit) ? hit : null; }
     while (n !== savedField && n.parentNode !== savedField) n = n.parentNode;
@@ -834,6 +843,46 @@
   }
 
   var BLOCK_CMD = /^(justify|formatBlock|outdent|indent)/;
+
+  /* Gecko ignores styleWithCSS for fontSize and always emits <font size>, an obsolete tag the paste
+     filter strips on the next round trip. So run the command with a marker size — which also clears
+     any size already inside the selection — and swap the tags it produced for a real CSS size, or
+     for nothing at all when the editor asked for Normal. */
+  function setSize(css) {
+    var d = cdoc();
+    execLine("fontSize", "7");
+    if (!d || !savedField) return;
+    Array.prototype.forEach.call(savedField.querySelectorAll('font[size="7"]'), function (f) {
+      var box = d.createElement("span");
+      if (css === "normal") box = d.createDocumentFragment();
+      else box.style.fontSize = css;
+      while (f.firstChild) box.appendChild(f.firstChild);
+      f.parentNode.replaceChild(box, f);
+    });
+    savedField.normalize();
+    fire(savedField);
+  }
+
+  // the inline size covering the caret, if the toolbar put one there
+  function caretSize() {
+    if (!liveField()) return "";
+    var n = caretNode();
+    while (n && n !== savedField) {
+      if (n.style && n.style.fontSize) return n.style.fontSize;
+      n = n.parentNode;
+    }
+    return "";
+  }
+
+  function execLine(cmd, val) {
+    var d = cdoc();
+    if (!d || !restoreSelection()) return;
+    if (savedRange.collapsed) {
+      var line = caretBlock();
+      if (line) { var r = d.createRange(); r.selectNodeContents(line); savedRange = r; }
+    }
+    exec(cmd, val);
+  }
 
   function exec(cmd, val) {
     var d = cdoc();
@@ -914,6 +963,14 @@
       if (style.value) exec("formatBlock", "<" + style.value + ">");
     });
 
+    var size = el("select", { "class": "tb-style tb-size", title: "Text size" });
+    size.appendChild(el("option", { value: "", text: "Size", hidden: "hidden" }));
+    TEXT_SIZES.forEach(function (o) { size.appendChild(el("option", { value: o[0], text: o[1] })); });
+    size.addEventListener("blur", function () { syncBar(); });
+    size.addEventListener("change", function () {
+      if (size.value) setSize(size.value);
+    });
+
     var bold = b("B", "Bold", function () { exec("bold"); }, "tb-b"),
         ital = b("I", "Italic", function () { exec("italic"); }, "tb-i"),
         und = b("U", "Underline", function () { exec("underline"); }, "tb-u"),
@@ -964,7 +1021,7 @@
     }
 
     bar.appendChild(group([b("↶", "Undo", function () { exec("undo"); }), b("↷", "Redo", function () { exec("redo"); })]));
-    bar.appendChild(group([style]));
+    bar.appendChild(group([style, size]));
     bar.appendChild(group([bold, ital, und, strike, b("Tx", "Remove formatting", function () { exec("removeFormat"); })]));
     // formatBlock only ever wraps, so quote needs its own way back out: outdent is what unwraps a
     // blockquote in both engines.
@@ -1004,6 +1061,9 @@
       bar.classList.toggle("tb-off", !live);
       [style, bold, ital, und, strike, quote, align.left, align.center, align.right]
         .forEach(function (x) { x.disabled = !live; });
+      // Size belongs to body text. A heading's size IS its level, so offering both there invites an
+      // H2 that looks like an H4 — the outline Google reads and the one a reader sees disagreeing.
+      size.disabled = !live || /^H[1-6]$/.test((caretBlock() || {}).tagName || "");
       if (HINT) HINT.innerHTML = live ? HINT_ON : "Click in the page to start editing.";
       if (!live) return;
       try {
@@ -1018,6 +1078,8 @@
         Object.keys(align).forEach(function (k) { align[k].classList.toggle("on", k === at); });
         var blk = (d.queryCommandValue("formatBlock") || "").toLowerCase();
         style.value = HEAD_TAGS.indexOf(blk) > -1 ? blk : "";
+        var px = caretSize();
+        size.value = TEXT_SIZES.some(function (o) { return o[0] === px; }) ? px : (px ? "" : "normal");
       } catch (e) { /* no selection in the canvas yet */ }
     };
   }

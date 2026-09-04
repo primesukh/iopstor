@@ -373,6 +373,28 @@ already on *Normal text*, so picking *Normal text* changed nothing and raised no
 
 The style dropdown offers **Normal text** plus **H1–H6**, labelled by number and by role
 (*H2 — Heading*, *H3 — Sub-heading*, …) so it reads to an editor and to anyone who thinks in tags.
+**Size is a second dropdown, and it is not a heading level.** A level says what a line *is* and
+Google reads it; a size only says how big it looks. `TEXT_SIZES` holds absolute `rem` values, so a
+size inside a size does not compound, and `"normal"` *removes* the wrapper rather than writing
+`1rem` — a true reset.
+
+`setSize()` cannot just call `execCommand("fontSize")`: Gecko ignores `styleWithCSS` for that command
+and always emits `<font size>`, an obsolete tag the paste filter strips on the next round trip. So it
+runs the command with a marker size — which usefully also clears any size already inside the
+selection — then swaps the `<font size="7">` tags it produced for spans carrying a real CSS size, or
+for nothing at all on *Normal*. `execLine()` wraps it: a collapsed caret means "this whole line",
+because otherwise picking a size with nothing selected only sets a pending style and nothing visibly
+happens, which reads as another dead control.
+
+`syncBar()` disables the size dropdown whenever the caret's block is `h1`-`h6`. A heading's size *is*
+its level, and offering both there invites an H2 that looks like an H4 — the outline Google reads and
+the one a reader sees disagreeing.
+
+`caretNode()` is shared by `caretBlock()` and `caretSize()`. At a block boundary Gecko names the
+range's container as the *parent* with an offset, not the node you are standing in; walking up from
+that misses everything below it, which is how the inline size became invisible to `syncBar` and the
+control appeared to snap back to *Normal* after every pick.
+
 `HEAD_LEVELS` (one table, shared by the `<option>` list and `syncBar`'s recognised set) is the only
 place a level is declared. Adding or renaming one is that array.
 

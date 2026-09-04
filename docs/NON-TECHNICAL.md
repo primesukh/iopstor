@@ -90,6 +90,7 @@ The sections available:
 |---|---|
 | **↶ ↷** | Undo and redo |
 | **Normal text ▾** | Sets the size of the line: **H1** down to **H6**, or back to *Normal text*. H2 is the normal way to start a section, H3 for something under it, and so on down. |
+| **Size ▾** | Makes ordinary writing bigger or smaller — *Small*, *Normal*, *Large*, *Larger*, *Huge*. Select some words to resize just those, or click anywhere in a line to resize the whole line. *Normal* puts it back. It is greyed out on a heading, because a heading's size is set by its H-level instead. |
 | **B** *I* <u>U</u> **S** | Bold, italic, underline and strikethrough |
 | **Tx** | Strips all formatting off the selected words |
 | **• 1.** | Bulleted and numbered lists |
