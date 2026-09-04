@@ -140,7 +140,14 @@ BLOCKS = {  # type: (required fields, optional fields)
 
 Fifteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`.
 
-**Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section"><div class="wrap">…`. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
+**Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section{{ al }}"{{ fe() }}><div class="wrap">…` — `al` is the alignment hook (below) and `fe()` the edit marker; both are handed to every block template by `render_blocks()`. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
+
+**Alignment.** Two optional keys on any block's `data`, `left` | `center` | `right`, absent = the theme's own layout:
+
+- `align` — how the content inside the section lines up (headings, text, buttons, captions, images).
+- `align_box` — where the section's own box sits, which only shows on the blocks narrower than the page (`.rich-text` 820px, `.lead-form` 640px). A full-width section has nowhere to go.
+
+`align_class(data)` turns them into `" al-center alb-right"`, which every template interpolates into its root `class`. It is a **whitelist** (`ALIGNS`), not a passthrough — the value lands in a `class` attribute, the same reason `col_widths()` is strict — so a junk value typed into *Advanced* renders nothing at all. Both keys are in `_NON_TEXT_KEYS`, so "center" never reaches `llms-full.txt`, the feed or admin search. They are deliberately **not** fields in `BLOCKS`: alignment belongs to every section, so `admin.js` renders one pair of controls for all types (§12.1) and `validate_blocks()` simply tolerates the extra keys. `site.css` holds the `.al-*` / `.alb-*` rules; `.cta` and table cells keep their own `text-align`, so a centred section does not restyle a CTA band or a spec table.
 
 Two behaviours worth knowing:
 
@@ -265,7 +272,9 @@ Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in nam
 
 ## 12. Theme
 
-One stylesheet, `static/site.css`, with CSS variables at the top, then header/footer, then `.cards` / `.card` / `.btn` / `.section`, then one rule-group per block. `static/admin.css` layers admin-only rules on top, so `/admin` inherits the public theme.
+One stylesheet, `static/site.css`, with CSS variables at the top, then header/footer, then `.cards` / `.card` / `.btn` / `.section`, then the section-alignment group (`.al-*` / `.alb-*`, §6), then one rule-group per block. `static/admin.css` layers admin-only rules on top, so `/admin` inherits the public theme.
+
+**Long words wrap.** `body` carries `overflow-wrap:break-word`, so an unbroken string (a pasted URL, a hash) breaks instead of running off the right of its section and giving the page a horizontal scrollbar — and it is inherited, so the editor canvas gets it too. `break-word` only wraps *inside* a box, and a grid track or a table column is sized from min-content, which a 300-character word still blows out; the boxes that size to their content (`.card`, `.column`, `.stats li`, table cells) get `overflow-wrap:anywhere`, which counts in that size. Not on `body`: `anywhere` would let the header nav break mid-word.
 
 No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS, and the public site ships no JavaScript at all.
 
@@ -283,7 +292,7 @@ No CSS framework, no build step, no JavaScript framework. Mobile navigation is a
 
   Both sides match on the slug, not the string: `slugify()` in `admin.js` mirrors `db.slugify()`, so typing "All-Flash" when "all flash" exists offers the existing term instead of *Create*, and if the browser's snapshot is stale `db.ensure_term()` reuses the row anyway rather than making a second one. Enter in the search box `preventDefault()`s unconditionally — it sits inside `#post-form`, where a bare Enter would submit the post.
 - **Media pickers** — one `mediaWidget()` renders a thumbnail, a "choose existing" select and a file input that uploads to `/admin/media/upload` and appends the new row to *every* picker on the page. It is applied to `select[data-media]` (featured image, per-type `media` fields) and to media fields inside blocks, so there is one code path rather than three. Its third argument is a mime prefix that narrows both the list and the file input: `"image/"` (every image field, and `data-media="images"`), `"application/pdf"` (the `pdf` widget), `""` for anything the server accepts.
-- **Section settings** — `blockFields(block)` renders one section's non-inline fields: labelled inputs driven by `BLOCKS` + `EDITOR`, media pickers, and repeaters for `items`/`images`/`rows`. It is what `⚙` opens in the popover (§12.1); there is no form-based content entry any more — the canvas and the popover are the only editors, and *Advanced* is the raw JSON. It mutates the block object in place, so **keys it does not render survive**, and an unknown block type falls back to an "edit it under Advanced" note. On submit `admin.js` serialises the array back into `textarea[name="blocks"]`, so `_form_body()` and `validate_blocks()` are untouched — the editor only ever writes the JSON a human could have typed. If that textarea holds unparseable JSON (a rejected save round-trip), the editor stands down, opens *Advanced* and says so.
+- **Section settings** — `blockFields(block)` renders one section's non-inline fields: two alignment selects (*Align the content* → `data.align`, *Align the section* → `data.align_box`, §6 — they are type-agnostic, so they are built here rather than from `BLOCKS`, and picking *Default* **deletes** the key so an unaligned section stays byte-identical in the saved JSON), then labelled inputs driven by `BLOCKS` + `EDITOR`, media pickers, and repeaters for `items`/`images`/`rows`. It is what `⚙` opens in the popover (§12.1); there is no form-based content entry any more — the canvas and the popover are the only editors, and *Advanced* is the raw JSON. It mutates the block object in place, so **keys it does not render survive**, and an unknown block type falls back to an "edit it under Advanced" note. On submit `admin.js` serialises the array back into `textarea[name="blocks"]`, so `_form_body()` and `validate_blocks()` are untouched — the editor only ever writes the JSON a human could have typed. If that textarea holds unparseable JSON (a rejected save round-trip), the editor stands down, opens *Advanced* and says so.
 
 Rich fields inside the popover get `richText()`: a `contenteditable` box with a bold/italic/H2/H3/list/link/clear toolbar plus an *HTML* toggle for the raw markup; paste goes through the same `richPaste` filter as the canvas, so headings and lists survive and Word's markup does not.
 
@@ -672,6 +681,8 @@ Marked in code with `# ponytail:` comments.
   has no npm toolchain. Its check is the manual "paste a Google Doc in" step.
 - `embed_html` shows a placeholder on the canvas instead of running. That is partly UX (you cannot click-edit a YouTube embed) and partly safety: the canvas is same-origin with a live admin session, so `|safe` block HTML would execute with the admin's cookie. The trust model is unchanged from the public site, but an `editor` authoring HTML that an `admin` later opens is a path worth knowing about.
 - Inline editing is opt-in per element. Anything without an `fe()` marker — `post_list`'s titles and excerpts, which belong to *other* posts — simply is not editable, which is the point.
+- Section alignment is reachable only through `⚙`, and `wireBlock()` deliberately gives a `rich_text` section no hover bar — so a document paragraph aligns per line from the document toolbar, and its *section* cannot be aligned as a whole. If that gap is felt, the smallest fix is the same two selects in the document toolbar, acting on `selected`.
+- `.cta` and table cells keep their own explicit `text-align`, so a centred section does not restyle a CTA band or a spec table's columns. `align_box` likewise only moves a section narrower than the page; a full-width one has nowhere to go.
 - `DummyGateway` moves no money.
 - `post_types` and `settings` are cached per process, not per cluster. A multi-worker deployment sees an update after `uncache()` runs in *that* worker.
 - FAQPage JSON-LD is not wired up (§9).

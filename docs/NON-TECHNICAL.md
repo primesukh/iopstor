@@ -201,7 +201,22 @@ Click any wording inside a section and type over it — headline, button label, 
 
 Ordinary paragraphs deliberately have no toolbar hovering over them. They are just writing.
 
-**Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live on the section itself: hover it, click the **⚙** on its little dark toolbar, and a small panel opens over that section with exactly its own options — the picture, the button link, how many posts to list, and **+ Add** / ✕ for rows in a Cards, FAQ, Numbers or Specification section. Any picture field there has a **Choose file** button that uploads on the spot. The page updates as you type. Close it with **Esc**, the ✕, another press of ⚙, or by clicking anywhere else.
+**Lining a section up: left, centre or right.** The **⇤ ↔ ⇥** buttons on the top toolbar centre one
+paragraph at a time. To do a whole section at once, open its **⚙** and use the two boxes at the top:
+
+| Box | What it moves |
+|---|---|
+| **Align the content** | Everything inside the section — the heading, the writing, the button, the picture, the caption — lines up left, centre or right together. |
+| **Align the section** | The section's own block. Only some sections are narrower than the page (writing, an enquiry form); those can sit on the left, in the middle, or over on the right. A section that already fills the width has nowhere to go, so nothing changes. |
+
+Both start on **Default**, which is how the design lays that section out on its own. Set one, and the
+page redraws as you choose it. A coloured CTA band stays centred and a specification table stays
+left, whatever you pick — those two are designed that way on purpose.
+
+Ordinary paragraphs are the exception: a plain block of writing has no **⚙**, so use the **⇤ ↔ ⇥**
+buttons on the toolbar for those.
+
+**Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live on the section itself: hover it, click the **⚙** on its little dark toolbar, and a small panel opens over that section with exactly its own options — **Align the content**, **Align the section**, the picture, the button link, how many posts to list, and **+ Add** / ✕ for rows in a Cards, FAQ, Numbers or Specification section. Any picture field there has a **Choose file** button that uploads on the spot. The page updates as you type. Close it with **Esc**, the ✕, another press of ⚙, or by clicking anywhere else.
 
 Nothing is saved until you press **Save**. If you try to leave with unsaved changes, your browser will warn you. If something required is missing, the page comes back with the problem listed at the top and your work still in place.
 
@@ -304,6 +319,11 @@ Products can carry a price and a checkout button. The payment step is currently 
 ---
 
 ## 12. Quick answers
+
+**A long web address or code runs off the edge of the page.** It no longer does — a word too long to
+fit now breaks and carries on on the next line, in the editor and on the live site, instead of
+pushing the page sideways.
+
 
 **I changed something and the website looks the same.** Check the status is *Published* and the publish date is not in the future. Then refresh with Ctrl+F5.
 

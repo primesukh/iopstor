@@ -107,6 +107,27 @@ def test_edit_markers_only_in_edit_mode(app, monkeypatch):
     assert 'data-r="items" data-i="0"' in edit
 
 
+def test_section_alignment_is_a_whitelist(app, monkeypatch):
+    """Both alignments reach the section's class, in edit and public alike, and nothing else does."""
+    from iopstor import db
+    from iopstor.blocks import align_class
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    data = {"heading": "Hi", "align": "center", "align_box": "right"}
+    blocks = [{"type": "cards", "data": {**data, "items": [{"title": "One", "text": "x"}]}}]
+
+    assert align_class(data) == " al-center alb-right"
+    assert 'class="section al-center alb-right"' in render_blocks(blocks)
+    assert 'class="section al-center alb-right"' in render_blocks(blocks, edit=True)
+
+    # it lands in a class attribute, so anything not on the list is dropped rather than escaped
+    assert align_class({"align": 'x" onload="', "align_box": "middle"}) == ""
+    assert align_class({}) == ""
+    # and an alignment is layout, not words: it must not reach llms.txt, the feed or admin search
+    assert blocks_text(blocks) == "Hi One x"   # the heading, not "center right"
+
+
 def test_edit_mode_survives_a_half_finished_block(app, monkeypatch):
     from iopstor import db
 

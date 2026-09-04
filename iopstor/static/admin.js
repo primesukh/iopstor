@@ -476,14 +476,34 @@
     return el("div", {}, [el("strong", { text: labelFor(key) }), list]);
   }
 
+  /* Alignment belongs to every section, so it is not a field in BLOCKS: one control here covers all
+     of them, and any type added later. "" removes the key rather than writing an empty string, so a
+     section nobody aligned stays byte-identical in the saved JSON.
+     ponytail: a rich_text section has no ⚙ bar (wireBlock skips it), so this is out of reach there —
+     its text still aligns per paragraph from the document toolbar. If that gap is felt, the smallest
+     fix is the same two controls in the doc toolbar, acting on `selected`. */
+  var ALIGNMENTS = [["", "Default"], ["left", "Left"], ["center", "Centre"], ["right", "Right"]];
+
+  function alignPick(label, key, data) {
+    var s = el("select", { title: label });
+    ALIGNMENTS.forEach(function (o) { s.appendChild(el("option", { value: o[0], text: o[1] })); });
+    s.value = data[key] || "";
+    s.addEventListener("change", function () {
+      if (s.value) data[key] = s.value; else delete data[key];
+    });
+    return labelled(label, false, s);
+  }
+
   // The fields of one section — what ⚙ opens. Words on the page are edited on the page; this is
-  // for the rest: pictures, links, choices, and the rows of a Cards / FAQ / Numbers section.
+  // for the rest: alignment, pictures, links, choices, and the rows of a Cards / FAQ / Numbers section.
   function blockFields(block) {
     if (!block.data || typeof block.data !== "object") block.data = {};
     var body = el("div", { "class": "blk-fields" });
     if (!SPEC.blocks[block.type]) {
       body.appendChild(el("p", { "class": "muted", text: "Unknown section type — edit it under Advanced." }));
     } else {
+      body.appendChild(alignPick("Align the content", "align", block.data));
+      body.appendChild(alignPick("Align the section", "align_box", block.data));
       fieldsOf(block.type).forEach(function (f) {
         if (f.key === "cols") {
           // the sections inside a column are edited on the page; the panel only adds, moves and removes

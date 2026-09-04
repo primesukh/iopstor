@@ -108,7 +108,7 @@ def layout(name):
     """Expand a LAYOUTS entry into real blocks. Unknown name -> a blank page."""
     return [{"type": t, "data": deepcopy(EDITOR["seed"].get(t) or {})} for t in LAYOUTS.get(name, [])]
 
-_NON_TEXT_KEYS = {"url", "cta_url", "button_url", "icon", "image", "media_id", "file_media_id", "post_type", "term", "limit", "kind", "top_level", "type", "widths"}
+_NON_TEXT_KEYS = {"url", "cta_url", "button_url", "icon", "image", "media_id", "file_media_id", "post_type", "term", "limit", "kind", "top_level", "type", "widths", "align", "align_box"}
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
 _TEXT_ORDER = ("heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company", "value", "label", "k", "v",
                "caption", "alt", "cta_label", "button_label", "items", "images", "rows", "cols")
@@ -159,6 +159,18 @@ def col_widths(data):
         return ""
     nums = [float(p) for p in parts]
     return " ".join(f"{n:g}fr" for n in nums) if all(n > 0 for n in nums) else ""
+
+
+ALIGNS = ("left", "center", "right")
+
+
+def align_class(data):
+    """The alignment classes for one section: "align" lines up what is inside it, "align_box" moves
+    the box itself. Both are optional and absent means the theme's own layout. A whitelist, not a
+    passthrough: the result goes straight into a class attribute, the same reason col_widths() is
+    strict. Returns "" or " al-center", " al-center alb-right", …"""
+    out = [p + data[k] for k, p in (("align", "al-"), ("align_box", "alb-")) if data.get(k) in ALIGNS]
+    return (" " + " ".join(out)) if out else ""
 
 
 def at_path(blocks, path):
@@ -221,7 +233,7 @@ def render_blocks(blocks, edit=False, path="0"):
                 extra = {"col": lambda n, p=p, cols=cols: render_blocks(cols[n], edit, f"{p}.{n}.0"),
                          "widths": col_widths(b["data"])}
             out.append(render_template(f"blocks/{b['type']}.html", data=b["data"], edit=edit,
-                                       fe=_fe(p) if edit else _no_fe, **extra))
+                                       al=align_class(b["data"]), fe=_fe(p) if edit else _no_fe, **extra))
         except Exception as e:
             if not edit:
                 raise  # a public page that cannot render should fail loudly, not hide it

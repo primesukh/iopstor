@@ -1,4 +1,4 @@
-<section class="section"{{ fe() }}><div class="wrap">
+<section class="section{{ al }}"{{ fe() }}><div class="wrap">
   {% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}
   <div class="cards">{% for p in posts %}<a class="card" href="{{ p.path }}">{% if p.post_type.slug == 'post' and p.published_at %}<span class="date">{{ p.published_at[:10] }}</span>{% endif %}<h3>{{ p.title }}</h3>{% if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}</a>{% else %}<p class="lead">Coming soon.</p>{% endfor %}</div>
 </div></section>
