@@ -90,11 +90,25 @@ The sections available:
 |---|---|
 | **↶ ↷** | Undo and redo |
 | **Normal text ▾** | Turn a line into a *Heading*, *Sub-heading* or *Small heading*. (There is no “Heading 1” on purpose — the page title at the top is already the main heading, and having two confuses Google.) |
-| **B** *I* <u>U</u> | Bold, italic, underline, and a button to strip formatting off |
+| **B** *I* <u>U</u> **S** | Bold, italic, underline and strikethrough |
+| **Tx** | Strips all formatting off the selected words |
 | **• 1.** | Bulleted and numbered lists |
 | **❝ —** | A pull quote, and a dividing line |
 | **🔗 🖼 ▦ </>** | A link; a picture; a table; or code embedded from another service like YouTube or Google Maps |
 | **⇤ ↔ ⇥** and the two colour squares | Alignment, text colour and highlight |
+
+**The buttons light up to show what is switched on.** Put the cursor in a line and the toolbar
+follows it: if that line is a quote, **❝** is highlighted; if it is centred, **↔** is highlighted;
+bold, italic, underline and strikethrough do the same. **Clicking a highlighted button switches it
+back off** — that is how you take a paragraph back out of a quote, or move centred text back to the
+left.
+
+**If the toolbar goes grey, it is waiting for you.** It fades and the line underneath reads *“Click
+in the page to start editing”* whenever the cursor is not in text it can format — after you have
+been working somewhere else on the screen, or when the cursor is in a headline or a button label,
+which are a fixed size on purpose. Click into a paragraph and the toolbar comes straight back. It is
+deliberately switched off rather than pretending: a button that looked available but did nothing was
+the old, more confusing behaviour.
 
 **Pasting from Word or Google Docs works properly.** Draft wherever you like, copy the whole thing, paste it in — your headings stay headings and your bullets stay bullets. Word's own invisible junk is dropped on the way in, so nothing strange leaks into the site.
 

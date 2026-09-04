@@ -11,6 +11,8 @@ Python 3.13, Flask 3.1, **supabase-py 2.x** (PostgREST data access, Auth, Storag
 No SQLAlchemy, no direct Postgres connection, no ORM: rows are plain dicts.
 Package manager: **pipenv** (`Pipfile` + `Pipfile.lock`, venv in `.venv/`). `requirements.txt` / `requirements-dev.txt` are generated
 from the lock (`pipenv requirements > requirements.txt`, `pipenv requirements --dev-only`) and are what Docker installs. Regenerate both after any Pipfile change.
+**Installing a new package: `pipenv install <pkg>` (or `pipenv install --dev <pkg>`) — never `pip install`.** Then regenerate both
+`requirements.txt` and `requirements-dev.txt` from the lock (commands above) in the same change; Docker only ever reads those two files.
 
 Platform: self-hosted **Supabase** reached only via its Kong gateway (`SUPABASE_URL`) with the service-role key — PostgREST for data,
 GoTrue for admin logins, Storage bucket `media` for uploads — and self-hosted **Dokploy** (Dockerfile + gunicorn).
@@ -51,7 +53,12 @@ pipenv run flask create-admin EMAIL PASS    # Supabase Auth user + CMS admin row
 pipenv run pytest
 ```
 
+The user's own dev server is usually already running on port 5000 — if you need to run a server yourself to test something, use a different port (e.g. `flask run --debug -p 5001`), never 5000.
+
 ## Workflow (non-negotiable)
+
+**0. Check recent git history before planning or implementing anything.**
+`git log --oneline -20` (and `git log -p` / `git show` on anything that looks related) before touching a new feature or an existing one — recent commits often already cover, half-cover, or conflict with the task. Do this before graphify/grep in step 1.
 
 **1. Explore with graphify first, then grep.**
 Before answering an architecture question or touching an unfamiliar area, query the knowledge graph — it is already built at `graphify-out/graph.json`:
@@ -64,7 +71,7 @@ graphify explain "apply_post"        # plain-language explanation of one node
 
 The graph gives the shape: which modules connect, which communities a symbol bridges, where the god nodes are (`table()`, `require_role()`, `one()`, `apply_post()`, `render_blocks()`). *Then* grep and read the actual files to confirm the detail — the graph is the map, the source is the territory. Never skip straight to grep on a question the graph can answer, and never trust the graph alone for a claim you are about to write down.
 
-**Never rebuild the graph during feature work.** The graph is refreshed at merge time only — see rule 2. A branch may be abandoned or reworked, so indexing it mid-flight burns tokens on a shape that may never reach `main`. Query a slightly stale graph, then confirm against source; that is what step 1 is for.
+**Never rebuild the graph during feature work.** A branch may be abandoned or reworked, so indexing it mid-flight burns tokens on a shape that may never reach `main`. Query a slightly stale graph, then confirm against source; that is what step 1 is for.
 
 **2. Every feature goes on its own branch and PR. Never merge without being told.**
 
@@ -76,24 +83,20 @@ git push -u origin <branch>            # then open the PR
 
 Open the PR and **stop there**. Do not merge, do not squash, do not push to `main` — even when tests pass and the work is obviously finished. Merging happens only when the user explicitly says so, on that specific PR. `gh` is not installed on this machine; PRs go through the GitHub API using the existing git credential.
 
-**Rebuild the graph as the last step of a merge, and only then:**
+**Never mention Claude or Anthropic anywhere in git authorship** — no `Co-Authored-By: Claude ...` trailer, no `noreply@anthropic.com`, in commit messages or PR bodies/authors. Commits and PRs are authored as the user only.
 
-```
-git checkout main && git pull        # after the PR is merged
-/graphify . --update                 # re-extract only new/changed files
-```
-
-So the full order is: branch → work → both docs → push → open PR → **stop**. Then, once the user says merge: merge → pull `main` → `/graphify . --update`. The graph therefore always describes what is on `main`, never a half-finished branch.
+So the full order is: branch → work → both docs → push → open PR → **stop**.
 
 **3. Every feature updates both docs, in the same PR.**
 `docs/TECHNICAL.md` for developers (modules, schema, endpoints, contracts, ceilings) and `docs/NON-TECHNICAL.md` for editors (what it does, in plain English, no jargon). A feature is not finished until both reflect it. If a change genuinely affects only one audience, say so in the PR body rather than silently skipping the other.
 
 ## Hard rules
 
+- **Never write to the database, run migrations, or deploy anything without the user's explicit permission.** Reading data (via `db.py` helpers, Studio, or the Supabase MCP) is always fine. Never run `flask migrate`, `flask seed`, `flask create-admin`, or any other command that changes the database yourself — write the `.sql` file and hand it to the user so they can read it and apply it manually (Studio SQL editor or `flask migrate` on their own machine).
 - **Migrations are plain `.sql` files in `migrations/`, one per schema edit**, named `NNNN_short_name.sql` (zero-padded, applied in name order,
   tracked in `schema_migrations`). `0000_bootstrap.sql` is pasted once into Studio's SQL editor; it creates `apply_migration(name, sql)`
   (SECURITY DEFINER, executable by service_role only) which `flask migrate` calls per file over Kong — each file runs in one transaction.
-  Workflow for a schema change: write the `ALTER`/`CREATE` SQL as a new file → `flask migrate` → update the code that reads/writes those columns → commit.
+  Workflow for a schema change: write the `ALTER`/`CREATE` SQL as a new file → tell the user it's ready for them to apply → update the code that reads/writes those columns → commit.
 - **Supabase is the only backend, reached only through Kong with the supabase library.** No `DATABASE_URL`, no psycopg, no SQLite. Local development and tests
   point at the same self-hosted Supabase; the app refuses to start without `SUPABASE_URL`, both keys and the JWT secret.
 - Every query goes through `iopstor/db.py`; use `db.select_posts()` (embeds `post_type`, `featured_media`, `terms`) and `db.hydrate()`/`db.with_paths()` so posts carry `path`.

@@ -308,9 +308,56 @@ but the editing surface leads with writing:
 **The toolbar** (`#doc-toolbar`, `buildToolbar()`) lives in the admin page so it can use
 `admin.css`, but every command runs against the *canvas* document. Clicking a button moves focus
 out of the iframe, so the caret is stored on every `selectionchange` (`rememberSelection`) and put
-back before the command runs (`restoreSelection` → `exec`). `styleWithCSS` is enabled only for the
-colour commands, so they emit `<span style>` rather than `<font>`. `syncBar()` reflects the caret
-back into the bold/italic/underline states and the style dropdown.
+back before the command runs (`restoreSelection` → `exec`). `syncBar()` reflects the caret back into
+the bold/italic/underline/strikethrough states, the quote state, the three alignment buttons and the
+style dropdown — a lit button is what tells an editor that a second click switches it off again.
+
+**The toolbar goes dead rather than lying.** `liveField()` is the gate: the remembered field must
+still be inside the *current* canvas document (`d.contains(savedField)` — `isConnected` is not
+enough, a node from a replaced `srcdoc` stays connected to its own dead document and handing that
+range to the live selection throws) and must carry `data-rich`, which is exactly the set of fields
+where `execCommand` does anything. Fail either test and `syncBar()` disables the style select and
+every formatting button, greys the bar (`.tb-off`) and swaps `#pane-hint` for "Click in the page to
+start editing". Undo/redo, insert and **+ Section** stay live — they need no caret. Without this the
+select silently reset itself to *Normal text* after any re-render, which reads as "the dropdown is
+broken". `canvasFull()`'s `onload` and `canvasBlock()` both call `syncBar()` because they are the
+two places a caret is destroyed and no `selectionchange` follows.
+
+Four `execCommand`/selection details the toolbar cannot do without:
+
+- **`caretBlock()` descends through `startOffset`.** At a block boundary — the caret at the end of a
+  line, which is where it is after you type — Gecko reports the range's container as the editing
+  *host*, not the block. Taken at face value that makes quote-off undetectable
+  (`closest("blockquote")` from the host is `null`) and reads alignment off the wrong element.
+
+- **`styleWithCSS` is on for the colour *and* the justify commands.** Colours emit `<span style>`
+  rather than `<font>`; alignment emits `style="text-align:…"` rather than the legacy presentational
+  `align=""`. That attribute maps to a UA-level rule that ranks *below* author CSS, so inside any
+  section `site.css` centres (`.cta`, `.stats`, …) it is silently ignored. It stays off for
+  bold/italic/underline so those still emit `<b>/<i>/<u>`.
+- **A block command needs a block.** Write-back stores `f.innerHTML` (`bindField`), which excludes
+  the contenteditable host's own attributes — so when the field holds bare text with no wrapper, an
+  alignment written onto the host is thrown away by the next re-render. `exec()` runs
+  `formatBlock:<p>` first whenever `caretBlock()` resolves to the field itself.
+- **`formatBlock` only ever wraps.** Quote is a toggle: `outdent` when `caretBlock("blockquote")`
+  hits, `formatBlock:<blockquote>` otherwise.
+
+`hold()` (cancel `mousedown` so the click cannot blur the canvas) is applied to **buttons only**.
+On a `<select>` or an `<input type="color">` cancelling `mousedown` suppresses the native popup, and
+it is not needed anyway — `savedRange` already survives the blur.
+
+**Nothing may touch the style `<select>`'s value on `mousedown`.** From Firefox 137 the dropdown is
+DOM-rendered rather than an OS popup, so clicking an *option* fires a second `mousedown` that
+bubbles to the select. A handler there runs again and wipes the pick before `change` reads it —
+`change` then arrives with `value === ""`, `formatBlock` is handed `"<>"`, and the only visible
+effect is `ensureBlock` wrapping the line in a `<p>`: the control appears to snap back to *Normal
+text*. It reproduces only on Firefox ≥137; Firefox 140 ESR and Chrome fire no such event.
+
+The select stays honest instead. It carries a `hidden` `value=""` option, and `syncBar()` selects it
+whenever the caret's block is not one of `p`/`h2`/`h3`/`h4` — a blockquote, a bare text node. Coercing
+those to `"p"` was the original reason for the mousedown hack: it made the select claim the caret was
+already on *Normal text*, so picking *Normal text* changed nothing and raised no `change`. With a real
+"none of these" value, every pick is a genuine change. The handler still ignores an empty value.
 
 The style dropdown offers **Normal text / Heading / Sub-heading / Small heading** → `p`/`h2`/`h3`/`h4`.
 There is deliberately **no Heading 1**: `post.html:9` already emits the page title as the page's
@@ -460,6 +507,11 @@ Marked in code with `# ponytail:` comments.
 - `admin.js` re-renders whole lists on every reorder, and media pickers are refreshed by iterating every picker on the page. Fine at page scale; revisit only if a page grows to hundreds of blocks.
 - The canvas re-renders one whole block per settings change rather than patching the one field that moved. A round trip is a few tens of milliseconds on the LAN; patch per field only if it ever feels slow.
 - Undo/redo is `execCommand` inside one `rich_text` block; it does not span block boundaries.
+- The document toolbar remembers one caret (`savedRange`/`savedField`). A re-render — `canvasBlock()`
+  or `canvasFull()` — replaces the node, and the caret is **refused, not recovered**: the toolbar
+  switches itself off until the editor clicks back into the canvas. Recovering it would mean
+  addressing the field by block index + field key + repeater row and inventing an offset into DOM
+  nodes that no longer exist. Do that only if the extra click ever costs more than it saves.
 - The paste normaliser walks the DOM, so it has no unit test — Node ships no DOM and this project
   has no npm toolchain. Its check is the manual "paste a Google Doc in" step.
 - `embed_html` shows a placeholder on the canvas instead of running. That is partly UX (you cannot click-edit a YouTube embed) and partly safety: the canvas is same-origin with a live admin session, so `|safe` block HTML would execute with the admin's cookie. The trust model is unchanged from the public site, but an `editor` authoring HTML that an `admin` later opens is a path worth knowing about.

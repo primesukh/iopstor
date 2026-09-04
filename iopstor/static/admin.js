@@ -23,9 +23,10 @@
      drafted there. Keep the structure, drop the vendor noise: an allowlist of tags, and only
      href/src/alt survive. This is a quality filter, not a security boundary — block HTML is
      still trusted-staff-only on the server (blocks.py). */
-  var PASTE_OK = { P: 1, BR: 1, H2: 1, H3: 1, H4: 1, UL: 1, OL: 1, LI: 1, STRONG: 1, EM: 1, U: 1, A: 1,
+  var PASTE_OK = { P: 1, BR: 1, H2: 1, H3: 1, H4: 1, UL: 1, OL: 1, LI: 1, STRONG: 1, EM: 1, U: 1, A: 1, S: 1,
                    BLOCKQUOTE: 1, TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TH: 1, TD: 1, IMG: 1, HR: 1, CODE: 1, PRE: 1 };
-  var PASTE_AS = { B: "STRONG", I: "EM", DIV: "P", H1: "H2", H5: "H4", H6: "H4" };  // h1 is the page title's alone
+  var PASTE_AS = { B: "STRONG", I: "EM", DIV: "P", H1: "H2", H5: "H4", H6: "H4",  // h1 is the page title's alone
+                   STRIKE: "S", DEL: "S" };
   var PASTE_DROP = { SCRIPT: 1, STYLE: 1, HEAD: 1, META: 1, LINK: 1, TITLE: 1, OBJECT: 1, IFRAME: 1, NOSCRIPT: 1, SVG: 1 };
   var PASTE_ATTR = { href: 1, src: 1, alt: 1 };
 
@@ -382,6 +383,7 @@
         FRAME.onload = null;
         wireDoc();
         if (focusOnLoad > -1) { focusBlock(focusOnLoad); focusOnLoad = -1; }
+        syncBar();                       // the old caret died with the old document; say so
       };
       FRAME.srcdoc = html;
     });
@@ -398,6 +400,7 @@
       wireBlock(fresh);
       paint();
       bars();
+      syncBar();                         // replaceWith just threw the remembered caret away
     });
   }
 
@@ -717,9 +720,20 @@
     syncBar();
   }
 
+  /* Is the remembered caret still commandable? isConnected is not enough: a node from a replaced
+     srcdoc stays "connected" to its own dead document, and handing that range to the live document's
+     selection throws. It has to be in the canvas document we are about to run the command against.
+     ponytail: a re-render (canvasBlock/canvasFull) throws the node away and the toolbar goes dead
+     until the editor clicks back into the canvas — it says so rather than failing quietly. Re-derive
+     the field from its block index + field key if that click ever costs more than it saves. */
+  function liveField() {
+    var d = cdoc();
+    return d && savedRange && savedField && d.contains(savedField) ? savedField : null;
+  }
+
   function restoreSelection() {
     var d = cdoc();
-    if (!d || !savedRange || !savedField || !savedField.isConnected) return false;
+    if (!liveField()) return false;
     savedField.focus();
     var sel = d.defaultView.getSelection();
     sel.removeAllRanges();
@@ -727,10 +741,40 @@
     return true;
   }
 
+  /* The block element the caret sits in, bounded by the field. sel="…" asks for the nearest
+     matching ancestor instead. Returns the field itself only when the text really has no wrapper.
+
+     The descent matters: at a block boundary — the caret at the end of a line, which is where it
+     is after you type — Gecko reports the range's container as the editing HOST, not the block.
+     Taken at face value that makes quote-off undetectable (closest("blockquote") from the host is
+     null) and reads alignment off the wrong element. Resolve through startOffset first. */
+  function caretBlock(sel) {
+    if (!liveField()) return null;
+    var n = savedRange.startContainer;
+    if (n === savedField && n.childNodes.length) {
+      n = n.childNodes[Math.min(savedRange.startOffset, n.childNodes.length - 1)];
+    }
+    n = n.nodeType === 1 ? n : n.parentNode;
+    if (!n || !savedField.contains(n)) return null;
+    if (sel) { var hit = n.closest(sel); return hit && savedField.contains(hit) ? hit : null; }
+    while (n !== savedField && n.parentNode !== savedField) n = n.parentNode;
+    return n;
+  }
+
+  var BLOCK_CMD = /^(justify|formatBlock|outdent|indent)/;
+
   function exec(cmd, val) {
     var d = cdoc();
     if (!d || !restoreSelection()) return;
-    d.execCommand("styleWithCSS", false, cmd === "foreColor" || cmd === "hiliteColor");
+    // Bare text straight in the field leaves the browser styling the contenteditable host, whose
+    // attributes the innerHTML write-back drops on the floor. Give a block command a block first.
+    if (BLOCK_CMD.test(cmd) && caretBlock() === savedField) {
+      d.execCommand("formatBlock", false, "<p>");
+      rememberSelection();
+    }
+    // Justify has to win against site.css: styleWithCSS off emits a presentational align="" that
+    // ranks below author styles, so a centred section simply ignores it.
+    d.execCommand("styleWithCSS", false, /^(foreColor|hiliteColor|justify)/.test(cmd));
     d.execCommand(cmd, false, val == null ? null : val);
     if (savedField) fire(savedField);
     rememberSelection();
@@ -780,15 +824,26 @@
     function group(kids) { return el("span", { "class": "tb-group" }, kids); }
 
     var style = el("select", { "class": "tb-style", title: "Text style" });
+    // Shown when the caret is in a block this list has no name for — a blockquote, a bare text node.
+    // It has to be a real selectable value, not a coerced "p": pretending the caret is already on
+    // Normal text means picking Normal text changes nothing and raises no change event.
+    style.appendChild(el("option", { value: "", text: "\u2014", hidden: "hidden" }));
     // No Heading 1: post.html already emits the page title as the page's only <h1>.
     [["p", "Normal text"], ["h2", "Heading"], ["h3", "Sub-heading"], ["h4", "Small heading"]]
       .forEach(function (o) { style.appendChild(el("option", { value: o[0], text: o[1] })); });
-    hold(style);
-    style.addEventListener("change", function () { exec("formatBlock", "<" + style.value + ">"); });
+    // No hold() here: cancelling mousedown on a <select> suppresses the native popup, and the caret
+    // is replayed from savedRange anyway. Nor does mousedown touch selectedIndex: from Firefox 137
+    // the dropdown is DOM-rendered, so clicking an option fires a SECOND mousedown that bubbles to
+    // the select — anything that resets the value there wipes the pick before change reads it.
+    style.addEventListener("blur", function () { syncBar(); });   // dismissed without picking: show the caret's style again
+    style.addEventListener("change", function () {
+      if (style.value) exec("formatBlock", "<" + style.value + ">");
+    });
 
     var bold = b("B", "Bold", function () { exec("bold"); }, "tb-b"),
         ital = b("I", "Italic", function () { exec("italic"); }, "tb-i"),
-        und = b("U", "Underline", function () { exec("underline"); }, "tb-u");
+        und = b("U", "Underline", function () { exec("underline"); }, "tb-u"),
+        strike = b("S", "Strikethrough", function () { exec("strikeThrough"); }, "tb-s");
 
     var file = el("input", { type: "file", accept: "image/*", style: "display:none" });
     var note = el("small", { "class": "tb-note" });
@@ -818,8 +873,7 @@
 
     function colour(cmd, title, initial) {
       var i = el("input", { type: "color", "class": "tb-colour", title: title, value: initial });
-      hold(i);
-      i.addEventListener("input", function () { exec(cmd, i.value); });
+      i.addEventListener("input", function () { exec(cmd, i.value); });   // no hold(): it would block the picker
       return i;
     }
 
@@ -837,10 +891,15 @@
 
     bar.appendChild(group([b("↶", "Undo", function () { exec("undo"); }), b("↷", "Redo", function () { exec("redo"); })]));
     bar.appendChild(group([style]));
-    bar.appendChild(group([bold, ital, und, b("T̶", "Remove formatting", function () { exec("removeFormat"); })]));
+    bar.appendChild(group([bold, ital, und, strike, b("Tx", "Remove formatting", function () { exec("removeFormat"); })]));
+    // formatBlock only ever wraps, so quote needs its own way back out: outdent is what unwraps a
+    // blockquote in both engines.
+    var quote = b("❝", "Quote", function () {
+      if (caretBlock("blockquote")) exec("outdent"); else exec("formatBlock", "<blockquote>");
+    });
     bar.appendChild(group([b("•", "Bulleted list", function () { exec("insertUnorderedList"); }),
                            b("1.", "Numbered list", function () { exec("insertOrderedList"); }),
-                           b("❝", "Quote", function () { exec("formatBlock", "<blockquote>"); }),
+                           quote,
                            b("—", "Divider", function () { exec("insertHTML", "<hr><p><br></p>"); })]));
     bar.appendChild(group([b("🔗", "Add a link", function () { var u = prompt("Link address", "https://"); if (u) exec("createLink", u); }),
                            b("🖼", "Insert a picture", function () { file.click(); }),
@@ -849,24 +908,42 @@
                              var h = prompt("Paste the embed code (YouTube, Google Maps, …)");
                              if (h) exec("insertHTML", h);
                            })]));
-    bar.appendChild(group([b("⇤", "Align left", function () { exec("justifyLeft"); }),
-                           b("↔", "Centre", function () { exec("justifyCenter"); }),
-                           b("⇥", "Align right", function () { exec("justifyRight"); }),
+    var align = { left: b("⇤", "Align left", function () { exec("justifyLeft"); }),
+                  center: b("↔", "Centre", function () { exec("justifyCenter"); }),
+                  right: b("⇥", "Align right", function () { exec("justifyRight"); }) };
+    bar.appendChild(group([align.left, align.center, align.right,
                            colour("foreColor", "Text colour", "#1f2937"),
                            colour("hiliteColor", "Highlight", "#fef08a")]));
     bar.appendChild(group([b("+ Section", "Insert a designed section", insertSection, "tb-wide")]));
     bar.appendChild(file);
     bar.appendChild(note);
 
+    var HINT = document.getElementById("pane-hint"), HINT_ON = HINT && HINT.innerHTML;
+
     syncBar = function () {                       // reflect the caret, the way a real toolbar does
       var d = cdoc();
       if (!d) return;
+      // A command needs a caret in a rich field. Without one execCommand does nothing, so the
+      // toolbar must go dead rather than paint a state it cannot deliver — a control that silently
+      // snaps back to "Normal text" is worse than one that is visibly switched off.
+      var live = !!(liveField() && savedField.hasAttribute("data-rich"));
+      bar.classList.toggle("tb-off", !live);
+      [style, bold, ital, und, strike, quote, align.left, align.center, align.right]
+        .forEach(function (x) { x.disabled = !live; });
+      if (HINT) HINT.innerHTML = live ? HINT_ON : "Click in the page to start editing.";
+      if (!live) return;
       try {
         bold.classList.toggle("on", d.queryCommandState("bold"));
         ital.classList.toggle("on", d.queryCommandState("italic"));
         und.classList.toggle("on", d.queryCommandState("underline"));
-        var blk = (d.queryCommandValue("formatBlock") || "p").toLowerCase();
-        style.value = ["p", "h2", "h3", "h4"].indexOf(blk) > -1 ? blk : "p";
+        strike.classList.toggle("on", d.queryCommandState("strikeThrough"));
+        quote.classList.toggle("on", !!caretBlock("blockquote"));
+        // a lit button is what tells the editor a second click switches it back off
+        var line = caretBlock(), at = line ? d.defaultView.getComputedStyle(line).textAlign : "";
+        if (at === "start" || at === "justify") at = "left";
+        Object.keys(align).forEach(function (k) { align[k].classList.toggle("on", k === at); });
+        var blk = (d.queryCommandValue("formatBlock") || "").toLowerCase();
+        style.value = ["p", "h2", "h3", "h4"].indexOf(blk) > -1 ? blk : "";
       } catch (e) { /* no selection in the canvas yet */ }
     };
   }
