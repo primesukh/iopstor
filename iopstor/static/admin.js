@@ -891,15 +891,21 @@
     function group(kids) { return el("span", { "class": "tb-group" }, kids); }
 
     var style = el("select", { "class": "tb-style", title: "Text style" });
+    // Shown when the caret is in a block this list has no name for — a blockquote, a bare text node.
+    // It has to be a real selectable value, not a coerced "p": pretending the caret is already on
+    // Normal text means picking Normal text changes nothing and raises no change event.
+    style.appendChild(el("option", { value: "", text: "\u2014", hidden: "hidden" }));
     // No Heading 1: post.html already emits the page title as the page's only <h1>.
     [["p", "Normal text"], ["h2", "Heading"], ["h3", "Sub-heading"], ["h4", "Small heading"]]
       .forEach(function (o) { style.appendChild(el("option", { value: o[0], text: o[1] })); });
-    // No hold() here: cancelling mousedown on a <select> suppresses the native popup. The caret is
-    // replayed from savedRange anyway. Blanking it on the way in makes picking the shown style —
-    // "Normal text" while the caret is in a blockquote — still raise a change event.
-    style.addEventListener("mousedown", function () { style.selectedIndex = -1; });
+    // No hold() here: cancelling mousedown on a <select> suppresses the native popup, and the caret
+    // is replayed from savedRange anyway. Nor does mousedown touch selectedIndex: from Firefox 137
+    // the dropdown is DOM-rendered, so clicking an option fires a SECOND mousedown that bubbles to
+    // the select — anything that resets the value there wipes the pick before change reads it.
     style.addEventListener("blur", function () { syncBar(); });   // dismissed without picking: show the caret's style again
-    style.addEventListener("change", function () { exec("formatBlock", "<" + style.value + ">"); });
+    style.addEventListener("change", function () {
+      if (style.value) exec("formatBlock", "<" + style.value + ">");
+    });
 
     var bold = b("B", "Bold", function () { exec("bold"); }, "tb-b"),
         ital = b("I", "Italic", function () { exec("italic"); }, "tb-i"),
@@ -1003,8 +1009,8 @@
         var line = caretBlock(), at = line ? d.defaultView.getComputedStyle(line).textAlign : "";
         if (at === "start" || at === "justify") at = "left";
         Object.keys(align).forEach(function (k) { align[k].classList.toggle("on", k === at); });
-        var blk = (d.queryCommandValue("formatBlock") || "p").toLowerCase();
-        style.value = ["p", "h2", "h3", "h4"].indexOf(blk) > -1 ? blk : "p";
+        var blk = (d.queryCommandValue("formatBlock") || "").toLowerCase();
+        style.value = ["p", "h2", "h3", "h4"].indexOf(blk) > -1 ? blk : "";
       } catch (e) { /* no selection in the canvas yet */ }
     };
   }
