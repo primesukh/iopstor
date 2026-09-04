@@ -18,9 +18,9 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
     assert dash.status_code == 200 and b"Dashboard" in dash.data and user["email"].encode() in dash.data
 
     form = client.get("/admin/posts/new?type=post")
-    assert form.status_code == 200 and b"Block reference" in form.data
-    # the visual editor's mount points and the metadata it is driven by
-    for hook in (b'id="canvas"', b'id="doc-toolbar"', b'id="content-tabs"', b'"layouts"', b'"seed"', b'"names"'):
+    assert form.status_code == 200
+    # the editor's mount points, the Advanced textarea that actually posts, and the metadata it is driven by
+    for hook in (b'id="canvas"', b'id="doc-toolbar"', b'id="advanced"', b'name="blocks"', b'"layouts"', b'"seed"', b'"names"'):
         assert hook in form.data, hook
     csrf = re.search(r'name="csrf" value="([^"]+)"', form.text).group(1)
     r = client.post("/admin/posts/new?type=post", data={"csrf": csrf, "title": "zz-test UI Post", "status": "published", "excerpt": "From the browser",
