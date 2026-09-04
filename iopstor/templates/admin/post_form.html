@@ -4,7 +4,7 @@
 {% if errors %}<div class="error"><strong>Not saved.</strong><ul>{% for k, v in errors.items() %}<li><code>{{ k }}</code>: {{ v if v is string else v|join('; ') }}</li>{% endfor %}</ul></div>{% endif %}
 {% set p = post or {} %}
 {% set meta = p.meta or {} %}{% set seo = p.seo or {} %}
-<script type="application/json" id="editor-data">{{ {"blocks": blocks, "ui": blocks_ui, "layouts": layouts, "media": media, "post_types": post_types|map(attribute='slug')|list}|tojson }}</script>
+<script type="application/json" id="editor-data">{{ {"blocks": blocks, "ui": blocks_ui, "layouts": layouts, "media": media, "type": pt.slug, "pk": p.get('id'), "post_types": post_types|map(attribute='slug')|list}|tojson }}</script>
 <form method="post" class="grid" id="post-form">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <div>
@@ -36,9 +36,21 @@
         <button type="button" data-tab="json">Advanced</button>
       </div>
       <div id="pane-visual" hidden>
+        <div class="pv-bar">
+          <span class="seg" id="view-mode">
+            <button type="button" data-view="edit" class="on">Edit</button>
+            <button type="button" data-view="preview">Preview</button>
+          </span>
+          <span class="seg" id="pv-device" hidden>
+            <button type="button" data-w="1440" class="on">Desktop</button>
+            <button type="button" data-w="834">Tablet</button>
+            <button type="button" data-w="390">Phone</button>
+          </span>
+        </div>
         <div id="doc-toolbar" class="doc-toolbar"></div>
-        <iframe id="canvas" title="Your page, as a visitor will see it"></iframe>
-        <small>Just start typing. Press <kbd>/</kbd> on an empty line to drop in a section.</small>
+        <div id="canvas-wrap"><iframe id="canvas" title="Your page, as a visitor will see it"></iframe></div>
+        <small id="pane-hint">Just start typing. Press <kbd>/</kbd> on an empty line to drop in a section.</small>
+        <div id="seo-card" hidden></div>
       </div>
       <div id="pane-form" hidden><div id="blocks-editor"></div></div>
       <div id="pane-json">
@@ -66,7 +78,7 @@
       <label>Featured image <select name="featured_media_id" data-media="images"><option value="">— none —</option>{% for m in media if m.mime.startswith('image/') %}<option value="{{ m.id }}" {{ 'selected' if p.featured_media_id|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select></label>
       {% for tax in taxonomies %}<label>{{ tax.name }}</label>{% for t in tax.terms|sort(attribute='name') %}<div><label class="inline" style="font-weight:400"><input type="checkbox" name="terms" value="{{ t.id }}" {{ 'checked' if t.id in term_ids }}> {{ t.name }}</label></div>{% else %}<small>No terms yet — add them via the API or Supabase Studio.</small>{% endfor %}{% endfor %}
       <p style="margin-top:1rem"><button type="submit">Save</button>
-      {% if p.id %}<a class="btn secondary" href="{{ p.path }}" target="_blank">View</a>{% endif %}</p>
+      {% if p.id and p.status == 'published' and p.path %}<a class="btn secondary" href="{{ p.path }}" target="_blank">View live</a>{% endif %}</p>
     </div>
     {% if p.id and admin_user.role == 'admin' %}
     <form method="post" action="{{ url_for('admin_ui.delete_post', pk=p.id) }}" onsubmit="return confirm('Delete this permanently?')" class="card" style="text-align:right"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="danger">Delete</button></form>

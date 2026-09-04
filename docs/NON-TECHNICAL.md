@@ -127,6 +127,26 @@ Nothing is saved until you press **Save**. If you try to leave with unsaved chan
 > **The other two tabs.** Above the page there are three tabs. **Visual** is the one described above and the one to use. **Form** is the older view — the same content as a list of labelled boxes — which some people find quicker for bulk typing. **Advanced** shows the raw data for developers; you never need to open it.
 
 
+### Checking how it looks
+
+Above the page are two buttons: **Edit** and **Preview**.
+
+**Preview** shows the page exactly as a visitor gets it — with the site header and menu, the
+breadcrumb trail, the featured image, the footer, and none of the editing marks. Nothing is
+published by doing this, and it works on a page that has never been published, which is the point:
+you can check a draft before anyone else sees it. The preview keeps up as you type.
+
+**Desktop / Tablet / Phone** redraw the preview at those screen sizes, so you can check a page
+works on a phone before publishing rather than after.
+
+Underneath, two small cards show **how the page will look in a Google result** and **when someone
+shares the link** on WhatsApp or LinkedIn — the title, the web address, the description and the
+picture. They also tell you if your title or description is too long and will be cut short. If the
+share card says *No image*, set a Featured image on the right.
+
+Links in the preview open in a new tab rather than taking you away from it, and the contact form
+does not send anything.
+
 ---
 
 ## 5. Draft, published and scheduled
