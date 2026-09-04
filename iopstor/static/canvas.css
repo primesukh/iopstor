@@ -51,6 +51,11 @@
 .iop-add button{width:100%;max-width:820px;background:transparent;border:0;border-radius:8px;color:#94a3b8;
                 font:inherit;font-size:.85rem;text-align:left;padding:.45rem .6rem;cursor:text;opacity:0;transition:opacity .12s}
 .iop-add:hover button{opacity:1;background:#f1f5f9}
+/* An empty column holds nothing but its own strip, so hover-to-reveal makes it look like a dead box.
+   Show it, and make it read as somewhere to drop a section. */
+.column>.iop-add:only-child{padding:1.1rem 0}
+.column>.iop-add:only-child button{opacity:1;text-align:center;background:#f8fafc;border:1px dashed #cbd5e1;cursor:pointer}
+.column>.iop-add:only-child button:hover{background:#f1f5f9;color:var(--accent-2);border-color:var(--accent)}
 
 /* --- table columns: drag an edge to resize ------------------------------- */
 [data-rich] th,[data-rich] td{position:relative}

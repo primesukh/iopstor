@@ -170,7 +170,7 @@ Most sections run the full width of the page. When you want two, three or four t
 It arrives as two columns with a line of writing in each. From there:
 
 - **Type in a column** exactly as you type on the page.
-- **Put a section in a column.** Click the faint *“Type here, or press / for a section”* line inside the column and press `/`, then pick what you want. Numbers, Cards, a Customer quote, a Contact form — almost anything can go in a column. (Hero and Columns cannot: a Hero is the page's big opening band, and columns inside columns get impossible to work with.)
+- **Put a section in a column.** An empty column shows a dashed box saying *“Type here, or press / for a section”*. Click it, press `/`, and pick what you want. In a column that already has something in it, the same line appears above and below what is there when you hover — click the one where you want the new section to land. Numbers, Cards, a Customer quote, a Contact form — almost anything can go in a column. (Hero and Columns cannot: a Hero is the page's big opening band, and columns inside columns get impossible to work with.)
 - **Move things in and out.** Drag a section by its **⠿** handle into a column, out of it, or across to the next one. The **↑ ↓** buttons move a section within the column it is already in.
 - **Add or remove a column.** Hover the Columns section, click **⚙**, and use **+ Add column** and the **✕** next to each one. It asks before removing a column that still has something in it.
 
