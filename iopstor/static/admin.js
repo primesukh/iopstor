@@ -878,6 +878,30 @@
     return "";
   }
 
+  /* Setting a heading clears any inline size inside the line. The level IS the size — an H2 left
+     wearing a "Huge" span renders like nothing in the outline, and because the size control is
+     disabled on headings there would be no way back out of it from the toolbar. Normal text keeps
+     its size: p + a size is the whole point of the size control. */
+  function applyLevel(tag) {
+    exec("formatBlock", "<" + tag + ">");
+    var line = /^h[1-6]$/.test(tag) && caretBlock();
+    if (!line || line === savedField) return;
+    var sized = [].slice.call(line.querySelectorAll('[style*="font-size"]'));
+    if (line.style && line.style.fontSize) sized.push(line);
+    sized.forEach(function (n) {
+      n.style.fontSize = "";
+      if (!n.getAttribute("style")) n.removeAttribute("style");
+      if (n.tagName === "SPAN" && !n.attributes.length) {      // nothing left to carry: unwrap it
+        while (n.firstChild) n.parentNode.insertBefore(n.firstChild, n);
+        n.remove();
+      }
+    });
+    if (!sized.length) return;
+    line.normalize();
+    fire(savedField);
+    rememberSelection();
+  }
+
   function execLine(cmd, val) {
     var d = cdoc();
     if (!d || !restoreSelection()) return;
@@ -964,7 +988,7 @@
     // the select — anything that resets the value there wipes the pick before change reads it.
     style.addEventListener("blur", function () { syncBar(); });   // dismissed without picking: show the caret's style again
     style.addEventListener("change", function () {
-      if (style.value) exec("formatBlock", "<" + style.value + ">");
+      if (style.value) applyLevel(style.value);
     });
 
     var size = el("select", { "class": "tb-style tb-size", title: "Text size" });

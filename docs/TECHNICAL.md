@@ -386,6 +386,12 @@ for nothing at all on *Normal*. `execLine()` wraps it: a collapsed caret means "
 because otherwise picking a size with nothing selected only sets a pending style and nothing visibly
 happens, which reads as another dead control.
 
+**Setting a heading clears any inline size inside the line** (`applyLevel()`): the size is stripped,
+an emptied `<span>` is unwrapped rather than left as noise, and *Normal text* is exempt because `p` +
+a size is the whole point of the size control. Without this a heading kept wearing the span that
+overrode it — and since the size dropdown is disabled on headings, there was no way back out of it
+from the toolbar.
+
 `syncBar()` disables the size dropdown whenever the caret's block is `h1`-`h6`. A heading's size *is*
 its level, and offering both there invites an H2 that looks like an H4 — the outline Google reads and
 the one a reader sees disagreeing.
