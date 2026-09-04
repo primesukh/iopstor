@@ -65,3 +65,4 @@
 
 /* a blank document needs a comfortable click target, not a single line of placeholder */
 .rich-text[data-f]{min-height:6rem}
+.column .rich-text[data-f]{min-height:2.5rem}   /* a column is not a blank document: 6rem dominates it */

@@ -1640,15 +1640,19 @@
       return box.innerHTML;
     }
     var head = line === f ? "" : html(before), tail = line === f ? "" : html(after);
-    var ins = [{ type: type, data: seedFor(type) }, { type: "rich_text", data: { html: tail } }];
+    var ins = [{ type: type, data: seedFor(type) }];
+    // On the page the trailing paragraph is where you carry on writing, so it always goes in. In a
+    // column it would just be an empty box under the thing you placed, so it goes in only when the
+    // split actually left text behind. The caret then lands on the section itself.
+    if (tail || !isNested(path)) ins.push({ type: "rich_text", data: { html: tail } });
     if (!r.arr) return;
     if (head) {
       r.arr[r.i].data.html = head;
       r.arr.splice.apply(r.arr, [r.i + 1, 0].concat(ins));
-      focusOnLoad = siblingPath(path, r.i + 2);
+      focusOnLoad = siblingPath(path, r.i + ins.length);
     } else {                                     // the "/" line was the whole paragraph: replace it
       r.arr.splice.apply(r.arr, [r.i, 1].concat(ins));
-      focusOnLoad = siblingPath(path, r.i + 1);
+      focusOnLoad = siblingPath(path, r.i + ins.length - 1);
     }
     markDirty();
     canvasFull();
