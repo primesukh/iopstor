@@ -328,11 +328,17 @@ carries the name, move, duplicate and delete. A 250 ms debounce on the popover's
 still be inside the *current* canvas document (`d.contains(savedField)` — `isConnected` is not
 enough, a node from a replaced `srcdoc` stays connected to its own dead document and handing that
 range to the live selection throws) and must carry `data-rich`, which is exactly the set of fields
-where `execCommand` does anything. Fail either test and `syncBar()` disables the style select and
-every formatting button, greys the bar (`.tb-off`) and swaps `#pane-hint` for "Click in the page to
-start editing". Undo/redo, insert and **+ Section** stay live — they need no caret. Without this the
-select silently reset itself to *Normal text* after any re-render, which reads as "the dropdown is
-broken". `canvasFull()`'s `onload` and `canvasBlock()` both call `syncBar()` because they are the
+where `execCommand` does anything. Fail either test and `syncBar()` disables every control that
+needs a caret, greys the bar (`.tb-off`) and swaps `#pane-hint` for "Click in the page to start
+editing". Only **↶ ↷** and **+ Section** stay live. Without this the select silently reset itself to
+*Normal text* after any re-render, which reads as "the dropdown is broken".
+
+**That disabled set is a registry, not a list.** `b()` pushes every button it builds into `cmds`
+unless the caller passes `free`, and `colour()` pushes its two swatches; `syncBar()` disables
+`cmds` plus the style select. The hand-written array it replaces had drifted: `Tx`, the two list
+buttons, the divider, both colour swatches and all four insert buttons were outside it, so they
+stayed clickable with no caret and `exec()` dropped them at `restoreSelection()`. Harmless while a
+click was the whole interaction; with dialogs it means filling in a form for nothing. `canvasFull()`'s `onload` and `canvasBlock()` both call `syncBar()` because they are the
 two places a caret is destroyed and no `selectionchange` follows.
 
 Four `execCommand`/selection details the toolbar cannot do without:
@@ -442,10 +448,57 @@ before the `/` line stay in this block, the chosen section goes next, and the ch
 become a second `rich_text`. If the `/` line *was* the whole paragraph, the block is replaced
 outright rather than leaving an empty one behind.
 
-**Pictures in the flow.** The image button reuses `upload()` → `POST /admin/media/upload`, then
-`insertHTML`s an `<img>` at the caret. `media_alt()` cannot reach inside `rich_text` HTML, so
-`altPrompt()` immediately offers a non-blocking line to write the `alt` attribute — otherwise an
-inline picture would never get one.
+**Link, picture, table and embed are dialogs.** All four used to be a `prompt()`: unstyled,
+single-line (so an embed snippet was unreadable), impossible to validate, and on Firefox carrying a
+"prevent this page from creating additional dialogs" checkbox that kills the button for the rest of
+the session. `modal(title, kids, wide)` is the shared shell — `.iop-modal` over `.iop-modal-in`,
+Esc / ✕ / backdrop click, returns `close()`. `chooser()` is now four lines on top of it.
+
+A dialog mounts on `document.body`, **outside `#post-form`**, which is load-bearing twice over:
+Enter in a field cannot submit the post, and the form's 500 ms preview debounce
+(`form.addEventListener("input")`) never sees the typing. The caret needs no special handling —
+focusing an admin `<input>` does not disturb a selection living in the iframe, so `savedRange`
+survives exactly as it does for `chooser()`'s search box, and every dialog commits through `exec()`.
+
+- **`linkDialog(cur, save, remove)`** — address, link text, "open in a new tab", and *Remove link*
+  when there is one. It is deliberately callback-shaped because it has two callers in two different
+  documents: `docLink()` finds the anchor with `caretBlock("a")` and commits through `exec()`, while
+  `richText()`'s `link` button works on the admin document and therefore needs its own four-line
+  range stash (taken on the toolbar's `mousedown`, which fires before focus moves — a `blur` handler
+  is too late). Editing an existing link points the range at the whole anchor first (`rangeOn()`),
+  the same trick `execLine()` uses to turn a collapsed caret into a whole line.
+  The `<a>` is **built as a DOM node and inserted as `outerHTML`**, so the browser does the escaping
+  and there is no hand-rolled entity table. `safeUrl()` is a scheme *allowlist* —
+  `http(s)`/`mailto`/`tel`, a `/` path, a `#` anchor, otherwise `https://` in front of a bare
+  domain — because a `javascript:` blocklist alone still lets `data:` through.
+- **`pictureDialog()`** replaces `altPrompt()` and the hidden `<input type=file>`. The picker is
+  `mediaWidget()`, the same widget as every other image field, so an inline picture can now reuse a
+  library image instead of only ever uploading a new one; alt text is prefilled from the media row
+  and asked for *before* the insert, because `media_alt()` cannot reach inside `rich_text` HTML.
+- **`tableDialog()`** is a Word/Docs hover grid: 80 `.tb-cell` spans, **one** `mousemove` listener
+  reading `data-r`/`data-c`, and Rows/Columns number boxes beside it that drive the same state.
+  The boxes are the keyboard path and the only way past the visible 8 × 10 (the clamps are 50 × 12,
+  as before), so the grid carries `aria-hidden` rather than being read out as eighty empty cells —
+  cheaper and clearer than a roving tabindex over 80 buttons. `tableHtml()` emits a real `<thead>`
+  when *First row is a header* is ticked (`PASTE_OK` already allows `THEAD`, so a copy round-trips)
+  and skips `<tbody>` entirely for a one-row all-header table. Typing in a box repaints the grid but
+  does not rewrite the box mid-keystroke; the value is normalised on `change`.
+- **Columns resize by dragging their edge.** One capture-phase `mousedown` on the canvas document
+  (`startColDrag`, registered in `wireDoc()`, so it survives every single-block re-render) picks up
+  a press within 6px of a cell's right edge; `canvas.css` puts a `::after` grip there so the
+  `col-resize` cursor costs no JS. `colgroupFor()` builds a `<colgroup>` on the *first* drag, seeded
+  from the measured widths **as percentages** so the table still reflows on a phone, and the two
+  columns either side of the edge trade width so the table itself never changes size. `site.css`
+  switches to `table-layout:fixed` only via `:has(colgroup)` — a table nobody has resized keeps
+  auto-fitting, so no existing page changes shape. `fire(field)` on mouseup writes the HTML back
+  through the same path as any other edit; `rich_text` is unsanitised on the server
+  (`blocks.py:10`), so the `<colgroup>` round-trips. Widths are lost on copy-paste, because
+  `PASTE_ATTR` keeps only `href`/`src`/`alt` — the table simply falls back to auto layout.
+  `.rich-text` cells also gained the column borders they never had: they only ever carried a
+  `border-bottom`, which reads as a list rather than a grid.
+- **`embedDialog()`** is a monospace paste box. The snippet still goes in **inline and unfiltered**:
+  block HTML is trusted-staff-only on the server and the `embed_html` block already takes raw
+  markup, so filtering here alone would make the two disagree.
 
 **Sections still work.** Each non-prose block keeps its floating bar, drags via the vendored
 SortableJS, and opens `blockCard()` — the *same* function the Form tab uses — in the sidebar for

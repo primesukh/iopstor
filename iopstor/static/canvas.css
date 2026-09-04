@@ -41,5 +41,11 @@
                 font:inherit;font-size:.85rem;text-align:left;padding:.45rem .6rem;cursor:text;opacity:0;transition:opacity .12s}
 .iop-add:hover button{opacity:1;background:#f1f5f9}
 
+/* --- table columns: drag an edge to resize ------------------------------- */
+[data-rich] th,[data-rich] td{position:relative}
+[data-rich] tr>*:not(:last-child)::after{content:"";position:absolute;top:0;right:-3px;width:6px;height:100%;
+                                         cursor:col-resize;z-index:2}
+[data-rich] table.iop-resizing{cursor:col-resize;user-select:none}
+
 /* a blank document needs a comfortable click target, not a single line of placeholder */
 .rich-text[data-f]{min-height:6rem}
