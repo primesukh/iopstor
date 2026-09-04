@@ -383,6 +383,7 @@
         FRAME.onload = null;
         wireDoc();
         if (focusOnLoad > -1) { focusBlock(focusOnLoad); focusOnLoad = -1; }
+        syncBar();                       // the old caret died with the old document; say so
       };
       FRAME.srcdoc = html;
     });
@@ -399,6 +400,7 @@
       wireBlock(fresh);
       paint();
       bars();
+      syncBar();                         // replaceWith just threw the remembered caret away
     });
   }
 
@@ -718,12 +720,20 @@
     syncBar();
   }
 
-  // ponytail: a re-render (canvasBlock/canvasFull) throws the remembered node away and every command
-  // then no-ops until the editor clicks back into the canvas. Re-derive the field from the block
-  // index if that silence starts costing more than a stray click.
+  /* Is the remembered caret still commandable? isConnected is not enough: a node from a replaced
+     srcdoc stays "connected" to its own dead document, and handing that range to the live document's
+     selection throws. It has to be in the canvas document we are about to run the command against.
+     ponytail: a re-render (canvasBlock/canvasFull) throws the node away and the toolbar goes dead
+     until the editor clicks back into the canvas — it says so rather than failing quietly. Re-derive
+     the field from its block index + field key if that click ever costs more than it saves. */
+  function liveField() {
+    var d = cdoc();
+    return d && savedRange && savedField && d.contains(savedField) ? savedField : null;
+  }
+
   function restoreSelection() {
     var d = cdoc();
-    if (!d || !savedRange || !savedField || !savedField.isConnected) return false;
+    if (!liveField()) return false;
     savedField.focus();
     var sel = d.defaultView.getSelection();
     sel.removeAllRanges();
@@ -734,7 +744,7 @@
   // The block element the caret sits in, bounded by the field. sel="…" asks for the nearest
   // matching ancestor instead. Returns the field itself when the text has no wrapper of its own.
   function caretBlock(sel) {
-    if (!savedRange || !savedField || !savedField.isConnected) return null;
+    if (!liveField()) return null;
     var n = savedRange.startContainer;
     n = n.nodeType === 1 ? n : n.parentNode;
     if (!n || !savedField.contains(n)) return null;
@@ -894,9 +904,20 @@
     bar.appendChild(file);
     bar.appendChild(note);
 
+    var HINT = document.getElementById("pane-hint"), HINT_ON = HINT && HINT.innerHTML;
+
     syncBar = function () {                       // reflect the caret, the way a real toolbar does
       var d = cdoc();
       if (!d) return;
+      // A command needs a caret in a rich field. Without one execCommand does nothing, so the
+      // toolbar must go dead rather than paint a state it cannot deliver — a control that silently
+      // snaps back to "Normal text" is worse than one that is visibly switched off.
+      var live = !!(liveField() && savedField.hasAttribute("data-rich"));
+      bar.classList.toggle("tb-off", !live);
+      [style, bold, ital, und, strike, quote, align.left, align.center, align.right]
+        .forEach(function (x) { x.disabled = !live; });
+      if (HINT) HINT.innerHTML = live ? HINT_ON : "Click in the page to start editing.";
+      if (!live) return;
       try {
         bold.classList.toggle("on", d.queryCommandState("bold"));
         ital.classList.toggle("on", d.queryCommandState("italic"));

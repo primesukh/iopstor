@@ -103,6 +103,13 @@ bold, italic, underline and strikethrough do the same. **Clicking a highlighted 
 back off** — that is how you take a paragraph back out of a quote, or move centred text back to the
 left.
 
+**If the toolbar goes grey, it is waiting for you.** It fades and the line underneath reads *“Click
+in the page to start editing”* whenever the cursor is not in text it can format — after you have
+been working somewhere else on the screen, or when the cursor is in a headline or a button label,
+which are a fixed size on purpose. Click into a paragraph and the toolbar comes straight back. It is
+deliberately switched off rather than pretending: a button that looked available but did nothing was
+the old, more confusing behaviour.
+
 **Pasting from Word or Google Docs works properly.** Draft wherever you like, copy the whole thing, paste it in — your headings stay headings and your bullets stay bullets. Word's own invisible junk is dropped on the way in, so nothing strange leaks into the site.
 
 **Pictures go in the flow.** Press **🖼**, choose a file, and it uploads and lands where the cursor was. You are then offered a box to describe the picture for blind visitors — worth thirty seconds, and good for Google too.

@@ -312,6 +312,17 @@ back before the command runs (`restoreSelection` → `exec`). `syncBar()` reflec
 the bold/italic/underline/strikethrough states, the quote state, the three alignment buttons and the
 style dropdown — a lit button is what tells an editor that a second click switches it off again.
 
+**The toolbar goes dead rather than lying.** `liveField()` is the gate: the remembered field must
+still be inside the *current* canvas document (`d.contains(savedField)` — `isConnected` is not
+enough, a node from a replaced `srcdoc` stays connected to its own dead document and handing that
+range to the live selection throws) and must carry `data-rich`, which is exactly the set of fields
+where `execCommand` does anything. Fail either test and `syncBar()` disables the style select and
+every formatting button, greys the bar (`.tb-off`) and swaps `#pane-hint` for "Click in the page to
+start editing". Undo/redo, insert and **+ Section** stay live — they need no caret. Without this the
+select silently reset itself to *Normal text* after any re-render, which reads as "the dropdown is
+broken". `canvasFull()`'s `onload` and `canvasBlock()` both call `syncBar()` because they are the
+two places a caret is destroyed and no `selectionchange` follows.
+
 Three `execCommand` details the toolbar cannot do without:
 
 - **`styleWithCSS` is on for the colour *and* the justify commands.** Colours emit `<span style>`
@@ -480,10 +491,11 @@ Marked in code with `# ponytail:` comments.
 - `admin.js` re-renders whole lists on every reorder, and media pickers are refreshed by iterating every picker on the page. Fine at page scale; revisit only if a page grows to hundreds of blocks.
 - The canvas re-renders one whole block per settings change rather than patching the one field that moved. A round trip is a few tens of milliseconds on the LAN; patch per field only if it ever feels slow.
 - Undo/redo is `execCommand` inside one `rich_text` block; it does not span block boundaries.
-- The document toolbar remembers one caret (`savedRange`/`savedField`). A re-render — a settings
-  change through `canvasBlock()`, or a full `canvasFull()` — replaces the node, so every command
-  silently no-ops until the editor clicks back into the canvas. Re-derive the field from the block
-  index if that silence ever costs more than a stray click.
+- The document toolbar remembers one caret (`savedRange`/`savedField`). A re-render — `canvasBlock()`
+  or `canvasFull()` — replaces the node, and the caret is **refused, not recovered**: the toolbar
+  switches itself off until the editor clicks back into the canvas. Recovering it would mean
+  addressing the field by block index + field key + repeater row and inventing an offset into DOM
+  nodes that no longer exist. Do that only if the extra click ever costs more than it saves.
 - The paste normaliser walks the DOM, so it has no unit test — Node ships no DOM and this project
   has no npm toolchain. Its check is the manual "paste a Google Doc in" step.
 - `embed_html` shows a placeholder on the canvas instead of running. That is partly UX (you cannot click-edit a YouTube embed) and partly safety: the canvas is same-origin with a live admin session, so `|safe` block HTML would execute with the admin's cookie. The trust model is unchanged from the public site, but an `editor` authoring HTML that an `admin` later opens is a path worth knowing about.
