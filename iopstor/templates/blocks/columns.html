@@ -1,7 +1,7 @@
 {# The one block that holds other blocks. `col` and `widths` come from render_blocks(), the same
    way post_list gets `posts`; data-col is the editor's column address and never reaches the public
    page, because it is written only under {% if edit %}. #}
-<section class="section"{{ fe() }}><div class="wrap">
+<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
   {% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}
   <div class="columns"{% if widths %} style="--cols:{{ widths }}"{% endif %}>{% for c in data['cols'] %}<div class="column"{% if edit %} data-col="{{ loop.index0 }}"{% endif %}>{{ col(loop.index0) }}</div>{% endfor %}</div>
 </div></section>

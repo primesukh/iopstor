@@ -107,6 +107,50 @@ def test_edit_markers_only_in_edit_mode(app, monkeypatch):
     assert 'data-r="items" data-i="0"' in edit
 
 
+def test_section_alignment_is_a_whitelist(app, monkeypatch):
+    """Both alignments reach the section's class, in edit and public alike, and nothing else does."""
+    from iopstor import db
+    from iopstor.blocks import section_class
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    data = {"heading": "Hi", "align": "center", "align_box": "right"}
+    blocks = [{"type": "cards", "data": {**data, "items": [{"title": "One", "text": "x"}]}}]
+
+    assert section_class(data) == " al-center alb-right"
+    assert 'class="section al-center alb-right"' in render_blocks(blocks)
+    assert 'class="section al-center alb-right"' in render_blocks(blocks, edit=True)
+
+    # it lands in a class attribute, so anything not on the list is dropped rather than escaped
+    assert section_class({"align": 'x" onload="', "align_box": "middle"}) == ""
+    assert section_class({}) == ""
+    # and an alignment is layout, not words: it must not reach llms.txt, the feed or admin search
+    assert blocks_text(blocks) == "Hi One x"   # the heading, not "center right"
+
+
+def test_section_width_is_a_named_step_or_a_plain_number(app, monkeypatch):
+    """One key, two carriers: a named width is a class, an exact one is the --w custom property."""
+    from iopstor import db
+    from iopstor.blocks import section_class, section_style
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+
+    assert section_class({"width": "wide"}) == " w-wide" and section_style({"width": "wide"}) == ""
+    assert section_style({"width": 950}) == ' style="--w:950px"'
+    assert section_class({"width": 950}) == ""              # a number is not a class
+    # it lands in a style attribute, so only digits inside the ceiling ever get through
+    for bad in ("950px", "950; background:red", "-5", "0", "9999", "", None, {}):
+        assert section_style({"width": bad}) == "", bad
+    assert section_style({}) == ""
+
+    blocks = [{"type": "rich_text", "data": {"html": "<p>hi</p>", "width": 950}}]
+    assert '<section class="section" style="--w:950px"' in render_blocks(blocks)
+    assert '<section class="section" style="--w:950px"' in render_blocks(blocks, edit=True)
+    assert 'class="section w-full"' in render_blocks([{"type": "rich_text", "data": {"html": "<p>hi</p>", "width": "full"}}])
+    assert blocks_text(blocks) == "hi"                      # not "950"
+
+
 def test_edit_mode_survives_a_half_finished_block(app, monkeypatch):
     from iopstor import db
 

@@ -1,1 +1,1 @@
-<section class="section"{{ fe() }}><div class="wrap"><ul class="stats">{% for s in data['items'] %}<li{{ fe('items', loop.index0) }}><strong{{ fe('value') }}>{{ s.value }}</strong> <span{{ fe('label') }}>{{ s.label }}</span></li>{% endfor %}</ul></div></section>
+<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap"><ul class="stats">{% for s in data['items'] %}<li{{ fe('items', loop.index0) }}><strong{{ fe('value') }}>{{ s.value }}</strong> <span{{ fe('label') }}>{{ s.label }}</span></li>{% endfor %}</ul></div></section>

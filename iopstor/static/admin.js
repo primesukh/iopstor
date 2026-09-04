@@ -476,15 +476,64 @@
     return el("div", {}, [el("strong", { text: labelFor(key) }), list]);
   }
 
+  /* Alignment belongs to every section, so it is not a field in BLOCKS: one control here covers all
+     of them, and any type added later. "" removes the key rather than writing an empty string, so a
+     section nobody aligned stays byte-identical in the saved JSON.
+     ponytail: a rich_text section has no ⚙ bar (wireBlock skips it), so this is out of reach there —
+     its text still aligns per paragraph from the document toolbar. If that gap is felt, the smallest
+     fix is the same two controls in the doc toolbar, acting on `selected`. */
+  var ALIGNMENTS = [["", "Default"], ["left", "Left"], ["center", "Centre"], ["right", "Right"]];
+
+  function alignPick(label, key, data) {
+    var s = el("select", { title: label });
+    ALIGNMENTS.forEach(function (o) { s.appendChild(el("option", { value: o[0], text: o[1] })); });
+    s.value = data[key] || "";
+    s.addEventListener("change", function () {
+      if (s.value) data[key] = s.value; else delete data[key];
+    });
+    return labelled(label, false, s);
+  }
+
+  /* Width is one key holding either a named step or a number of pixels, so the select and the number
+     box both write data.width and each clears the other. "Custom" is only ever shown while a number
+     is in play — picking it is meaningless, so it is disabled. */
+  var WIDTHS = [["", "Default"], ["wide", "Wide"], ["full", "Full width"]];
+
+  function widthPick(data) {
+    var s = el("select", { title: "How wide the section's content is" }),
+        n = el("input", { type: "number", "class": "wid-px", min: "1", max: "4000", step: "10", placeholder: "px" });
+    WIDTHS.forEach(function (o) { s.appendChild(el("option", { value: o[0], text: o[1] })); });
+    s.appendChild(el("option", { value: "custom", text: "Custom", disabled: "disabled" }));
+    function show() {
+      var v = String(data.width == null ? "" : data.width);
+      s.value = /^\d+$/.test(v) ? "custom" : (v === "wide" || v === "full" ? v : "");
+      n.value = /^\d+$/.test(v) ? v : "";
+    }
+    function set(v) {
+      if (v) data.width = v; else delete data.width;
+      show();
+    }
+    s.addEventListener("change", function () { set(s.value === "custom" ? "" : s.value); });
+    n.addEventListener("change", function () { set(n.value && +n.value > 0 ? String(Math.round(+n.value)) : ""); });
+    show();
+    return labelled("Width", false, el("span", { "class": "wid" }, [s, n]));
+  }
+
   // The fields of one section — what ⚙ opens. Words on the page are edited on the page; this is
-  // for the rest: pictures, links, choices, and the rows of a Cards / FAQ / Numbers section.
+  // for the rest: alignment, pictures, links, choices, and the rows of a Cards / FAQ / Numbers section.
   function blockFields(block) {
     if (!block.data || typeof block.data !== "object") block.data = {};
     var body = el("div", { "class": "blk-fields" });
     if (!SPEC.blocks[block.type]) {
       body.appendChild(el("p", { "class": "muted", text: "Unknown section type — edit it under Advanced." }));
     } else {
+      body.appendChild(alignPick("Align the content", "align", block.data));
+      body.appendChild(alignPick("Align the section", "align_box", block.data));
+      body.appendChild(widthPick(block.data));
       fieldsOf(block.type).forEach(function (f) {
+        // a rich_text section IS its html, edited on the page; a second document editor in a 23rem
+        // popover is a trap, so the panel here is layout only
+        if (block.type === "rich_text" && f.key === "html") return;
         if (f.key === "cols") {
           // the sections inside a column are edited on the page; the panel only adds, moves and removes
           body.appendChild(repeater(block.type, "cols", block.data,
@@ -828,8 +877,10 @@
   function wireBlock(node) {
     var d = node.ownerDocument, old = node.querySelector(":scope > .iop-bar");
     if (old) old.remove();
-    // a floating toolbar over every paragraph would destroy the document feel; sections keep theirs
-    if (((blockAt(node.getAttribute("data-b")) || {}).type) !== "rich_text") node.appendChild(blockBar(d, node));
+    // Typed sections carry it too: it is the only way to reach their alignment and width, and it is
+    // one bar per block of writing, not one per paragraph. It hangs off the <section>, outside the
+    // [data-f] editable, so nothing it adds can reach the saved HTML.
+    node.appendChild(blockBar(d, node));
     // only this block's own fields and clicks: a Columns block must not claim its children's
     Array.prototype.forEach.call(node.querySelectorAll("[data-f]"), function (f) {
       if (f.closest("[data-b]") === node) bindField(node, f);
