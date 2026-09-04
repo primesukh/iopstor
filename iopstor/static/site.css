@@ -78,7 +78,11 @@ a.card{text-decoration:none;color:inherit;transition:transform .15s,box-shadow .
 a.card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(15,27,45,.12)}
 .btn{display:inline-block;background:var(--accent);color:#fff;padding:.75rem 1.5rem;border-radius:8px;text-decoration:none;font-weight:600;border:0;cursor:pointer;font:inherit}
 .btn:hover{background:var(--accent-2);color:#fff}
-.btn.ghost{background:transparent;border:2px solid currentColor}
+/* .btn paints white on the accent; ghost drops the fill, so it has to name its own colour or it is
+   white-on-white. The :hover rule is not optional: .btn:hover and .btn.ghost have equal specificity,
+   so ghost's transparent background wins on source order while :hover's white text still applies. */
+.btn.ghost{background:transparent;color:var(--accent-2);border:2px solid currentColor}
+.btn.ghost:hover{background:var(--accent-2);color:#fff}
 .pagination{display:flex;gap:.75rem;margin:2rem 0}
 .featured{border-radius:var(--radius);margin:1rem 0 1.5rem;width:100%;max-height:440px;object-fit:cover}
 .terms a{display:inline-block;background:#e0f2fe;color:var(--accent-2);padding:.2rem .7rem;border-radius:999px;text-decoration:none;font-size:.85rem;margin:0 .35rem .35rem 0}
