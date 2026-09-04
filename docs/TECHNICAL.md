@@ -288,7 +288,7 @@ The **Content** card on the post form has three tabs over one array: *Visual* (t
 
 Write them tight against the tag (`<h1{{ fe('heading') }}>`) — a space would make the public render `<h1 >`, which `tests/test_offline.py::test_render_blocks_uses_template` catches.
 
-**Typing never re-renders.** `contenteditable` (`plaintext-only`, with an Enter-blocking fallback for engines without it) writes straight into the block objects, which `fieldInput()` already mutates in place — canvas, settings panel and JSON textarea point at the same objects, so there is no sync layer. Only structural changes touch the server, and then only for **one** block: `POST /admin/canvas` with `i=N` returns a bare fragment that replaces that one `<section>`; deletes remove the node, drags move it, and `data-b` is renumbered client-side. `setBlocks()` is the single place the array reference is ever replaced.
+**Typing never re-renders.** `contenteditable` (`plaintext-only`, with an Enter-blocking fallback for engines without it) writes straight into the block objects, which `fieldInput()` already mutates in place — canvas, settings popover and JSON textarea point at the same objects, so there is no sync layer. Only structural changes touch the server, and then only for **one** block: `POST /admin/canvas` with `i=N` returns a bare fragment that replaces that one `<section>`; deletes remove the node, drags move it, and `data-b` is renumbered client-side. `setBlocks()` is the single place the array reference is ever replaced.
 
 **A page is a document, not a stack.** Prose lives in `rich_text` blocks; the other twelve types
 are the designed bands. Nothing about the storage changed — `posts.blocks` is the same JSONB —
@@ -311,6 +311,18 @@ out of the iframe, so the caret is stored on every `selectionchange` (`rememberS
 back before the command runs (`restoreSelection` → `exec`). `syncBar()` reflects the caret back into
 the bold/italic/underline/strikethrough states, the quote state, the three alignment buttons and the
 style dropdown — a lit button is what tells an editor that a second click switches it off again.
+
+**A section's settings belong to the section.** There is no sidebar card: `⚙` on a section's own
+hover bar calls `openPanel(i)`, which floats `blockCard()` over that section. The popover has to be
+built in the *admin* document — `blockCard`, `mediaWidget` and `richText` all create parent-document
+nodes — so it is positioned over the iframe from two rects (`FRAME.getBoundingClientRect()` plus the
+section's), exactly the trick `openSlash()` uses for the `/` menu. `place()` re-runs on the canvas
+document's `scroll` (`#canvas` is `76vh` and scrolls inside itself), on window `scroll`/`resize`, and
+clamps into the viewport. Esc, the ✕, a click outside and a second press of `⚙` all close it; so do
+move / duplicate / delete / `setBlocks()`, because the block index it holds would otherwise be
+stale. `blockCard`'s own head is hidden by CSS inside the popover — the section's hover bar already
+carries the name, move, duplicate and delete. A 250 ms debounce on the popover's
+`input`/`change`/`click` calls `canvasBlock()`, so the section updates live as you edit.
 
 **The toolbar goes dead rather than lying.** `liveField()` is the gate: the remembered field must
 still be inside the *current* canvas document (`d.contains(savedField)` — `isConnected` is not

@@ -321,12 +321,13 @@
 
   // ---- shared model ---------------------------------------------------------
   /* One array, three editors. fieldInput() mutates block objects in place, so the canvas, the
-     settings panel and the JSON textarea all point at the same objects — there is no sync layer.
+     settings popover and the JSON textarea all point at the same objects — there is no sync layer.
      The one dangerous move is REPLACING the array; setBlocks() is the only place that happens. */
   var MODEL = [], AREA = null, dirty = false;
   var redrawForm = function () {};
 
   function setBlocks(next) {
+    closePanel();
     MODEL = Array.isArray(next) ? next : [];
     redrawForm();
     canvasFull();
@@ -348,7 +349,7 @@
   /* The iframe holds a real server render (POST /admin/canvas) of the blocks currently in memory,
      so what an editor sees is exactly what render_blocks() will publish. Same origin, so we drive
      contentDocument directly. Typing never re-renders; a structural change swaps ONE <section>. */
-  var FRAME = null, selected = -1, panel = null, tokens = {};
+  var FRAME = null, selected = -1, tokens = {};
 
   function cdoc() { return FRAME && FRAME.contentDocument; }
 
@@ -389,7 +390,7 @@
     });
   }
 
-  function canvasBlock(i) {           // one block's data changed in the settings panel
+  function canvasBlock(i) {           // one block's data changed in its settings popover
     var d = cdoc();
     if (!d || !MODEL[i]) return;
     ask("b" + i, { i: i }, function (html) {
@@ -505,6 +506,7 @@
   function moveBlock(dir, i) {
     var to = i + dir, d = cdoc();
     if (to < 0 || to >= MODEL.length) return;
+    closePanel();
     MODEL.splice(to, 0, MODEL.splice(i, 1)[0]);
     if (d) {
       var nodes = d.querySelectorAll("[data-b]"), node = nodes[i], ref = nodes[to];
@@ -518,6 +520,7 @@
   }
 
   function dupBlock(i) {
+    closePanel();
     MODEL.splice(i + 1, 0, JSON.parse(JSON.stringify(MODEL[i])));
     redrawForm();
     markDirty();
@@ -525,6 +528,7 @@
   }
 
   function delBlock(i) {
+    closePanel();
     if (!confirm("Remove this " + nameFor(MODEL[i].type) + " section?")) return;
     MODEL.splice(i, 1);
     var d = cdoc(), node = d && d.querySelector('[data-b="' + i + '"]');
@@ -562,7 +566,7 @@
     push("↑", "Move up", function (i) { moveBlock(-1, i); });
     push("↓", "Move down", function (i) { moveBlock(1, i); });
     push("⧉", "Make a copy", dupBlock);
-    push("⚙", "Pictures, links and settings", select);
+    push("⚙", "Pictures, links and settings", function (i) { select(i); openPanel(i); });
     push("✕", "Remove this section", delBlock, "iop-del");
     return bar;
   }
@@ -610,7 +614,7 @@
     }
   }
 
-  // ---- selection + the settings panel ---------------------------------------
+  // ---- selection + the section's settings popover ---------------------------
   function paint() {
     var d = cdoc();
     if (d) Array.prototype.forEach.call(d.querySelectorAll("[data-b]"), function (n) {
@@ -619,21 +623,84 @@
   }
 
   function select(i) {
-    if (i === selected) return;   // every mousedown lands here; only rebuild the panel on a real change
+    if (i === selected) return;   // every mousedown lands here; only repaint on a real change
     selected = i;
     paint();
-    showPanel(i);
   }
 
-  function showPanel(i) {
-    if (!panel) return;
-    panel.innerHTML = "";
-    if (!MODEL[i]) {
-      panel.appendChild(el("p", { "class": "muted", text: "Click a section on the page to change its pictures, links and settings." }));
-      return;
-    }
-    // the settings panel IS the form editor's card — every widget reused, nothing reimplemented
-    panel.appendChild(blockCard(MODEL[i], i, MODEL, function () { redrawForm(); canvasFull(); select(-1); }));
+  /* A section's pictures, links and settings belong to the section, not to a card parked in the
+     sidebar — ⚙ on its own toolbar opens them over it. The popover has to live in the ADMIN
+     document (blockCard builds nodes with el(), mediaWidget and richText, all parent-document),
+     so it is positioned over the iframe from two rects, the way openSlash() already does it. */
+  var panelBox = null, panelAt = -1, panelPlace = null;
+
+  function closePanel() {
+    if (!panelBox) return;
+    document.removeEventListener("keydown", panelKey);
+    document.removeEventListener("mousedown", panelAway);
+    window.removeEventListener("resize", panelPlace);
+    window.removeEventListener("scroll", panelPlace, true);
+    var d = cdoc();
+    if (d) { d.removeEventListener("scroll", panelPlace, true); d.removeEventListener("mousedown", panelAway); }
+    panelBox.remove();
+    panelBox = null;
+    panelAt = -1;
+    panelPlace = null;
+  }
+
+  function panelKey(e) { if (e.key === "Escape") closePanel(); }
+  function panelAway(e) {
+    // a section's own bar is exempt: closing on its mousedown would undo the ⚙ toggle a moment later
+    var bar = e.target.closest && e.target.closest(".iop-bar");
+    if (panelBox && !bar && !panelBox.contains(e.target)) closePanel();
+  }
+
+  function openPanel(i) {
+    var d = cdoc(), node = d && d.querySelector('[data-b="' + i + '"]');
+    if (panelAt === i) return closePanel();       // ⚙ again on the same section shuts it
+    closePanel();
+    if (!node || !MODEL[i]) return;
+    var box = el("div", { "class": "iop-panel" });
+    panelBox = box;
+    panelAt = i;
+    box.appendChild(el("div", { "class": "toolbar" }, [
+      el("strong", { text: nameFor(MODEL[i].type) }),
+      el("span", { "class": "spacer" }),
+      btn("✕", "Close", closePanel)
+    ]));
+    // the popover IS the form editor's card — every widget reused, nothing reimplemented
+    box.appendChild(blockCard(MODEL[i], i, MODEL, function () { closePanel(); redrawForm(); canvasFull(); select(-1); }));
+
+    // fieldInput() mutates in place and reports nothing, so watch the popover for any activity
+    // and redraw the one block it belongs to. Cheaper than threading a callback through every widget.
+    var pending = null;
+    ["input", "change", "click"].forEach(function (ev) {
+      box.addEventListener(ev, function () {
+        clearTimeout(pending);
+        pending = setTimeout(function () { if (panelAt > -1) canvasBlock(panelAt); }, 250);
+        markDirty();
+      });
+    });
+
+    panelPlace = function () {
+      var live = cdoc(), n = live && live.querySelector('[data-b="' + panelAt + '"]');
+      if (!n) return closePanel();
+      var r = n.getBoundingClientRect(), fr = FRAME.getBoundingClientRect(), pad = 8;
+      // clamp into the window: a section at the far right or scrolled half off must stay reachable
+      var top = Math.min(Math.max(fr.top + r.top + 40, pad), window.innerHeight - box.offsetHeight - pad),
+          left = Math.min(Math.max(fr.left + r.left + 24, pad), window.innerWidth - box.offsetWidth - pad);
+      box.style.top = Math.max(top, pad) + "px";
+      box.style.left = Math.max(left, pad) + "px";
+    };
+
+    document.body.appendChild(box);
+    panelPlace();
+    document.addEventListener("keydown", panelKey);
+    document.addEventListener("mousedown", panelAway);
+    window.addEventListener("resize", panelPlace);
+    window.addEventListener("scroll", panelPlace, true);
+    d.addEventListener("scroll", panelPlace, true);   // the canvas scrolls inside itself (#canvas is 76vh)
+    d.addEventListener("mousedown", panelAway);       // iframe clicks never reach the admin document
   }
 
   // ---- the section picker ---------------------------------------------------
@@ -1162,7 +1229,6 @@
     SPEC = JSON.parse(data.textContent);
     MEDIA = SPEC.media || [];
     FRAME = document.getElementById("canvas");
-    panel = document.getElementById("block-settings");
     initMediaSelects();
     buildToolbar();
     initPreview();
@@ -1187,19 +1253,6 @@
     redrawForm();
     mount.appendChild(list);
     mount.appendChild(el("div", { "class": "toolbar" }, [btn("+ Add a section", "Choose a section to add", function () { openInserter(MODEL.length); })]));
-
-    if (panel) {
-      // fieldInput() mutates in place and reports nothing, so watch the panel for any activity
-      // and redraw the one block it belongs to. Cheaper than threading a callback through every widget.
-      var pending = null;
-      var schedule = function () {
-        clearTimeout(pending);
-        pending = setTimeout(function () { if (selected > -1) canvasBlock(selected); }, 250);
-        markDirty();
-      };
-      ["input", "change", "click"].forEach(function (ev) { panel.addEventListener(ev, schedule); });
-      showPanel(-1);
-    }
 
     focusOnLoad = 0;   // land the caret in the document, the way Docs does
     canvasFull();

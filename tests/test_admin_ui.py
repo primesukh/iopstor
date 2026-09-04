@@ -20,7 +20,7 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
     form = client.get("/admin/posts/new?type=post")
     assert form.status_code == 200 and b"Block reference" in form.data
     # the visual editor's mount points and the metadata it is driven by
-    for hook in (b'id="canvas"', b'id="doc-toolbar"', b'id="block-settings"', b'id="content-tabs"', b'"layouts"', b'"seed"', b'"names"'):
+    for hook in (b'id="canvas"', b'id="doc-toolbar"', b'id="content-tabs"', b'"layouts"', b'"seed"', b'"names"'):
         assert hook in form.data, hook
     csrf = re.search(r'name="csrf" value="([^"]+)"', form.text).group(1)
     r = client.post("/admin/posts/new?type=post", data={"csrf": csrf, "title": "zz-test UI Post", "status": "published", "excerpt": "From the browser",
