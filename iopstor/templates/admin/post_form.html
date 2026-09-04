@@ -66,10 +66,6 @@
     </div>
   </div>
   <div>
-    <div class="card" id="settings-card">
-      <h2>Section settings</h2>
-      <div id="block-settings"></div>
-    </div>
     <div class="card">
       <label>Status <select name="status">{% for s in ('draft','published') %}<option value="{{ s }}" {{ 'selected' if (p.status or 'draft')==s }}>{{ s }}</option>{% endfor %}</select></label>
       <label>Publish date <small>(empty = now when published; future = scheduled)</small> <input type="datetime-local" name="published_at" value="{{ (p.published_at or '')[:16] }}"></label>
