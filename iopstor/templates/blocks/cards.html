@@ -1,4 +1,4 @@
-<section class="section{{ al }}"{{ fe() }}><div class="wrap">
+<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
   {% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}
   <div class="cards">{% for c in data['items'] %}{% if c.url %}<a class="card" href="{{ c.url }}"{{ fe('items', loop.index0) }}>{% else %}<div class="card"{{ fe('items', loop.index0) }}>{% endif %}{% if c.icon %}<div style="font-size:1.8rem">{{ c.icon }}</div>{% endif %}<h3{{ fe('title') }}>{{ c.title }}</h3>{% if c.text or edit %}<p{{ fe('text') }}>{{ c.text }}</p>{% endif %}{% if c.url %}</a>{% else %}</div>{% endif %}{% endfor %}</div>
 </div></section>

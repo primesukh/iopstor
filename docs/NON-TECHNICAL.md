@@ -196,10 +196,10 @@ Click any wording inside a section and type over it — headline, button label, 
 | **⠿** | Hold and drag to move the whole section up or down the page |
 | **↑ ↓** | Move it one place up or down, if you prefer buttons to dragging |
 | **⧉** | Make a copy of the section, just below |
-| **⚙** | Open its settings, right over the section — pictures, links, how wide each column is, and the choices that are not words on the page |
+| **⚙** | Open its settings, right over the section — alignment, width, pictures, links, and the choices that are not words on the page |
 | **✕** | Remove the section (it asks first) |
 
-Ordinary paragraphs deliberately have no toolbar hovering over them. They are just writing.
+A section of your own writing has the same toolbar — hover it and it appears in the corner, so a block of writing can be moved, copied, aligned or widened like any other section.
 
 **Lining a section up: left, centre or right.** The **⇤ ↔ ⇥** buttons on the top toolbar centre one
 paragraph at a time. To do a whole section at once, open its **⚙** and use the two boxes at the top:
@@ -213,10 +213,19 @@ Both start on **Default**, which is how the design lays that section out on its 
 page redraws as you choose it. A coloured CTA band stays centred and a specification table stays
 left, whatever you pick — those two are designed that way on purpose.
 
-Ordinary paragraphs are the exception: a plain block of writing has no **⚙**, so use the **⇤ ↔ ⇥**
-buttons on the toolbar for those.
+**How wide a section is.** The third box in the same **⚙** panel:
 
-**Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live on the section itself: hover it, click the **⚙** on its little dark toolbar, and a small panel opens over that section with exactly its own options — **Align the content**, **Align the section**, the picture, the button link, how many posts to list, and **+ Add** / ✕ for rows in a Cards, FAQ, Numbers or Specification section. Any picture field there has a **Choose file** button that uploads on the spot. The page updates as you type. Close it with **Esc**, the ✕, another press of ⚙, or by clicking anywhere else.
+| Width | What you get |
+|---|---|
+| **Default** | How the design lays that section out on its own — writing stops at a comfortable reading width rather than stretching across the whole screen. |
+| **Wide** | The section's contents fill the page column, edge to edge of the white area. |
+| **Full width** | The section breaks out of the page column entirely and runs the full width of the browser window. Good for a picture or a coloured band. |
+| **A number** | Type an exact width in pixels in the small box next to it — 950, say. The dropdown then reads *Custom*. Empty the box to go back. |
+
+Set a width and an alignment together and they work as you would expect: a section narrowed to 700
+and set to *Align the section: Centre* sits as a neat centred column.
+
+**Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live on the section itself: hover it, click the **⚙** on its little dark toolbar, and a small panel opens over that section with exactly its own options — **Align the content**, **Align the section**, **Width**, the picture, the button link, how many posts to list, and **+ Add** / ✕ for rows in a Cards, FAQ, Numbers or Specification section. Any picture field there has a **Choose file** button that uploads on the spot. The page updates as you type. Close it with **Esc**, the ✕, another press of ⚙, or by clicking anywhere else.
 
 Nothing is saved until you press **Save**. If you try to leave with unsaved changes, your browser will warn you. If something required is missing, the page comes back with the problem listed at the top and your work still in place.
 
