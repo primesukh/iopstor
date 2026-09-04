@@ -85,7 +85,7 @@ The sections available:
 | Group | What it is for |
 |---|---|
 | **Publish** | Draft or published, and the date (see §5). The small grey or green label in the top bar shows what is *saved* — it changes when you press Save, not before. |
-| **Web address** | Made from the title automatically. If another page of the same kind already uses that address, the note under the box turns red as you type and tells you a free one to use instead. **Edit** if you really need to change it; it asks first, because changing it breaks existing links. |
+| **Web address** | Made from the title automatically. If another page of the same kind already uses that address, three random letters are added so yours still works — `testing-shc` — and the note under the box tells you so. **Edit** if you really need to change it; it asks first, because changing it breaks existing links. |
 | **Summary** | A sentence or two. Shown in lists, and under the page in Google results. |
 | **Featured image** | The picture used in lists and when the page is shared. **Choose file** uploads on the spot. |
 | **Organise** | The parent page (for pages and services), categories or tags, and the order in menus. |
@@ -268,7 +268,7 @@ Products can carry a price and a checkout button. The payment step is currently 
 
 **Can I change a page's web address?** The address is made from the title automatically, and the box is locked so it cannot be changed by accident — an address that changes breaks every link and bookmark pointing at the old one, and search engines drop the page. If you genuinely need to change it, the small **Edit** button beside the box unlocks it and warns you first.
 
-**It says the address is already used.** Two pages cannot share an address, so if you write a second page called *About Us* the note under the box turns red — *That address is already used — try “about-us-2”.* Press **Edit** beside the box and put in the suggestion, or anything else that is free. The red note goes away as soon as the address is unused, and Save will not go through while it is showing.
+**Two pages with the same name.** Two pages cannot share an address, but you are never stopped from writing one. Give a second page the same title as an existing one and it quietly gets three random letters on the end — *“testing” is already used, so this page is at “testing-shc”* — and the note under the box says exactly that. If you would rather choose the address yourself, press **Edit** and type one. There the rule is stricter: type an address another page already has and the note turns red, offers you a free one, and Save will not go through until you change it.
 
 **A page gives "not found".** Its address is built from its slug and its type. A Service named *NAS* filed under *Storage* lives at `/services/storage/nas`, not `/services/nas`. Check the parent is set correctly.
 
