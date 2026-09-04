@@ -23,10 +23,11 @@
      drafted there. Keep the structure, drop the vendor noise: an allowlist of tags, and only
      href/src/alt survive. This is a quality filter, not a security boundary — block HTML is
      still trusted-staff-only on the server (blocks.py). */
-  var PASTE_OK = { P: 1, BR: 1, H2: 1, H3: 1, H4: 1, UL: 1, OL: 1, LI: 1, STRONG: 1, EM: 1, U: 1, A: 1, S: 1,
+  var PASTE_OK = { P: 1, BR: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, UL: 1, OL: 1, LI: 1, STRONG: 1, EM: 1, U: 1, A: 1, S: 1,
                    BLOCKQUOTE: 1, TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TH: 1, TD: 1, IMG: 1, HR: 1, CODE: 1, PRE: 1 };
-  var PASTE_AS = { B: "STRONG", I: "EM", DIV: "P", H1: "H2", H5: "H4", H6: "H4",  // h1 is the page title's alone
-                   STRIKE: "S", DEL: "S" };
+  // H1 is still demoted on the way in: a pasted Word or Docs file always carries its title as an
+  // H1, and the page already has one. The toolbar can still set H1 deliberately.
+  var PASTE_AS = { B: "STRONG", I: "EM", DIV: "P", H1: "H2", STRIKE: "S", DEL: "S" };
   var PASTE_DROP = { SCRIPT: 1, STYLE: 1, HEAD: 1, META: 1, LINK: 1, TITLE: 1, OBJECT: 1, IFRAME: 1, NOSCRIPT: 1, SVG: 1 };
   var PASTE_ATTR = { href: 1, src: 1, alt: 1 };
 
@@ -220,6 +221,15 @@
   function widgetFor(type, field) {
     return SPEC.ui.widgets[type + "." + field] || SPEC.ui.widgets[field] || "text";
   }
+  var HEAD_LEVELS = [["p", "Normal text"], ["h1", "H1 \u2014 Page title"], ["h2", "H2 \u2014 Heading"],
+                     ["h3", "H3 \u2014 Sub-heading"], ["h4", "H4 \u2014 Small heading"],
+                     ["h5", "H5 \u2014 Smaller"], ["h6", "H6 \u2014 Smallest"]];
+  var HEAD_TAGS = HEAD_LEVELS.map(function (o) { return o[0]; });
+  /* Size is separate from level on purpose: a level says what a line *is* (and Google reads it),
+     a size only says how big it looks. Values are absolute rem, so a size inside a size does not
+     compound. "normal" removes the wrapper instead of writing one, which is a true reset. */
+  var TEXT_SIZES = [["0.875rem", "Small"], ["normal", "Normal"], ["1.25rem", "Large"],
+                    ["1.5rem", "Larger"], ["2rem", "Huge"]];
   var BLOCK_NAMES = { cta: "CTA", faq: "FAQ", embed_html: "Embed HTML", rich_text: "Rich text" };
   function nameFor(type) {
     var n = SPEC && SPEC.ui.names && SPEC.ui.names[type];
@@ -808,20 +818,28 @@
     return true;
   }
 
-  /* The block element the caret sits in, bounded by the field. sel="…" asks for the nearest
-     matching ancestor instead. Returns the field itself only when the text really has no wrapper.
+  /* The element the caret is actually in. At a block boundary — the caret at the end of a line,
+     which is where it is after you type — Gecko names the range's container as the *parent* (the
+     block, or the editing host) with an offset, not the node you are standing in. Walking up from
+     that misses everything below it: quote-off goes undetectable, alignment reads off the wrong
+     element, an inline size is invisible. Resolve through startOffset before walking anywhere. */
+  // ponytail: a mixed selection reports the size at its start; showing "several" would need the end
+  // walked too, for a case an editor hits rarely.
+  function caretNode() {
+    var n = savedRange.startContainer, off = savedRange.startOffset, atEnd;
+    while (n.nodeType === 1 && n.childNodes.length) {   // all the way down, not one level: a
+      atEnd = off >= n.childNodes.length;               // selection CONTAINING a span resolves to
+      n = atEnd ? n.lastChild : n.childNodes[off];      // the block, and the span's size is below it
+      off = atEnd && n.childNodes ? n.childNodes.length : 0;
+    }
+    return n.nodeType === 1 ? n : n.parentNode;
+  }
 
-     The descent matters: at a block boundary — the caret at the end of a line, which is where it
-     is after you type — Gecko reports the range's container as the editing HOST, not the block.
-     Taken at face value that makes quote-off undetectable (closest("blockquote") from the host is
-     null) and reads alignment off the wrong element. Resolve through startOffset first. */
+  /* The block element the caret sits in, bounded by the field. sel="…" asks for the nearest
+     matching ancestor instead. Returns the field itself only when the text really has no wrapper. */
   function caretBlock(sel) {
     if (!liveField()) return null;
-    var n = savedRange.startContainer;
-    if (n === savedField && n.childNodes.length) {
-      n = n.childNodes[Math.min(savedRange.startOffset, n.childNodes.length - 1)];
-    }
-    n = n.nodeType === 1 ? n : n.parentNode;
+    var n = caretNode();
     if (!n || !savedField.contains(n)) return null;
     if (sel) { var hit = n.closest(sel); return hit && savedField.contains(hit) ? hit : null; }
     while (n !== savedField && n.parentNode !== savedField) n = n.parentNode;
@@ -829,6 +847,70 @@
   }
 
   var BLOCK_CMD = /^(justify|formatBlock|outdent|indent)/;
+
+  /* Gecko ignores styleWithCSS for fontSize and always emits <font size>, an obsolete tag the paste
+     filter strips on the next round trip. So run the command with a marker size — which also clears
+     any size already inside the selection — and swap the tags it produced for a real CSS size, or
+     for nothing at all when the editor asked for Normal. */
+  function setSize(css) {
+    var d = cdoc();
+    execLine("fontSize", "7");
+    if (!d || !savedField) return;
+    Array.prototype.forEach.call(savedField.querySelectorAll('font[size="7"]'), function (f) {
+      var box = d.createElement("span");
+      if (css === "normal") box = d.createDocumentFragment();
+      else box.style.fontSize = css;
+      while (f.firstChild) box.appendChild(f.firstChild);
+      f.parentNode.replaceChild(box, f);
+    });
+    savedField.normalize();
+    fire(savedField);
+  }
+
+  // the inline size covering the caret, if the toolbar put one there
+  function caretSize() {
+    if (!liveField()) return "";
+    var n = caretNode();
+    while (n && n !== savedField) {
+      if (n.style && n.style.fontSize) return n.style.fontSize;
+      n = n.parentNode;
+    }
+    return "";
+  }
+
+  /* Setting a heading clears any inline size inside the line. The level IS the size — an H2 left
+     wearing a "Huge" span renders like nothing in the outline, and because the size control is
+     disabled on headings there would be no way back out of it from the toolbar. Normal text keeps
+     its size: p + a size is the whole point of the size control. */
+  function applyLevel(tag) {
+    exec("formatBlock", "<" + tag + ">");
+    var line = /^h[1-6]$/.test(tag) && caretBlock();
+    if (!line || line === savedField) return;
+    var sized = [].slice.call(line.querySelectorAll('[style*="font-size"]'));
+    if (line.style && line.style.fontSize) sized.push(line);
+    sized.forEach(function (n) {
+      n.style.fontSize = "";
+      if (!n.getAttribute("style")) n.removeAttribute("style");
+      if (n.tagName === "SPAN" && !n.attributes.length) {      // nothing left to carry: unwrap it
+        while (n.firstChild) n.parentNode.insertBefore(n.firstChild, n);
+        n.remove();
+      }
+    });
+    if (!sized.length) return;
+    line.normalize();
+    fire(savedField);
+    rememberSelection();
+  }
+
+  function execLine(cmd, val) {
+    var d = cdoc();
+    if (!d || !restoreSelection()) return;
+    if (savedRange.collapsed) {
+      var line = caretBlock();
+      if (line) { var r = d.createRange(); r.selectNodeContents(line); savedRange = r; }
+    }
+    exec(cmd, val);
+  }
 
   function exec(cmd, val) {
     var d = cdoc();
@@ -895,16 +977,26 @@
     // It has to be a real selectable value, not a coerced "p": pretending the caret is already on
     // Normal text means picking Normal text changes nothing and raises no change event.
     style.appendChild(el("option", { value: "", text: "\u2014", hidden: "hidden" }));
-    // No Heading 1: post.html already emits the page title as the page's only <h1>.
-    [["p", "Normal text"], ["h2", "Heading"], ["h3", "Sub-heading"], ["h4", "Small heading"]]
-      .forEach(function (o) { style.appendChild(el("option", { value: o[0], text: o[1] })); });
+    /* All six levels, named as well as numbered so the list reads to an editor and to anyone who
+       thinks in H-tags. H1 is offered but is not the default for a reason: post.html already emits
+       the page title as the page's only <h1> (a hero block emits its own), so an H1 in body text is
+       a second one on the page. Use H2 to open a section. */
+    HEAD_LEVELS.forEach(function (o) { style.appendChild(el("option", { value: o[0], text: o[1] })); });
     // No hold() here: cancelling mousedown on a <select> suppresses the native popup, and the caret
     // is replayed from savedRange anyway. Nor does mousedown touch selectedIndex: from Firefox 137
     // the dropdown is DOM-rendered, so clicking an option fires a SECOND mousedown that bubbles to
     // the select — anything that resets the value there wipes the pick before change reads it.
     style.addEventListener("blur", function () { syncBar(); });   // dismissed without picking: show the caret's style again
     style.addEventListener("change", function () {
-      if (style.value) exec("formatBlock", "<" + style.value + ">");
+      if (style.value) applyLevel(style.value);
+    });
+
+    var size = el("select", { "class": "tb-style tb-size", title: "Text size" });
+    size.appendChild(el("option", { value: "", text: "Size", hidden: "hidden" }));
+    TEXT_SIZES.forEach(function (o) { size.appendChild(el("option", { value: o[0], text: o[1] })); });
+    size.addEventListener("blur", function () { syncBar(); });
+    size.addEventListener("change", function () {
+      if (size.value) setSize(size.value);
     });
 
     var bold = b("B", "Bold", function () { exec("bold"); }, "tb-b"),
@@ -957,7 +1049,7 @@
     }
 
     bar.appendChild(group([b("↶", "Undo", function () { exec("undo"); }), b("↷", "Redo", function () { exec("redo"); })]));
-    bar.appendChild(group([style]));
+    bar.appendChild(group([style, size]));
     bar.appendChild(group([bold, ital, und, strike, b("Tx", "Remove formatting", function () { exec("removeFormat"); })]));
     // formatBlock only ever wraps, so quote needs its own way back out: outdent is what unwraps a
     // blockquote in both engines.
@@ -997,6 +1089,9 @@
       bar.classList.toggle("tb-off", !live);
       [style, bold, ital, und, strike, quote, align.left, align.center, align.right]
         .forEach(function (x) { x.disabled = !live; });
+      // Size belongs to body text. A heading's size IS its level, so offering both there invites an
+      // H2 that looks like an H4 — the outline Google reads and the one a reader sees disagreeing.
+      size.disabled = !live || /^H[1-6]$/.test((caretBlock() || {}).tagName || "");
       if (HINT) HINT.innerHTML = live ? HINT_ON : "Click in the page to start editing.";
       if (!live) return;
       try {
@@ -1010,7 +1105,9 @@
         if (at === "start" || at === "justify") at = "left";
         Object.keys(align).forEach(function (k) { align[k].classList.toggle("on", k === at); });
         var blk = (d.queryCommandValue("formatBlock") || "").toLowerCase();
-        style.value = ["p", "h2", "h3", "h4"].indexOf(blk) > -1 ? blk : "";
+        style.value = HEAD_TAGS.indexOf(blk) > -1 ? blk : "";
+        var px = caretSize();
+        size.value = TEXT_SIZES.some(function (o) { return o[0] === px; }) ? px : (px ? "" : "normal");
       } catch (e) { /* no selection in the canvas yet */ }
     };
   }

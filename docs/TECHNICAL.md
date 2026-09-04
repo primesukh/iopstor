@@ -371,9 +371,60 @@ those to `"p"` was the original reason for the mousedown hack: it made the selec
 already on *Normal text*, so picking *Normal text* changed nothing and raised no `change`. With a real
 "none of these" value, every pick is a genuine change. The handler still ignores an empty value.
 
-The style dropdown offers **Normal text / Heading / Sub-heading / Small heading** → `p`/`h2`/`h3`/`h4`.
-There is deliberately **no Heading 1**: `post.html:9` already emits the page title as the page's
-only `<h1>`, and a second one is an SEO error. Pasted `<h1>` is demoted to `<h2>` for the same reason.
+The style dropdown offers **Normal text** plus **H1–H6**, labelled by number and by role
+(*H2 — Heading*, *H3 — Sub-heading*, …) so it reads to an editor and to anyone who thinks in tags.
+**Size is a second dropdown, and it is not a heading level.** A level says what a line *is* and
+Google reads it; a size only says how big it looks. `TEXT_SIZES` holds absolute `rem` values, so a
+size inside a size does not compound, and `"normal"` *removes* the wrapper rather than writing
+`1rem` — a true reset.
+
+`setSize()` cannot just call `execCommand("fontSize")`: Gecko ignores `styleWithCSS` for that command
+and always emits `<font size>`, an obsolete tag the paste filter strips on the next round trip. So it
+runs the command with a marker size — which usefully also clears any size already inside the
+selection — then swaps the `<font size="7">` tags it produced for spans carrying a real CSS size, or
+for nothing at all on *Normal*. `execLine()` wraps it: a collapsed caret means "this whole line",
+because otherwise picking a size with nothing selected only sets a pending style and nothing visibly
+happens, which reads as another dead control.
+
+**Setting a heading clears any inline size inside the line** (`applyLevel()`): the size is stripped,
+an emptied `<span>` is unwrapped rather than left as noise, and *Normal text* is exempt because `p` +
+a size is the whole point of the size control. Without this a heading kept wearing the span that
+overrode it — and since the size dropdown is disabled on headings, there was no way back out of it
+from the toolbar.
+
+`syncBar()` disables the size dropdown whenever the caret's block is `h1`-`h6`. A heading's size *is*
+its level, and offering both there invites an H2 that looks like an H4 — the outline Google reads and
+the one a reader sees disagreeing.
+
+`caretNode()` is shared by `caretBlock()` and `caretSize()`, and it descends **all the way** to the
+node at the range's start rather than one level. Two different bugs came out of getting this wrong.
+At a block boundary Gecko names the range's container as the *parent* with an offset, not the node
+you are standing in — walking up from that misses everything below it, so `syncBar` never saw the
+inline size and the control snapped back to *Normal* after every pick. And a **selection** that
+*contains* a sized span (drag-select a line, or Ctrl-A) resolves to the block, with the span a level
+further down — one level of descent still landed above it. Climbing back up to the block afterwards
+is unaffected, so `caretBlock()` gets the deeper start for free.
+
+A mixed selection reports the size at its start; saying "several" would mean walking the end too,
+for a case an editor hits rarely (`ponytail:` in the source).
+
+`HEAD_LEVELS` (one table, shared by the `<option>` list and `syncBar`'s recognised set) is the only
+place a level is declared. Adding or renaming one is that array.
+
+**H1 is offered but is not the default.** `post.html:9` already emits the page title as the page's
+only `<h1>`, and a hero block emits its own, so an H1 in body text is a *second* `<h1>` on the page —
+an SEO signal error. It is in the list because an editor asked to set levels by hand; H2 remains the
+right way to open a section.
+
+Pasted `<h1>` is still demoted to `<h2>`: a Word or Docs file always carries its title as an H1 and
+the page already has one, so the demotion is right for the bulk path even though the toolbar can set
+H1 deliberately. `<h5>`/`<h6>` are no longer demoted — the toolbar can produce them, so paste has to
+agree about which levels exist or a pasted H5 lands as an H4 you cannot reproduce with the dropdown.
+
+`site.css` gives every level an explicit `font-size` inside `.rich-text` and nothing else — the
+browser defaults put `h5`/`h6` *below* body size, which reads as broken text rather than as a
+heading. Size only: colour and casing stay the same as every other heading, because the control is
+called a heading level and an editor picking H6 is asking for a size, not for a restyle.
 
 **Paste keeps its formatting.** `richPaste()` reads the `text/html` clipboard flavour, strips
 conditional comments, and walks it against an allowlist (`PASTE_OK`), renaming `b`→`strong`,
