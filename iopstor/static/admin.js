@@ -23,10 +23,11 @@
      drafted there. Keep the structure, drop the vendor noise: an allowlist of tags, and only
      href/src/alt survive. This is a quality filter, not a security boundary — block HTML is
      still trusted-staff-only on the server (blocks.py). */
-  var PASTE_OK = { P: 1, BR: 1, H2: 1, H3: 1, H4: 1, UL: 1, OL: 1, LI: 1, STRONG: 1, EM: 1, U: 1, A: 1, S: 1,
+  var PASTE_OK = { P: 1, BR: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, UL: 1, OL: 1, LI: 1, STRONG: 1, EM: 1, U: 1, A: 1, S: 1,
                    BLOCKQUOTE: 1, TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TH: 1, TD: 1, IMG: 1, HR: 1, CODE: 1, PRE: 1 };
-  var PASTE_AS = { B: "STRONG", I: "EM", DIV: "P", H1: "H2", H5: "H4", H6: "H4",  // h1 is the page title's alone
-                   STRIKE: "S", DEL: "S" };
+  // H1 is still demoted on the way in: a pasted Word or Docs file always carries its title as an
+  // H1, and the page already has one. The toolbar can still set H1 deliberately.
+  var PASTE_AS = { B: "STRONG", I: "EM", DIV: "P", H1: "H2", STRIKE: "S", DEL: "S" };
   var PASTE_DROP = { SCRIPT: 1, STYLE: 1, HEAD: 1, META: 1, LINK: 1, TITLE: 1, OBJECT: 1, IFRAME: 1, NOSCRIPT: 1, SVG: 1 };
   var PASTE_ATTR = { href: 1, src: 1, alt: 1 };
 
@@ -220,6 +221,10 @@
   function widgetFor(type, field) {
     return SPEC.ui.widgets[type + "." + field] || SPEC.ui.widgets[field] || "text";
   }
+  var HEAD_LEVELS = [["p", "Normal text"], ["h1", "H1 \u2014 Page title"], ["h2", "H2 \u2014 Heading"],
+                     ["h3", "H3 \u2014 Sub-heading"], ["h4", "H4 \u2014 Small heading"],
+                     ["h5", "H5 \u2014 Smaller"], ["h6", "H6 \u2014 Smallest"]];
+  var HEAD_TAGS = HEAD_LEVELS.map(function (o) { return o[0]; });
   var BLOCK_NAMES = { cta: "CTA", faq: "FAQ", embed_html: "Embed HTML", rich_text: "Rich text" };
   function nameFor(type) {
     var n = SPEC && SPEC.ui.names && SPEC.ui.names[type];
@@ -895,9 +900,11 @@
     // It has to be a real selectable value, not a coerced "p": pretending the caret is already on
     // Normal text means picking Normal text changes nothing and raises no change event.
     style.appendChild(el("option", { value: "", text: "\u2014", hidden: "hidden" }));
-    // No Heading 1: post.html already emits the page title as the page's only <h1>.
-    [["p", "Normal text"], ["h2", "Heading"], ["h3", "Sub-heading"], ["h4", "Small heading"]]
-      .forEach(function (o) { style.appendChild(el("option", { value: o[0], text: o[1] })); });
+    /* All six levels, named as well as numbered so the list reads to an editor and to anyone who
+       thinks in H-tags. H1 is offered but is not the default for a reason: post.html already emits
+       the page title as the page's only <h1> (a hero block emits its own), so an H1 in body text is
+       a second one on the page. Use H2 to open a section. */
+    HEAD_LEVELS.forEach(function (o) { style.appendChild(el("option", { value: o[0], text: o[1] })); });
     // No hold() here: cancelling mousedown on a <select> suppresses the native popup, and the caret
     // is replayed from savedRange anyway. Nor does mousedown touch selectedIndex: from Firefox 137
     // the dropdown is DOM-rendered, so clicking an option fires a SECOND mousedown that bubbles to
@@ -1010,7 +1017,7 @@
         if (at === "start" || at === "justify") at = "left";
         Object.keys(align).forEach(function (k) { align[k].classList.toggle("on", k === at); });
         var blk = (d.queryCommandValue("formatBlock") || "").toLowerCase();
-        style.value = ["p", "h2", "h3", "h4"].indexOf(blk) > -1 ? blk : "";
+        style.value = HEAD_TAGS.indexOf(blk) > -1 ? blk : "";
       } catch (e) { /* no selection in the canvas yet */ }
     };
   }

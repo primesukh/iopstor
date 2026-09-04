@@ -89,7 +89,7 @@ The sections available:
 | | |
 |---|---|
 | **↶ ↷** | Undo and redo |
-| **Normal text ▾** | Turn a line into a *Heading*, *Sub-heading* or *Small heading*. (There is no “Heading 1” on purpose — the page title at the top is already the main heading, and having two confuses Google.) |
+| **Normal text ▾** | Sets the size of the line: **H1** down to **H6**, or back to *Normal text*. H2 is the normal way to start a section, H3 for something under it, and so on down. |
 | **B** *I* <u>U</u> **S** | Bold, italic, underline and strikethrough |
 | **Tx** | Strips all formatting off the selected words |
 | **• 1.** | Bulleted and numbered lists |
@@ -102,6 +102,11 @@ follows it: if that line is a quote, **❝** is highlighted; if it is centred, *
 bold, italic, underline and strikethrough do the same. **Clicking a highlighted button switches it
 back off** — that is how you take a paragraph back out of a quote, or move centred text back to the
 left.
+
+**A word on H1.** It is in the list, but reach for **H2** to open a section. The page title at the
+top of the page is already the page's H1, so adding another one inside your writing gives the page
+two — and that is one of the things Google reads to work out what a page is about. H2, H3, H4 and
+below are yours to use freely.
 
 **If the toolbar goes grey, it is waiting for you.** It fades and the line underneath reads *“Click
 in the page to start editing”* whenever the cursor is not in text it can format — after you have
