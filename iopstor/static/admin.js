@@ -189,16 +189,38 @@
     raw.value = value || "";
 
     var bar = el("div", { "class": "rt-toolbar" });
+    /* This body lives in the ADMIN document, so a dialog input really does take its selection away
+       (the canvas toolbar gets away with it only because its caret is in another document). Stash
+       the range on the toolbar's mousedown, which fires before focus moves, and replay it after. */
+    var rng = null;
+    bar.addEventListener("mousedown", function () {
+      var sel = document.getSelection();
+      if (sel.rangeCount && body.contains(sel.getRangeAt(0).commonAncestorContainer)) rng = sel.getRangeAt(0).cloneRange();
+      else rng = null;
+    });
+    function replay(r) {
+      body.focus();
+      if (!r) return;
+      var sel = document.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+    function rtLink() {
+      var n = rng && rng.commonAncestorContainer, a = null;
+      if (n) { n = n.nodeType === 1 ? n : n.parentNode; a = n.closest("a"); }
+      if (a && !body.contains(a)) a = null;
+      linkDialog({ url: a ? a.getAttribute("href") : "",
+                   text: a ? a.textContent : (rng ? rng.toString() : ""),
+                   blank: !!(a && a.getAttribute("target") === "_blank") },
+        function (html) { replay(a ? rangeOn(a) : rng); document.execCommand("insertHTML", false, html); onChange(body.innerHTML); },
+        a && function () { replay(rangeOn(a)); document.execCommand("unlink", false, null); onChange(body.innerHTML); });
+    }
     RT_BUTTONS.forEach(function (b) {
       bar.appendChild(btn(b[0], b[2], function () {
         var cmd = b[1].split(":");
+        if (cmd[0] === "createLink") return rtLink();
         body.focus();
-        if (cmd[0] === "createLink") {
-          var url = prompt("Link address", "https://");
-          if (url) document.execCommand("createLink", false, url);
-        } else {
-          document.execCommand(cmd[0], false, cmd[1] || null);
-        }
+        document.execCommand(cmd[0], false, cmd[1] || null);
         onChange(body.innerHTML);
       }));
     });
@@ -590,9 +612,63 @@
     node.addEventListener("mousedown", function () { select(+node.getAttribute("data-b")); });
   }
 
+  /* Drag a column edge to resize it. Widths live in a <colgroup> built on the first drag, in
+     percentages so the table still reflows on a phone, and the two columns either side of the edge
+     trade width so the table itself never changes size. site.css switches a table to
+     table-layout:fixed only once it has a colgroup, so nothing anyone typed before this existed
+     changes shape.
+     ponytail: uniform tables only — colspan and ragged rows are ignored. tableHtml() never emits
+     either; a pasted table that has them resizes oddly rather than breaking. */
+  var GRIP = 6, MIN_COL = 4;                     // px either side of the edge; smallest column, in %
+
+  function colgroupFor(table, cols) {
+    var g = table.querySelector(":scope > colgroup");
+    if (g && g.children.length === cols) return g;
+    if (g) g.remove();
+    var d = table.ownerDocument, row = table.rows[0], full = table.getBoundingClientRect().width;
+    g = d.createElement("colgroup");
+    for (var i = 0; i < cols; i++) {
+      var c = d.createElement("col");
+      c.style.width = (row.cells[i].getBoundingClientRect().width / full * 100).toFixed(3) + "%";
+      g.appendChild(c);
+    }
+    table.insertBefore(g, table.firstChild);     // a colgroup has to come before thead/tbody
+    return g;
+  }
+
+  function startColDrag(e) {
+    var cell = e.target.closest && e.target.closest("td,th");
+    if (!cell || !cell.closest("[data-rich]")) return;
+    var row = cell.parentNode, at = cell.cellIndex;
+    if (at < 0 || at >= row.cells.length - 1) return;            // the last edge is the table's own
+    if (e.clientX < cell.getBoundingClientRect().right - GRIP) return;
+    var table = cell.closest("table"), field = cell.closest("[data-f]"), d = cell.ownerDocument;
+    if (!table || !field) return;
+    var g = colgroupFor(table, row.cells.length),
+        a = g.children[at], b = g.children[at + 1],
+        full = table.getBoundingClientRect().width,
+        aw = parseFloat(a.style.width), bw = parseFloat(b.style.width), x0 = e.clientX;
+    e.preventDefault();                          // otherwise the contenteditable starts selecting text
+    function move(ev) {
+      var by = Math.max(MIN_COL - aw, Math.min((ev.clientX - x0) / full * 100, bw - MIN_COL));
+      a.style.width = (aw + by).toFixed(3) + "%";
+      b.style.width = (bw - by).toFixed(3) + "%";
+    }
+    function stop() {
+      d.removeEventListener("mousemove", move);
+      d.removeEventListener("mouseup", stop);
+      table.classList.remove("iop-resizing");
+      fire(field);                               // the new HTML goes back into MODEL like any edit
+    }
+    table.classList.add("iop-resizing");
+    d.addEventListener("mousemove", move);
+    d.addEventListener("mouseup", stop);
+  }
+
   function wireDoc() {
     var d = cdoc();
     if (!d) return;
+    d.addEventListener("mousedown", startColDrag, true);   // before the caret lands in the cell
     // the canvas is a real page: stop it behaving like one (contact_form would post a live lead)
     d.addEventListener("submit", function (e) { e.preventDefault(); }, true);
     d.addEventListener("click", function (e) {
@@ -713,6 +789,229 @@
     d.addEventListener("mousedown", panelAway);       // iframe clicks never reach the admin document
   }
 
+  // ---- dialogs ----------------------------------------------------------------
+  /* One overlay behind every dialog: the section picker and the toolbar's link, picture, table and
+     embed boxes. It mounts on document.body — deliberately OUTSIDE #post-form, so Enter in a field
+     cannot submit the post and the form's own preview debounce never sees the typing. Esc, the
+     ✕ and a click on the backdrop all close it. Returns close(). */
+  function modal(title, kids, wide) {
+    function esc(e) { if (e.key === "Escape") close(); }
+    function close() { document.removeEventListener("keydown", esc); box.remove(); }
+    var card = el("div", { "class": "iop-modal-in" + (wide ? "" : " iop-modal-sm") },
+      [el("div", { "class": "toolbar" }, [el("strong", { text: title }), el("span", { "class": "spacer" }),
+                                          btn("✕", "Close", function () { close(); })])].concat(kids));
+    var box = el("div", { "class": "iop-modal" }, [card]);
+    box.addEventListener("click", function (e) { if (e.target === box) close(); });
+    document.addEventListener("keydown", esc);
+    document.body.appendChild(box);
+    return close;
+  }
+
+  // btn() is the small secondary one; a dialog's confirming button is the accent-filled default.
+  function primary(label, fn) {
+    var x = el("button", { type: "button", text: label });
+    x.addEventListener("click", fn);
+    return x;
+  }
+
+  function foot(kids) {
+    return el("div", { "class": "toolbar iop-foot" }, [el("span", { "class": "spacer" })].concat(kids));
+  }
+
+  function onEnter(input, fn) {
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); fn(); } });
+  }
+
+  function rangeOn(node) {                       // a range covering one whole element
+    var r = node.ownerDocument.createRange();
+    r.selectNode(node);
+    return r;
+  }
+
+  /* A scheme allowlist, not a javascript: blocklist — data: URLs script just as happily. A bare
+     domain gets https://, because that is what an editor actually types into a link box. */
+  function safeUrl(u) {
+    u = (u || "").trim();
+    var bare = u.replace(/[\s\u0000-\u001f]/g, "");
+    if (!u) return "";
+    if (/^(https?|mailto|tel):/i.test(bare)) return u;
+    if (/^[/#?]/.test(u)) return u;                      // same-site path, anchor, query
+    if (/^[a-z][a-z0-9+.-]*:/i.test(bare)) return "";    // any other scheme: refuse
+    return "https://" + u;
+  }
+
+  /* The link box, shared by the document toolbar and the Form tab's rich-text widget. They differ
+     only in which document their caret lives in, so the caller says what to prefill from and what
+     to do with the finished anchor. `remove` is null when there is no link to take off. */
+  function linkDialog(cur, save, remove) {
+    var url = el("input", { type: "text", placeholder: "example.com/page  ·  /about  ·  mailto:sales@…" }),
+        text = el("input", { type: "text", placeholder: "The words the reader clicks" }),
+        blank = el("input", { type: "checkbox" }),
+        why = el("small", { "class": "iop-why" });
+    url.value = cur.url || "";
+    text.value = cur.text || "";
+    blank.checked = !!cur.blank;
+
+    function apply() {
+      var href = safeUrl(url.value);
+      if (!href) {
+        why.textContent = url.value.trim() ? "That web address is not allowed." : "Enter a web address.";
+        url.focus();
+        return;
+      }
+      var a = document.createElement("a");       // built as a node, so the browser does the escaping
+      a.setAttribute("href", href);
+      a.textContent = text.value.trim() || href;
+      if (blank.checked) { a.setAttribute("target", "_blank"); a.setAttribute("rel", "noopener"); }
+      close();
+      save(a.outerHTML);
+    }
+    onEnter(url, apply);
+    onEnter(text, apply);
+
+    var bottom = foot([btn("Cancel", "Close without changing anything", function () { close(); }),
+                       primary(remove ? "Save" : "Insert", apply)]);
+    // Remove sits at the far left, away from Save: it is the one button that throws something away
+    if (remove) bottom.insertBefore(btn("Remove link", "Take the link off these words",
+                                        function () { close(); remove(); }), bottom.firstChild);
+
+    var close = modal(remove ? "Edit link" : "Add a link", [
+      labelled("Web address", true, url), why,
+      labelled("Link text", false, text),
+      el("div", { "class": "iop-check" }, [
+        el("label", { "class": "inline" }, [blank, document.createTextNode(" Open in a new tab")])
+      ]),
+      bottom
+    ]);
+    url.focus();
+    url.select();
+  }
+
+  /* A picture in the flow. mediaWidget() is the same picker as every other image field on the form,
+     so an editor can reuse a library image here instead of only ever uploading a new one.
+     media_alt() cannot reach inside rich_text HTML, which is why the alt text is asked for here. */
+  function pictureDialog() {
+    var id = "", alt = el("input", { type: "text", placeholder: "What is in the picture?" }),
+        why = el("small", { "class": "iop-why" });
+    var widget = mediaWidget(function () { return id; }, function (v) {
+      id = v;
+      var m = mediaById(v);
+      if (m && m.alt && !alt.value.trim()) alt.value = m.alt;
+      why.textContent = "";
+    }, true);
+
+    function apply() {
+      var m = mediaById(id);
+      if (!m) { why.textContent = "Choose a picture first."; return; }
+      var img = document.createElement("img");
+      img.setAttribute("src", m.url);
+      img.setAttribute("alt", alt.value.trim());
+      close();
+      exec("insertHTML", img.outerHTML);
+    }
+    onEnter(alt, apply);
+
+    var close = modal("Insert a picture", [
+      labelled("Picture", true, widget), why,
+      labelled("Alt text", false, alt),
+      el("small", { text: "A short description for blind visitors — Google reads it too." }),
+      foot([btn("Cancel", "Close without inserting", function () { close(); }), primary("Insert", apply)])
+    ]);
+  }
+
+  var GRID_R = 8, GRID_C = 10, MAX_R = 50, MAX_C = 12;
+
+  function tableHtml(rows, cols, head) {
+    function row(tag) { return "<tr>" + Array(cols + 1).join("<" + tag + ">&nbsp;</" + tag + ">") + "</tr>"; }
+    var html = "<table>", body = head ? rows - 1 : rows;
+    if (head) html += "<thead>" + row("th") + "</thead>";
+    if (body > 0) {                              // a one-row table that is all header has no tbody
+      html += "<tbody>";
+      for (var i = 0; i < body; i++) html += row("td");
+      html += "</tbody>";
+    }
+    return html + "</table><p><br></p>";         // somewhere to type once the table is in
+  }
+
+  /* Drag out the size the way Word and Docs do. The grid is the pointer affordance; the two number
+     boxes beside it are the keyboard path and the only way to ask for more than the grid shows, so
+     the grid itself is hidden from screen readers rather than read out as eighty empty cells. */
+  function tableDialog() {
+    var rows = 3, cols = 3, cells = [],
+        grid = el("div", { "class": "tb-grid", "aria-hidden": "true" }),
+        out = el("strong"),
+        rowIn = el("input", { type: "number", min: "1", max: String(MAX_R), value: "3" }),
+        colIn = el("input", { type: "number", min: "1", max: String(MAX_C), value: "3" }),
+        head = el("input", { type: "checkbox" });
+    head.checked = true;
+
+    for (var y = 1; y <= GRID_R; y++) {
+      for (var x = 1; x <= GRID_C; x++) {
+        var cell = el("span", { "class": "tb-cell", "data-r": String(y), "data-c": String(x) });
+        cells.push(cell);
+        grid.appendChild(cell);
+      }
+    }
+    function clamp(n, max) { return Math.max(1, Math.min(Math.floor(n) || 1, max)); }
+    function paint() {
+      cells.forEach(function (n) {
+        n.classList.toggle("on", +n.getAttribute("data-r") <= rows && +n.getAttribute("data-c") <= cols);
+      });
+      out.textContent = cols + " × " + rows;
+    }
+    function set(r, c) {
+      rows = clamp(r, MAX_R);
+      cols = clamp(c, MAX_C);
+      rowIn.value = rows;
+      colIn.value = cols;
+      paint();
+    }
+    function apply() { close(); exec("insertHTML", tableHtml(rows, cols, head.checked)); }
+
+    grid.addEventListener("mousemove", function (e) {      // one listener, eighty cells
+      var t = e.target.closest(".tb-cell");
+      if (t) set(+t.getAttribute("data-r"), +t.getAttribute("data-c"));
+    });
+    grid.addEventListener("click", function (e) { if (e.target.closest(".tb-cell")) apply(); });
+    // typing repaints but does not rewrite the box mid-keystroke; the value is normalised on change
+    rowIn.addEventListener("input", function () { rows = clamp(+rowIn.value, MAX_R); paint(); });
+    colIn.addEventListener("input", function () { cols = clamp(+colIn.value, MAX_C); paint(); });
+    rowIn.addEventListener("change", function () { set(+rowIn.value, cols); });
+    colIn.addEventListener("change", function () { set(rows, +colIn.value); });
+    onEnter(rowIn, apply);
+    onEnter(colIn, apply);
+
+    var close = modal("Insert a table", [
+      grid, el("p", { "class": "tb-dims-line" }, [out]),
+      el("div", { "class": "tb-dims" }, [labelled("Rows", false, rowIn), labelled("Columns", false, colIn)]),
+      el("div", { "class": "iop-check" }, [
+        el("label", { "class": "inline" }, [head, document.createTextNode(" First row is a header")])
+      ]),
+      foot([btn("Cancel", "Close without inserting", function () { close(); }), primary("Insert", apply)])
+    ]);
+    paint();
+  }
+
+  /* The snippet goes in exactly as pasted. Block HTML is trusted-staff-only on the server and the
+     embed_html block already takes raw markup; filtering here alone would make the two disagree. */
+  function embedDialog() {
+    var box = el("textarea", { "class": "code", style: "min-height:9rem",
+                               placeholder: '<iframe src="https://www.youtube.com/embed/…" …></iframe>' }),
+        why = el("small", { "class": "iop-why" });
+    function apply() {
+      var html = box.value.trim();
+      if (!html) { why.textContent = "Paste the code first."; box.focus(); return; }
+      close();
+      exec("insertHTML", html);
+    }
+    var close = modal("Embed code from another service", [
+      labelled("Embed code", true, box), why,
+      el("small", { text: "The share or embed snippet from YouTube, Google Maps, a form or a calendar." }),
+      foot([btn("Cancel", "Close without inserting", function () { close(); }), primary("Insert", apply)])
+    ]);
+    box.focus();
+  }
+
   // ---- the section picker ---------------------------------------------------
   function chooser(title, items, pick) {
     var search = el("input", { type: "search", placeholder: "Search…" }), grid = el("div", { "class": "iop-grid" });
@@ -730,18 +1029,8 @@
       });
       if (!grid.children.length) grid.appendChild(el("p", { "class": "muted", text: "Nothing matches that." }));
     }
-    function esc(e) { if (e.key === "Escape") close(); }
-    function close() { document.removeEventListener("keydown", esc); box.remove(); }
     search.addEventListener("input", draw);
-    var box = el("div", { "class": "iop-modal" }, [
-      el("div", { "class": "iop-modal-in" }, [
-        el("div", { "class": "toolbar" }, [el("strong", { text: title }), el("span", { "class": "spacer" }), btn("✕", "Close", close)]),
-        search, grid
-      ])
-    ]);
-    box.addEventListener("click", function (e) { if (e.target === box) close(); });
-    document.addEventListener("keydown", esc);
-    document.body.appendChild(box);
+    var close = modal(title, [search, grid], true);
     draw();
     search.focus();
   }
@@ -938,36 +1227,33 @@
     });
   }
 
-  // A picture in the flow, uploaded on the spot. media_alt() cannot reach inside rich_text HTML,
-  // so the alt text has to be asked for here or it never gets written at all.
-  function altPrompt(src) {
-    var host = document.getElementById("doc-toolbar");
-    if (!host) return;
-    var input = el("input", { type: "text", placeholder: "Describe this picture for screen readers (recommended)" });
-    function close() { row.remove(); }
-    function save() {
-      var d = cdoc(), img = d && d.querySelector('img[src="' + src.replace(/"/g, '&quot;') + '"]');
-      if (img && input.value.trim()) {
-        img.setAttribute("alt", input.value.trim());
-        var f = img.closest("[data-f]");
-        if (f) fire(f);
-      }
-      close();
-    }
-    var row = el("div", { "class": "tb-alt" }, [input, btn("Save", "Save the description", save), btn("Skip", "Leave it blank", close)]);
-    host.appendChild(row);
-    input.focus();
-    input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); save(); } });
+  /* The document toolbar's own link box: the caret lives in the canvas, so the anchor is found
+     through caretBlock() and the result goes back through exec(), which replays savedRange. Editing
+     an existing link means pointing savedRange at the whole anchor first — the same trick execLine()
+     uses to turn a collapsed caret into a whole line. */
+  function docLink() {
+    var a = caretBlock("a");
+    linkDialog({ url: a ? a.getAttribute("href") : "",
+                 text: a ? a.textContent : (savedRange ? savedRange.toString() : ""),
+                 blank: !!(a && a.getAttribute("target") === "_blank") },
+      function (html) { if (a) savedRange = rangeOn(a); exec("insertHTML", html); },
+      a && function () { savedRange = rangeOn(a); exec("unlink"); });
   }
 
   function buildToolbar() {
     var bar = document.getElementById("doc-toolbar");
     if (!bar) return;
     function hold(x) { x.addEventListener("mousedown", function (e) { e.preventDefault(); }); return x; }
-    function b(label, title, fn, cls) {
+    /* Every control that needs a caret in a rich field registers itself here, so syncBar() cannot
+       drift out of step with the buttons the way a hand-written list did: Tx, the lists, the divider,
+       the four insert buttons and the colour swatches were all left enabled and silently doing
+       nothing. `free` opts out the three that genuinely need no caret. */
+    var cmds = [];
+    function b(label, title, fn, cls, free) {
       var x = el("button", { type: "button", "class": "tb" + (cls ? " " + cls : ""), title: title, text: label });
       hold(x);
       x.addEventListener("click", function (e) { e.preventDefault(); fn(); });
+      if (!free) cmds.push(x);
       return x;
     }
     function group(kids) { return el("span", { "class": "tb-group" }, kids); }
@@ -1004,35 +1290,10 @@
         und = b("U", "Underline", function () { exec("underline"); }, "tb-u"),
         strike = b("S", "Strikethrough", function () { exec("strikeThrough"); }, "tb-s");
 
-    var file = el("input", { type: "file", accept: "image/*", style: "display:none" });
-    var note = el("small", { "class": "tb-note" });
-    file.addEventListener("change", function () {
-      if (!file.files.length) return;
-      note.textContent = "Uploading…";
-      upload(file.files[0], "", function (m) {
-        note.textContent = "";
-        exec("insertHTML", '<img src="' + m.url + '" alt="">');
-        altPrompt(m.url);
-        file.value = "";
-      }, function (err) { note.textContent = err; file.value = ""; });
-    });
-
-    function insertTable() {
-      var spec = prompt("How many rows and columns?", "3 x 2");
-      var m = spec && /(\d+)\s*[x×]\s*(\d+)/i.exec(spec);
-      if (!m) return;
-      var rows = Math.max(1, Math.min(+m[1], 50)), cols = Math.max(1, Math.min(+m[2], 12)), html = "<table><tbody>";
-      for (var r = 0; r < rows; r++) {
-        html += "<tr>";
-        for (var c = 0; c < cols; c++) html += (r ? "<td>&nbsp;</td>" : "<th>&nbsp;</th>");
-        html += "</tr>";
-      }
-      exec("insertHTML", html + "</tbody></table><p><br></p>");
-    }
-
     function colour(cmd, title, initial) {
       var i = el("input", { type: "color", "class": "tb-colour", title: title, value: initial });
       i.addEventListener("input", function () { exec(cmd, i.value); });   // no hold(): it would block the picker
+      cmds.push(i);
       return i;
     }
 
@@ -1048,7 +1309,8 @@
       });
     }
 
-    bar.appendChild(group([b("↶", "Undo", function () { exec("undo"); }), b("↷", "Redo", function () { exec("redo"); })]));
+    bar.appendChild(group([b("↶", "Undo", function () { exec("undo"); }, "", true),
+                           b("↷", "Redo", function () { exec("redo"); }, "", true)]));
     bar.appendChild(group([style, size]));
     bar.appendChild(group([bold, ital, und, strike, b("Tx", "Remove formatting", function () { exec("removeFormat"); })]));
     // formatBlock only ever wraps, so quote needs its own way back out: outdent is what unwraps a
@@ -1060,22 +1322,17 @@
                            b("1.", "Numbered list", function () { exec("insertOrderedList"); }),
                            quote,
                            b("—", "Divider", function () { exec("insertHTML", "<hr><p><br></p>"); })]));
-    bar.appendChild(group([b("🔗", "Add a link", function () { var u = prompt("Link address", "https://"); if (u) exec("createLink", u); }),
-                           b("🖼", "Insert a picture", function () { file.click(); }),
-                           b("▦", "Insert a table", insertTable),
-                           b("</>", "Embed code from another service", function () {
-                             var h = prompt("Paste the embed code (YouTube, Google Maps, …)");
-                             if (h) exec("insertHTML", h);
-                           })]));
+    bar.appendChild(group([b("🔗", "Add a link", docLink),
+                           b("🖼", "Insert a picture", pictureDialog),
+                           b("▦", "Insert a table", tableDialog),
+                           b("</>", "Embed code from another service", embedDialog)]));
     var align = { left: b("⇤", "Align left", function () { exec("justifyLeft"); }),
                   center: b("↔", "Centre", function () { exec("justifyCenter"); }),
                   right: b("⇥", "Align right", function () { exec("justifyRight"); }) };
     bar.appendChild(group([align.left, align.center, align.right,
                            colour("foreColor", "Text colour", "#1f2937"),
                            colour("hiliteColor", "Highlight", "#fef08a")]));
-    bar.appendChild(group([b("+ Section", "Insert a designed section", insertSection, "tb-wide")]));
-    bar.appendChild(file);
-    bar.appendChild(note);
+    bar.appendChild(group([b("+ Section", "Insert a designed section", insertSection, "tb-wide", true)]));
 
     var HINT = document.getElementById("pane-hint"), HINT_ON = HINT && HINT.innerHTML;
 
@@ -1087,8 +1344,7 @@
       // snaps back to "Normal text" is worse than one that is visibly switched off.
       var live = !!(liveField() && savedField.hasAttribute("data-rich"));
       bar.classList.toggle("tb-off", !live);
-      [style, bold, ital, und, strike, quote, align.left, align.center, align.right]
-        .forEach(function (x) { x.disabled = !live; });
+      cmds.concat([style]).forEach(function (x) { x.disabled = !live; });
       // Size belongs to body text. A heading's size IS its level, so offering both there invites an
       // H2 that looks like an H4 — the outline Google reads and the one a reader sees disagreeing.
       size.disabled = !live || /^H[1-6]$/.test((caretBlock() || {}).tagName || "");

@@ -95,7 +95,7 @@ The sections available:
 | **Tx** | Strips all formatting off the selected words |
 | **• 1.** | Bulleted and numbered lists |
 | **❝ —** | A pull quote, and a dividing line |
-| **🔗 🖼 ▦ </>** | A link; a picture; a table; or code embedded from another service like YouTube or Google Maps |
+| **🔗 🖼 ▦ </>** | A link; a picture; a table; or code embedded from another service like YouTube or Google Maps. Each one opens a proper box to fill in, not a bare browser pop-up |
 | **⇤ ↔ ⇥** and the two colour squares | Alignment, text colour and highlight |
 
 **The buttons light up to show what is switched on.** Put the cursor in a line and the toolbar
@@ -114,11 +114,20 @@ in the page to start editing”* whenever the cursor is not in text it can forma
 been working somewhere else on the screen, or when the cursor is in a headline or a button label,
 which are a fixed size on purpose. Click into a paragraph and the toolbar comes straight back. It is
 deliberately switched off rather than pretending: a button that looked available but did nothing was
-the old, more confusing behaviour.
+the old, more confusing behaviour. This now covers **every** button that needs the cursor, the four
+on the right included — so you can never fill in a picture or a table box and find nothing arrives.
 
 **Pasting from Word or Google Docs works properly.** Draft wherever you like, copy the whole thing, paste it in — your headings stay headings and your bullets stay bullets. Word's own invisible junk is dropped on the way in, so nothing strange leaks into the site.
 
-**Pictures go in the flow.** Press **🖼**, choose a file, and it uploads and lands where the cursor was. You are then offered a box to describe the picture for blind visitors — worth thirty seconds, and good for Google too.
+**Links.** Select the words you want to link and press **🔗**. A box asks for the web address, shows the words you selected so you can correct them, and offers **Open in a new tab**. You can type a plain address like `iopstor.com/nas` and the `https://` is added for you; `/about` links to another page on this site, and `mailto:` or `tel:` addresses work too. Put the cursor inside a link you already made and press **🔗** again: everything is filled in ready to change, and there is a **Remove link** button that takes the link off without deleting the words.
+
+**Pictures go in the flow.** Press **🖼**. Pick a picture you have already uploaded from the list, or press **Choose file** to upload a new one on the spot — either way there is a thumbnail so you can see what you have chosen. Write the **alt text** in the same box (a short description for blind visitors — worth thirty seconds, and good for Google too), then press **Insert** and it lands where the cursor was.
+
+**Tables.** Press **▦** and drag across the little grid, the way you would in Word — the squares light up and the label underneath reads the size, then click to drop the table in. For anything bigger than the grid shows, type the numbers into the **Rows** and **Columns** boxes instead. Leave **First row is a header** ticked and the top row comes out shaded and bold. Then just click into a cell and type.
+
+**Making a column wider or narrower.** Put the pointer on the line between two columns — it turns into a left-right arrow — and drag. The column either side gives up what the other one gains, so the table stays the same width overall, and the proportions hold when the page is viewed on a phone. Tables you have never dragged carry on sizing themselves to fit their contents.
+
+**Embedded code.** Press **</>** for a video, a map, a booking calendar or anything else another service gives you a snippet for. Copy the "embed" code from that service, paste it into the box — a proper big box, so you can actually read it — and press **Insert**.
 
 ### Adding a section
 
