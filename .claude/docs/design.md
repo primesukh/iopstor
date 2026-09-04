@@ -97,7 +97,7 @@ Resolver order: trailing slash → 301; `redirects` table; post type by first se
 
 ## 10. Admin UI (`/admin`)
 
-Dashboard (counts per type, new leads) → per-type lists (search, status filter) → post form: title, slug, excerpt, meta fields generated from `field_schema` (text/textarea/number/date/url/media/json), blocks as JSON with a block reference panel, SEO overrides, status, publish date, parent (hierarchical), menu order, featured image, taxonomy checkboxes, delete (admin). Media (upload/delete), Leads (mark handled), Settings and Users (admin). The drag-and-drop page builder replacing the JSON block editor is the next phase.
+Dashboard (counts per type, new leads) → per-type lists (search, status filter) → post form: title, slug, excerpt, meta fields generated from `field_schema` (text/textarea/number/date/url/media/json), blocks in a visual editor (canvas / form / JSON tabs) with a block reference panel, SEO overrides, status, publish date, parent (hierarchical), menu order, featured image, taxonomy checkboxes, delete (admin). Media (upload/delete), Leads (mark handled), Settings and Users (admin). The visual page editor replaced the JSON block editor; the JSON textarea remains the escape hatch and the only field that POSTs.
 
 ## 11. Seed
 

@@ -19,6 +19,9 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
 
     form = client.get("/admin/posts/new?type=post")
     assert form.status_code == 200 and b"Block reference" in form.data
+    # the visual editor's mount points and the metadata it is driven by
+    for hook in (b'id="canvas"', b'id="doc-toolbar"', b'id="block-settings"', b'id="content-tabs"', b'"layouts"', b'"seed"', b'"names"'):
+        assert hook in form.data, hook
     csrf = re.search(r'name="csrf" value="([^"]+)"', form.text).group(1)
     r = client.post("/admin/posts/new?type=post", data={"csrf": csrf, "title": "zz-test UI Post", "status": "published", "excerpt": "From the browser",
                                                         "blocks": '[{"type":"hero","data":{"heading":"Hi from the form"}}]'})
@@ -42,6 +45,29 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
     assert client.post("/admin/media/upload", data={"csrf": csrf}, content_type="multipart/form-data").status_code == 400
     assert client.post("/admin/media/upload", data={"csrf": csrf, "file": (BytesIO(b"x"), "zz.exe")},
                        content_type="multipart/form-data").status_code == 400
+
+    # the visual editor's iframe: the real render_blocks() output, with edit markers on
+    blocks = '[{"type":"hero","data":{"heading":"zz canvas"}},{"type":"cta","data":{"heading":"h","button_label":"b","button_url":"/x"}}]'
+    page = client.post("/admin/canvas", data={"csrf": csrf, "blocks": blocks, "title": "zz-test"})
+    assert page.status_code == 200 and b'data-b="0"' in page.data and b'data-b="1"' in page.data
+    assert b'data-f="heading"' in page.data and b"canvas.css" in page.data
+    one = client.post("/admin/canvas", data={"csrf": csrf, "blocks": blocks, "i": "1"})
+    assert one.status_code == 200 and b"<html" not in one.data and b'data-b="0"' in one.data  # bare fragment
+    assert client.post("/admin/canvas", data={"csrf": csrf, "blocks": "not json"}).status_code == 200  # never 500s
+    assert client.post("/admin/canvas", data={"blocks": "[]"}).status_code == 400  # CSRF still enforced
+
+    # a document-shaped post: one rich_text block, the way the editor saves plain writing
+    doc = ('[{"type":"rich_text","data":{"html":"<h2>What it does</h2><p>Stores <strong>things</strong>.</p>'
+           '<ul><li>NFS</li></ul><table><tbody><tr><th>Capacity</th><td>5 PB</td></tr></tbody></table>"}}]')
+    r = client.post("/admin/posts/new?type=post", data={"csrf": csrf, "title": "zz-test Document", "status": "published",
+                                                        "excerpt": "A standfirst", "blocks": doc})
+    assert r.status_code == 302
+    page = client.get("/blog/zz-test-document")
+    assert page.status_code == 200
+    body = page.data
+    assert b"<h2>What it does</h2>" in body and b"<li>NFS</li>" in body and b"<th>Capacity</th>" in body
+    assert body.count(b"<h1") == 1  # the page title is the only h1; prose starts at h2
+    assert b'class="lead"' in body  # no hero, so post.html gives it a document header
 
     product_form = client.get("/admin/posts/new?type=product")
     assert b'name="meta_price"' in product_form.data and b'name="meta_sku"' in product_form.data

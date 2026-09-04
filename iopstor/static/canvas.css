@@ -1,0 +1,45 @@
+/* Inside the visual editor's iframe only. The public theme is site.css, loaded first and untouched;
+   everything here is editing chrome that never reaches a visitor. See static/admin.js. */
+.iop-canvas{padding-bottom:6rem}
+.iop-canvas #main{min-height:100vh}
+
+/* --- one block ----------------------------------------------------------- */
+[data-b]{position:relative;transition:outline-color .12s}
+[data-b]:hover{outline:2px dashed #bae6fd;outline-offset:-2px}
+[data-b].iop-sel{outline:2px solid var(--accent);outline-offset:-2px}
+.iop-empty{padding:4rem 0;text-align:center;color:var(--muted)}
+
+/* the toolbar that appears on the selected/hovered block */
+.iop-bar{position:absolute;top:.4rem;right:.4rem;z-index:20;display:none;gap:.15rem;background:var(--navy);
+         border-radius:8px;padding:.2rem;box-shadow:0 4px 14px rgba(15,27,45,.28)}
+[data-b]:hover>.iop-bar,[data-b].iop-sel>.iop-bar{display:flex}
+.iop-bar button{background:transparent;border:0;color:#fff;font:inherit;font-size:.8rem;line-height:1;
+                padding:.32rem .42rem;border-radius:6px;cursor:pointer}
+.iop-bar button:hover{background:rgba(255,255,255,.18)}
+.iop-bar .iop-grab{cursor:grab}
+.iop-bar .iop-del:hover{background:#b91c1c}
+.iop-bar .iop-name{color:#cbd5e1;font-size:.72rem;padding:.32rem .45rem;white-space:nowrap;letter-spacing:.02em}
+
+/* --- editable fields ------------------------------------------------------ */
+[data-f]{cursor:text}
+[data-f]:focus{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+[data-f]:empty::before{content:attr(data-ph);color:#94a3b8;font-style:italic;font-weight:400}
+[data-r]:hover{outline:1px dashed #cbd5e1;outline-offset:3px}
+
+/* placeholders for the blocks that cannot be edited on the page itself */
+.iop-ph{border:2px dashed var(--line);border-radius:var(--radius);padding:1.6rem;text-align:center;color:var(--muted);background:#f8fafc}
+.iop-err{border:2px dashed #fecaca;border-radius:var(--radius);padding:1.2rem;text-align:center;color:#b91c1c;background:#fef2f2}
+
+/* --- dragging ------------------------------------------------------------- */
+.iop-ghost{opacity:.35}
+.iop-drag{outline:2px solid var(--accent)!important}
+
+
+/* --- the click-to-type gap between sections ------------------------------- */
+.iop-add{position:relative;z-index:15;display:flex;align-items:center;justify-content:center;padding:.35rem 0}
+.iop-add button{width:100%;max-width:820px;background:transparent;border:0;border-radius:8px;color:#94a3b8;
+                font:inherit;font-size:.85rem;text-align:left;padding:.45rem .6rem;cursor:text;opacity:0;transition:opacity .12s}
+.iop-add:hover button{opacity:1;background:#f1f5f9}
+
+/* a blank document needs a comfortable click target, not a single line of placeholder */
+.rich-text[data-f]{min-height:6rem}

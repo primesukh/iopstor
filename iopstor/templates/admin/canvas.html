@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{{ title or 'Untitled' }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='canvas.css') }}">
+<script src="{{ url_for('static', filename='vendor/sortable.min.js') }}"></script>
+</head>
+<body class="iop-canvas">
+<main id="main">
+  {% if not has_hero %}<div class="wrap page-head"><h1 class="page-title">{{ title or 'Untitled page' }}</h1>{% if excerpt %}<p class="lead">{{ excerpt }}</p>{% endif %}</div>{% endif %}
+  {{ body }}
+</main>
+</body>
+</html>

@@ -185,7 +185,8 @@ def paginate(q, page, per_page, transform=lambda x: x):
 
 
 def get_media(pk):
-    return one(table("media").select("*").eq("id", pk)) if pk else None
+    # per-request memo: the visual editor calls media_url()/media_alt() once per image per block swap
+    return _cached(f"media_{pk}", lambda: one(table("media").select("*").eq("id", pk))) if pk else None
 
 
 def get_menu(slug):

@@ -45,3 +45,77 @@ def test_editor_metadata_covers_every_block():
             if field in REPEATERS:
                 assert EDITOR["items"].get(name), f"{name}.{field} is a repeater with no EDITOR['items'] entry"
     assert set(EDITOR["items"]) <= set(BLOCKS)
+
+
+def test_inserter_metadata_and_seeds():
+    """Every block must be offerable in the visual inserter, and arrive usable when inserted."""
+    from iopstor.blocks import BLOCKS, EDITOR
+
+    for name, (required, optional) in BLOCKS.items():
+        icon, label, description = EDITOR["names"][name]
+        assert icon and label and description.endswith("."), name
+        seed = EDITOR["seed"][name]
+        assert set(seed) <= set(required + optional), (name, set(seed) - set(required + optional))
+    # a seeded block the editor drops in should save as-is; picture blocks are the honest exception
+    for name in BLOCKS:
+        if name in ("image", "gallery"):
+            continue  # no placeholder can stand in for a picture: the editor has to choose one
+        assert validate_blocks([{"type": name, "data": EDITOR["seed"][name]}]) == [], name
+
+
+def test_layouts_expand_and_validate():
+    from iopstor.blocks import BLOCKS, LAYOUTS, layout
+
+    for name in LAYOUTS:
+        blocks = layout(name)
+        assert blocks and all(b["type"] in BLOCKS for b in blocks), name
+        assert validate_blocks(blocks) == [], name
+    assert layout("nope") == []
+    a, b = layout("Product page"), layout("Product page")
+    a[0]["data"]["heading"] = "changed"
+    assert b[0]["data"]["heading"] != "changed"  # seeds must be copied, not shared
+
+
+def test_edit_markers_only_in_edit_mode(app, monkeypatch):
+    from iopstor import db
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    blocks = [{"type": "hero", "data": {"heading": "Hi"}}, {"type": "stats", "data": {"items": [{"value": "5PB", "label": "per rack"}]}}]
+
+    public = render_blocks(blocks)
+    assert "data-b=" not in public and "data-f=" not in public and "data-r=" not in public
+
+    edit = render_blocks(blocks, edit=True)
+    assert 'data-b="0"' in edit and 'data-b="1"' in edit
+    assert 'data-f="heading" data-ph="Heading"' in edit
+    assert 'data-r="items" data-i="0"' in edit
+
+
+def test_edit_mode_survives_a_half_finished_block(app, monkeypatch):
+    from iopstor import db
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    blocks = [{"type": "post_list", "data": {}}, {"type": "hero", "data": {"heading": "Still here"}}]
+    html = render_blocks(blocks, edit=True)
+    assert "iop-err" in html and "Still here" in html  # one bad block must not take the canvas down
+
+
+def test_a_document_is_just_one_rich_text_block(app, monkeypatch):
+    """Plain writing needs no new storage: prose is a rich_text block in the existing JSONB."""
+    from iopstor import db
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    doc = [{"type": "rich_text", "data": {"html": "<h2>Heads</h2><p>Words and <strong>bold</strong>.</p><ul><li>One</li></ul>"}}]
+    assert validate_blocks(doc) == []
+    assert blocks_text(doc) == "Heads Words and bold . One"  # extracts in reading order, no block juggling
+
+    html = render_blocks(doc)
+    assert "<h2>Heads</h2>" in html and "<li>One</li>" in html and "data-f=" not in html
+    edit = render_blocks(doc, edit=True)
+    assert 'data-f="html"' in edit and 'data-rich="1"' in edit  # the caret target the editor types into
+
+    empty = render_blocks([{"type": "rich_text", "data": {"html": ""}}], edit=True)
+    assert "Start writing" in empty  # a blank page invites you to type instead of naming a field
