@@ -344,9 +344,20 @@ Four `execCommand`/selection details the toolbar cannot do without:
 
 `hold()` (cancel `mousedown` so the click cannot blur the canvas) is applied to **buttons only**.
 On a `<select>` or an `<input type="color">` cancelling `mousedown` suppresses the native popup, and
-it is not needed anyway — `savedRange` already survives the blur. The style `<select>` also blanks
-itself on `mousedown` so that picking the value it already shows (*Normal text* while the caret is
-in a `blockquote`) still raises `change`.
+it is not needed anyway — `savedRange` already survives the blur.
+
+**Nothing may touch the style `<select>`'s value on `mousedown`.** From Firefox 137 the dropdown is
+DOM-rendered rather than an OS popup, so clicking an *option* fires a second `mousedown` that
+bubbles to the select. A handler there runs again and wipes the pick before `change` reads it —
+`change` then arrives with `value === ""`, `formatBlock` is handed `"<>"`, and the only visible
+effect is `ensureBlock` wrapping the line in a `<p>`: the control appears to snap back to *Normal
+text*. It reproduces only on Firefox ≥137; Firefox 140 ESR and Chrome fire no such event.
+
+The select stays honest instead. It carries a `hidden` `value=""` option, and `syncBar()` selects it
+whenever the caret's block is not one of `p`/`h2`/`h3`/`h4` — a blockquote, a bare text node. Coercing
+those to `"p"` was the original reason for the mousedown hack: it made the select claim the caret was
+already on *Normal text*, so picking *Normal text* changed nothing and raised no `change`. With a real
+"none of these" value, every pick is a genuine change. The handler still ignores an empty value.
 
 The style dropdown offers **Normal text / Heading / Sub-heading / Small heading** → `p`/`h2`/`h3`/`h4`.
 There is deliberately **no Heading 1**: `post.html:9` already emits the page title as the page's
