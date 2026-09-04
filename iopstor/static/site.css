@@ -60,6 +60,14 @@ main{min-height:60vh}
 .section-title{font-size:1.9rem;margin:0 0 1.5rem}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.5rem;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem}
+/* columns block. The widths go in --cols (not straight into grid-template-columns) so the stacking
+   media query below can win without !important beating an inline style. A nested block keeps its own
+   <section class="section"><div class="wrap">, so both are neutralised inside a column. */
+.columns{display:grid;gap:1.75rem;grid-template-columns:var(--cols,repeat(auto-fit,minmax(240px,1fr)))}
+@media(max-width:800px){.columns{grid-template-columns:1fr}}
+.column>.section{padding:0}
+.column>.section+.section{padding-top:1.5rem}
+.column .wrap{max-width:none;padding:0}
 .card h3{margin:0 0 .5rem;font-size:1.15rem}.card p{margin:0;color:var(--muted)}
 .card .date{display:block;font-size:.85rem;color:var(--muted);margin-bottom:.4rem}
 a.card{text-decoration:none;color:inherit;transition:transform .15s,box-shadow .15s;display:block}

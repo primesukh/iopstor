@@ -1,5 +1,5 @@
 """Pure logic — no Supabase needed."""
-from iopstor.blocks import blocks_text, render_blocks, validate_blocks
+from iopstor.blocks import at_path, blocks_text, col_widths, render_blocks, validate_blocks
 from iopstor.db import slugify
 
 
@@ -43,7 +43,7 @@ def test_editor_metadata_covers_every_block():
             widget = EDITOR["widgets"].get(f"{name}.{field}") or EDITOR["widgets"].get(field) or "text"
             assert widget in ("text", "textarea", "code", "richtext", "media", "pdf", "url", "number", "checkbox", "post_type", "kind"), (name, field)
             if field in REPEATERS:
-                assert EDITOR["items"].get(name), f"{name}.{field} is a repeater with no EDITOR['items'] entry"
+                assert EDITOR["items"].get(name) is not None, f"{name}.{field} is a repeater with no EDITOR['items'] entry"
     assert set(EDITOR["items"]) <= set(BLOCKS)
 
 
@@ -134,3 +134,75 @@ def test_a_document_is_just_one_rich_text_block(app, monkeypatch):
 
     empty = render_blocks([{"type": "rich_text", "data": {"html": ""}}], edit=True)
     assert "Start writing" in empty  # a blank page invites you to type instead of naming a field
+
+
+def _cols(*columns, **data):
+    data["cols"] = list(columns)
+    return {"type": "columns", "data": data}
+
+
+def test_columns_nest_one_level():
+    """A column holds sections; it does not hold another grid, and it never holds the page's <h1>."""
+    text = {"type": "rich_text", "data": {"html": "<p>Hi</p>"}}
+    assert validate_blocks([_cols([text], [{"type": "stats", "data": {"items": [{"value": "5", "label": "PB"}]}}])]) == []
+    assert validate_blocks([_cols([])]) == []                       # an empty column is a spacer, not an error
+    assert validate_blocks([{"type": "columns", "data": {}}]) == ["blocks[0].cols required"]
+    assert validate_blocks([{"type": "columns", "data": {"cols": "nope"}}]) == ["blocks[0].cols must be a list of columns"]
+    assert validate_blocks([_cols("nope")]) == ["blocks[0].cols[0] must be a list"]
+    assert validate_blocks([_cols([{"type": "nope", "data": {}}])]) == ["blocks[0].cols[0][0]: unknown type 'nope'"]
+    assert validate_blocks([_cols([text], [_cols([text])])]) == \
+        ["blocks[0].cols[1][0]: a columns section cannot go inside a column"]
+    assert validate_blocks([_cols([{"type": "hero", "data": {"heading": "Hi"}}])]) == \
+        ["blocks[0].cols[0][0]: a hero section cannot go inside a column"]
+    assert validate_blocks([_cols([{"type": "cta", "data": {"heading": "x"}}])]) == \
+        ["blocks[0].cols[0][0].button_label required", "blocks[0].cols[0][0].button_url required"]
+
+
+def test_columns_render_with_paths(app, monkeypatch):
+    from iopstor import db
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    blocks = [{"type": "hero", "data": {"heading": "Top"}},
+              _cols([{"type": "rich_text", "data": {"html": "<p>Left</p>"}}],
+                    [{"type": "rich_text", "data": {"html": "<p>Right</p>"}},
+                     {"type": "testimonial", "data": {"quote": "Q", "author": "A"}}],
+                    widths="50/25/25")]  # three numbers for two columns: ignored
+
+    edit = render_blocks(blocks, edit=True)
+    assert 'data-b="1"' in edit and 'data-col="0"' in edit and 'data-col="1"' in edit
+    assert 'data-b="1.0.0"' in edit and 'data-b="1.1.0"' in edit and 'data-b="1.1.1"' in edit
+    assert "--cols" not in edit                      # three widths for two columns is a mismatch
+
+    public = render_blocks(blocks)
+    assert "data-b=" not in public and "data-col=" not in public
+    assert "Left" in public and "Right" in public
+
+    blocks[1]["data"]["widths"] = "50/25/25"
+    blocks[1]["data"]["cols"].append([])
+    assert 'style="--cols:50fr 25fr 25fr"' in render_blocks(blocks)
+
+
+def test_col_widths_only_takes_one_positive_number_per_column():
+    three = {"cols": [[], [], []]}
+    assert col_widths({**three, "widths": "50/25/25"}) == "50fr 25fr 25fr"
+    assert col_widths({**three, "widths": " 50 / 25 / 25 "}) == "50fr 25fr 25fr"
+    assert col_widths({**three, "widths": "1.5/1/1"}) == "1.5fr 1fr 1fr"
+    for bad in ("", "50/50", "50/25/25/25", "a/b/c", "0/50/50", "-1/50/50", "inf/1/1", "1;color:red/1/1"):
+        assert col_widths({**three, "widths": bad}) == "", bad
+
+
+def test_at_path_resolves_a_nested_block():
+    text = {"type": "rich_text", "data": {"html": "<p>Hi</p>"}}
+    blocks = [{"type": "hero", "data": {"heading": "Top"}}, _cols([], [text])]
+    assert at_path(blocks, "0")["type"] == "hero"
+    assert at_path(blocks, "1")["type"] == "columns"
+    assert at_path(blocks, "1.1.0") is text
+    for bad in ("", "9", "1.1.9", "1.9.0", "0.0.0", "1.1", "-1", "1.x.0", "1.1.0.0.0"):
+        assert at_path(blocks, bad) is None, bad
+
+
+def test_blocks_text_reaches_into_columns_without_leaking_keys():
+    txt = blocks_text([_cols([{"type": "rich_text", "data": {"html": "<p>Inside <b>a</b> column</p>"}}],
+                             widths="50/50", heading="Side by side")])
+    assert txt == "Side by side Inside a column"

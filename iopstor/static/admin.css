@@ -50,6 +50,7 @@
 .media-note{flex-basis:100%}
 .rep-row{display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap;border-left:3px solid var(--line);padding:0 0 .4rem .6rem;margin:.4rem 0}
 .rep-row>label{flex:1;min-width:8rem;margin-top:.3rem}
+.rep-row>span{flex:1;min-width:8rem;color:var(--muted);font-size:.9rem}  /* a column row: a summary, not a field */
 .rep-controls{display:flex;gap:.25rem;padding-bottom:.35rem}
 .rt-toolbar{display:flex;gap:.25rem;flex-wrap:wrap;margin:.25rem 0}
 .rt-toolbar .rt-toggle{margin-left:auto}

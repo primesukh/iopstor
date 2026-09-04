@@ -163,6 +163,30 @@ on the right included — so you can never fill in a picture or a table box and 
 
 You can also use **+ Section** on the toolbar, which opens the same list with a description of each one. The same menu has *“Start from a layout…”* if you would rather begin from a ready-made Product, Service or Landing page and replace the wording.
 
+### Putting things side by side
+
+Most sections run the full width of the page. When you want two, three or four things **next to each other** — a description beside a picture, three features in a row, a bit of text beside an enquiry form — add a **Columns** section.
+
+It arrives as two columns with a line of writing in each. From there:
+
+- **Type in a column** exactly as you type on the page.
+- **Put a section in a column.** An empty column shows a dashed box saying *“Type here, or press / for a section”*. Click it, press `/`, and pick what you want. In a column that already has something in it, the same line appears above and below what is there when you hover — click the one where you want the new section to land. Numbers, Cards, a Customer quote, a Contact form — almost anything can go in a column. Unlike on the page itself, you do not get a blank line under it afterwards; a column is somewhere you place things, so it stays exactly as tight as what you put in it. (Hero and Columns cannot: a Hero is the page's big opening band, and columns inside columns get impossible to work with.)
+- **Move things in and out.** Drag a section by its **⠿** handle into a column, out of it, or across to the next one. The **↑ ↓** buttons move a section within the column it is already in.
+- **Add or remove a column.** Hover the Columns section, click **⚙**, and use **+ Add column** and the **✕** next to each one. It asks before removing a column that still has something in it.
+
+**How wide each column is.** By default they share the space equally. To split it yourself, put numbers in the **Column widths** box in the same **⚙** panel — one per column, separated by slashes:
+
+| You type | You get |
+|---|---|
+| *(blank)* | Equal columns |
+| `50/25/25` | A wide first column and two narrower ones |
+| `1/2` | A second column twice the width of the first |
+| `33/33/33` | Equal thirds |
+
+The numbers are proportions, so `50/25/25` and `2/1/1` do the same thing. If the numbers do not match the number of columns, or you type something that is not a number, the columns simply go back to equal — nothing breaks.
+
+On a phone, columns always stack one under the other, however you set the widths. You can check this with **Preview → Phone**.
+
 ### Changing a section
 
 Click any wording inside a section and type over it — headline, button label, a question in the FAQ, a number in the numbers strip. Hover a section and a small dark toolbar appears in its top-right corner:
@@ -172,7 +196,7 @@ Click any wording inside a section and type over it — headline, button label, 
 | **⠿** | Hold and drag to move the whole section up or down the page |
 | **↑ ↓** | Move it one place up or down, if you prefer buttons to dragging |
 | **⧉** | Make a copy of the section, just below |
-| **⚙** | Open its settings, right over the section — pictures, links, and the choices that are not words on the page |
+| **⚙** | Open its settings, right over the section — pictures, links, how wide each column is, and the choices that are not words on the page |
 | **✕** | Remove the section (it asks first) |
 
 Ordinary paragraphs deliberately have no toolbar hovering over them. They are just writing.

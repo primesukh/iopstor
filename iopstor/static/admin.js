@@ -393,6 +393,7 @@
   var TEXT_SIZES = [["0.875rem", "Small"], ["normal", "Normal"], ["1.25rem", "Large"],
                     ["1.5rem", "Larger"], ["2rem", "Huge"]];
   var BLOCK_NAMES = { cta: "CTA", faq: "FAQ", embed_html: "Embed HTML", rich_text: "Rich text" };
+  var NEVER_NESTED = ["columns", "hero"];   // mirrors blocks.py; a column holds sections, not a grid or the page H1
   function nameFor(type) {
     var n = SPEC && SPEC.ui.names && SPEC.ui.names[type];
     return (n && n[1]) || BLOCK_NAMES[type] || (type.charAt(0).toUpperCase() + type.slice(1)).replace(/_/g, " ");
@@ -440,8 +441,10 @@
     return el("label", {}, [document.createTextNode(text + (required ? " *" : "")), node]);
   }
 
-  // items / images / rows: a list of {subfield: value} rows
-  function repeater(type, key, data) {
+  /* items / images / rows: a list of {subfield: value} rows. `make` and `cells` are the two things a
+     columns block needs different — its rows are arrays of blocks, not rows of fields — and the ↑ ↓ ✕
+     splice loop is worth having in one place rather than two. */
+  function repeater(type, key, data, make, cells) {
     var subs = SPEC.ui.items[type] || [];
     if (!Array.isArray(data[key])) data[key] = [];
     var list = el("div", { "class": "rep" });
@@ -449,18 +452,23 @@
     function draw() {
       list.innerHTML = "";
       data[key].forEach(function (row, i) {
-        var cells = subs.map(function (s) { return labelled(labelFor(s), false, fieldInput(type, s, row)); });
+        var cells_ = cells ? cells(row, i) : subs.map(function (s) { return labelled(labelFor(s), false, fieldInput(type, s, row)); });
         var controls = el("span", { "class": "rep-controls" }, [
           btn("↑", "Move up", function () { if (i) { data[key].splice(i - 1, 0, data[key].splice(i, 1)[0]); draw(); } }),
           btn("↓", "Move down", function () { if (i < data[key].length - 1) { data[key].splice(i + 1, 0, data[key].splice(i, 1)[0]); draw(); } }),
-          btn("✕", "Remove", function () { data[key].splice(i, 1); draw(); })
+          btn("✕", "Remove", function () {   // a row that is itself a list (a column) takes sections with it
+            if (Array.isArray(data[key][i]) && data[key][i].length &&
+                !confirm("Remove this column and everything in it?")) return;
+            data[key].splice(i, 1);
+            draw();
+          })
         ]);
-        list.appendChild(el("div", { "class": "rep-row" }, cells.concat([controls])));
+        list.appendChild(el("div", { "class": "rep-row" }, cells_.concat([controls])));
       });
       list.appendChild(btn("+ Add " + labelFor(key).toLowerCase().replace(/s$/, ""), "Add a row", function () {
         var row = {};
         subs.forEach(function (s) { row[s] = ""; });
-        data[key].push(row);
+        data[key].push(make ? make() : row);
         draw();
       }));
     }
@@ -477,7 +485,15 @@
       body.appendChild(el("p", { "class": "muted", text: "Unknown section type — edit it under Advanced." }));
     } else {
       fieldsOf(block.type).forEach(function (f) {
-        if (SPEC.ui.items[block.type] && (f.key === "items" || f.key === "images" || f.key === "rows")) {
+        if (f.key === "cols") {
+          // the sections inside a column are edited on the page; the panel only adds, moves and removes
+          body.appendChild(repeater(block.type, "cols", block.data,
+            function () { return []; },
+            function (col, i) {
+              return [el("span", { text: "Column " + (i + 1) + " \u2014 " +
+                                        col.length + " section" + (col.length === 1 ? "" : "s") })];
+            }));
+        } else if (SPEC.ui.items[block.type] && (f.key === "items" || f.key === "images" || f.key === "rows")) {
           body.appendChild(repeater(block.type, f.key, block.data));
         } else {
           body.appendChild(labelled(labelFor(f.key), f.required, fieldInput(block.type, f.key, block.data)));
@@ -493,6 +509,22 @@
      layer. The one dangerous move is REPLACING the array; setBlocks() is the only place that happens. */
   var MODEL = [], AREA = null, dirty = false;
 
+  /* A block's address is a dotted PATH, not an index: "3" is a top-level block, "3.1.0" is block 3's
+     column 1, first block. Parts alternate block/column, so the count is always odd. Everything that
+     used to parse +getAttribute("data-b") goes through these three instead. */
+  function listAt(path) {                 // {arr, i} — the array a path lives in, and where in it
+    var p = String(path).split("."), arr = MODEL;
+    while (p.length > 2) {
+      var b = arr[+p.shift()], c = +p.shift();
+      arr = b && b.data && b.data.cols && b.data.cols[c];
+      if (!Array.isArray(arr)) return { arr: null, i: -1 };
+    }
+    return { arr: arr, i: +p[0] };
+  }
+  function blockAt(path) { var r = listAt(path); return r.arr ? r.arr[r.i] : null; }
+  function siblingPath(path, n) { var p = String(path).split("."); p[p.length - 1] = n; return p.join("."); }
+  function isNested(path) { return String(path).split(".").length > 1; }
+
   function setBlocks(next) {
     closePanel();
     MODEL = Array.isArray(next) ? next : [];
@@ -507,6 +539,18 @@
     var html = b.data && b.data.html || "";
     return !!html.replace(/<[^>]*>/g, "").replace(/&nbsp;|\u00a0/g, " ").trim() || /<(img|hr|table)\b/i.test(html);
   }
+  // written(), applied all the way down. Returns new arrays: a rejected save must not eat the empty
+  // paragraph an editor still has the caret in.
+  function prune(list) {
+    return list.filter(written).map(function (b) {
+      if (b.type !== "columns" || !b.data || !Array.isArray(b.data.cols)) return b;
+      var data = {};
+      for (var k in b.data) data[k] = b.data[k];
+      data.cols = b.data.cols.map(prune);
+      return { type: b.type, data: data };
+    });
+  }
+
   function seedFor(type) {
     return JSON.parse(JSON.stringify((SPEC.ui.seed && SPEC.ui.seed[type]) || {}));  // never hand out the shared seed
   }
@@ -515,7 +559,7 @@
   /* The iframe holds a real server render (POST /admin/canvas) of the blocks currently in memory,
      so what an editor sees is exactly what render_blocks() will publish. Same origin, so we drive
      contentDocument directly. Typing never re-renders; a structural change swaps ONE <section>. */
-  var FRAME = null, selected = -1, tokens = {};
+  var FRAME = null, selected = null, tokens = {};
 
   function cdoc() { return FRAME && FRAME.contentDocument; }
 
@@ -540,7 +584,7 @@
     return holder.firstElementChild;
   }
 
-  var focusOnLoad = -1;
+  var focusOnLoad = null;
 
   function canvasFull() {
     if (!FRAME) return;
@@ -549,46 +593,80 @@
       FRAME.onload = function () {
         FRAME.onload = null;
         wireDoc();
-        if (focusOnLoad > -1) { focusBlock(focusOnLoad); focusOnLoad = -1; }
+        if (focusOnLoad) { focusBlock(focusOnLoad); focusOnLoad = null; }
         syncBar();                       // the old caret died with the old document; say so
       };
       FRAME.srcdoc = html;
     });
   }
 
-  function canvasBlock(i) {           // one block's data changed in its settings popover
+  /* Blocks live in containers: #main, or one [data-col] of a columns block. These four are the
+     bridge between a container in the canvas document and the array it stands for in MODEL. */
+  function blocksIn(box) {                // the blocks this container owns, in document order
+    return Array.prototype.filter.call(box.querySelectorAll("[data-b]"), function (n) {
+      return n.parentNode.closest("[data-col],#main") === box;
+    });
+  }
+  function boxFor(path) {                 // #main, or the [data-col] that holds this path
+    var d = cdoc(), p = String(path).split(".");
+    if (!d) return null;
+    if (p.length === 1) return d.getElementById("main");
+    var owner = d.querySelector('[data-b="' + p.slice(0, -2).join(".") + '"]');
+    return owner && owner.querySelector('[data-col="' + p[p.length - 2] + '"]');
+  }
+  function pathIn(box, i) {               // the path a block at index i of this container would have
+    if (box.id === "main") return String(i);
+    return box.closest("[data-b]").getAttribute("data-b") + "." + box.getAttribute("data-col") + "." + i;
+  }
+  function listIn(box) {                  // the MODEL array this container stands for
+    if (box.id === "main") return MODEL;
+    var owner = blockAt(box.closest("[data-b]").getAttribute("data-b"));
+    return owner && owner.data && owner.data.cols && owner.data.cols[+box.getAttribute("data-col")];
+  }
+
+  function canvasBlock(path) {        // one block's data changed in its settings popover
     var d = cdoc();
-    if (!d || !MODEL[i]) return;
-    ask("b" + i, { i: i }, function (html) {
-      var node = d.querySelector('[data-b="' + i + '"]'), fresh = fragment(d, html);
+    if (!d || !blockAt(path)) return;
+    ask("b" + path, { p: path }, function (html) {
+      var node = d.querySelector('[data-b="' + path + '"]'), fresh = fragment(d, html);
       if (!node || !fresh) return canvasFull();
-      node.replaceWith(fresh);
-      fresh.setAttribute("data-b", i);   // the fragment is rendered alone, so it comes back as 0
-      wireBlock(fresh);
+      node.replaceWith(fresh);           // the server rendered it at its own path, so no renumbering
+      wireTree(fresh);
       paint();
       bars();
       syncBar();                         // replaceWith just threw the remembered caret away
     });
   }
 
-  function canvasInsert(i, focus) {   // MODEL already holds the new block at i
+  function canvasInsert(path, focus) {   // MODEL already holds the new block at this path
     var d = cdoc();
     if (!d) return canvasFull();
-    ask("b" + i, { i: i }, function (html) {
-      var main = d.getElementById("main"), at = d.querySelectorAll("[data-b]")[i], fresh = fragment(d, html);
-      if (!main || !fresh) return canvasFull();
-      main.insertBefore(fresh, at || null);
+    ask("b" + path, { p: path }, function (html) {
+      var box = boxFor(path), fresh = fragment(d, html);
+      if (!box || !fresh) return canvasFull();
+      box.insertBefore(fresh, blocksIn(box)[+String(path).split(".").pop()] || null);
       renumber();
-      wireBlock(fresh);
+      wireTree(fresh);
       bars();
-      if (focus) focusBlock(i); else select(i);
+      if (focus) focusBlock(path); else select(path);
       fresh.scrollIntoView({ behavior: "smooth", block: "center" });
     });
   }
 
-  function renumber() {
+  /* Document order alone no longer gives the numbering: a column's blocks sit inside their parent,
+     so renumbering has to descend container by container instead of over one flat NodeList. */
+  function renumber(box, prefix) {
     var d = cdoc();
-    if (d) Array.prototype.forEach.call(d.querySelectorAll("[data-b]"), function (n, i) { n.setAttribute("data-b", String(i)); });
+    if (!d) return;
+    box = box || d.getElementById("main");
+    if (!box) return;
+    blocksIn(box).forEach(function (node, i) {
+      var p = prefix == null ? String(i) : prefix + "." + i;
+      node.setAttribute("data-b", p);
+      Array.prototype.forEach.call(node.querySelectorAll("[data-col]"), function (c) {
+        if (c.closest("[data-b]") === node) renumber(c, p + "." + c.getAttribute("data-col"));
+      });
+    });
   }
 
   /* The gaps between sections are where a document keeps typing. Clicking one drops in an empty
@@ -607,13 +685,18 @@
   }
 
   function addParagraph(at) {
-    MODEL.splice(at, 0, { type: "rich_text", data: { html: "" } });
+    var r = listAt(at);
+    if (!r.arr) return;
+    r.arr.splice(r.i, 0, { type: "rich_text", data: { html: "" } });
     markDirty();
     canvasInsert(at, true);
   }
 
-  function focusBlock(i) {
-    var d = cdoc(), f = d && d.querySelector('[data-b="' + i + '"] [data-f]');
+  function focusBlock(path) {
+    var d = cdoc(), node = d && d.querySelector('[data-b="' + path + '"]');
+    var f = node && Array.prototype.filter.call(node.querySelectorAll("[data-f]"), function (x) {
+      return x.closest("[data-b]") === node;      // not a nested block's first field
+    })[0];
     if (!f) return;
     f.focus();
     var r = d.createRange(), sel = d.defaultView.getSelection();
@@ -621,7 +704,7 @@
     r.collapse(true);
     sel.removeAllRanges();
     sel.addRange(r);
-    select(i);
+    select(path);
   }
 
   function bars() {                   // the "+" strips live between blocks; rebuild after any move
@@ -630,8 +713,11 @@
     var main = d.getElementById("main");
     if (!main) return;
     Array.prototype.forEach.call(d.querySelectorAll(".iop-add"), function (n) { n.remove(); });
-    var list = d.querySelectorAll("[data-b]");
-    for (var i = 0; i <= list.length; i++) main.insertBefore(addBar(d, i), list[i] || null);
+    // every container, so an empty column is a place to type rather than a dead box
+    [main].concat(Array.prototype.slice.call(d.querySelectorAll("[data-col]"))).forEach(function (box) {
+      var list = blocksIn(box);
+      for (var i = 0; i <= list.length; i++) box.insertBefore(addBar(d, pathIn(box, i)), list[i] || null);
+    });
   }
 
   // ---- editing on the page --------------------------------------------------
@@ -646,10 +732,10 @@
 
   // Which object does this field write into — the block's data, or one repeater row?
   function dataFor(node, f) {
-    var b = MODEL[+node.getAttribute("data-b")];
+    var b = blockAt(node.getAttribute("data-b"));
     if (!b || !b.data) return null;
     var row = f.closest("[data-r]");
-    if (!row || row === f) return b.data;
+    if (!row || row === f || row.closest("[data-b]") !== node) return b.data;
     var arr = b.data[row.getAttribute("data-r")];
     return Array.isArray(arr) ? arr[+row.getAttribute("data-i")] : null;
   }
@@ -663,49 +749,55 @@
       target[key] = rich ? f.innerHTML : f.innerText;
       markDirty();
     });
-    f.addEventListener("focus", function () { select(+node.getAttribute("data-b")); });
+    f.addEventListener("focus", function () { select(node.getAttribute("data-b")); });
     f.addEventListener("paste", rich ? richPaste : plainPaste);
     if (rich) bindSlash(node, f);
   }
 
-  function moveBlock(dir, i) {
-    var to = i + dir, d = cdoc();
-    if (to < 0 || to >= MODEL.length) return;
+  // ↑ ↓ move within the block's own container: out of a column is a drag, not a button press
+  function moveBlock(dir, path) {
+    var r = listAt(path), to = r.i + dir, d = cdoc();
+    if (!r.arr || to < 0 || to >= r.arr.length) return;
     closePanel();
-    MODEL.splice(to, 0, MODEL.splice(i, 1)[0]);
-    if (d) {
-      var nodes = d.querySelectorAll("[data-b]"), node = nodes[i], ref = nodes[to];
+    r.arr.splice(to, 0, r.arr.splice(r.i, 1)[0]);
+    var box = d && boxFor(path);
+    if (box) {
+      var nodes = blocksIn(box), node = nodes[r.i], ref = nodes[to];
       if (node && ref) ref.parentNode.insertBefore(node, dir > 0 ? ref.nextSibling : ref);
       renumber();
       bars();
     }
     markDirty();
-    select(to);
+    select(siblingPath(path, to));
   }
 
-  function dupBlock(i) {
+  function dupBlock(path) {
     closePanel();
-    MODEL.splice(i + 1, 0, JSON.parse(JSON.stringify(MODEL[i])));
+    var r = listAt(path);
+    if (!r.arr) return;
+    r.arr.splice(r.i + 1, 0, JSON.parse(JSON.stringify(r.arr[r.i])));
     markDirty();
-    canvasInsert(i + 1);
+    canvasInsert(siblingPath(path, r.i + 1));
   }
 
-  function delBlock(i) {
+  function delBlock(path) {
     closePanel();
-    if (!confirm("Remove this " + nameFor(MODEL[i].type) + " section?")) return;
-    MODEL.splice(i, 1);
-    var d = cdoc(), node = d && d.querySelector('[data-b="' + i + '"]');
+    var r = listAt(path);
+    if (!r.arr || !r.arr[r.i]) return;
+    if (!confirm("Remove this " + nameFor(r.arr[r.i].type) + " section?")) return;
+    r.arr.splice(r.i, 1);
+    var d = cdoc(), node = d && d.querySelector('[data-b="' + path + '"]');
     if (node) node.remove();
     renumber();
     bars();
     markDirty();
-    select(-1);
+    select(null);
   }
 
   function blockBar(d, node) {
     var bar = d.createElement("div");
     bar.className = "iop-bar";
-    var at = function () { return +node.getAttribute("data-b"); };
+    var at = function () { return node.getAttribute("data-b"); };
     function push(label, title, fn, cls) {
       var x = d.createElement("button");
       x.type = "button";
@@ -717,7 +809,7 @@
     }
     var name = d.createElement("span");
     name.className = "iop-name";
-    name.textContent = nameFor((MODEL[at()] || {}).type || "");
+    name.textContent = nameFor((blockAt(at()) || {}).type || "");
     bar.appendChild(name);
     var grab = d.createElement("button");
     grab.type = "button";
@@ -737,9 +829,21 @@
     var d = node.ownerDocument, old = node.querySelector(":scope > .iop-bar");
     if (old) old.remove();
     // a floating toolbar over every paragraph would destroy the document feel; sections keep theirs
-    if (((MODEL[+node.getAttribute("data-b")] || {}).type) !== "rich_text") node.appendChild(blockBar(d, node));
-    Array.prototype.forEach.call(node.querySelectorAll("[data-f]"), function (f) { bindField(node, f); });
-    node.addEventListener("mousedown", function () { select(+node.getAttribute("data-b")); });
+    if (((blockAt(node.getAttribute("data-b")) || {}).type) !== "rich_text") node.appendChild(blockBar(d, node));
+    // only this block's own fields and clicks: a Columns block must not claim its children's
+    Array.prototype.forEach.call(node.querySelectorAll("[data-f]"), function (f) {
+      if (f.closest("[data-b]") === node) bindField(node, f);
+    });
+    node.addEventListener("mousedown", function (e) {
+      if (e.target.closest("[data-b]") === node) select(node.getAttribute("data-b"));
+    });
+  }
+
+  // a fresh fragment can carry nested blocks and their own drop containers
+  function wireTree(node) {
+    wireBlock(node);
+    Array.prototype.forEach.call(node.querySelectorAll("[data-b]"), wireBlock);
+    Array.prototype.forEach.call(node.querySelectorAll("[data-col]"), sortable);
   }
 
   /* Drag a column edge to resize it. Widths live in a <colgroup> built on the first drag, in
@@ -811,35 +915,46 @@
     Array.prototype.forEach.call(d.querySelectorAll("[data-b]"), wireBlock);
     bars();
     paint();
-    var Sortable = d.defaultView && d.defaultView.Sortable;
-    if (Sortable) {
-      Sortable.create(d.getElementById("main"), {
-        draggable: "[data-b]", handle: ".iop-grab", animation: 140, ghostClass: "iop-ghost", chosenClass: "iop-drag",
-        onEnd: function (e) {
-          var from = +e.item.getAttribute("data-b"),
-              to = Array.prototype.indexOf.call(d.querySelectorAll("[data-b]"), e.item);
-          if (to < 0 || to === from) return;
-          MODEL.splice(to, 0, MODEL.splice(from, 1)[0]);
-          renumber();
-          bars();
-          markDirty();
-          select(to);
-        }
-      });
-    }
+    sortable(d.getElementById("main"));
+    Array.prototype.forEach.call(d.querySelectorAll("[data-col]"), sortable);
+  }
+
+  /* One Sortable per container, all in the same group, so a section drags between the page and any
+     column. oldIndex/newIndex count the .iop-add strips too, so the destination is read back out of
+     the DOM the way it always was — and the source path off the item, before renumber() rewrites it. */
+  function sortable(box) {
+    var Sortable = box && box.ownerDocument.defaultView && box.ownerDocument.defaultView.Sortable;
+    if (!Sortable) return;
+    Sortable.create(box, {
+      draggable: "[data-b]", handle: ".iop-grab", animation: 140, ghostClass: "iop-ghost", chosenClass: "iop-drag",
+      group: { name: "iop", put: function (to, from, item) {
+        // blocks.py NEVER_NESTED rejects these on save too; this is so the drop never looks legal
+        return to.el.id === "main" ||
+               NEVER_NESTED.indexOf((blockAt(item.getAttribute("data-b")) || {}).type) < 0;
+      } },
+      onEnd: function (e) {
+        var src = listAt(e.item.getAttribute("data-b")), dst = listIn(e.to), to = blocksIn(e.to).indexOf(e.item);
+        if (!src.arr || !dst || to < 0) return canvasFull();
+        dst.splice(to, 0, src.arr.splice(src.i, 1)[0]);
+        renumber();
+        bars();
+        markDirty();
+        select(e.item.getAttribute("data-b"));
+      }
+    });
   }
 
   // ---- selection + the section's settings popover ---------------------------
   function paint() {
     var d = cdoc();
     if (d) Array.prototype.forEach.call(d.querySelectorAll("[data-b]"), function (n) {
-      n.classList.toggle("iop-sel", +n.getAttribute("data-b") === selected);
+      n.classList.toggle("iop-sel", n.getAttribute("data-b") === selected);
     });
   }
 
-  function select(i) {
-    if (i === selected) return;   // every mousedown lands here; only repaint on a real change
-    selected = i;
+  function select(path) {
+    if (path === selected) return;   // every mousedown lands here; only repaint on a real change
+    selected = path;
     paint();
   }
 
@@ -847,7 +962,7 @@
      sidebar — ⚙ on its own toolbar opens them over it. The popover has to live in the ADMIN
      document (blockFields builds nodes with el(), mediaWidget and richText, all parent-document),
      so it is positioned over the iframe from two rects, the way openSlash() already does it. */
-  var panelBox = null, panelAt = -1, panelPlace = null;
+  var panelBox = null, panelAt = null, panelPlace = null;
 
   function closePanel() {
     if (!panelBox) return;
@@ -859,7 +974,7 @@
     if (d) { d.removeEventListener("scroll", panelPlace, true); d.removeEventListener("mousedown", panelAway); }
     panelBox.remove();
     panelBox = null;
-    panelAt = -1;
+    panelAt = null;
     panelPlace = null;
   }
 
@@ -870,20 +985,20 @@
     if (panelBox && !bar && !panelBox.contains(e.target)) closePanel();
   }
 
-  function openPanel(i) {
-    var d = cdoc(), node = d && d.querySelector('[data-b="' + i + '"]');
-    if (panelAt === i) return closePanel();       // ⚙ again on the same section shuts it
+  function openPanel(path) {
+    var d = cdoc(), node = d && d.querySelector('[data-b="' + path + '"]'), block = blockAt(path);
+    if (panelAt === path) return closePanel();    // ⚙ again on the same section shuts it
     closePanel();
-    if (!node || !MODEL[i]) return;
+    if (!node || !block) return;
     var box = el("div", { "class": "iop-panel" });
     panelBox = box;
-    panelAt = i;
+    panelAt = path;
     box.appendChild(el("div", { "class": "toolbar" }, [
-      el("strong", { text: nameFor(MODEL[i].type) }),
+      el("strong", { text: nameFor(block.type) }),
       el("span", { "class": "spacer" }),
       btn("✕", "Close", closePanel)
     ]));
-    box.appendChild(blockFields(MODEL[i]));
+    box.appendChild(blockFields(block));
 
     // fieldInput() mutates in place and reports nothing, so watch the popover for any activity
     // and redraw the one block it belongs to. Cheaper than threading a callback through every widget.
@@ -891,7 +1006,7 @@
     ["input", "change", "click"].forEach(function (ev) {
       box.addEventListener(ev, function () {
         clearTimeout(pending);
-        pending = setTimeout(function () { if (panelAt > -1) canvasBlock(panelAt); }, 250);
+        pending = setTimeout(function () { if (panelAt) canvasBlock(panelAt); }, 250);
         markDirty();
       });
     });
@@ -1345,10 +1460,11 @@
     rememberSelection();
   }
 
-  function sectionItems() {
+  function sectionItems(nested) {
     var types = (SPEC.ui.order || []).filter(function (t) { return SPEC.blocks[t]; });
     Object.keys(SPEC.blocks).forEach(function (t) { if (types.indexOf(t) < 0) types.push(t); });
-    return types.filter(function (t) { return t !== "rich_text"; }).map(function (t) {
+    // rich_text is what you get by just typing; inside a column the two never-nested types go too
+    return types.filter(function (t) { return t !== "rich_text" && !(nested && NEVER_NESTED.indexOf(t) > -1); }).map(function (t) {
       var n = (SPEC.ui.names && SPEC.ui.names[t]) || [];
       return { key: t, icon: n[0], label: nameFor(t), text: n[2] || "" };
     });
@@ -1425,11 +1541,15 @@
     }
 
     function insertSection() {
-      var at = selected > -1 ? selected + 1 : MODEL.length;
-      chooser("Insert", sectionItems().concat([{ key: "__layout", icon: "▤", label: "Start from a layout…",
-                                                 text: "Replace the page with a ready-made set of sections." }]), function (t) {
+      var cur = selected && listAt(selected);   // a path left over from a setBlocks() falls back to the end
+      var at = cur && cur.arr ? siblingPath(selected, cur.i + 1) : String(MODEL.length), nested = isNested(at);
+      var extra = nested ? [] : [{ key: "__layout", icon: "▤", label: "Start from a layout…",
+                                   text: "Replace the page with a ready-made set of sections." }];
+      chooser("Insert", sectionItems(nested).concat(extra), function (t) {
         if (t === "__layout") return openLayouts();
-        MODEL.splice(at, 0, { type: t, data: seedFor(t) });
+        var r = listAt(at);
+        if (!r.arr) return;
+        r.arr.splice(r.i, 0, { type: t, data: seedFor(t) });
         markDirty();
         canvasInsert(at);
       });
@@ -1509,7 +1629,7 @@
   }
 
   function splitAt(node, f, line, type) {
-    var i = +node.getAttribute("data-b"), before = [], after = [], seen = false;
+    var path = node.getAttribute("data-b"), r = listAt(path), before = [], after = [], seen = false;
     Array.prototype.forEach.call(f.childNodes, function (n) {
       if (n === line) { seen = true; return; }
       (seen ? after : before).push(n);
@@ -1520,14 +1640,19 @@
       return box.innerHTML;
     }
     var head = line === f ? "" : html(before), tail = line === f ? "" : html(after);
-    var ins = [{ type: type, data: seedFor(type) }, { type: "rich_text", data: { html: tail } }];
+    var ins = [{ type: type, data: seedFor(type) }];
+    // On the page the trailing paragraph is where you carry on writing, so it always goes in. In a
+    // column it would just be an empty box under the thing you placed, so it goes in only when the
+    // split actually left text behind. The caret then lands on the section itself.
+    if (tail || !isNested(path)) ins.push({ type: "rich_text", data: { html: tail } });
+    if (!r.arr) return;
     if (head) {
-      MODEL[i].data.html = head;
-      MODEL.splice.apply(MODEL, [i + 1, 0].concat(ins));
-      focusOnLoad = i + 2;
+      r.arr[r.i].data.html = head;
+      r.arr.splice.apply(r.arr, [r.i + 1, 0].concat(ins));
+      focusOnLoad = siblingPath(path, r.i + ins.length);
     } else {                                     // the "/" line was the whole paragraph: replace it
-      MODEL.splice.apply(MODEL, [i, 1].concat(ins));
-      focusOnLoad = i + 1;
+      r.arr.splice.apply(r.arr, [r.i, 1].concat(ins));
+      focusOnLoad = siblingPath(path, r.i + ins.length - 1);
     }
     markDirty();
     canvasFull();
@@ -1541,7 +1666,7 @@
     list.style.top = (window.scrollY + fr.top + rect.bottom + 6) + "px";
     list.style.left = (window.scrollX + fr.left + rect.left) + "px";
 
-    var items = sectionItems(), shown = items;
+    var items = sectionItems(isNested(node.getAttribute("data-b"))), shown = items;
     function draw() {
       var q = (line.textContent || "").replace(/^\//, "").trim().toLowerCase();
       shown = items.filter(function (it) { return !q || (it.label + " " + it.text).toLowerCase().indexOf(q) > -1; });
@@ -1678,7 +1803,7 @@
     if (v === "preview") {
       renderPreview();
     } else {
-      focusOnLoad = -1;      // coming back from preview should not yank the caret to the top
+      focusOnLoad = null;    // coming back from preview should not yank the caret to the top
       canvasFull();
     }
   }
@@ -1723,7 +1848,7 @@
     MODEL = parsed;
     if (!MODEL.length) MODEL = [{ type: "rich_text", data: { html: "" } }];   // open with a caret, not a dialog
 
-    focusOnLoad = 0;   // land the caret in the document, the way Docs does
+    focusOnLoad = "0";   // land the caret in the document, the way Docs does
     canvasFull();
 
     // Advanced is the same data as JSON. The textarea is written when the panel opens (and on
@@ -1746,7 +1871,7 @@
     });
     form.addEventListener("submit", function () {
       dirty = false;
-      AREA.value = JSON.stringify(MODEL.filter(written), null, 2);
+      AREA.value = JSON.stringify(prune(MODEL), null, 2);
     });
     var pvPending = null;
     ["input", "change"].forEach(function (ev) {      // while Preview is up, keep it a step behind your typing
