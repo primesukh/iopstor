@@ -262,17 +262,19 @@ One stylesheet, `static/site.css`, with CSS variables at the top, then header/fo
 
 No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS, and the public site ships no JavaScript at all.
 
-`static/admin.js` is the single exception, loaded only by `templates/admin/base.html`. It is plain ES5-ish browser JavaScript — no framework, no bundler, and nothing fetched at runtime: the one third-party file, `static/vendor/sortable.min.js` (SortableJS 1.15.6, MIT, 45 KB), is **vendored, not CDN-loaded**, because the CMS runs on a LAN and an editor without internet must still be able to drag a section. It is **progressive enhancement only**: every part is a no-op when its hook is missing, and the plain form underneath still saves with JavaScript disabled. Four parts:
+`static/admin.js` is the single exception, loaded only by `templates/admin/base.html`. It is plain ES5-ish browser JavaScript — no framework, no bundler, and nothing fetched at runtime: the one third-party file, `static/vendor/sortable.min.js` (SortableJS 1.15.6, MIT, 45 KB), is **vendored, not CDN-loaded**, because the CMS runs on a LAN and an editor without internet must still be able to drag a section. It is **progressive enhancement only**: every part is a no-op when its hook is missing, and the plain form underneath still saves with JavaScript disabled. Three parts:
 
 - **Slug** — `#post-slug` is `readonly`; typing in `#post-title` live-fills it with a JS mirror of `db.slugify()` while the post has no saved slug. An *Edit* button unlocks the field after a confirm, for the deliberate URL change. Nothing server-side changed: `apply_post()` already generates the slug from the title when the submitted one is empty, and leaves an existing slug alone.
 - **Media pickers** — one `mediaWidget()` renders a thumbnail, a "choose existing" select and a file input that uploads to `/admin/media/upload` and appends the new row to *every* picker on the page. It is applied to `select[data-media]` (featured image, per-type `media` fields) and to media fields inside blocks, so there is one code path rather than three. `data-media="images"` filters non-images out.
-- **Block editor** — parses the `blocks` textarea, renders a card per block with labelled inputs driven by `BLOCKS` + `EDITOR`, with ↑ ↓ ✕ controls and repeaters for `items`/`images`/`rows`, then serializes back into that same textarea on submit. `_form_body()` and `validate_blocks()` are untouched — the editor only ever writes the JSON a human could have typed. It mutates the parsed objects in place, so **keys it does not render survive**, and an unknown block type falls back to a "edit it as JSON" note. If the textarea holds unparseable JSON (a rejected save round-trip), the editor stands down and opens the *Advanced — edit as JSON* panel instead.
+- **Section settings** — `blockFields(block)` renders one section's non-inline fields: labelled inputs driven by `BLOCKS` + `EDITOR`, media pickers, and repeaters for `items`/`images`/`rows`. It is what `⚙` opens in the popover (§12.1); there is no form-based content entry any more — the canvas and the popover are the only editors, and *Advanced* is the raw JSON. It mutates the block object in place, so **keys it does not render survive**, and an unknown block type falls back to an "edit it under Advanced" note. On submit `admin.js` serialises the array back into `textarea[name="blocks"]`, so `_form_body()` and `validate_blocks()` are untouched — the editor only ever writes the JSON a human could have typed. If that textarea holds unparseable JSON (a rejected save round-trip), the editor stands down, opens *Advanced* and says so.
 
-`rich_text` fields get a `contenteditable` box with a bold/italic/H2/H3/list/link/clear toolbar plus an *HTML* toggle for the raw markup; paste is inserted as plain text so Word markup does not leak in.
+Rich fields inside the popover get `richText()`: a `contenteditable` box with a bold/italic/H2/H3/list/link/clear toolbar plus an *HTML* toggle for the raw markup; paste goes through the same `richPaste` filter as the canvas, so headings and lists survive and Word's markup does not.
 
 ### 12.1 The document editor
 
-The **Content** card on the post form has three tabs over one array: *Visual* (the document), *Form* (the block editor above) and *Advanced* (the raw JSON). `textarea[name="blocks"]` is still the only field that POSTs, so `_form_body()` → `apply_post()` → `validate_blocks()` remains the single validation path. With JavaScript off the tabs stay hidden and the JSON pane is what you get.
+The post form (`templates/admin/post_form.html`) is one screen. A bar across the top: back link, the *saved* status pill, *Edit* / *Preview*, the device widths (Preview only), *View live*, **Save**. Under it, the page column — a borderless title input, the document toolbar and `iframe#canvas` filling whatever height is left — and, on the right, the settings panel: *Publish*, *Web address*, *Summary*, *Featured image*, *Organise* (parent, taxonomies, menu order), the type's *Details* (`field_schema`), then *Search engine overrides* and *Advanced* as collapsed `<details>`. `.admin-main:has(#post-form)` is sized to the viewport and the two columns scroll on their own, so the toolbar never scrolls away; under 1000px the panel stacks beneath the page.
+
+*Advanced* holds `textarea[name="blocks"]`, still the only field that POSTs, so `_form_body()` → `apply_post()` → `validate_blocks()` remains the single validation path. Opening the `<details>` writes the current array into it, a blur on a hand edit reads it back through `setBlocks()`, and submit rewrites it from the array. With JavaScript off, Advanced is what you get. Delete is a `<button form="delete-post">` pointing at a second form placed *after* `#post-form`: a form nested inside a form is dropped by the parser, so the old inline delete form's button submitted the post form instead.
 
 **The canvas is a server render, not a second renderer.** `POST /admin/canvas` (`admin_ui.py`, `@ui_required()`, CSRF as form data) takes the blocks the browser currently holds — unsaved ones included — and returns `render_blocks(blocks, edit=True)` inside `templates/admin/canvas.html`, a standalone document linking `site.css` and `static/canvas.css`. `admin.js` puts that in `iframe#canvas` via `srcdoc`. Preview and published page therefore cannot drift. The iframe is not decoration: every `admin.css` rule is scoped to `body.admin`, which would be an ancestor of an inline canvas and would silently repaint `.specs`, `.card` and the lead form.
 
@@ -313,15 +315,15 @@ the bold/italic/underline/strikethrough states, the quote state, the three align
 style dropdown — a lit button is what tells an editor that a second click switches it off again.
 
 **A section's settings belong to the section.** There is no sidebar card: `⚙` on a section's own
-hover bar calls `openPanel(i)`, which floats `blockCard()` over that section. The popover has to be
-built in the *admin* document — `blockCard`, `mediaWidget` and `richText` all create parent-document
+hover bar calls `openPanel(i)`, which floats `blockFields()` over that section. The popover has to be
+built in the *admin* document — `blockFields`, `mediaWidget` and `richText` all create parent-document
 nodes — so it is positioned over the iframe from two rects (`FRAME.getBoundingClientRect()` plus the
 section's), exactly the trick `openSlash()` uses for the `/` menu. `place()` re-runs on the canvas
-document's `scroll` (`#canvas` is `76vh` and scrolls inside itself), on window `scroll`/`resize`, and
+document's `scroll` (`#canvas` fills its column and scrolls inside itself), on window `scroll`/`resize`, and
 clamps into the viewport. Esc, the ✕, a click outside and a second press of `⚙` all close it; so do
 move / duplicate / delete / `setBlocks()`, because the block index it holds would otherwise be
-stale. `blockCard`'s own head is hidden by CSS inside the popover — the section's hover bar already
-carries the name, move, duplicate and delete. A 250 ms debounce on the popover's
+stale. The popover holds the fields alone — the section's hover bar already carries the name, move,
+duplicate and delete. A 250 ms debounce on the popover's
 `input`/`change`/`click` calls `canvasBlock()`, so the section updates live as you edit.
 
 **The toolbar goes dead rather than lying.** `liveField()` is the gate: the remembered field must
@@ -501,8 +503,7 @@ survives exactly as it does for `chooser()`'s search box, and every dialog commi
   markup, so filtering here alone would make the two disagree.
 
 **Sections still work.** Each non-prose block keeps its floating bar, drags via the vendored
-SortableJS, and opens `blockCard()` — the *same* function the Form tab uses — in the sidebar for
-everything that is not inline text. The canvas is a live page, so `submit` and `a`/`button` clicks
+SortableJS, and opens `blockFields()` over itself for everything that is not inline text. The canvas is a live page, so `submit` and `a`/`button` clicks
 are cancelled in the capture phase: a `contact_form` block would otherwise post a real lead.
 
 
@@ -539,8 +540,10 @@ Client side: `admin.js` posts `new FormData(#post-form)` with `blocks` taken fro
 textarea is only written on submit). Preview mode runs `wirePreview()` instead of `wireDoc()` — no
 `contenteditable`, no section bars, no Sortable — plus capture-phase handlers that cancel `submit`
 and open links in a new tab rather than navigating the preview away. Device widths render at
-1440/834/390 and `transform: scale()` down to the pane, with the iframe's height divided by the
-same factor so the scaled result fills it exactly; the iframe *is* the viewport, so the site's own
+1440/834/390 and `transform: scale()` down to `#canvas-wrap`, which Preview sizes to the rest of the
+window (from the frame's top to the bottom, `flex:none` so the search and share cards under it cannot
+squeeze it; the column scrolls to them), with the iframe's height divided by the same factor so the
+scaled result fills it exactly; the iframe *is* the viewport, so the site's own
 breakpoints answer honestly. A 500 ms debounce on any form `input` keeps it a step behind your typing.
 
 One CSS rule underpins all the show/hide: `.admin [hidden]{display:none!important}`. Author display

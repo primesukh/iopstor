@@ -57,7 +57,7 @@ Some types ask for a few extra details. A Case Study asks for Client, Challenge,
 
 ## 4. Writing a page
 
-**Open a page and start typing.** Under **Content** you get a blank white page with the cursor already in it and a toolbar across the top — the same as Word or Google Docs. You do not have to choose anything, set anything up, or understand anything first. Type.
+**Open a page and start typing.** The screen *is* the page: a big title box at the top, a toolbar under it, and a blank white page with the cursor already in it — the same as Word or Google Docs. Everything that is not the page itself — whether it is live, its web address, the picture used when it is shared — sits in the panel on the right, and **Save** is in the bar at the top. You do not have to choose anything, set anything up, or understand anything first. Type.
 
 Most pages are exactly that: words. When you want something fancier than words — a row of boxes, a strip of big numbers, a coloured band with a button — you drop one in without leaving the keyboard. Those are called **sections**, and the design is applied for you, so they always look right and work on phones.
 
@@ -79,6 +79,19 @@ The sections available:
 | **Embed HTML** | For dropping in code from another service, like a map or a video |
 
 **Rule of thumb:** if a page starts with a Hero, the Hero supplies the page's main headline. Otherwise the page title is shown at the top, above whatever you have written.
+
+**The panel on the right** holds everything about the page that is not the page:
+
+| Group | What it is for |
+|---|---|
+| **Publish** | Draft or published, and the date (see §5). The small grey or green label in the top bar shows what is *saved* — it changes when you press Save, not before. |
+| **Web address** | Made from the title automatically. **Edit** if you really need to change it; it asks first, because changing it breaks existing links. |
+| **Summary** | A sentence or two. Shown in lists, and under the page in Google results. |
+| **Featured image** | The picture used in lists and when the page is shared. **Choose file** uploads on the spot. |
+| **Organise** | The parent page (for pages and services), categories or tags, and the order in menus. |
+| **Details** | The extra boxes some kinds of content have — a case study's client, an event's dates, a datasheet's PDF. |
+| **Search engine overrides**, **Advanced** | Closed by default. Leave them closed unless you know why you are opening them. |
+| **Delete** | At the very bottom, for administrators. It asks first. |
 
 ### Writing
 
@@ -144,7 +157,7 @@ Click any wording inside a section and type over it — headline, button label, 
 | **⠿** | Hold and drag to move the whole section up or down the page |
 | **↑ ↓** | Move it one place up or down, if you prefer buttons to dragging |
 | **⧉** | Make a copy of the section, just below |
-| **⚙** | Open its settings on the right — pictures, links, and the choices that are not words on the page |
+| **⚙** | Open its settings, right over the section — pictures, links, and the choices that are not words on the page |
 | **✕** | Remove the section (it asks first) |
 
 Ordinary paragraphs deliberately have no toolbar hovering over them. They are just writing.
@@ -153,25 +166,25 @@ Ordinary paragraphs deliberately have no toolbar hovering over them. They are ju
 
 Nothing is saved until you press **Save**. If you try to leave with unsaved changes, your browser will warn you. If something required is missing, the page comes back with the problem listed at the top and your work still in place.
 
-> **The other two tabs.** Above the page there are three tabs. **Visual** is the one described above and the one to use. **Form** is the older view — the same content as a list of labelled boxes — which some people find quicker for bulk typing. **Advanced** shows the raw data for developers; you never need to open it.
+> **Advanced.** At the very bottom of the right-hand panel, *Advanced* shows the page's sections as raw data. It is there for developers; you never need to open it.
 
 
 ### Checking how it looks
 
-Above the page are two buttons: **Edit** and **Preview**.
+In the bar at the top of the screen are two buttons: **Edit** and **Preview**.
 
 **Preview** shows the page exactly as a visitor gets it — with the site header and menu, the
 breadcrumb trail, the featured image, the footer, and none of the editing marks. Nothing is
 published by doing this, and it works on a page that has never been published, which is the point:
 you can check a draft before anyone else sees it. The preview keeps up as you type.
 
-**Desktop / Tablet / Phone** redraw the preview at those screen sizes, so you can check a page
+**Desktop / Tablet / Phone**, which appear next to them in Preview, redraw the page at those screen sizes, so you can check a page
 works on a phone before publishing rather than after.
 
-Underneath, two small cards show **how the page will look in a Google result** and **when someone
+The preview fills the screen; scroll down under it for two small cards that show **how the page will look in a Google result** and **when someone
 shares the link** on WhatsApp or LinkedIn — the title, the web address, the description and the
 picture. They also tell you if your title or description is too long and will be cut short. If the
-share card says *No image*, set a Featured image on the right.
+share card says *No image*, set a Featured image in the panel on the right.
 
 Links in the preview open in a new tab rather than taking you away from it, and the contact form
 does not send anything.
@@ -196,7 +209,7 @@ The **Media** section is the shared library for every image, logo and PDF.
 2. Give it **alt text** — a short description of what is in the picture. This is what a blind visitor's screen reader reads out, and it is one of the things Google looks at. Please do not skip it.
 3. The file is then selectable anywhere the site asks for an image.
 
-**You do not have to go to Media first.** Anywhere a page asks for a picture — a Hero image, an Image or Gallery block, the Featured image in the sidebar — there is a **Choose file** button right there. Pick a file and it uploads straight away, gets used on the spot, and joins the Media library so you can reuse it elsewhere. A small thumbnail next to it shows what is currently selected. Uploads made this way have no alt text yet, so add it in the Media section afterwards for anything important.
+**You do not have to go to Media first.** Anywhere a page asks for a picture — a Hero image, an Image or Gallery section, the Featured image in the panel on the right — there is a **Choose file** button right there. Pick a file and it uploads straight away, gets used on the spot, and joins the Media library so you can reuse it elsewhere. A small thumbnail next to it shows what is currently selected. Uploads made this way have no alt text yet, so add it in the Media section afterwards for anything important.
 
 ---
 

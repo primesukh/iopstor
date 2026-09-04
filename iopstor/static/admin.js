@@ -1,6 +1,6 @@
-/* Admin progressive enhancement: auto slug, inline media upload, block editor.
+/* Admin progressive enhancement: auto slug, inline media upload, the document editor.
    No framework, no build step. Every part is a no-op when its hook is absent, and the
-   plain form underneath (textarea named "blocks", plain selects) still works without JS. */
+   plain form underneath (the Advanced textarea named "blocks", plain selects) still works without JS. */
 (function () {
   "use strict";
 
@@ -237,7 +237,7 @@
     return el("div", { "class": "rt" }, [bar, body, raw]);
   }
 
-  // ---- block editor ---------------------------------------------------------
+  // ---- a section's fields ---------------------------------------------------
   var SPEC = null;  // {blocks: {type: [required, optional]}, ui: {widgets, items, labels, kinds}, media, post_types}
 
   function widgetFor(type, field) {
@@ -327,18 +327,13 @@
     return el("div", {}, [el("strong", { text: labelFor(key) }), list]);
   }
 
-  function blockCard(block, i, blocks, redraw) {
-    var head = el("div", { "class": "blk-head" }, [
-      el("strong", { text: nameFor(block.type) }),
-      el("span", { "class": "spacer" }),
-      btn("↑", "Move up", function () { if (i) { blocks.splice(i - 1, 0, blocks.splice(i, 1)[0]); redraw(); } }),
-      btn("↓", "Move down", function () { if (i < blocks.length - 1) { blocks.splice(i + 1, 0, blocks.splice(i, 1)[0]); redraw(); } }),
-      btn("✕", "Remove this section", function () { if (confirm("Remove this " + nameFor(block.type) + " section?")) { blocks.splice(i, 1); redraw(); } })
-    ]);
+  // The fields of one section — what ⚙ opens. Words on the page are edited on the page; this is
+  // for the rest: pictures, links, choices, and the rows of a Cards / FAQ / Numbers section.
+  function blockFields(block) {
     if (!block.data || typeof block.data !== "object") block.data = {};
     var body = el("div", { "class": "blk-fields" });
     if (!SPEC.blocks[block.type]) {
-      body.appendChild(el("p", { "class": "muted", text: "Unknown block type — edit it under “Advanced — edit as JSON”." }));
+      body.appendChild(el("p", { "class": "muted", text: "Unknown section type — edit it under Advanced." }));
     } else {
       fieldsOf(block.type).forEach(function (f) {
         if (SPEC.ui.items[block.type] && (f.key === "items" || f.key === "images" || f.key === "rows")) {
@@ -348,20 +343,18 @@
         }
       });
     }
-    return el("div", { "class": "blk" }, [head, body]);
+    return body;
   }
 
   // ---- shared model ---------------------------------------------------------
-  /* One array, three editors. fieldInput() mutates block objects in place, so the canvas, the
-     settings popover and the JSON textarea all point at the same objects — there is no sync layer.
-     The one dangerous move is REPLACING the array; setBlocks() is the only place that happens. */
+  /* One array, two views and a textarea. fieldInput() mutates block objects in place, so the canvas,
+     the settings popover and the Advanced textarea all point at the same objects — there is no sync
+     layer. The one dangerous move is REPLACING the array; setBlocks() is the only place that happens. */
   var MODEL = [], AREA = null, dirty = false;
-  var redrawForm = function () {};
 
   function setBlocks(next) {
     closePanel();
     MODEL = Array.isArray(next) ? next : [];
-    redrawForm();
     canvasFull();
   }
   function markDirty() { dirty = true; }
@@ -474,7 +467,6 @@
 
   function addParagraph(at) {
     MODEL.splice(at, 0, { type: "rich_text", data: { html: "" } });
-    redrawForm();
     markDirty();
     canvasInsert(at, true);
   }
@@ -546,7 +538,6 @@
       renumber();
       bars();
     }
-    redrawForm();
     markDirty();
     select(to);
   }
@@ -554,7 +545,6 @@
   function dupBlock(i) {
     closePanel();
     MODEL.splice(i + 1, 0, JSON.parse(JSON.stringify(MODEL[i])));
-    redrawForm();
     markDirty();
     canvasInsert(i + 1);
   }
@@ -567,7 +557,6 @@
     if (node) node.remove();
     renumber();
     bars();
-    redrawForm();
     markDirty();
     select(-1);
   }
@@ -692,7 +681,6 @@
           MODEL.splice(to, 0, MODEL.splice(from, 1)[0]);
           renumber();
           bars();
-          redrawForm();
           markDirty();
           select(to);
         }
@@ -716,7 +704,7 @@
 
   /* A section's pictures, links and settings belong to the section, not to a card parked in the
      sidebar — ⚙ on its own toolbar opens them over it. The popover has to live in the ADMIN
-     document (blockCard builds nodes with el(), mediaWidget and richText, all parent-document),
+     document (blockFields builds nodes with el(), mediaWidget and richText, all parent-document),
      so it is positioned over the iframe from two rects, the way openSlash() already does it. */
   var panelBox = null, panelAt = -1, panelPlace = null;
 
@@ -754,8 +742,7 @@
       el("span", { "class": "spacer" }),
       btn("✕", "Close", closePanel)
     ]));
-    // the popover IS the form editor's card — every widget reused, nothing reimplemented
-    box.appendChild(blockCard(MODEL[i], i, MODEL, function () { closePanel(); redrawForm(); canvasFull(); select(-1); }));
+    box.appendChild(blockFields(MODEL[i]));
 
     // fieldInput() mutates in place and reports nothing, so watch the popover for any activity
     // and redraw the one block it belongs to. Cheaper than threading a callback through every widget.
@@ -840,9 +827,9 @@
     return "https://" + u;
   }
 
-  /* The link box, shared by the document toolbar and the Form tab's rich-text widget. They differ
-     only in which document their caret lives in, so the caller says what to prefill from and what
-     to do with the finished anchor. `remove` is null when there is no link to take off. */
+  /* The link box, shared by the document toolbar and the rich-text widget in a section's settings.
+     They differ only in which document their caret lives in, so the caller says what to prefill from
+     and what to do with the finished anchor. `remove` is null when there is no link to take off. */
   function linkDialog(cur, save, remove) {
     var url = el("input", { type: "text", placeholder: "example.com/page  ·  /about  ·  mailto:sales@…" }),
         text = el("input", { type: "text", placeholder: "The words the reader clicks" }),
@@ -1043,7 +1030,6 @@
       return { key: t, icon: n[0], label: nameFor(t), text: n[2] || "" };
     }), function (t) {
       MODEL.splice(at, 0, { type: t, data: seedFor(t) });
-      redrawForm();
       markDirty();
       canvasInsert(at);
     });
@@ -1303,7 +1289,6 @@
                                                  text: "Replace the page with a ready-made set of sections." }]), function (t) {
         if (t === "__layout") return openLayouts();
         MODEL.splice(at, 0, { type: t, data: seedFor(t) });
-        redrawForm();
         markDirty();
         canvasInsert(at);
       });
@@ -1403,7 +1388,6 @@
       MODEL.splice.apply(MODEL, [i, 1].concat(ins));
       focusOnLoad = i + 1;
     }
-    redrawForm();
     markDirty();
     canvasFull();
   }
@@ -1516,17 +1500,23 @@
   function fitPreview() {
     var wrap = document.getElementById("canvas-wrap");
     if (!FRAME || !wrap) return;
+    FRAME.style.height = wrap.style.height = wrap.style.flex = "";   // measure the layout, not the last fit
     if (VIEW !== "preview") {
-      FRAME.style.width = FRAME.style.height = FRAME.style.transform = "";
-      wrap.style.height = "";
+      FRAME.style.width = FRAME.style.transform = "";
       return;
     }
-    var pane = wrap.clientWidth, k = Math.min(1, pane / DEVICE), h = Math.round(window.innerHeight * 0.76);
+    // Preview is the whole screen: from where the frame starts down to the bottom of the window,
+    // taken out of the flex flow so the search and share cards under it cannot squeeze it — the
+    // column scrolls to reach them instead.
+    var top = Math.max(wrap.getBoundingClientRect().top, 0),
+        h = Math.max(window.innerHeight - top - 16, 288),
+        pane = wrap.clientWidth, k = Math.min(1, pane / DEVICE);
     FRAME.style.width = DEVICE + "px";
     FRAME.style.height = Math.round(h / k) + "px";
     FRAME.style.transformOrigin = "top left";
     FRAME.style.transform = "scale(" + k + ")";
-    wrap.style.height = h + "px";
+    wrap.style.flex = "none";
+    wrap.style.height = h + "px";                  // the unscaled frame must not stretch the wrap
   }
 
   function setView(v) {
@@ -1568,64 +1558,38 @@
     window.addEventListener("resize", fitPreview);
   }
 
-  // ---- tabs -----------------------------------------------------------------
-  function initTabs() {
-    var tabs = document.getElementById("content-tabs");
-    if (!tabs) return;
-    var panes = { visual: document.getElementById("pane-visual"), form: document.getElementById("pane-form"), json: document.getElementById("pane-json") };
-    function show(want) {
-      Array.prototype.forEach.call(tabs.querySelectorAll("button"), function (x) { x.classList.toggle("on", x.getAttribute("data-tab") === want); });
-      for (var k in panes) if (panes[k]) panes[k].hidden = k !== want;
-      if (want === "json" && AREA) AREA.value = JSON.stringify(MODEL, null, 2);
-    }
-    Array.prototype.forEach.call(tabs.querySelectorAll("button"), function (b) {
-      b.addEventListener("click", function () { show(b.getAttribute("data-tab")); });
-    });
-    tabs.hidden = false;
-    show("visual");
-    return show;
-  }
-
   // ---- wiring ---------------------------------------------------------------
   function initBlocks() {
-    var mount = document.getElementById("blocks-editor"),
-        data = document.getElementById("editor-data"),
-        form = document.getElementById("post-form");
+    var data = document.getElementById("editor-data"),
+        form = document.getElementById("post-form"),
+        advanced = document.getElementById("advanced");
     AREA = document.querySelector('textarea[name="blocks"]');
-    if (!mount || !data || !AREA || !form) return;
+    if (!data || !AREA || !form) return;
     SPEC = JSON.parse(data.textContent);
     MEDIA = SPEC.media || [];
     FRAME = document.getElementById("canvas");
     initMediaSelects();
     buildToolbar();
     initPreview();
-    var show = initTabs();
 
     var parsed;
     try { parsed = JSON.parse(AREA.value || "[]"); } catch (e) { parsed = null; }
     if (!Array.isArray(parsed)) {   // unparseable JSON from a rejected save: leave the textarea in charge
-      mount.appendChild(el("p", { "class": "error", text: "The saved content is not valid JSON — fix it under Advanced." }));
-      if (show) show("json");
+      AREA.parentNode.insertBefore(el("p", { "class": "error", text: "The saved content is not valid JSON — fix it here." }), AREA);
+      if (advanced) advanced.open = true;
       return;
     }
     MODEL = parsed;
     if (!MODEL.length) MODEL = [{ type: "rich_text", data: { html: "" } }];   // open with a caret, not a dialog
 
-    var list = el("div");
-    redrawForm = function () {
-      list.innerHTML = "";
-      if (!MODEL.length) list.appendChild(el("p", { "class": "muted", text: "No sections yet — add one below." }));
-      MODEL.forEach(function (b, i) { list.appendChild(blockCard(b, i, MODEL, function () { redrawForm(); canvasFull(); })); });
-    };
-    redrawForm();
-    mount.appendChild(list);
-    mount.appendChild(el("div", { "class": "toolbar" }, [btn("+ Add a section", "Choose a section to add", function () { openInserter(MODEL.length); })]));
-
     focusOnLoad = 0;   // land the caret in the document, the way Docs does
     canvasFull();
 
-    // The Advanced panel edits the same data. Hand-edited JSON is read back on blur, so whichever
-    // side was touched last wins instead of being silently overwritten on save.
+    // Advanced is the same data as JSON. The textarea is written when the panel opens (and on
+    // submit); a hand edit is read back on blur, so whichever side was touched last wins.
+    if (advanced) advanced.addEventListener("toggle", function () {
+      if (advanced.open) AREA.value = JSON.stringify(MODEL, null, 2);
+    });
     AREA.addEventListener("change", function () {
       var next;
       try { next = JSON.parse(AREA.value || "[]"); } catch (e) { next = null; }

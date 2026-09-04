@@ -1,88 +1,86 @@
 {% extends "admin/base.html" %}{% block title %}{{ post.title if post and post.id else 'New ' ~ pt.name }}{% endblock %}
 {% block content %}
-<h1>{% if post and post.id %}Edit: {{ post.title }}{% else %}New {{ pt.name }}{% endif %}</h1>
-{% if errors %}<div class="error"><strong>Not saved.</strong><ul>{% for k, v in errors.items() %}<li><code>{{ k }}</code>: {{ v if v is string else v|join('; ') }}</li>{% endfor %}</ul></div>{% endif %}
 {% set p = post or {} %}
 {% set meta = p.meta or {} %}{% set seo = p.seo or {} %}
+{% set can_delete = p.id and admin_user.role == 'admin' %}
 <script type="application/json" id="editor-data">{{ {"blocks": blocks, "ui": blocks_ui, "layouts": layouts, "media": media, "type": pt.slug, "pk": p.get('id'), "post_types": post_types|map(attribute='slug')|list}|tojson }}</script>
-<form method="post" class="grid" id="post-form">
+{# One screen: a bar (back, saved status, Edit/Preview, Save), the page under a big title, and every
+   setting in the panel on the right. textarea[name="blocks"] under Advanced is still the only field
+   that carries the content, so the server side is unchanged. #}
+<form method="post" id="post-form" class="ed">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  <div>
-    <div class="card">
-      <label>Title <input type="text" name="title" id="post-title" value="{{ p.title or '' }}" required></label>
-      <label>Web address <small>(made from the title)</small>
-        <span class="slug-field"><span class="slug-prefix">/{{ (pt.url_prefix ~ '/') if pt.url_prefix else '' }}</span><input type="text" name="slug" id="post-slug" value="{{ p.slug or '' }}" readonly></span></label>
-      <label>Excerpt <small>(used as the meta description and in lists)</small> <textarea name="excerpt">{{ p.excerpt or '' }}</textarea></label>
-      {% for f in pt.field_schema or [] %}
-        <label>{{ f.label }}{% if f.required %} *{% endif %}
-        {% set v = meta.get(f.key) %}
-        {% if f.type == 'textarea' %}<textarea name="meta_{{ f.key }}">{{ v or '' }}</textarea>
-        {% elif f.type == 'json' %}<textarea name="meta_{{ f.key }}" class="code" style="min-height:6rem">{{ v|tojson(indent=2) if v is not none and v is not string else (v or '') }}</textarea>
-        {% elif f.type == 'media' %}<select name="meta_{{ f.key }}" data-media><option value="">— none —</option>{% for m in media %}<option value="{{ m.id }}" {{ 'selected' if v|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select>
-        {% elif f.type == 'number' %}<input type="number" step="any" name="meta_{{ f.key }}" value="{{ v if v is not none else '' }}">
-        {% elif f.type == 'date' %}<input type="date" name="meta_{{ f.key }}" value="{{ v or '' }}">
-        {% elif f.type == 'url' %}<input type="url" name="meta_{{ f.key }}" value="{{ v or '' }}">
-        {% else %}<input type="text" name="meta_{{ f.key }}" value="{{ v or '' }}">{% endif %}
-        </label>
-      {% endfor %}
-    </div>
-    <div class="card">
-      <h2>Content</h2>
-      {# Three views of one array. Without JavaScript the tabs stay hidden and the JSON pane —
-         the only thing that actually POSTs — is what you get. admin.js reveals the other two. #}
-      <div class="tabs" id="content-tabs" hidden>
-        <button type="button" data-tab="visual" class="on">Visual</button>
-        <button type="button" data-tab="form">Form</button>
-        <button type="button" data-tab="json">Advanced</button>
-      </div>
-      <div id="pane-visual" hidden>
-        <div class="pv-bar">
-          <span class="seg" id="view-mode">
-            <button type="button" data-view="edit" class="on">Edit</button>
-            <button type="button" data-view="preview">Preview</button>
-          </span>
-          <span class="seg" id="pv-device" hidden>
-            <button type="button" data-w="1440" class="on">Desktop</button>
-            <button type="button" data-w="834">Tablet</button>
-            <button type="button" data-w="390">Phone</button>
-          </span>
-        </div>
-        <div id="doc-toolbar" class="doc-toolbar"></div>
-        <div id="canvas-wrap"><iframe id="canvas" title="Your page, as a visitor will see it"></iframe></div>
-        <small id="pane-hint">Just start typing. Press <kbd>/</kbd> on an empty line to drop in a section.</small>
-        <div id="seo-card" hidden></div>
-      </div>
-      <div id="pane-form" hidden><div id="blocks-editor"></div></div>
-      <div id="pane-json">
-        <label><small>JSON list of {"type", "data"}; see the block reference on the right.</small>
-        <textarea name="blocks" class="code">{{ p.blocks_text if p.blocks_text is defined else blocks_json }}</textarea></label>
-      </div>
-    </div>
-    <div class="card">
-      <details><summary>SEO overrides</summary>
-        {% for k in seo_keys %}<label>{{ k }} <input type="text" name="seo_{{ k }}" value="{{ seo.get(k, '') }}"></label>{% endfor %}
-        <small>robots e.g. <code>noindex,follow</code>; og_image is a full image URL.</small>
-      </details>
-    </div>
+  <div class="ed-bar">
+    <a class="ed-back" href="{{ url_for('admin_ui.posts', type=pt.slug) }}">&larr; {{ pt.name }}</a>
+    <span class="pill {{ p.status or 'draft' }}" title="As last saved">{{ p.status or 'draft' }}</span>
+    <span class="seg" id="view-mode">
+      <button type="button" data-view="edit" class="on">Edit</button>
+      <button type="button" data-view="preview">Preview</button>
+    </span>
+    <span class="seg" id="pv-device" hidden>
+      <button type="button" data-w="1440" class="on">Desktop</button>
+      <button type="button" data-w="834">Tablet</button>
+      <button type="button" data-w="390">Phone</button>
+    </span>
+    <span class="spacer"></span>
+    {% if p.id and p.status == 'published' and p.path %}<a class="btn secondary" href="{{ p.path }}" target="_blank">View live</a>{% endif %}
+    <button type="submit">Save</button>
   </div>
-  <div>
-    <div class="card">
-      <label>Status <select name="status">{% for s in ('draft','published') %}<option value="{{ s }}" {{ 'selected' if (p.status or 'draft')==s }}>{{ s }}</option>{% endfor %}</select></label>
-      <label>Publish date <small>(empty = now when published; future = scheduled)</small> <input type="datetime-local" name="published_at" value="{{ (p.published_at or '')[:16] }}"></label>
-      {% if pt.hierarchical %}<label>Parent <select name="parent_id"><option value="">— top level —</option>{% for par in parents %}<option value="{{ par.id }}" {{ 'selected' if p.parent_id|string == par.id|string }}>{{ par.title }}</option>{% endfor %}</select></label>{% endif %}
-      <label>Menu order <input type="number" name="menu_order" value="{{ p.menu_order or 0 }}"></label>
-      <label>Featured image <select name="featured_media_id" data-media="images"><option value="">— none —</option>{% for m in media if m.mime.startswith('image/') %}<option value="{{ m.id }}" {{ 'selected' if p.featured_media_id|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select></label>
-      {% for tax in taxonomies %}<label>{{ tax.name }}</label>{% for t in tax.terms|sort(attribute='name') %}<div><label class="inline" style="font-weight:400"><input type="checkbox" name="terms" value="{{ t.id }}" {{ 'checked' if t.id in term_ids }}> {{ t.name }}</label></div>{% else %}<small>No terms yet — add them via the API or Supabase Studio.</small>{% endfor %}{% endfor %}
-      <p style="margin-top:1rem"><button type="submit">Save</button>
-      {% if p.id and p.status == 'published' and p.path %}<a class="btn secondary" href="{{ p.path }}" target="_blank">View live</a>{% endif %}</p>
-    </div>
-    {% if p.id and admin_user.role == 'admin' %}
-    <form method="post" action="{{ url_for('admin_ui.delete_post', pk=p.id) }}" onsubmit="return confirm('Delete this permanently?')" class="card" style="text-align:right"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="danger">Delete</button></form>
+  <div class="ed-main">
+    {% if errors %}<div class="error"><strong>Not saved.</strong><ul>{% for k, v in errors.items() %}<li><code>{{ k }}</code>: {{ v if v is string else v|join('; ') }}</li>{% endfor %}</ul></div>{% endif %}
+    <input type="text" name="title" id="post-title" class="ed-title" value="{{ p.title or '' }}" placeholder="Title" aria-label="Title" required>
+    <div id="doc-toolbar" class="doc-toolbar"></div>
+    <div id="canvas-wrap"><iframe id="canvas" title="Your page, as a visitor will see it"></iframe></div>
+    <small id="pane-hint">Just start typing. Press <kbd>/</kbd> on an empty line to drop in a section.</small>
+    <div id="seo-card" hidden></div>
+  </div>
+  <aside class="ed-side">
+    <h3>Publish</h3>
+    <label>Status <select name="status">{% for s in ('draft','published') %}<option value="{{ s }}" {{ 'selected' if (p.status or 'draft')==s }}>{{ s }}</option>{% endfor %}</select></label>
+    <label>Publish date <small>(empty = now; a future date schedules it)</small> <input type="datetime-local" name="published_at" value="{{ (p.published_at or '')[:16] }}"></label>
+
+    <h3>Web address</h3>
+    <div class="slug-field"><span class="slug-prefix">/{{ (pt.url_prefix ~ '/') if pt.url_prefix else '' }}</span><input type="text" name="slug" id="post-slug" value="{{ p.slug or '' }}" aria-label="Web address" readonly></div>
+    <small>Made from the title.</small>
+
+    <h3>Summary</h3>
+    <textarea name="excerpt" aria-label="Summary" placeholder="One or two sentences. Shown in lists, and as the description under the page in search results.">{{ p.excerpt or '' }}</textarea>
+
+    <h3>Featured image</h3>
+    <select name="featured_media_id" data-media="images" aria-label="Featured image"><option value="">— none —</option>{% for m in media if m.mime.startswith('image/') %}<option value="{{ m.id }}" {{ 'selected' if p.featured_media_id|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select>
+
+    <h3>Organise</h3>
+    {% if pt.hierarchical %}<label>Parent <select name="parent_id"><option value="">— top level —</option>{% for par in parents %}<option value="{{ par.id }}" {{ 'selected' if p.parent_id|string == par.id|string }}>{{ par.title }}</option>{% endfor %}</select></label>{% endif %}
+    {% for tax in taxonomies %}<label>{{ tax.name }}</label>{% for t in tax.terms|sort(attribute='name') %}<div><label class="inline"><input type="checkbox" name="terms" value="{{ t.id }}" {{ 'checked' if t.id in term_ids }}> {{ t.name }}</label></div>{% else %}<small>No terms yet — add them via the API or Supabase Studio.</small>{% endfor %}{% endfor %}
+    <label>Menu order <small>(lower comes first)</small> <input type="number" name="menu_order" value="{{ p.menu_order or 0 }}"></label>
+
+    {% if pt.field_schema %}
+    <h3>Details</h3>
+    {% for f in pt.field_schema %}
+      <label>{{ f.label }}{% if f.required %} *{% endif %}
+      {% set v = meta.get(f.key) %}
+      {% if f.type == 'textarea' %}<textarea name="meta_{{ f.key }}">{{ v or '' }}</textarea>
+      {% elif f.type == 'json' %}<textarea name="meta_{{ f.key }}" class="code" style="min-height:6rem">{{ v|tojson(indent=2) if v is not none and v is not string else (v or '') }}</textarea>
+      {% elif f.type == 'media' %}<select name="meta_{{ f.key }}" data-media><option value="">— none —</option>{% for m in media %}<option value="{{ m.id }}" {{ 'selected' if v|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select>
+      {% elif f.type == 'number' %}<input type="number" step="any" name="meta_{{ f.key }}" value="{{ v if v is not none else '' }}">
+      {% elif f.type == 'date' %}<input type="date" name="meta_{{ f.key }}" value="{{ v or '' }}">
+      {% elif f.type == 'url' %}<input type="url" name="meta_{{ f.key }}" value="{{ v or '' }}">
+      {% else %}<input type="text" name="meta_{{ f.key }}" value="{{ v or '' }}">{% endif %}
+      </label>
+    {% endfor %}
     {% endif %}
-    <div class="card"><details><summary>Block reference</summary>
-      {% for name, (req, opt) in blocks.items() %}<p><code>{{ name }}</code><br><small>required: {{ req|join(', ') or '—' }}<br>optional: {{ opt|join(', ') or '—' }}</small></p>{% endfor %}
-      <small>Example: <code>[{"type":"hero","data":{"heading":"NAS"}},{"type":"rich_text","data":{"html":"&lt;p&gt;…&lt;/p&gt;"}}]</code></small>
-    </details></div>
-  </div>
+
+    <details class="ed-more"><summary>Search engine overrides</summary>
+      {% for k in seo_keys %}<label>{{ k }} <input type="text" name="seo_{{ k }}" value="{{ seo.get(k, '') }}"></label>{% endfor %}
+      <small>Only to override what the page already produces. robots e.g. <code>noindex,follow</code>; og_image is a full image URL.</small>
+    </details>
+    <details class="ed-more" id="advanced"><summary>Advanced</summary>
+      <small>The page's sections as data, for developers: a list of {"type", "data"}.</small>
+      <textarea name="blocks" class="code" aria-label="Sections as JSON">{{ p.blocks_text if p.blocks_text is defined else blocks_json }}</textarea>
+    </details>
+    {% if can_delete %}<p class="ed-danger"><button type="submit" form="delete-post" class="danger">Delete</button></p>{% endif %}
+  </aside>
 </form>
+{# Outside #post-form on purpose: a form inside a form is dropped by the parser, and the Delete
+   button would have saved the post instead. form= on the button points here. #}
+{% if can_delete %}<form id="delete-post" method="post" action="{{ url_for('admin_ui.delete_post', pk=p.id) }}" onsubmit="return confirm('Delete this permanently?')"><input type="hidden" name="csrf" value="{{ csrf }}"></form>{% endif %}
 {% endblock %}
