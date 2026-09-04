@@ -376,6 +376,7 @@
 
   function canvasFull() {
     if (!FRAME) return;
+    if (VIEW === "preview") return renderPreview();   // whatever changed, preview is what is on screen
     ask("full", {}, function (html) {
       FRAME.onload = function () {
         FRAME.onload = null;
@@ -961,6 +962,115 @@
     });
   }
 
+  // ---- preview: the page exactly as a visitor gets it ------------------------
+  /* The editing canvas is honest about the content but says nothing about the header, the footer,
+     the breadcrumbs or the social card — and it adds outlines and placeholders a visitor never
+     sees. Preview swaps the same iframe for a real render of post.html + base.html, built by the
+     server from the form as it stands. A draft cannot be seen any other way: db.live() gates every
+     public lookup on status='published'. */
+  var VIEW = "edit", DEVICE = 1440;
+
+  function previewUrl(part) {
+    return "/admin/preview?type=" + encodeURIComponent(SPEC.type || "page") +
+           (SPEC.pk ? "&pk=" + SPEC.pk : "") + (part ? "&part=" + part : "");
+  }
+
+  // The whole form, so the server can run it through the same _form_body() that Save uses.
+  function formBody() {
+    var form = document.getElementById("post-form"), body = new FormData(form);
+    body.set("blocks", JSON.stringify(MODEL.filter(written)));   // the textarea is only written on submit
+    return body;
+  }
+
+  function askPreview(part, done) {
+    var key = "pv" + (part || ""), mine = tokens[key] = (tokens[key] || 0) + 1;
+    fetch(previewUrl(part), { method: "POST", body: formBody(), credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.text() : Promise.reject(r.statusText); })
+      .then(function (html) { if (tokens[key] === mine) done(html); })   // a newer request already won
+      .catch(function () {});
+  }
+
+  function renderPreview() {
+    if (!FRAME || VIEW !== "preview") return;
+    askPreview("", function (html) {
+      FRAME.onload = function () { FRAME.onload = null; wirePreview(); };
+      FRAME.srcdoc = html;
+    });
+    var card = document.getElementById("seo-card");
+    if (card) askPreview("card", function (html) { card.innerHTML = html; });
+  }
+
+  function wirePreview() {
+    var d = cdoc();
+    if (!d) return;
+    d.addEventListener("submit", function (e) { e.preventDefault(); }, true);   // no real leads from a preview
+    d.addEventListener("click", function (e) {
+      var a = e.target.closest && e.target.closest("a");
+      if (!a) return;
+      e.preventDefault();                       // navigating would replace the preview with a real page
+      var href = a.getAttribute("href") || "";
+      if (href && href.charAt(0) !== "#") window.open(href, "_blank", "noopener");
+    }, true);
+  }
+
+  /* The iframe IS the viewport, so the site's own breakpoints answer honestly. Show a device width
+     by rendering at that width and scaling down to the pane; the height is divided by the same
+     factor so the scaled result fills the pane exactly instead of leaving a gap. */
+  function fitPreview() {
+    var wrap = document.getElementById("canvas-wrap");
+    if (!FRAME || !wrap) return;
+    if (VIEW !== "preview") {
+      FRAME.style.width = FRAME.style.height = FRAME.style.transform = "";
+      wrap.style.height = "";
+      return;
+    }
+    var pane = wrap.clientWidth, k = Math.min(1, pane / DEVICE), h = Math.round(window.innerHeight * 0.76);
+    FRAME.style.width = DEVICE + "px";
+    FRAME.style.height = Math.round(h / k) + "px";
+    FRAME.style.transformOrigin = "top left";
+    FRAME.style.transform = "scale(" + k + ")";
+    wrap.style.height = h + "px";
+  }
+
+  function setView(v) {
+    VIEW = v;
+    closeSlash();
+    ["doc-toolbar", "pane-hint"].forEach(function (id) {
+      var n = document.getElementById(id);
+      if (n) n.hidden = v !== "edit";
+    });
+    ["pv-device", "seo-card"].forEach(function (id) {
+      var n = document.getElementById(id);
+      if (n) n.hidden = v !== "preview";
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("#view-mode button"), function (b) {
+      b.classList.toggle("on", b.getAttribute("data-view") === v);
+    });
+    fitPreview();
+    if (v === "preview") {
+      renderPreview();
+    } else {
+      focusOnLoad = -1;      // coming back from preview should not yank the caret to the top
+      canvasFull();
+    }
+  }
+
+  function initPreview() {
+    var mode = document.getElementById("view-mode"), dev = document.getElementById("pv-device");
+    if (!mode) return;
+    Array.prototype.forEach.call(mode.querySelectorAll("button"), function (b) {
+      b.addEventListener("click", function () { setView(b.getAttribute("data-view")); });
+    });
+    if (dev) Array.prototype.forEach.call(dev.querySelectorAll("button"), function (b) {
+      b.addEventListener("click", function () {
+        DEVICE = +b.getAttribute("data-w");
+        Array.prototype.forEach.call(dev.querySelectorAll("button"), function (x) { x.classList.toggle("on", x === b); });
+        fitPreview();
+      });
+    });
+    window.addEventListener("resize", fitPreview);
+  }
+
   // ---- tabs -----------------------------------------------------------------
   function initTabs() {
     var tabs = document.getElementById("content-tabs");
@@ -992,6 +1102,7 @@
     panel = document.getElementById("block-settings");
     initMediaSelects();
     buildToolbar();
+    initPreview();
     var show = initTabs();
 
     var parsed;
@@ -1048,6 +1159,14 @@
     form.addEventListener("submit", function () {
       dirty = false;
       AREA.value = JSON.stringify(MODEL.filter(written), null, 2);
+    });
+    var pvPending = null;
+    ["input", "change"].forEach(function (ev) {      // while Preview is up, keep it a step behind your typing
+      form.addEventListener(ev, function () {
+        if (VIEW !== "preview") return;
+        clearTimeout(pvPending);
+        pvPending = setTimeout(renderPreview, 500);
+      });
     });
     window.addEventListener("beforeunload", function (e) { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
   }

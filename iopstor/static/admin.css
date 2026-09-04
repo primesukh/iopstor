@@ -57,16 +57,16 @@
 .rt-body:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
 .rt-body>*:first-child{margin-top:0}
 /* --- visual editor: tabs, canvas frame, section picker (see static/admin.js) --- */
+/* Any author display rule outranks the UA's [hidden]{display:none}; toggling .hidden on a
+   flex/grid/block element silently does nothing without this. One rule, whole class of bug. */
+.admin [hidden]{display:none!important}
 .admin-main:has(#post-form){max-width:1560px}   /* the canvas needs more room than a form does */
 .admin .card>h2:first-child{margin-top:0}
-.tabs:not([hidden]){display:flex}
-.tabs{gap:.3rem;margin-bottom:.9rem;border-bottom:1px solid var(--line);padding-bottom:.6rem}
+.tabs{display:flex;gap:.3rem;margin-bottom:.9rem;border-bottom:1px solid var(--line);padding-bottom:.6rem}
 .tabs button{background:transparent;color:var(--muted);padding:.4rem .9rem;font-size:.9rem}
 .tabs button:hover{background:#f1f5f9;color:var(--navy)}
 .tabs button.on{background:var(--accent);color:#fff}
-/* :not([hidden]) matters: an id selector otherwise outranks [hidden] and the frame never hides */
-#canvas:not([hidden]){display:block}
-#canvas{width:100%;height:76vh;min-height:30rem;border:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius);background:#fff}
+#canvas{display:block;width:100%;height:76vh;min-height:30rem;border:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius);background:#fff}
 #pane-visual>small{display:block;margin-top:.5rem}
 #block-settings .blk{border:0;margin:0}
 #block-settings .blk-head{border-radius:8px;border-bottom:0}
@@ -106,3 +106,29 @@
                             color:var(--text);font-weight:400;padding:.42rem .55rem;border-radius:7px}
 .admin button.iop-slash-row:hover,.admin button.iop-slash-row.on{background:#f0f9ff}
 .iop-slash-row .iop-icon{font-size:1.1rem;line-height:1}
+/* --- Edit / Preview, device widths, and the search + social cards --- */
+.pv-bar{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin-bottom:.6rem}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.admin .seg button{background:#fff;color:var(--navy);border:0;border-right:1px solid var(--line);
+                   border-radius:0;padding:.4rem .95rem;font-size:.88rem}
+.admin .seg button:last-child{border-right:0}
+.admin .seg button:hover{background:#f1f5f9}
+.admin .seg button.on{background:var(--accent);color:#fff}
+#canvas-wrap{overflow:hidden}                       /* holds the scaled-down device preview */
+#pane-visual:has(#doc-toolbar[hidden]) #canvas{border-radius:var(--radius)}
+#seo-card{margin-top:1rem}
+.seo-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(19rem,1fr));gap:1rem}
+.seo-card{border:1px solid var(--line);border-radius:var(--radius);padding:1rem;background:#fff}
+.seo-card h4{margin:0 0 .7rem;font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.seo-card small{display:block;margin-top:.6rem}
+.serp-url{display:block;color:#202124;font-size:.82rem;overflow-wrap:anywhere}
+.serp-title{display:block;color:#1a0dab;font-size:1.15rem;line-height:1.3;margin:.15rem 0}
+.serp-desc{color:#4d5156;font-size:.88rem;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;
+           -webkit-box-orient:vertical;overflow:hidden}
+.share{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.share img{width:100%;aspect-ratio:1.91/1;object-fit:cover;display:block}
+.share-noimg{aspect-ratio:1.91/1;display:flex;align-items:center;justify-content:center;background:#f1f5f9;
+             color:var(--muted);font-size:.85rem}
+.share-body{padding:.6rem .8rem;background:#f8fafc}
+.share-site{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.share-body strong{display:block;margin:.15rem 0;color:var(--navy)}

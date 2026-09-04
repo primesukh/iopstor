@@ -69,6 +69,28 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
     assert body.count(b"<h1") == 1  # the page title is the only h1; prose starts at h2
     assert b'class="lead"' in body  # no hero, so post.html gives it a document header
 
+    # live preview: the real public shell, built from the form, for a post that is not published
+    fields = {"csrf": csrf, "title": "zz-test Preview", "slug": "zz-test-preview", "status": "draft",
+              "excerpt": "How it looks to a visitor", "blocks": doc}
+    pv = client.post("/admin/preview?type=post", data=fields)
+    assert pv.status_code == 200
+    shown = pv.data
+    assert b'class="site-header"' in shown and b'class="site-footer"' in shown and b"breadcrumb" in shown
+    assert b"data-f=" not in shown and b"data-b=" not in shown      # no editing chrome
+    assert b"googletagmanager" not in shown                        # a preview must not touch analytics
+    assert b'name="robots" content="noindex,nofollow"' in shown
+    assert b"<h2>What it does</h2>" in shown                        # unsaved blocks render
+    assert client.get("/blog/zz-test-preview").status_code == 404   # ...while the public URL still 404s
+
+    card = client.post("/admin/preview?type=post&part=card", data=fields)
+    assert card.status_code == 200 and b"zz-test Preview" in card.data and b"How it looks to a visitor" in card.data
+    assert client.post("/admin/preview?type=post", data={"title": "x"}).status_code == 400  # CSRF enforced
+
+    # post.html slices published_at as a string; apply_post() stores a datetime. The preview must
+    # keep the form's string or this render raises TypeError.
+    dated = client.post("/admin/preview?type=post", data={**fields, "status": "published", "published_at": "2026-09-04T10:30"})
+    assert dated.status_code == 200 and b"2026-09-04" in dated.data
+
     product_form = client.get("/admin/posts/new?type=product")
     assert b'name="meta_price"' in product_form.data and b'name="meta_sku"' in product_form.data
     for path in ("/admin/posts?type=service", "/admin/media", "/admin/leads", "/admin/settings", "/admin/users"):

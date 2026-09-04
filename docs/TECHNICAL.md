@@ -343,6 +343,47 @@ everything that is not inline text. The canvas is a live page, so `submit` and `
 are cancelled in the capture phase: a `contact_form` block would otherwise post a real lead.
 
 
+### 12.2 Preview
+
+The canvas is honest about content but silent about everything around it, and a **draft cannot be
+seen any other way**: `db.live()` (`db.py:106-108`) gates every public lookup on
+`status='published'` with no bypass, no token and no role check.
+
+`POST /admin/preview?type=<slug>&pk=<id>` renders the real `post.html` inside the real
+`base.html`. It reuses two things whole: `_form_body(pt, existing)` — the same parser `Save` runs —
+and `crumbs_for()` from `public.py`. `_preview_post()` shapes the result like a hydrated row, and
+`db.hydrate()`/`db.ancestors()` work on it unchanged because they read only `post_type`,
+`post_type_id`, `parent_id` and `slug` — never `id`. `?part=card` returns just the search/social
+fragment (`admin/seo_card.html`) from the same data. Nothing needed rewiring: `public.py:22-24`
+registers `site`, `menu`, `render_blocks` and `year` with `app_context_processor`, so they are
+already live in admin templates.
+
+Three things it must get right, all of them latent traps:
+
+| | |
+|---|---|
+| **Analytics** | `base.html`'s gate was `{% if site.ga_id %}` alone, so every preview refresh would have sent a real gtag pageview to production, attributed to a URL that does not exist. It is now `{% if site.ga_id and not preview %}` — `preview` is undefined on public pages, so it stays falsy there. |
+| **`published_at`** | `apply_post()` (`admin_api.py:211`) stores a `datetime`, but `post.html:11` does `published_at[:10]` and `seo.jsonld()` hands it to `\|tojson`. The preview dict keeps the form's **string**; both problems go at once. Covered by a test. |
+| **`post["id"]`** | `render_post()` (`public.py:43`) queries children by id. The preview builds its own context and only queries children when there actually is a saved id. |
+
+`meta.robots` is forced to `noindex,nofollow` after `build_meta()` — the default is `index,follow`
+(`seo.py:25`) and a post's own SEO override would otherwise win.
+
+`render_blocks(edit=False)` re-raises on a malformed block, which is right for the public site and
+wrong for a pane you are typing into, so the render is wrapped and reports which section is unfinished.
+
+Client side: `admin.js` posts `new FormData(#post-form)` with `blocks` taken from `MODEL` (the
+textarea is only written on submit). Preview mode runs `wirePreview()` instead of `wireDoc()` — no
+`contenteditable`, no section bars, no Sortable — plus capture-phase handlers that cancel `submit`
+and open links in a new tab rather than navigating the preview away. Device widths render at
+1440/834/390 and `transform: scale()` down to the pane, with the iframe's height divided by the
+same factor so the scaled result fills it exactly; the iframe *is* the viewport, so the site's own
+breakpoints answer honestly. A 500 ms debounce on any form `input` keeps it a step behind your typing.
+
+One CSS rule underpins all the show/hide: `.admin [hidden]{display:none!important}`. Author display
+rules outrank the UA's `[hidden]{display:none}`, so toggling `hidden` on a flex or grid element
+silently does nothing — the bug that once showed the layout chooser and the canvas at the same time.
+
 ---
 
 ## 13. Tests
