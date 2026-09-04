@@ -77,17 +77,18 @@ def test_layouts_expand_and_validate():
 
 
 def test_pdf_block_renders_the_browser_viewer(app, monkeypatch):
-    """The PDF section is an iframe at the file plus a link out — no viewer library, and a way in
-    for the mobile browsers that will not render a framed PDF."""
+    """The PDF section is an iframe at the file plus a download button — no viewer library, and a way
+    in for the mobile browsers that will not render a framed PDF. The button saves the file under the
+    name it was uploaded with, not the uuid its bucket key is made of."""
     from iopstor import db
 
     monkeypatch.setattr(db, "settings", lambda: {})
     monkeypatch.setattr(db, "get_menu", lambda slug: [])
-    monkeypatch.setattr(db, "get_media", lambda pk: {"url": "https://x/media/a.pdf"})
+    monkeypatch.setattr(db, "get_media", lambda pk: {"url": "https://x/media/a.pdf", "filename": "flash array.pdf"})
 
     html = render_blocks([{"type": "pdf", "data": {"file_media_id": 7, "heading": "Datasheet"}}])
     assert '<iframe src="https://x/media/a.pdf#view=FitH"' in html
-    assert 'href="https://x/media/a.pdf"' in html and ">Open the PDF</a>" in html
+    assert 'href="https://x/media/a.pdf?download=flash%20array.pdf"' in html and ">Download the PDF</a>" in html
     assert validate_blocks([{"type": "pdf", "data": {"heading": "no file"}}]) == ["blocks[0].file_media_id required"]
 
 

@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from flask import Flask
 from flask.json.provider import DefaultJSONProvider
 
@@ -25,9 +27,16 @@ def create_app(test_config=None):
     from .cli import register as register_cli
     from .public import api as public_api, pub as public_site
 
+    def media_download(i):
+        # Supabase Storage turns ?download into Content-Disposition: attachment; the value names the
+        # saved file, so the reader gets "datasheet.pdf" and not the uuid the bucket key is made of.
+        m = db.get_media(int(i)) if i else None
+        return f"{m['url']}?download={quote(m.get('filename') or '')}" if m else ""
+
     app.jinja_env.globals.update(
         media_url=lambda i: (db.get_media(int(i)) or {}).get("url", "") if i else "",
         media_alt=lambda i: (db.get_media(int(i)) or {}).get("alt", "") if i else "",
+        media_download=media_download,
     )
     app.register_blueprint(admin_api)
     app.register_blueprint(admin_ui)
