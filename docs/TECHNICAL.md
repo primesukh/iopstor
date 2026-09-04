@@ -335,7 +335,12 @@ select silently reset itself to *Normal text* after any re-render, which reads a
 broken". `canvasFull()`'s `onload` and `canvasBlock()` both call `syncBar()` because they are the
 two places a caret is destroyed and no `selectionchange` follows.
 
-Three `execCommand` details the toolbar cannot do without:
+Four `execCommand`/selection details the toolbar cannot do without:
+
+- **`caretBlock()` descends through `startOffset`.** At a block boundary — the caret at the end of a
+  line, which is where it is after you type — Gecko reports the range's container as the editing
+  *host*, not the block. Taken at face value that makes quote-off undetectable
+  (`closest("blockquote")` from the host is `null`) and reads alignment off the wrong element.
 
 - **`styleWithCSS` is on for the colour *and* the justify commands.** Colours emit `<span style>`
   rather than `<font>`; alignment emits `style="text-align:…"` rather than the legacy presentational
