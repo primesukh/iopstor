@@ -141,8 +141,26 @@ def _form_body(pt, existing):
     return b
 
 
+def _new_term_ids(pt):
+    """Chips the form invented, "taxonomy-slug:Name" → term ids, reusing a term of that name if there
+    already is one. Called from _save() only: _form_body() is shared with /admin/preview, which must
+    never write. The taxonomy check is the trust boundary — the field is client-supplied, and without
+    it an editor could file a term into a taxonomy this post type does not even use."""
+    allowed = pt.get("taxonomies") or []
+    ids = []
+    for chip in request.form.getlist("new_terms"):
+        tax, _, name = chip.partition(":")
+        if tax in allowed and name.strip():
+            ids.append(db.ensure_term(tax, name.strip()))
+    return [i for i in ids if i]
+
+
 def _form_context(pt, post, errors=None):
-    taxonomies = [t for t in db.rows(db.table("taxonomies").select("*, terms(*)").order("id")) if t["slug"] in (pt.get("taxonomies") or [])]
+    # Slimmed to what the chip picker needs: the whole list is embedded in the page, so matching a
+    # typed name against it costs no round trip (like taken_slugs feeds the web-address warning).
+    taxonomies = [{"slug": t["slug"], "name": t["name"],
+                   "terms": sorted([{"id": x["id"], "name": x["name"]} for x in t["terms"]], key=lambda x: x["name"].lower())}
+                  for t in db.rows(db.table("taxonomies").select("*, terms(*)").order("id")) if t["slug"] in (pt.get("taxonomies") or [])]
     # ponytail: assumes < 2000 posts per type, like db._index(); one select feeds both the parent
     # dropdown and the slug list the form warns against.
     siblings = db.rows(db.table("posts").select("id,title,slug").eq("post_type_id", pt["id"]).order("title").limit(2000))
@@ -158,6 +176,9 @@ def _form_context(pt, post, errors=None):
 
 def _save(pt, existing):
     b = _form_body(pt, existing)
+    # Before apply_post, not after: a rejected save then round-trips the new chips for free, because
+    # the draft carries their ids and _form_context() re-reads the taxonomies and finds them.
+    b["terms"] += _new_term_ids(pt)
     try:
         changes, term_ids = apply_post(existing, b)
     except HTTPException as e:

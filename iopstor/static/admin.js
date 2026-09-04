@@ -140,6 +140,101 @@
     check();   // a rejected save comes back with the clashing slug already in the field
   }
 
+  // ---- categories and tags --------------------------------------------------
+  /* Each .term-pick is a checkbox list from the server; this swaps it for a search box and chips.
+     Everything it matches against is already in data-all, so there is no request anywhere in here.
+     A chip is either an existing term (hidden "terms" = its id, what the form has always posted) or
+     one you just named (hidden "new_terms" = "taxonomy:Name"), which _save() turns into a real term. */
+  function termPick(box) {
+    // ponytail: a page-load snapshot of this taxonomy's terms, like initSlug()'s. A term added in
+    // another tab meanwhile is not offered, but naming it still lands on db.ensure_term(), which
+    // reuses it rather than making a second one.
+    var all = JSON.parse(box.getAttribute("data-all") || "[]"), tax = box.getAttribute("data-tax"),
+        picked = [], list = null, boxes = box.querySelector(".term-boxes");
+
+    Array.prototype.forEach.call(box.querySelectorAll('input[name="terms"]:checked'), function (c) {
+      var name = c.parentNode.textContent.trim();
+      picked.push({ id: Number(c.value), name: name });
+    });
+    if (boxes) boxes.remove();          // JS is up: the plain checkboxes are the fallback, not a duplicate
+
+    var chips = el("div", { "class": "chips" }),
+        input = el("input", { type: "text", "class": "term-input", autocomplete: "off", id: "tp-" + tax,
+                              placeholder: "Search or type a new one…" });
+    box.querySelector("label").htmlFor = input.id;   // the taxonomy name was a label with nothing to label
+    box.appendChild(chips);
+    box.appendChild(input);
+
+    function drawChips() {
+      chips.innerHTML = "";
+      picked.forEach(function (t, n) {
+        var chip = el("span", { "class": "pill chip" + (t.id ? "" : " new"), title: t.id ? "" : "New — created when you save" }, [
+          el("span", { text: t.name }),
+          el("input", { type: "hidden", name: t.id ? "terms" : "new_terms", value: t.id ? String(t.id) : tax + ":" + t.name })
+        ]);
+        chip.appendChild(btn("×", "Remove " + t.name, function () { picked.splice(n, 1); drawChips(); }));
+        chips.appendChild(chip);
+      });
+    }
+
+    function has(slug) { return picked.some(function (t) { return slugify(t.name) === slug; }); }
+
+    function add(t) { picked.push(t); input.value = ""; drawChips(); close(); }
+
+    function close() { if (list) { list.remove(); list = null; } }
+
+    function draw() {
+      close();
+      var q = input.value.trim(), slug = slugify(q);
+      if (!q) return;
+      var hits = all.filter(function (t) { return t.name.toLowerCase().indexOf(q.toLowerCase()) > -1 && !has(slugify(t.name)); }).slice(0, 8),
+          // Matched by slug, like the server: typing "All-Flash" when "all flash" exists offers that
+          // term rather than proposing a near-duplicate.
+          known = has(slug) || all.some(function (t) { return slugify(t.name) === slug; });
+      list = el("div", { "class": "iop-slash" });
+      hits.forEach(function (t, n) { list.appendChild(row(t.name, n === 0, function () { add({ id: t.id, name: t.name }); })); });
+      if (!known) list.appendChild(row("Create “" + q + "”", !hits.length, function () { add({ id: null, name: q }); }));
+      if (list.children.length) box.appendChild(list); else close();
+    }
+
+    function row(text, on, onclick) {
+      var r = el("button", { type: "button", "class": "iop-slash-row" + (on ? " on" : "") }, [el("strong", { text: text })]);
+      r.addEventListener("mousedown", function (e) { e.preventDefault(); });   // clicking a row must not blur the input
+      r.addEventListener("click", onclick);
+      return r;
+    }
+
+    function move(step) {
+      if (!list) return;
+      var rows = list.children, at = -1, i;
+      for (i = 0; i < rows.length; i++) if (rows[i].classList.contains("on")) at = i;
+      if (at > -1) rows[at].classList.remove("on");
+      rows[Math.max(0, Math.min(rows.length - 1, at + step))].classList.add("on");
+    }
+
+    input.addEventListener("input", draw);
+    input.addEventListener("blur", close);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();          // unconditional: this input is inside #post-form, so Enter would save the post
+        if (list) list.querySelector(".on").click();
+      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        move(e.key === "ArrowDown" ? 1 : -1);
+      } else if (e.key === "Escape") {
+        close();
+      } else if (e.key === "Backspace" && !input.value && picked.length) {
+        picked.pop();
+        drawChips();
+      }
+    });
+    drawChips();
+  }
+
+  function initTerms() {
+    Array.prototype.forEach.call(document.querySelectorAll(".term-pick"), termPick);
+  }
+
   // ---- media ----------------------------------------------------------------
   var MEDIA = [];            // {id, url, filename, mime, alt}
   var pickers = [];          // so a new upload appears in every picker at once; detached ones unregister themselves
@@ -1663,6 +1758,7 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     initSlug();
+    initTerms();
     initBlocks();
   });
 })();

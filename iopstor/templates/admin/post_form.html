@@ -54,7 +54,12 @@
     {% if pt.hierarchical or taxonomies %}
     <h3>Organise</h3>
     {% if pt.hierarchical %}<label>Parent <select name="parent_id"><option value="">— top level —</option>{% for par in parents %}<option value="{{ par.id }}" {{ 'selected' if p.parent_id|string == par.id|string }}>{{ par.title }}</option>{% endfor %}</select></label>{% endif %}
-    {% for tax in taxonomies %}<label>{{ tax.name }}</label>{% for t in tax.terms|sort(attribute='name') %}<div><label class="inline"><input type="checkbox" name="terms" value="{{ t.id }}" {{ 'checked' if t.id in term_ids }}> {{ t.name }}</label></div>{% else %}<small>No terms yet — add them via the API or Supabase Studio.</small>{% endfor %}{% endfor %}
+    {# initTerms() turns each of these into a chip picker; the checkboxes are what is left without JS.
+       data-all, not #editor-data: initTerms() runs beside initSlug(), before that blob is parsed. #}
+    {% for tax in taxonomies %}<div class="term-pick" data-tax="{{ tax.slug }}" data-all='{{ tax.terms|tojson }}'>
+      <label>{{ tax.name }}</label>
+      <div class="term-boxes">{% for t in tax.terms %}<div><label class="inline"><input type="checkbox" name="terms" value="{{ t.id }}" {{ 'checked' if t.id in term_ids }}> {{ t.name }}</label></div>{% else %}<small>No terms yet — add them via the API or Supabase Studio.</small>{% endfor %}</div>
+    </div>{% endfor %}
     {% endif %}
 
     {% if pt.field_schema %}

@@ -1,3 +1,4 @@
+import json
 import re
 
 from conftest import live, make_token, make_user
@@ -61,6 +62,34 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
     bad = client.post("/admin/posts/new?type=post", data={"csrf": csrf, "title": "", "blocks": "not json"})
     assert bad.status_code == 400 and b"Not saved" in bad.data and b"blocks" in bad.data
     assert client.post("/admin/posts/new?type=post", data={"title": "zz-test nope"}).status_code == 400  # missing CSRF token
+
+    # categories and tags: the chip picker posts a term it already knows as an id under "terms" and a
+    # name you just typed as "taxonomy:Name" under "new_terms", which _save() turns into a real term
+    assert b'class="term-pick" data-tax="tag"' in form.data and b'data-all=' in form.data
+    # data-all is the whole term list the picker matches against, so it must survive as an attribute:
+    # single-quoted, because |tojson escapes ' but not " (case studies have seeded industries in theirs)
+    cs = client.get("/admin/posts/new?type=case_study")
+    embedded = json.loads(re.search(r"data-all='([^']*)'", cs.text).group(1))
+    assert embedded and all(sorted(t) == ["id", "name"] for t in embedded)
+    chipped = client.post("/admin/posts/new?type=post", data={"csrf": csrf, "title": "zz-test Tagged", "blocks": "[]",
+                                                             "new_terms": ["tag:zz-test All Flash", "category:zz-test How To"]})
+    assert chipped.status_code == 302
+    tagged = db.get_post(int(chipped.headers["Location"].rstrip("/").rsplit("/", 1)[-1]))
+    assert sorted(t["slug"] for t in tagged["terms"]) == ["zz-test-all-flash", "zz-test-how-to"]
+    tag_id = next(t["id"] for t in tagged["terms"] if t["slug"] == "zz-test-all-flash")
+
+    # the same name again reuses that term rather than making a near-duplicate, whatever the casing,
+    # and a taxonomy this post type does not use is dropped instead of filed
+    twice = client.post("/admin/posts/new?type=post", data={"csrf": csrf, "title": "zz-test Tagged Two", "blocks": "[]",
+                                                            "terms": str(tag_id), "new_terms": ["category:ZZ-Test How-To", "industry:zz-test Sneaky"]})
+    assert twice.status_code == 302
+    second_post = db.get_post(int(twice.headers["Location"].rstrip("/").rsplit("/", 1)[-1]))
+    assert sorted(t["slug"] for t in second_post["terms"]) == ["zz-test-all-flash", "zz-test-how-to"]
+    assert len(db.rows(db.table("terms").select("id").like("slug", "zz-test%"))) == 2   # nothing duplicated, nothing sneaked in
+
+    # a rejected save keeps the chips: the new term is already real, so it comes back as a normal one
+    kept = client.post("/admin/posts/new?type=post", data={"csrf": csrf, "title": "", "blocks": "[]", "new_terms": "tag:zz-test All Flash"})
+    assert kept.status_code == 400 and f'value="{tag_id}" checked'.encode() in kept.data
 
     # inline uploader used by the post form's media pickers: JSON in, JSON out, CSRF enforced
     from io import BytesIO
