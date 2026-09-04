@@ -68,6 +68,7 @@ The sections available:
 | **Hero** | The big banner at the top: headline, sub-headline, optional image and button |
 | **Image** | One picture with a caption |
 | **Gallery** | A grid of pictures |
+| **PDF** | A PDF shown right on the page, with the reader's own page and zoom controls, and a button to open it full-size |
 | **Cards** | A row of boxes, each with a title, short text, icon and link |
 | **CTA** | A "call to action" strip: a line of text and a button |
 | **FAQ** | Question-and-answer list |
@@ -222,6 +223,8 @@ The **Media** section is the shared library for every image, logo and PDF.
 1. Go to Media and upload the file.
 2. Give it **alt text** — a short description of what is in the picture. This is what a blind visitor's screen reader reads out, and it is one of the things Google looks at. Please do not skip it.
 3. The file is then selectable anywhere the site asks for an image.
+
+**Putting a PDF on a page.** Press `/` on an empty line and choose **PDF**. The section drops in; hover it, press **⚙**, and pick the PDF from the list — or press **Choose file** to upload one on the spot. Only PDFs are offered there, so you cannot pick a photo by mistake. Visitors then read it without leaving the page — scrolling, zooming and printing with their browser's own controls — and there is an **Open the PDF** button under it for phones and for anyone who wants to download it. Give the section a heading by typing straight onto the page above the viewer.
 
 **You do not have to go to Media first.** Anywhere a page asks for a picture — a Hero image, an Image or Gallery section, the Featured image in the panel on the right — there is a **Choose file** button right there. Pick a file and it uploads straight away, gets used on the spot, and joins the Media library so you can reuse it elsewhere. A small thumbnail next to it shows what is currently selected. Uploads made this way have no alt text yet, so add it in the Media section afterwards for anything important.
 

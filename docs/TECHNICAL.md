@@ -138,7 +138,7 @@ BLOCKS = {  # type: (required fields, optional fields)
 }
 ```
 
-Thirteen types ship: `hero`, `rich_text`, `image`, `gallery`, `cards`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`.
+Fourteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`.
 
 **Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section"><div class="wrap">…`. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
 
@@ -146,12 +146,13 @@ Two behaviours worth knowing:
 
 - **`hero` is the only block that renders its own `<h1>`.** `post.html` skips the page title when a post's first block is a hero.
 - **`post_list` is queried at render time.** `render_blocks()` special-cases it, calling `_post_list()` to fetch live posts and passing them in as `posts`.
+- **`pdf` is an `<iframe>` at the file, nothing more** — the browser's own PDF viewer, no pdf.js. Its field is `file_media_id`, not `media_id`, because `EDITOR["labels"]` is keyed by the bare field name and `media_id` already reads "Image" (it also matches the `file_media_id` meta convention the `datasheet` type uses in `cli.py`). Height is fixed in `site.css` (`min(80vh,900px)`); the `<a class="btn ghost">` under the frame is the fallback for iOS Safari and Android Chrome, which render only the first page of a framed PDF or nothing at all. Unlike `embed_html` the canvas renders it for real: the src is the public Storage bucket, so it is cross-origin to the admin session. `canvas.css` gives it `pointer-events:none` so a click still selects the section.
 
 **Editor metadata.** Alongside `BLOCKS`, `blocks.py` exports `EDITOR` — how each field is edited in the browser admin, so the field shapes that used to live only in comments are data:
 
 ```python
 EDITOR = {
-    "widgets": {...},   # field key -> text | textarea | code | richtext | media | url | number | checkbox | post_type | kind
+    "widgets": {...},   # field key -> text | textarea | code | richtext | media | pdf | url | number | checkbox | post_type | kind
                         # "<block>.<field>" overrides the bare key (e.g. "embed_html.html": "code")
     "items":   {...},   # block type -> the subfields of one repeater row (items / images / rows)
     "labels":  {...},   # friendlier field labels; missing keys fall back to the key itself
@@ -276,7 +277,7 @@ No CSS framework, no build step, no JavaScript framework. Mobile navigation is a
   The wire format is where the design lives. A chip for a term that already exists posts the id under `terms`, exactly as the checkbox did, so nothing downstream changed. A name you just typed posts `"<taxonomy-slug>:<Name>"` under **`new_terms`** — a separate field because `_form_body()` does an unguarded `int()` on every `terms` value, and because `_form_body()` is shared with `/admin/preview`, which must never write. `_new_term_ids(pt)` resolves them through `db.ensure_term()` and is called from `_save()` **only** — so nothing is created until you actually save, and previewing a post with a pending chip writes nothing. It runs *before* `apply_post()`, which is what makes a rejected save round-trip for free: the draft carries the new ids under `terms`, and `_form_context()` re-reads the taxonomies and finds them. It also drops any taxonomy not in `pt["taxonomies"]` — the field is client-supplied, and without that check an editor could file a term into a taxonomy the type does not use.
 
   Both sides match on the slug, not the string: `slugify()` in `admin.js` mirrors `db.slugify()`, so typing "All-Flash" when "all flash" exists offers the existing term instead of *Create*, and if the browser's snapshot is stale `db.ensure_term()` reuses the row anyway rather than making a second one. Enter in the search box `preventDefault()`s unconditionally — it sits inside `#post-form`, where a bare Enter would submit the post.
-- **Media pickers** — one `mediaWidget()` renders a thumbnail, a "choose existing" select and a file input that uploads to `/admin/media/upload` and appends the new row to *every* picker on the page. It is applied to `select[data-media]` (featured image, per-type `media` fields) and to media fields inside blocks, so there is one code path rather than three. `data-media="images"` filters non-images out.
+- **Media pickers** — one `mediaWidget()` renders a thumbnail, a "choose existing" select and a file input that uploads to `/admin/media/upload` and appends the new row to *every* picker on the page. It is applied to `select[data-media]` (featured image, per-type `media` fields) and to media fields inside blocks, so there is one code path rather than three. Its third argument is a mime prefix that narrows both the list and the file input: `"image/"` (every image field, and `data-media="images"`), `"application/pdf"` (the `pdf` widget), `""` for anything the server accepts.
 - **Section settings** — `blockFields(block)` renders one section's non-inline fields: labelled inputs driven by `BLOCKS` + `EDITOR`, media pickers, and repeaters for `items`/`images`/`rows`. It is what `⚙` opens in the popover (§12.1); there is no form-based content entry any more — the canvas and the popover are the only editors, and *Advanced* is the raw JSON. It mutates the block object in place, so **keys it does not render survive**, and an unknown block type falls back to an "edit it under Advanced" note. On submit `admin.js` serialises the array back into `textarea[name="blocks"]`, so `_form_body()` and `validate_blocks()` are untouched — the editor only ever writes the JSON a human could have typed. If that textarea holds unparseable JSON (a rejected save round-trip), the editor stands down, opens *Advanced* and says so.
 
 Rich fields inside the popover get `richText()`: a `contenteditable` box with a bold/italic/H2/H3/list/link/clear toolbar plus an *HTML* toggle for the raw markup; paste goes through the same `richPaste` filter as the canvas, so headings and lists survive and Word's markup does not.

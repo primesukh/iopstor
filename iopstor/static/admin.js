@@ -260,10 +260,12 @@
   }
 
   /* One media widget: preview + "choose existing" select + upload straight from here.
-     `get`/`set` read and write whatever holds the value (a form <select> or a block field). */
-  function mediaWidget(get, set, imagesOnly) {
+     `get`/`set` read and write whatever holds the value (a form <select> or a block field).
+     `only` is a mime prefix ("image/", "application/pdf") that narrows both the list and the
+     file picker; "" or omitted offers everything the server accepts. */
+  function mediaWidget(get, set, only) {
     var sel = el("select"), thumb = el("span", { "class": "media-thumb" }),
-        file = el("input", { type: "file", accept: imagesOnly ? "image/*" : "image/*,application/pdf" }),
+        file = el("input", { type: "file", accept: only === "image/" ? "image/*" : (only || "image/*,application/pdf") }),
         note = el("small", { "class": "media-note" });
 
     function refresh() {
@@ -277,7 +279,7 @@
       sel.innerHTML = "";
       sel.appendChild(el("option", { value: "", text: "— none —" }));
       MEDIA.forEach(function (m) {
-        if (imagesOnly && m.mime && m.mime.indexOf("image/") !== 0) return;
+        if (only && m.mime && m.mime.indexOf(only) !== 0) return;
         sel.appendChild(el("option", { value: m.id, text: "#" + m.id + " " + m.filename }));
       });
       sel.value = cur == null ? "" : String(cur);
@@ -305,9 +307,9 @@
       var hidden = el("input", { type: "hidden", name: s.name });
       hidden.value = s.value;
       s.parentNode.insertBefore(hidden, s);
-      var imagesOnly = s.getAttribute("data-media") === "images";
+      var only = s.getAttribute("data-media") === "images" ? "image/" : "";
       s.parentNode.insertBefore(mediaWidget(function () { return hidden.value; },
-                                           function (v) { hidden.value = v; }, imagesOnly), s);
+                                           function (v) { hidden.value = v; }, only), s);
       s.remove();
     });
   }
@@ -407,7 +409,8 @@
   // One input for data[key]. `data` is mutated in place, so keys the editor does not render survive.
   function fieldInput(type, key, data) {
     var widget = widgetFor(type, key), set = function (v) { data[key] = v; };
-    if (widget === "media") return mediaWidget(function () { return data[key]; }, set, true);
+    if (widget === "media") return mediaWidget(function () { return data[key]; }, set, "image/");
+    if (widget === "pdf") return mediaWidget(function () { return data[key]; }, set, "application/pdf");
     if (widget === "richtext") return richText(data[key] || "", set);
     if (widget === "checkbox") {
       var c = el("input", { type: "checkbox" });
@@ -1023,7 +1026,7 @@
       var m = mediaById(v);
       if (m && m.alt && !alt.value.trim()) alt.value = m.alt;
       why.textContent = "";
-    }, true);
+    }, "image/");
 
     function apply() {
       var m = mediaById(id);

@@ -19,13 +19,16 @@ BLOCKS = {  # type: (required fields, optional fields)
     "post_list": (["post_type"], ["heading", "term", "limit", "top_level"]),  # queried at render time; top_level=true → parents only
     "spec_table": (["rows"], ["heading"]),  # rows: [{k, v}]
     "contact_form": (["kind"], ["heading"]),  # kind: contact | quote | career → POST /api/v1/leads
+    # file_media_id, not media_id: EDITOR["labels"] is keyed by bare field name and media_id already reads "Image".
+    # ponytail: the viewer is a fixed height in site.css; add a "height" field if editors ask for one.
+    "pdf": (["file_media_id"], ["heading"]),
 }
 # Admin editor metadata: how each field is edited in /admin (iopstor/static/admin.js).
 # Field shapes that used to live in the comments above are data here so the editor has one source of truth.
 EDITOR = {
     # widget per field key; "<block>.<field>" overrides the bare key. Default: text.
     "widgets": {"html": "richtext", "embed_html.html": "code", "text": "textarea", "a": "textarea", "subheading": "textarea",
-                "caption": "textarea", "quote": "textarea", "image": "media", "media_id": "media",
+                "caption": "textarea", "quote": "textarea", "image": "media", "media_id": "media", "file_media_id": "pdf",
                 "url": "url", "cta_url": "url", "button_url": "url", "limit": "number",
                 "top_level": "checkbox", "post_type": "post_type", "kind": "kind"},
     # repeater fields (items/images/rows) -> the subfields of one row
@@ -34,12 +37,13 @@ EDITOR = {
     # friendlier labels; anything missing is the key with underscores as spaces
     "labels": {"q": "Question", "a": "Answer", "k": "Label", "v": "Value", "html": "Content", "kind": "Form type",
                "cta_url": "Button link", "cta_label": "Button text", "top_level": "Top-level only",
-               "media_id": "Image", "image": "Image", "post_type": "Content type", "term": "Term slug"},
+               "media_id": "Image", "image": "Image", "file_media_id": "PDF file", "post_type": "Content type",
+               "term": "Term slug"},
     "kinds": ["contact", "quote", "career"],
     # order the section picker offers them in, commonest first (Jinja's tojson sorts dict keys,
     # so BLOCKS' own order does not survive the trip to the browser)
     "order": ["hero", "rich_text", "cards", "cta", "faq", "stats", "testimonial", "spec_table",
-              "image", "gallery", "post_list", "contact_form", "embed_html"],
+              "image", "gallery", "pdf", "post_list", "contact_form", "embed_html"],
     # the visual inserter: icon, plain-English name, one line on what the visitor sees
     "names": {
         "hero": ("\U0001F3D4", "Hero", "The big opening band: headline, one line of text, one button."),
@@ -54,6 +58,7 @@ EDITOR = {
         "gallery": ("\U0001F5C2", "Picture grid", "Several pictures laid out in a grid."),
         "post_list": ("\U0001F4D1", "Automatic list", "Lists pages of a type you choose, and keeps itself up to date."),
         "contact_form": ("\u2709", "Contact form", "A form visitors fill in. Replies arrive under Leads."),
+        "pdf": ("\U0001F4C4", "PDF", "A PDF shown on the page in the reader's own PDF viewer."),
         "embed_html": ("</>", "Embedded code", "Paste code from YouTube, a map or another service."),
     },
     # starting content for a freshly inserted block, so a new section is visible and clickable.
@@ -77,6 +82,7 @@ EDITOR = {
         "post_list": {"post_type": "post", "heading": "Latest"},
         "embed_html": {"html": "<!-- paste the embed code from YouTube, Google Maps, etc. here -->"},
         "image": {"caption": ""},      # media_id must be chosen: no placeholder can stand in for a picture
+        "pdf": {"heading": ""},        # same for the file: an empty viewer is worse than an empty section
         "gallery": {"images": []},
     },
 }
@@ -94,7 +100,7 @@ def layout(name):
     """Expand a LAYOUTS entry into real blocks. Unknown name -> a blank page."""
     return [{"type": t, "data": deepcopy(EDITOR["seed"].get(t) or {})} for t in LAYOUTS.get(name, [])]
 
-_NON_TEXT_KEYS = {"url", "cta_url", "button_url", "icon", "image", "media_id", "post_type", "term", "limit", "kind", "top_level"}
+_NON_TEXT_KEYS = {"url", "cta_url", "button_url", "icon", "image", "media_id", "file_media_id", "post_type", "term", "limit", "kind", "top_level"}
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
 _TEXT_ORDER = ("heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company", "value", "label", "k", "v",
                "caption", "alt", "cta_label", "button_label", "items", "images", "rows")
