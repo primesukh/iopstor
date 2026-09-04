@@ -88,7 +88,7 @@ The sections available:
 | **Web address** | Made from the title automatically. **Edit** if you really need to change it; it asks first, because changing it breaks existing links. |
 | **Summary** | A sentence or two. Shown in lists, and under the page in Google results. |
 | **Featured image** | The picture used in lists and when the page is shared. **Choose file** uploads on the spot. |
-| **Organise** | The parent page (for pages and services), categories or tags, and the order in menus. |
+| **Organise** | The parent page (for services) and any categories or tags. It only appears for types that have one or the other. Nothing here asks you to number your pages — lists show the newest first on their own. |
 | **Details** | The extra boxes some kinds of content have — a case study's client, an event's dates, a datasheet's PDF. |
 | **Search engine overrides**, **Advanced** | Closed by default. Leave them closed unless you know why you are opening them. |
 | **Delete** | At the very bottom, for administrators. It asks first. |
