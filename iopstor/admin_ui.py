@@ -5,15 +5,16 @@ import secrets
 from functools import wraps
 from urllib.parse import urlparse
 
-from flask import Blueprint, abort, flash, g, has_request_context, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, flash, g, has_request_context, jsonify, redirect, render_template, request, session, url_for
+from markupsafe import Markup, escape
 from postgrest import APIError
 from supabase_auth.errors import AuthError
 from werkzeug.exceptions import HTTPException
 
-from . import db
+from . import db, seo
 from .admin_api import apply_post
 from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login
-from .blocks import BLOCKS
+from .blocks import BLOCKS, EDITOR, LAYOUTS, render_blocks
 from .storage import delete_media, save_upload
 
 ui = Blueprint("admin_ui", __name__, url_prefix="/admin", template_folder="templates")
@@ -143,10 +144,10 @@ def _form_body(pt, existing):
 def _form_context(pt, post, errors=None):
     taxonomies = [t for t in db.rows(db.table("taxonomies").select("*, terms(*)").order("id")) if t["slug"] in (pt.get("taxonomies") or [])]
     parents = db.rows(db.table("posts").select("id,title,slug").eq("post_type_id", pt["id"]).order("title")) if pt["hierarchical"] else []
-    media = db.rows(db.table("media").select("id,filename,url,mime").order("id", desc=True).limit(200))
+    media = db.rows(db.table("media").select("id,filename,url,mime,alt").order("id", desc=True).limit(200))
     term_ids = {t["id"] for t in (post or {}).get("terms") or []}
     return dict(pt=pt, post=post, errors=errors or {}, taxonomies=taxonomies, parents=[p for p in parents if not post or p["id"] != post["id"]],
-                media=media, term_ids=term_ids, blocks=BLOCKS, blocks_json=json.dumps((post or {}).get("blocks") or [], indent=2, ensure_ascii=False),
+                media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps((post or {}).get("blocks") or [], indent=2, ensure_ascii=False),
                 seo_keys=SEO_KEYS)
 
 
@@ -209,7 +210,84 @@ def delete_post(pk):
     return redirect(url_for("admin_ui.posts", type=post["post_type"]["slug"]))
 
 
+@ui.post("/canvas")
+@ui_required()
+def canvas():
+    """The visual editor's iframe. Renders the blocks the browser currently holds — unsaved ones
+    included — through the same render_blocks() the public site uses, with edit markers on.
+    With ?i=N it returns just that one block, so an edit swaps one <section> instead of reloading."""
+    try:
+        blocks = json.loads(request.form.get("blocks") or "[]")
+    except ValueError:
+        blocks = []
+    if not isinstance(blocks, list):
+        blocks = []
+    i = request.form.get("i", type=int)
+    if i is not None:
+        return render_blocks(blocks[i:i + 1], edit=True) if 0 <= i < len(blocks) else ""
+    return render_template("admin/canvas.html", body=render_blocks(blocks, edit=True),
+                           title=request.form.get("title", ""), excerpt=request.form.get("excerpt", ""),
+                           has_hero=bool(blocks) and isinstance(blocks[0], dict) and blocks[0].get("type") == "hero")
+
+
+def _preview_post(pt, b, existing):
+    """The edit form as it stands right now, shaped like a hydrated post row so post.html can render it.
+
+    Deliberately carries no "id": nothing on the preview path needs one, and an unsaved post has none.
+    published_at stays the form's STRING — apply_post() turns it into a datetime, and post.html slices
+    it (`published_at[:10]`) while seo.jsonld() hands it to |tojson."""
+    blocks = b["blocks"] if isinstance(b["blocks"], list) else []   # _form_body parks an error string here
+    terms = db.rows(db.table("terms").select("*, taxonomy:taxonomies(*)").in_("id", b["terms"])) if b["terms"] else []
+    post = {**(existing or {}), "post_type": pt, "post_type_id": pt["id"],
+            "title": b["title"] or "Untitled", "slug": b["slug"] or (existing or {}).get("slug") or "preview",
+            "excerpt": b["excerpt"], "blocks": blocks, "meta": b["meta"], "seo": b["seo"], "status": b["status"],
+            "published_at": b["published_at"] or "",
+            "parent_id": int(b["parent_id"]) if b["parent_id"] else None,
+            "featured_media": db.get_media(b["featured_media_id"]) if b["featured_media_id"] else None,
+            "terms": terms}
+    post.pop("id", None)
+    return db.hydrate(post)
+
+
+@ui.post("/preview")
+@ui_required()
+def preview():
+    """The page exactly as a visitor gets it — real header, nav, breadcrumbs, footer and SEO — built
+    from the form as it stands, so a draft or an unsaved edit can be checked before saving. The public
+    route cannot do this: db.live() gates every lookup on status='published' with no bypass.
+    ?part=card returns just the search/social card from the same data."""
+    from .public import crumbs_for  # local import: keeps admin_ui out of public.py's import graph
+
+    pt = db.post_type(slug=request.args.get("type", "page")) or abort(404)
+    pk = request.args.get("pk", type=int)
+    existing = db.get_post(pk) if pk else None
+    post = _preview_post(pt, _form_body(pt, existing), existing)
+    crumbs = crumbs_for(post)
+    meta = {**seo.build_meta(post), "robots": "noindex,nofollow"}  # a preview must never be indexable
+    if request.args.get("part") == "card":
+        return render_template("admin/seo_card.html", meta=meta, site=seo.site())
+    children = (db.with_paths(db.rows(db.live(db.select_posts()).eq("parent_id", pk).order("menu_order")))
+                if pk and pt["hierarchical"] else [])
+    try:
+        return render_template("post.html", post=post, children=children, crumbs=crumbs, meta=meta,
+                               jsonld=seo.jsonld(post, crumbs), preview=True)
+    except Exception as e:
+        # render_blocks(edit=False) re-raises by design. On the public site that is honest; here it
+        # would blank the pane mid-edit, so say which section is not finished instead.
+        return render_template("admin/canvas.html", title=post["title"], excerpt="", has_hero=False,
+                               body=Markup('<div class="wrap"><p class="iop-err">This page cannot be shown yet — '
+                                           f'{escape(e)}</p></div>'))
+
+
 # ---- media, leads, settings, users ----------------------------------------
+
+def _upload(fs, alt=""):
+    """Store one upload and return the media row. Raises HTTPException(400) on a rejected file type."""
+    m = save_upload(fs, g.user["id"])
+    if alt:
+        m = db.update("media", m["id"], {"alt": alt[:300]}) or m
+    return m
+
 
 @ui.route("/media", methods=["GET", "POST"])
 @ui_required()
@@ -220,12 +298,10 @@ def media():
             flash("Choose a file first.")
         else:
             try:
-                m = save_upload(fs, g.user["id"])
+                m = _upload(fs, request.form.get("alt", ""))
             except HTTPException as e:
                 flash(e.description)
             else:
-                if request.form.get("alt"):
-                    db.update("media", m["id"], {"alt": request.form["alt"][:300]})
                 flash(f"Uploaded {m['filename']} (id {m['id']}).")
         return redirect(url_for("admin_ui.media"))
     page = max(request.args.get("page", 1, type=int) or 1, 1)
@@ -240,6 +316,20 @@ def media_delete(pk):
     delete_media(m)
     flash("Deleted.")
     return redirect(url_for("admin_ui.media"))
+
+
+@ui.post("/media/upload")
+@ui_required()
+def media_upload():
+    """Inline uploader used by the post form (admin.js); same storage path as the media page."""
+    fs = request.files.get("file")
+    if not fs or not fs.filename:
+        return jsonify({"error": "Choose a file first."}), 400
+    try:
+        m = _upload(fs, request.form.get("alt", ""))
+    except HTTPException as e:  # save_upload rejects unsupported types
+        return jsonify({"error": e.description}), e.code
+    return jsonify({k: m.get(k) for k in ("id", "url", "filename", "mime", "alt")}), 201
 
 
 @ui.get("/leads")

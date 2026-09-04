@@ -1,7 +1,7 @@
 # IOPSTOR CMS — project instructions
 
 WordPress + Elementor-Pro-style CMS in Python Flask for IOPSTOR (software-defined storage / cloud / HCI vendor).
-Phase 1 = backend + a basic theme: one stylesheet (`iopstor/static/site.css`), block templates rendered as full-width sections, a browser admin at `/admin`. The drag-and-drop page builder is still to come (blocks are edited as JSON in the admin).
+Phase 1 = backend + a basic theme: one stylesheet (`iopstor/static/site.css`), block templates rendered as full-width sections, a browser admin at `/admin`. The admin has a document editor: a post opens as a blank page with the caret in it, `/` inserts a designed section, and the page renders live through `render_blocks()` in an iframe (see `docs/TECHNICAL.md` §12.1).
 Client requirements: `.claude/docs/requirements.md`. Architecture spec: `.claude/docs/design.md`.
 Living documentation: `docs/TECHNICAL.md` (developers) and `docs/NON-TECHNICAL.md` (editors) — **both are updated with every feature**.
 

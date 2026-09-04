@@ -1,0 +1,26 @@
+{# How the page will read in a Google result and on a shared link. Everything here comes from
+   seo.build_meta(), the same function that writes the real <head>. #}
+<div class="seo-cards">
+  <div class="seo-card">
+    <h4>In a Google result</h4>
+    <div class="serp">
+      <span class="serp-url">{{ meta.canonical }}</span>
+      <span class="serp-title">{{ meta.title }}</span>
+      <span class="serp-desc">{{ meta.description or 'No description — write an excerpt.' }}</span>
+    </div>
+    <small>Title {{ meta.title|length }}/60{% if meta.title|length > 60 %} — Google will cut it short{% endif %}
+      · Description {{ meta.description|length }}/155{% if meta.description|length > 155 %} — will be cut short{% endif %}</small>
+  </div>
+  <div class="seo-card">
+    <h4>When the link is shared</h4>
+    <div class="share">
+      {% if meta.image %}<img src="{{ meta.image }}" alt="">{% else %}<div class="share-noimg">No image</div>{% endif %}
+      <div class="share-body">
+        <span class="share-site">{{ meta.site_name }}</span>
+        <strong>{{ meta.title }}</strong>
+        <span class="serp-desc">{{ meta.description }}</span>
+      </div>
+    </div>
+    {% if not meta.image %}<small>Set a Featured image, or a default social image under Settings.</small>{% endif %}
+  </div>
+</div>

@@ -55,16 +55,17 @@ Some types ask for a few extra details. A Case Study asks for Client, Challenge,
 
 ---
 
-## 4. Building a page out of blocks
+## 4. Writing a page
 
-A page is not one big text box. It is a **stack of blocks**, each one a full-width band down the page. You choose the blocks and the order; the design is applied for you, so every page looks consistent and works on phones.
+**Open a page and start typing.** Under **Content** you get a blank white page with the cursor already in it and a toolbar across the top — the same as Word or Google Docs. You do not have to choose anything, set anything up, or understand anything first. Type.
 
-The available blocks:
+Most pages are exactly that: words. When you want something fancier than words — a row of boxes, a strip of big numbers, a coloured band with a button — you drop one in without leaving the keyboard. Those are called **sections**, and the design is applied for you, so they always look right and work on phones.
 
-| Block | What the visitor sees |
+The sections available:
+
+| Section | What the visitor sees |
 |---|---|
 | **Hero** | The big banner at the top: headline, sub-headline, optional image and button |
-| **Rich text** | A normal paragraph area for prose |
 | **Image** | One picture with a caption |
 | **Gallery** | A grid of pictures |
 | **Cards** | A row of boxes, each with a title, short text, icon and link |
@@ -77,9 +78,74 @@ The available blocks:
 | **Contact form** | An enquiry form. Choose *contact*, *quote* or *career* |
 | **Embed HTML** | For dropping in code from another service, like a map or a video |
 
-**Rule of thumb:** if a page starts with a Hero block, the Hero supplies the page's main headline. Otherwise the page title is shown at the top.
+**Rule of thumb:** if a page starts with a Hero, the Hero supplies the page's main headline. Otherwise the page title is shown at the top, above whatever you have written.
 
-> **Today's limitation.** The drag-and-drop builder is phase 2. Right now blocks are entered in the admin as a structured text field, with a reference panel listing every block and the fields it needs. The blocks themselves and how they look on the site are already finished — only the editing experience is due to be upgraded.
+### Writing
+
+**Just type.** The page opens with the cursor in it. Everything you write goes down the page the way it does in a Word document — press Enter for a new paragraph and keep going.
+
+**The toolbar** across the top works the way you would expect:
+
+| | |
+|---|---|
+| **↶ ↷** | Undo and redo |
+| **Normal text ▾** | Turn a line into a *Heading*, *Sub-heading* or *Small heading*. (There is no “Heading 1” on purpose — the page title at the top is already the main heading, and having two confuses Google.) |
+| **B** *I* <u>U</u> | Bold, italic, underline, and a button to strip formatting off |
+| **• 1.** | Bulleted and numbered lists |
+| **❝ —** | A pull quote, and a dividing line |
+| **🔗 🖼 ▦ </>** | A link; a picture; a table; or code embedded from another service like YouTube or Google Maps |
+| **⇤ ↔ ⇥** and the two colour squares | Alignment, text colour and highlight |
+
+**Pasting from Word or Google Docs works properly.** Draft wherever you like, copy the whole thing, paste it in — your headings stay headings and your bullets stay bullets. Word's own invisible junk is dropped on the way in, so nothing strange leaks into the site.
+
+**Pictures go in the flow.** Press **🖼**, choose a file, and it uploads and lands where the cursor was. You are then offered a box to describe the picture for blind visitors — worth thirty seconds, and good for Google too.
+
+### Adding a section
+
+**Press `/` on an empty line.** A short list appears under the cursor. Type a few letters to narrow it — “num” finds Numbers, “quo” finds Customer quote — and press Enter. The section drops in right there, already filled with stand-in wording, and the cursor lands on a fresh line underneath so you can carry on writing.
+
+You can also use **+ Section** on the toolbar, which opens the same list with a description of each one. The same menu has *“Start from a layout…”* if you would rather begin from a ready-made Product, Service or Landing page and replace the wording.
+
+### Changing a section
+
+Click any wording inside a section and type over it — headline, button label, a question in the FAQ, a number in the numbers strip. Hover a section and a small dark toolbar appears in its top-right corner:
+
+| Button | What it does |
+|---|---|
+| **⠿** | Hold and drag to move the whole section up or down the page |
+| **↑ ↓** | Move it one place up or down, if you prefer buttons to dragging |
+| **⧉** | Make a copy of the section, just below |
+| **⚙** | Open its settings on the right — pictures, links, and the choices that are not words on the page |
+| **✕** | Remove the section (it asks first) |
+
+Ordinary paragraphs deliberately have no toolbar hovering over them. They are just writing.
+
+**Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live in the **Section settings** panel on the right, which fills in when you click a section. Any picture field there has a **Choose file** button that uploads on the spot.
+
+Nothing is saved until you press **Save**. If you try to leave with unsaved changes, your browser will warn you. If something required is missing, the page comes back with the problem listed at the top and your work still in place.
+
+> **The other two tabs.** Above the page there are three tabs. **Visual** is the one described above and the one to use. **Form** is the older view — the same content as a list of labelled boxes — which some people find quicker for bulk typing. **Advanced** shows the raw data for developers; you never need to open it.
+
+
+### Checking how it looks
+
+Above the page are two buttons: **Edit** and **Preview**.
+
+**Preview** shows the page exactly as a visitor gets it — with the site header and menu, the
+breadcrumb trail, the featured image, the footer, and none of the editing marks. Nothing is
+published by doing this, and it works on a page that has never been published, which is the point:
+you can check a draft before anyone else sees it. The preview keeps up as you type.
+
+**Desktop / Tablet / Phone** redraw the preview at those screen sizes, so you can check a page
+works on a phone before publishing rather than after.
+
+Underneath, two small cards show **how the page will look in a Google result** and **when someone
+shares the link** on WhatsApp or LinkedIn — the title, the web address, the description and the
+picture. They also tell you if your title or description is too long and will be cut short. If the
+share card says *No image*, set a Featured image on the right.
+
+Links in the preview open in a new tab rather than taking you away from it, and the contact form
+does not send anything.
 
 ---
 
@@ -100,6 +166,8 @@ The **Media** section is the shared library for every image, logo and PDF.
 1. Go to Media and upload the file.
 2. Give it **alt text** — a short description of what is in the picture. This is what a blind visitor's screen reader reads out, and it is one of the things Google looks at. Please do not skip it.
 3. The file is then selectable anywhere the site asks for an image.
+
+**You do not have to go to Media first.** Anywhere a page asks for a picture — a Hero image, an Image or Gallery block, the Featured image in the sidebar — there is a **Choose file** button right there. Pick a file and it uploads straight away, gets used on the spot, and joins the Media library so you can reuse it elsewhere. A small thumbnail next to it shows what is currently selected. Uploads made this way have no alt text yet, so add it in the Media section afterwards for anything important.
 
 ---
 
@@ -148,13 +216,15 @@ Products can carry a price and a checkout button. The payment step is currently 
 
 **Done:** the content system, the public website with its theme, the admin panel, search-engine and AI output, enquiry capture, media library, users and roles, and the payment placeholder.
 
-**Still to come:** the drag-and-drop page builder (phase 2) and a live payment provider.
+**Still to come:** a live payment provider.
 
 ---
 
 ## 12. Quick answers
 
 **I changed something and the website looks the same.** Check the status is *Published* and the publish date is not in the future. Then refresh with Ctrl+F5.
+
+**Can I change a page's web address?** The address is made from the title automatically, and the box is locked so it cannot be changed by accident — an address that changes breaks every link and bookmark pointing at the old one, and search engines drop the page. If you genuinely need to change it, the small **Edit** button beside the box unlocks it and warns you first.
 
 **A page gives "not found".** Its address is built from its slug and its type. A Service named *NAS* filed under *Storage* lives at `/services/storage/nas`, not `/services/nas`. Check the parent is set correctly.
 

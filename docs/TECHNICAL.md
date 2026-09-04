@@ -146,6 +146,21 @@ Two behaviours worth knowing:
 - **`hero` is the only block that renders its own `<h1>`.** `post.html` skips the page title when a post's first block is a hero.
 - **`post_list` is queried at render time.** `render_blocks()` special-cases it, calling `_post_list()` to fetch live posts and passing them in as `posts`.
 
+**Editor metadata.** Alongside `BLOCKS`, `blocks.py` exports `EDITOR` — how each field is edited in the browser admin, so the field shapes that used to live only in comments are data:
+
+```python
+EDITOR = {
+    "widgets": {...},   # field key -> text | textarea | code | richtext | media | url | number | checkbox | post_type | kind
+                        # "<block>.<field>" overrides the bare key (e.g. "embed_html.html": "code")
+    "items":   {...},   # block type -> the subfields of one repeater row (items / images / rows)
+    "labels":  {...},   # friendlier field labels; missing keys fall back to the key itself
+    "kinds":   [...],   # contact_form.kind options
+}
+REPEATERS = ("items", "images", "rows")
+```
+
+`EDITOR` is metadata only — nothing on the render or validation path reads it, and an unknown widget just degrades to a text input. `tests/test_offline.py::test_editor_metadata_covers_every_block` fails if a new block's fields have no widget, or if a repeater field has no `EDITOR["items"]` entry.
+
 `blocks_text()` flattens all block content to plain text for `llms-full.txt` and admin search. Because JSONB does not preserve key order, it walks fields in a fixed reading order (`_TEXT_ORDER`), with unknown keys appended alphabetically, so output is deterministic.
 
 ---
@@ -196,7 +211,9 @@ Writes: `POST /leads` (also the target of the HTML contact form — plain form P
 
 ### `/admin` — browser, `admin_ui.py`
 
-`/login`, `/logout`, `/` (dashboard), `/posts`, `/posts/new`, `/posts/<id>`, `/posts/<id>/delete`, `/media`, `/media/<id>/delete`, `/leads`, `/leads/<id>/status`, `/settings`, `/users`, `/users/<uuid>/delete`. Server-rendered forms; `_form_body()` turns form fields into the same body dict the JSON API accepts, so both surfaces share validation. `_safe_next()` restricts post-login redirects to relative same-origin paths.
+`/login`, `/logout`, `/` (dashboard), `/posts`, `/posts/new`, `/posts/<id>`, `/posts/<id>/delete`, `/media`, `/media/upload`, `/media/<id>/delete`, `/leads`, `/leads/<id>/status`, `/settings`, `/users`, `/users/<uuid>/delete`. Server-rendered forms; `_form_body()` turns form fields into the same body dict the JSON API accepts, so both surfaces share validation. `_safe_next()` restricts post-login redirects to relative same-origin paths.
+
+`POST /admin/media/upload` is the one exception to "server-rendered forms": it takes the same multipart body as `POST /admin/media` (`csrf`, `file`, optional `alt`) through the shared `_upload()` helper, and answers `201 {id, url, filename, mime, alt}` or `4xx {error}` instead of redirecting. It exists so the post form's media pickers can upload without leaving the page; session auth and CSRF come from `ui_required()` unchanged.
 
 ### Crawler endpoints
 
@@ -243,7 +260,129 @@ Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in nam
 
 One stylesheet, `static/site.css`, with CSS variables at the top, then header/footer, then `.cards` / `.card` / `.btn` / `.section`, then one rule-group per block. `static/admin.css` layers admin-only rules on top, so `/admin` inherits the public theme.
 
-No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS.
+No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS, and the public site ships no JavaScript at all.
+
+`static/admin.js` is the single exception, loaded only by `templates/admin/base.html`. It is plain ES5-ish browser JavaScript — no framework, no bundler, and nothing fetched at runtime: the one third-party file, `static/vendor/sortable.min.js` (SortableJS 1.15.6, MIT, 45 KB), is **vendored, not CDN-loaded**, because the CMS runs on a LAN and an editor without internet must still be able to drag a section. It is **progressive enhancement only**: every part is a no-op when its hook is missing, and the plain form underneath still saves with JavaScript disabled. Four parts:
+
+- **Slug** — `#post-slug` is `readonly`; typing in `#post-title` live-fills it with a JS mirror of `db.slugify()` while the post has no saved slug. An *Edit* button unlocks the field after a confirm, for the deliberate URL change. Nothing server-side changed: `apply_post()` already generates the slug from the title when the submitted one is empty, and leaves an existing slug alone.
+- **Media pickers** — one `mediaWidget()` renders a thumbnail, a "choose existing" select and a file input that uploads to `/admin/media/upload` and appends the new row to *every* picker on the page. It is applied to `select[data-media]` (featured image, per-type `media` fields) and to media fields inside blocks, so there is one code path rather than three. `data-media="images"` filters non-images out.
+- **Block editor** — parses the `blocks` textarea, renders a card per block with labelled inputs driven by `BLOCKS` + `EDITOR`, with ↑ ↓ ✕ controls and repeaters for `items`/`images`/`rows`, then serializes back into that same textarea on submit. `_form_body()` and `validate_blocks()` are untouched — the editor only ever writes the JSON a human could have typed. It mutates the parsed objects in place, so **keys it does not render survive**, and an unknown block type falls back to a "edit it as JSON" note. If the textarea holds unparseable JSON (a rejected save round-trip), the editor stands down and opens the *Advanced — edit as JSON* panel instead.
+
+`rich_text` fields get a `contenteditable` box with a bold/italic/H2/H3/list/link/clear toolbar plus an *HTML* toggle for the raw markup; paste is inserted as plain text so Word markup does not leak in.
+
+### 12.1 The document editor
+
+The **Content** card on the post form has three tabs over one array: *Visual* (the document), *Form* (the block editor above) and *Advanced* (the raw JSON). `textarea[name="blocks"]` is still the only field that POSTs, so `_form_body()` → `apply_post()` → `validate_blocks()` remains the single validation path. With JavaScript off the tabs stay hidden and the JSON pane is what you get.
+
+**The canvas is a server render, not a second renderer.** `POST /admin/canvas` (`admin_ui.py`, `@ui_required()`, CSRF as form data) takes the blocks the browser currently holds — unsaved ones included — and returns `render_blocks(blocks, edit=True)` inside `templates/admin/canvas.html`, a standalone document linking `site.css` and `static/canvas.css`. `admin.js` puts that in `iframe#canvas` via `srcdoc`. Preview and published page therefore cannot drift. The iframe is not decoration: every `admin.css` rule is scoped to `body.admin`, which would be an ancestor of an inline canvas and would silently repaint `.specs`, `.card` and the lead form.
+
+**Edit markers.** `render_blocks(blocks, edit=False)` hands each template an `fe` callable — `_fe(i)` in edit mode, `_no_fe` otherwise — so `data-*` attributes *cannot* reach the public site; there is no request-global flag to leak. In `blocks/*.html`:
+
+| call | emits | means |
+|---|---|---|
+| `{{ fe() }}` on the root `<section>` | `data-b="2"` | this is block 2 |
+| `{{ fe('heading') }}` | `data-f="heading" data-ph="Heading"` | editable text; `data-ph` is the empty-state placeholder, taken from `EDITOR["labels"]` |
+| `{{ fe('items', loop.index0) }}` | `data-r="items" data-i="0"` | one repeater row: fields inside write into `data.items[0]` |
+| `{{ fe('html', rich=True) }}` | `… data-rich="1"` | the value is `innerHTML`, not `innerText` |
+| `{{ fe('html', ph='…') }}` | overrides `data-ph` | when the field label ("Content") is not what an empty page should say |
+
+Write them tight against the tag (`<h1{{ fe('heading') }}>`) — a space would make the public render `<h1 >`, which `tests/test_offline.py::test_render_blocks_uses_template` catches.
+
+**Typing never re-renders.** `contenteditable` (`plaintext-only`, with an Enter-blocking fallback for engines without it) writes straight into the block objects, which `fieldInput()` already mutates in place — canvas, settings panel and JSON textarea point at the same objects, so there is no sync layer. Only structural changes touch the server, and then only for **one** block: `POST /admin/canvas` with `i=N` returns a bare fragment that replaces that one `<section>`; deletes remove the node, drags move it, and `data-b` is renumbered client-side. `setBlocks()` is the single place the array reference is ever replaced.
+
+**A page is a document, not a stack.** Prose lives in `rich_text` blocks; the other twelve types
+are the designed bands. Nothing about the storage changed — `posts.blocks` is the same JSONB —
+but the editing surface leads with writing:
+
+- A post with no blocks opens as **one empty `rich_text` with the caret in it** (`focusOnLoad`).
+  No dialog, no picker. `LAYOUTS` moved from a blocking chooser into the Insert menu.
+- The gaps between sections are **click-to-type**: clicking one splices in an empty `rich_text`
+  and focuses it. One mechanic instead of a separate "+" affordance, and it means there is never
+  nowhere to put the caret.
+- `rich_text` blocks get **no hover toolbar** — a floating bar over every paragraph would destroy
+  the document feel. Sections keep theirs (name, drag, ↑ ↓, duplicate, settings, remove).
+- **Empty `rich_text` blocks are stripped on submit** (`written()`), because an empty paragraph is
+  the editor waiting for you, not content — and `rich_text.html` is a required field. A paragraph
+  holding only an `<img>`, `<hr>` or `<table>` has no text and is still kept.
+
+**The toolbar** (`#doc-toolbar`, `buildToolbar()`) lives in the admin page so it can use
+`admin.css`, but every command runs against the *canvas* document. Clicking a button moves focus
+out of the iframe, so the caret is stored on every `selectionchange` (`rememberSelection`) and put
+back before the command runs (`restoreSelection` → `exec`). `styleWithCSS` is enabled only for the
+colour commands, so they emit `<span style>` rather than `<font>`. `syncBar()` reflects the caret
+back into the bold/italic/underline states and the style dropdown.
+
+The style dropdown offers **Normal text / Heading / Sub-heading / Small heading** → `p`/`h2`/`h3`/`h4`.
+There is deliberately **no Heading 1**: `post.html:9` already emits the page title as the page's
+only `<h1>`, and a second one is an SEO error. Pasted `<h1>` is demoted to `<h2>` for the same reason.
+
+**Paste keeps its formatting.** `richPaste()` reads the `text/html` clipboard flavour, strips
+conditional comments, and walks it against an allowlist (`PASTE_OK`), renaming `b`→`strong`,
+`i`→`em`, `div`→`p`, `h1`→`h2` (`PASTE_AS`), deleting `script`/`style`/`iframe` and friends outright
+(`PASTE_DROP` — unwrapping those would spill their source as visible text), unwrapping everything
+else, and keeping only `href`/`src`/`alt`. Plain-text fields (a heading, a button label) still use
+`plainPaste`. This is a **quality filter, not a security boundary** — block HTML is still
+trusted-staff-only on the server. It replaced the old handler that forced every paste through
+`insertText`, which threw away exactly the headings and lists an editor had drafted elsewhere.
+
+**`/` inserts a section at the caret.** Typing `/` on an otherwise empty line opens a filtered
+list positioned under the caret; typing filters, Enter takes the first, Escape cancels. `splitAt()`
+does the surgery at the HTML level rather than with Range extraction: the children of the field
+before the `/` line stay in this block, the chosen section goes next, and the children after it
+become a second `rich_text`. If the `/` line *was* the whole paragraph, the block is replaced
+outright rather than leaving an empty one behind.
+
+**Pictures in the flow.** The image button reuses `upload()` → `POST /admin/media/upload`, then
+`insertHTML`s an `<img>` at the caret. `media_alt()` cannot reach inside `rich_text` HTML, so
+`altPrompt()` immediately offers a non-blocking line to write the `alt` attribute — otherwise an
+inline picture would never get one.
+
+**Sections still work.** Each non-prose block keeps its floating bar, drags via the vendored
+SortableJS, and opens `blockCard()` — the *same* function the Form tab uses — in the sidebar for
+everything that is not inline text. The canvas is a live page, so `submit` and `a`/`button` clicks
+are cancelled in the capture phase: a `contact_form` block would otherwise post a real lead.
+
+
+### 12.2 Preview
+
+The canvas is honest about content but silent about everything around it, and a **draft cannot be
+seen any other way**: `db.live()` (`db.py:106-108`) gates every public lookup on
+`status='published'` with no bypass, no token and no role check.
+
+`POST /admin/preview?type=<slug>&pk=<id>` renders the real `post.html` inside the real
+`base.html`. It reuses two things whole: `_form_body(pt, existing)` — the same parser `Save` runs —
+and `crumbs_for()` from `public.py`. `_preview_post()` shapes the result like a hydrated row, and
+`db.hydrate()`/`db.ancestors()` work on it unchanged because they read only `post_type`,
+`post_type_id`, `parent_id` and `slug` — never `id`. `?part=card` returns just the search/social
+fragment (`admin/seo_card.html`) from the same data. Nothing needed rewiring: `public.py:22-24`
+registers `site`, `menu`, `render_blocks` and `year` with `app_context_processor`, so they are
+already live in admin templates.
+
+Three things it must get right, all of them latent traps:
+
+| | |
+|---|---|
+| **Analytics** | `base.html`'s gate was `{% if site.ga_id %}` alone, so every preview refresh would have sent a real gtag pageview to production, attributed to a URL that does not exist. It is now `{% if site.ga_id and not preview %}` — `preview` is undefined on public pages, so it stays falsy there. |
+| **`published_at`** | `apply_post()` (`admin_api.py:211`) stores a `datetime`, but `post.html:11` does `published_at[:10]` and `seo.jsonld()` hands it to `\|tojson`. The preview dict keeps the form's **string**; both problems go at once. Covered by a test. |
+| **`post["id"]`** | `render_post()` (`public.py:43`) queries children by id. The preview builds its own context and only queries children when there actually is a saved id. |
+
+`meta.robots` is forced to `noindex,nofollow` after `build_meta()` — the default is `index,follow`
+(`seo.py:25`) and a post's own SEO override would otherwise win.
+
+`render_blocks(edit=False)` re-raises on a malformed block, which is right for the public site and
+wrong for a pane you are typing into, so the render is wrapped and reports which section is unfinished.
+
+Client side: `admin.js` posts `new FormData(#post-form)` with `blocks` taken from `MODEL` (the
+textarea is only written on submit). Preview mode runs `wirePreview()` instead of `wireDoc()` — no
+`contenteditable`, no section bars, no Sortable — plus capture-phase handlers that cancel `submit`
+and open links in a new tab rather than navigating the preview away. Device widths render at
+1440/834/390 and `transform: scale()` down to the pane, with the iframe's height divided by the
+same factor so the scaled result fills it exactly; the iframe *is* the viewport, so the site's own
+breakpoints answer honestly. A 500 ms debounce on any form `input` keeps it a step behind your typing.
+
+One CSS rule underpins all the show/hide: `.admin [hidden]{display:none!important}`. Author display
+rules outrank the UA's `[hidden]{display:none}`, so toggling `hidden` on a flex or grid element
+silently does nothing — the bug that once showed the layout chooser and the canvas at the same time.
 
 ---
 
@@ -317,7 +456,14 @@ pipenv requirements --dev-only > requirements-dev.txt
 Marked in code with `# ponytail:` comments.
 
 - `rich_text` and `embed_html` render raw HTML with `|safe`. Fine for trusted staff; add `nh3` sanitising if untrusted authors are ever given accounts.
-- The drag-and-drop page builder is phase 2. Blocks are edited as JSON in a textarea with a reference panel.
+- The rich-text toolbar uses `document.execCommand` — deprecated but universally implemented, and 40 lines against a bundled editor. Swap for a real editor if a browser drops it.
+- `admin.js` re-renders whole lists on every reorder, and media pickers are refreshed by iterating every picker on the page. Fine at page scale; revisit only if a page grows to hundreds of blocks.
+- The canvas re-renders one whole block per settings change rather than patching the one field that moved. A round trip is a few tens of milliseconds on the LAN; patch per field only if it ever feels slow.
+- Undo/redo is `execCommand` inside one `rich_text` block; it does not span block boundaries.
+- The paste normaliser walks the DOM, so it has no unit test — Node ships no DOM and this project
+  has no npm toolchain. Its check is the manual "paste a Google Doc in" step.
+- `embed_html` shows a placeholder on the canvas instead of running. That is partly UX (you cannot click-edit a YouTube embed) and partly safety: the canvas is same-origin with a live admin session, so `|safe` block HTML would execute with the admin's cookie. The trust model is unchanged from the public site, but an `editor` authoring HTML that an `admin` later opens is a path worth knowing about.
+- Inline editing is opt-in per element. Anything without an `fe()` marker — `post_list`'s titles and excerpts, which belong to *other* posts — simply is not editable, which is the point.
 - `DummyGateway` moves no money.
 - `post_types` and `settings` are cached per process, not per cluster. A multi-worker deployment sees an update after `uncache()` runs in *that* worker.
 - FAQPage JSON-LD is not wired up (§9).

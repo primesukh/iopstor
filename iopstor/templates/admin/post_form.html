@@ -4,19 +4,21 @@
 {% if errors %}<div class="error"><strong>Not saved.</strong><ul>{% for k, v in errors.items() %}<li><code>{{ k }}</code>: {{ v if v is string else v|join('; ') }}</li>{% endfor %}</ul></div>{% endif %}
 {% set p = post or {} %}
 {% set meta = p.meta or {} %}{% set seo = p.seo or {} %}
-<form method="post" class="grid">
+<script type="application/json" id="editor-data">{{ {"blocks": blocks, "ui": blocks_ui, "layouts": layouts, "media": media, "type": pt.slug, "pk": p.get('id'), "post_types": post_types|map(attribute='slug')|list}|tojson }}</script>
+<form method="post" class="grid" id="post-form">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <div>
     <div class="card">
-      <label>Title <input type="text" name="title" value="{{ p.title or '' }}" required></label>
-      <label>Slug <small>(leave empty to generate from the title)</small> <input type="text" name="slug" value="{{ p.slug or '' }}"></label>
+      <label>Title <input type="text" name="title" id="post-title" value="{{ p.title or '' }}" required></label>
+      <label>Web address <small>(made from the title)</small>
+        <span class="slug-field"><span class="slug-prefix">/{{ (pt.url_prefix ~ '/') if pt.url_prefix else '' }}</span><input type="text" name="slug" id="post-slug" value="{{ p.slug or '' }}" readonly></span></label>
       <label>Excerpt <small>(used as the meta description and in lists)</small> <textarea name="excerpt">{{ p.excerpt or '' }}</textarea></label>
       {% for f in pt.field_schema or [] %}
         <label>{{ f.label }}{% if f.required %} *{% endif %}
         {% set v = meta.get(f.key) %}
         {% if f.type == 'textarea' %}<textarea name="meta_{{ f.key }}">{{ v or '' }}</textarea>
         {% elif f.type == 'json' %}<textarea name="meta_{{ f.key }}" class="code" style="min-height:6rem">{{ v|tojson(indent=2) if v is not none and v is not string else (v or '') }}</textarea>
-        {% elif f.type == 'media' %}<select name="meta_{{ f.key }}"><option value="">— none —</option>{% for m in media %}<option value="{{ m.id }}" {{ 'selected' if v|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select>
+        {% elif f.type == 'media' %}<select name="meta_{{ f.key }}" data-media><option value="">— none —</option>{% for m in media %}<option value="{{ m.id }}" {{ 'selected' if v|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select>
         {% elif f.type == 'number' %}<input type="number" step="any" name="meta_{{ f.key }}" value="{{ v if v is not none else '' }}">
         {% elif f.type == 'date' %}<input type="date" name="meta_{{ f.key }}" value="{{ v or '' }}">
         {% elif f.type == 'url' %}<input type="url" name="meta_{{ f.key }}" value="{{ v or '' }}">
@@ -25,8 +27,36 @@
       {% endfor %}
     </div>
     <div class="card">
-      <label>Content blocks <small>(JSON list of {"type", "data"}; see the block reference on the right)</small>
-      <textarea name="blocks" class="code">{{ p.blocks_text if p.blocks_text is defined else blocks_json }}</textarea></label>
+      <h2>Content</h2>
+      {# Three views of one array. Without JavaScript the tabs stay hidden and the JSON pane —
+         the only thing that actually POSTs — is what you get. admin.js reveals the other two. #}
+      <div class="tabs" id="content-tabs" hidden>
+        <button type="button" data-tab="visual" class="on">Visual</button>
+        <button type="button" data-tab="form">Form</button>
+        <button type="button" data-tab="json">Advanced</button>
+      </div>
+      <div id="pane-visual" hidden>
+        <div class="pv-bar">
+          <span class="seg" id="view-mode">
+            <button type="button" data-view="edit" class="on">Edit</button>
+            <button type="button" data-view="preview">Preview</button>
+          </span>
+          <span class="seg" id="pv-device" hidden>
+            <button type="button" data-w="1440" class="on">Desktop</button>
+            <button type="button" data-w="834">Tablet</button>
+            <button type="button" data-w="390">Phone</button>
+          </span>
+        </div>
+        <div id="doc-toolbar" class="doc-toolbar"></div>
+        <div id="canvas-wrap"><iframe id="canvas" title="Your page, as a visitor will see it"></iframe></div>
+        <small id="pane-hint">Just start typing. Press <kbd>/</kbd> on an empty line to drop in a section.</small>
+        <div id="seo-card" hidden></div>
+      </div>
+      <div id="pane-form" hidden><div id="blocks-editor"></div></div>
+      <div id="pane-json">
+        <label><small>JSON list of {"type", "data"}; see the block reference on the right.</small>
+        <textarea name="blocks" class="code">{{ p.blocks_text if p.blocks_text is defined else blocks_json }}</textarea></label>
+      </div>
     </div>
     <div class="card">
       <details><summary>SEO overrides</summary>
@@ -36,15 +66,19 @@
     </div>
   </div>
   <div>
+    <div class="card" id="settings-card">
+      <h2>Section settings</h2>
+      <div id="block-settings"></div>
+    </div>
     <div class="card">
       <label>Status <select name="status">{% for s in ('draft','published') %}<option value="{{ s }}" {{ 'selected' if (p.status or 'draft')==s }}>{{ s }}</option>{% endfor %}</select></label>
       <label>Publish date <small>(empty = now when published; future = scheduled)</small> <input type="datetime-local" name="published_at" value="{{ (p.published_at or '')[:16] }}"></label>
       {% if pt.hierarchical %}<label>Parent <select name="parent_id"><option value="">— top level —</option>{% for par in parents %}<option value="{{ par.id }}" {{ 'selected' if p.parent_id|string == par.id|string }}>{{ par.title }}</option>{% endfor %}</select></label>{% endif %}
       <label>Menu order <input type="number" name="menu_order" value="{{ p.menu_order or 0 }}"></label>
-      <label>Featured image <select name="featured_media_id"><option value="">— none —</option>{% for m in media if m.mime.startswith('image/') %}<option value="{{ m.id }}" {{ 'selected' if p.featured_media_id|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select></label>
+      <label>Featured image <select name="featured_media_id" data-media="images"><option value="">— none —</option>{% for m in media if m.mime.startswith('image/') %}<option value="{{ m.id }}" {{ 'selected' if p.featured_media_id|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select></label>
       {% for tax in taxonomies %}<label>{{ tax.name }}</label>{% for t in tax.terms|sort(attribute='name') %}<div><label class="inline" style="font-weight:400"><input type="checkbox" name="terms" value="{{ t.id }}" {{ 'checked' if t.id in term_ids }}> {{ t.name }}</label></div>{% else %}<small>No terms yet — add them via the API or Supabase Studio.</small>{% endfor %}{% endfor %}
       <p style="margin-top:1rem"><button type="submit">Save</button>
-      {% if p.id %}<a class="btn secondary" href="{{ p.path }}" target="_blank">View</a>{% endif %}</p>
+      {% if p.id and p.status == 'published' and p.path %}<a class="btn secondary" href="{{ p.path }}" target="_blank">View live</a>{% endif %}</p>
     </div>
     {% if p.id and admin_user.role == 'admin' %}
     <form method="post" action="{{ url_for('admin_ui.delete_post', pk=p.id) }}" onsubmit="return confirm('Delete this permanently?')" class="card" style="text-align:right"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="danger">Delete</button></form>

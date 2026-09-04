@@ -1,4 +1,4 @@
-<section class="section"><div class="wrap faq">
-  {% if data.heading %}<h2 class="section-title">{{ data.heading }}</h2>{% endif %}
-  {% for f in data['items'] %}<details><summary>{{ f.q }}</summary><div>{{ f.a|safe }}</div></details>{% endfor %}
+<section class="section"{{ fe() }}><div class="wrap faq">
+  {% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}
+  {% for f in data['items'] %}<details{{ fe('items', loop.index0) }}><summary{{ fe('q') }}>{{ f.q }}</summary><div{{ fe('a', rich=True) }}>{{ f.a|safe }}</div></details>{% endfor %}
 </div></section>
