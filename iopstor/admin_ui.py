@@ -118,7 +118,7 @@ def _form_body(pt, existing):
     """Turn the post form into the same body dict the JSON API accepts."""
     f = request.form
     b = {"post_type": pt["slug"], "title": f.get("title", ""), "slug": f.get("slug", ""), "status": f.get("status", "draft"),
-         "published_at": f.get("published_at", ""), "excerpt": f.get("excerpt", ""), "menu_order": f.get("menu_order") or 0,
+         "published_at": f.get("published_at", ""), "excerpt": f.get("excerpt", ""),
          "parent_id": f.get("parent_id") or None, "featured_media_id": f.get("featured_media_id") or None,
          "terms": [int(t) for t in f.getlist("terms")], "seo": {k: f.get(f"seo_{k}", "") for k in SEO_KEYS if f.get(f"seo_{k}")}}
     meta = dict(existing.get("meta") or {}) if existing else {}
@@ -163,7 +163,7 @@ def _save(pt, existing):
     except HTTPException as e:
         payload = e.response.get_json() if e.response is not None else {"error": e.description}
         errors = payload.get("fields") or {"_": payload.get("error")}
-        keep = ("title", "slug", "status", "published_at", "excerpt", "menu_order", "parent_id", "featured_media_id", "meta", "seo")
+        keep = ("title", "slug", "status", "published_at", "excerpt", "parent_id", "featured_media_id", "meta", "seo")
         draft = {**(existing or {}), "post_type": pt, **{k: b[k] for k in keep}, "terms": [{"id": t} for t in b["terms"]], "blocks_text": request.form.get("blocks", "")}
         return None, render_template("admin/post_form.html", **_form_context(pt, draft, errors))
     if existing:
@@ -271,7 +271,7 @@ def preview():
     meta = {**seo.build_meta(post), "robots": "noindex,nofollow"}  # a preview must never be indexable
     if request.args.get("part") == "card":
         return render_template("admin/seo_card.html", meta=meta, site=seo.site())
-    children = (db.with_paths(db.rows(db.live(db.select_posts()).eq("parent_id", pk).order("menu_order")))
+    children = (db.with_paths(db.rows(db.live(db.select_posts()).eq("parent_id", pk).order("menu_order").order("published_at", desc=True)))
                 if pk and pt["hierarchical"] else [])
     try:
         return render_template("post.html", post=post, children=children, crumbs=crumbs, meta=meta,

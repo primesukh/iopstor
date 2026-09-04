@@ -2,6 +2,8 @@ import re
 
 from conftest import live, make_token, make_user
 
+from iopstor import db
+
 pytestmark = live
 
 
@@ -44,6 +46,15 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
     assert r.status_code == 302 and "/admin/posts/" in r.headers["Location"]
     edit = client.get(r.headers["Location"])
     assert edit.status_code == 200 and b"Hi from the form" in edit.data
+
+    # menu_order is gone from the form, so a browser save must leave whatever is in the column alone
+    # rather than posting a 0 over the order the seed set
+    pk = int(r.headers["Location"].rstrip("/").rsplit("/", 1)[-1])
+    assert b'name="menu_order"' not in edit.data
+    db.update("posts", pk, {"menu_order": 7})
+    again = client.post(f"/admin/posts/{pk}", data={"csrf": csrf, "title": "zz-test UI Post", "status": "published",
+                                                    "blocks": '[{"type":"hero","data":{"heading":"Hi from the form"}}]'})
+    assert again.status_code == 302 and db.one(db.table("posts").select("menu_order").eq("id", pk))["menu_order"] == 7
     public = client.get("/blog/zz-test-ui-post")
     assert public.status_code == 200 and b"Hi from the form" in public.data
 

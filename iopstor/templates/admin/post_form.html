@@ -49,10 +49,13 @@
     <h3>Featured image</h3>
     <select name="featured_media_id" data-media="images" aria-label="Featured image"><option value="">— none —</option>{% for m in media if m.mime.startswith('image/') %}<option value="{{ m.id }}" {{ 'selected' if p.featured_media_id|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select>
 
+    {# Menu order is gone: everything shows newest first, and a number nobody understood was the only
+       thing keeping this section on screen for a type with no parent and no taxonomies. #}
+    {% if pt.hierarchical or taxonomies %}
     <h3>Organise</h3>
     {% if pt.hierarchical %}<label>Parent <select name="parent_id"><option value="">— top level —</option>{% for par in parents %}<option value="{{ par.id }}" {{ 'selected' if p.parent_id|string == par.id|string }}>{{ par.title }}</option>{% endfor %}</select></label>{% endif %}
     {% for tax in taxonomies %}<label>{{ tax.name }}</label>{% for t in tax.terms|sort(attribute='name') %}<div><label class="inline"><input type="checkbox" name="terms" value="{{ t.id }}" {{ 'checked' if t.id in term_ids }}> {{ t.name }}</label></div>{% else %}<small>No terms yet — add them via the API or Supabase Studio.</small>{% endfor %}{% endfor %}
-    <label>Menu order <small>(lower comes first)</small> <input type="number" name="menu_order" value="{{ p.menu_order or 0 }}"></label>
+    {% endif %}
 
     {% if pt.field_schema %}
     <h3>Details</h3>

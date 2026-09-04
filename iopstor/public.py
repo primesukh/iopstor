@@ -40,7 +40,7 @@ def crumbs_for(post):
 
 def render_post(post):
     crumbs = crumbs_for(post)
-    children = db.with_paths(db.rows(db.live(db.select_posts()).eq("parent_id", post["id"]).order("menu_order"))) if post["post_type"]["hierarchical"] else []
+    children = db.with_paths(db.rows(db.live(db.select_posts()).eq("parent_id", post["id"]).order("menu_order").order("published_at", desc=True))) if post["post_type"]["hierarchical"] else []
     return render_template("post.html", post=post, children=children, crumbs=crumbs, meta=seo.build_meta(post), jsonld=seo.jsonld(post, crumbs))
 
 
