@@ -73,7 +73,7 @@ Eleven tables, created by `migrations/0001_initial.sql`.
 
 Indexes: `posts (post_type_id, status, published_at)`, `leads (status, created_at)`, `payments (provider, provider_ref)`. `posts` is unique on `(post_type_id, slug)` — slugs are unique *per type*, not globally.
 
-**Where per-type data lives.** `posts.meta` is a JSON bag described by `post_types.field_schema` — a list of `{key, label, type, required}` descriptors that the admin form renders and the detail template reads back. `posts.blocks` is the ordered page content, `[{type, data}, ...]`.
+**Where per-type data lives.** `posts.meta` is a JSON bag described by `post_types.field_schema` — a list of `{key, label, type, required}` descriptors that the admin form renders and the detail template reads back. `posts.blocks` is the ordered page content, `[{type, data}, ...]` — flat, except a `columns` block, whose `data.cols` holds one such list per column (one level deep, see §6).
 
 **Seeded types:** `page` (prefix `""`), `post` (`blog`, BlogPosting), `service` (`services`, hierarchical, Service), `case_study` (`case-studies`, Article), `event` (`events`, Event), `partner` (`partners`, Organization), `datasheet` (`datasheets`), `product` (`products`).
 
@@ -138,7 +138,7 @@ BLOCKS = {  # type: (required fields, optional fields)
 }
 ```
 
-Fourteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`.
+Fifteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`.
 
 **Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section"><div class="wrap">…`. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
 
@@ -146,6 +146,10 @@ Two behaviours worth knowing:
 
 - **`hero` is the only block that renders its own `<h1>`.** `post.html` skips the page title when a post's first block is a hero.
 - **`post_list` is queried at render time.** `render_blocks()` special-cases it, calling `_post_list()` to fetch live posts and passing them in as `posts`.
+- **`columns` is the only block that holds other blocks.** `data.cols` is a list of columns, each an ordered `[{type, data}]` of its own; `data.widths` is `"50/25/25"` or blank. It uses the same `extra` hatch as `post_list`, so `columns.html` is handed a `col(n)` callable that renders column `n` and a `widths` string — no recursion is wired into Jinja, and `__init__.py` / `public.py` are untouched.
+  - **One level only.** `validate_blocks(..., nested=True)` rejects `NEVER_NESTED = ("columns", "hero")` inside a column: a grid inside a grid is how an Elementor page becomes unmaintainable, and a hero is a full-bleed band owning the page's only `<h1>`. `admin.js` mirrors the tuple so the inserter never offers them and a drag into a column is refused.
+  - **`col_widths(data)`** turns `"50/25/25"` into the `--cols` custom property `"50fr 25fr 25fr"`. Anything that is not exactly one positive number per column returns `""` (equal columns) — strict, because the value is interpolated into a `style` attribute. `site.css` puts the widths in `--cols` rather than straight into `grid-template-columns` so the `max-width:800px` stacking rule can override them without `!important` beating an inline style.
+  - **`at_path(blocks, path)`** resolves a `data-b` path (`"3"`, `"3.1.0"`) to one block. `/admin/canvas?p=` is its only caller.
 - **`pdf` is an `<iframe>` at the file, nothing more** — the browser's own PDF viewer, no pdf.js. Its field is `file_media_id`, not `media_id`, because `EDITOR["labels"]` is keyed by the bare field name and `media_id` already reads "Image" (it also matches the `file_media_id` meta convention the `datasheet` type uses in `cli.py`). Height is fixed in `site.css` (`min(80vh,900px)`); the `<a class="btn ghost">` under the frame is the fallback for iOS Safari and Android Chrome, which render only the first page of a framed PDF or nothing at all. Unlike `embed_html` the canvas renders it for real: the src is the public Storage bucket, so it is cross-origin to the admin session. `canvas.css` gives it `pointer-events:none` so a click still selects the section.
 
 **Editor metadata.** Alongside `BLOCKS`, `blocks.py` exports `EDITOR` — how each field is edited in the browser admin, so the field shapes that used to live only in comments are data:
@@ -154,16 +158,17 @@ Two behaviours worth knowing:
 EDITOR = {
     "widgets": {...},   # field key -> text | textarea | code | richtext | media | pdf | url | number | checkbox | post_type | kind
                         # "<block>.<field>" overrides the bare key (e.g. "embed_html.html": "code")
-    "items":   {...},   # block type -> the subfields of one repeater row (items / images / rows)
+    "items":   {...},   # block type -> the subfields of one repeater row (items / images / rows / cols)
+                        # [] means the rows are not rows of fields: "columns" rows are lists of blocks
     "labels":  {...},   # friendlier field labels; missing keys fall back to the key itself
     "kinds":   [...],   # contact_form.kind options
 }
-REPEATERS = ("items", "images", "rows")
+REPEATERS = ("items", "images", "rows", "cols")
 ```
 
-`EDITOR` is metadata only — nothing on the render or validation path reads it, and an unknown widget just degrades to a text input. `tests/test_offline.py::test_editor_metadata_covers_every_block` fails if a new block's fields have no widget, or if a repeater field has no `EDITOR["items"]` entry.
+`EDITOR` is metadata only — nothing on the render or validation path reads it, and an unknown widget just degrades to a text input. `tests/test_offline.py::test_editor_metadata_covers_every_block` fails if a new block's fields have no widget, or if a repeater field has no `EDITOR["items"]` entry (`[]` counts — `columns` has one).
 
-`blocks_text()` flattens all block content to plain text for `llms-full.txt` and admin search. Because JSONB does not preserve key order, it walks fields in a fixed reading order (`_TEXT_ORDER`), with unknown keys appended alphabetically, so output is deterministic.
+`blocks_text()` flattens all block content to plain text for `llms-full.txt` and admin search. Because JSONB does not preserve key order, it walks fields in a fixed reading order (`_TEXT_ORDER`), with unknown keys appended alphabetically, so output is deterministic. It already recurses through dicts and lists, so a column's blocks are picked up for free — `"type"` and `"widths"` are in `_NON_TEXT_KEYS` so the literal string `"rich_text"` and a width spec do not leak into the output.
 
 ---
 
@@ -296,7 +301,7 @@ The post form (`templates/admin/post_form.html`) is one screen. A bar across the
 
 | call | emits | means |
 |---|---|---|
-| `{{ fe() }}` on the root `<section>` | `data-b="2"` | this is block 2 |
+| `{{ fe() }}` on the root `<section>` | `data-b="2"` | this is block 2 (`data-b="2.1.0"` inside a column — see below) |
 | `{{ fe('heading') }}` | `data-f="heading" data-ph="Heading"` | editable text; `data-ph` is the empty-state placeholder, taken from `EDITOR["labels"]` |
 | `{{ fe('items', loop.index0) }}` | `data-r="items" data-i="0"` | one repeater row: fields inside write into `data.items[0]` |
 | `{{ fe('html', rich=True) }}` | `… data-rich="1"` | the value is `innerHTML`, not `innerText` |
@@ -304,7 +309,24 @@ The post form (`templates/admin/post_form.html`) is one screen. A bar across the
 
 Write them tight against the tag (`<h1{{ fe('heading') }}>`) — a space would make the public render `<h1 >`, which `tests/test_offline.py::test_render_blocks_uses_template` catches.
 
-**Typing never re-renders.** `contenteditable` (`plaintext-only`, with an Enter-blocking fallback for engines without it) writes straight into the block objects, which `fieldInput()` already mutates in place — canvas, settings popover and JSON textarea point at the same objects, so there is no sync layer. Only structural changes touch the server, and then only for **one** block: `POST /admin/canvas` with `i=N` returns a bare fragment that replaces that one `<section>`; deletes remove the node, drags move it, and `data-b` is renumbered client-side. `setBlocks()` is the single place the array reference is ever replaced.
+**Typing never re-renders.** `contenteditable` (`plaintext-only`, with an Enter-blocking fallback for engines without it) writes straight into the block objects, which `fieldInput()` already mutates in place — canvas, settings popover and JSON textarea point at the same objects, so there is no sync layer. Only structural changes touch the server, and then only for **one** block: `POST /admin/canvas` with `p=PATH` returns a bare fragment that replaces that one `<section>`; deletes remove the node, drags move it, and `data-b` is renumbered client-side. `setBlocks()` is the single place the array reference is ever replaced.
+
+**A block's address is a path, not an index.** `data-b` used to be an integer into one flat array. With `columns` it is a dotted path — `"3"` is a top-level block, `"3.1.0"` is block 3's column 1, first block; parts alternate block/column so the count is always odd. `render_blocks(blocks, edit, path)` takes the path of the *first* block and increments its last part for the siblings, which is why the `?p=` fragment comes back already carrying its own path and the browser no longer patches `data-b` after a swap. In `admin.js` everything routes through six helpers instead of parsing an integer:
+
+| helper | answers |
+|---|---|
+| `listAt(path)` | `{arr, i}` — the array a path lives in, and where in it. Every splice goes through this. |
+| `blockAt(path)` / `siblingPath(path, n)` / `isNested(path)` | the block; a sibling's path; is this inside a column |
+| `blocksIn(box)` | the blocks a container owns — `n.parentNode.closest("[data-col],#main") === box` |
+| `boxFor(path)` / `pathIn(box, i)` / `listIn(box)` | container ⇄ path ⇄ MODEL array |
+
+Blocks live in **containers**: `#main`, or one `[data-col]` of a columns block (written only under `{% if edit %}`, so it cannot reach the public page). Three consequences:
+
+- **`renumber()` recurses.** Document order over one flat `querySelectorAll("[data-b]")` would number a column's children into their parent's sequence and corrupt the whole mapping, so it walks container by container.
+- **`bars()` and Sortable run per container.** Every column gets its own click-to-type strips, so an empty column is a place to type rather than a dead box; every column gets its own `Sortable` in the shared `group: "iop"`, so a section drags between the page and any column. The group's `put` refuses `NEVER_NESTED` types, and `onEnd` reads the source path off the item (before `renumber()` rewrites it) and the destination out of `blocksIn(e.to)` — `oldIndex`/`newIndex` count the `.iop-add` strips too.
+- **Wiring is scoped to the owning block.** `wireBlock()` binds only fields where `f.closest("[data-b]") === node` and guards its `mousedown` the same way, or a Columns block would claim its children's fields and clicks. `wireTree()` is `wireBlock` plus every nested block and a `sortable()` for every new `[data-col]`, and is what a replaced fragment goes through.
+
+The `⚙` panel for a Columns block manages the column *list* — `repeater()` gained two optional hooks (a row factory, a cell renderer) because a column row is an array of blocks rather than a row of fields, which is cheaper than a second ↑ ↓ ✕ splice loop. Removing a column that holds sections asks first. The sections themselves are edited on the page, like everything else.
 
 **A page is a document, not a stack.** Prose lives in `rich_text` blocks; the other twelve types
 are the designed bands. Nothing about the storage changed — `posts.blocks` is the same JSONB —
@@ -317,7 +339,7 @@ but the editing surface leads with writing:
   nowhere to put the caret.
 - `rich_text` blocks get **no hover toolbar** — a floating bar over every paragraph would destroy
   the document feel. Sections keep theirs (name, drag, ↑ ↓, duplicate, settings, remove).
-- **Empty `rich_text` blocks are stripped on submit** (`written()`), because an empty paragraph is
+- **Empty `rich_text` blocks are stripped on submit** (`prune()`, which applies `written()` all the way down into columns and returns new arrays so a rejected save cannot eat the paragraph you still have the caret in), because an empty paragraph is
   the editor waiting for you, not content — and `rich_text.html` is a required field. A paragraph
   holding only an `<img>`, `<hr>` or `<table>` has no text and is still kept.
 

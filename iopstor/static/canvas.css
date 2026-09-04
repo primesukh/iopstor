@@ -20,6 +20,13 @@
 .iop-bar .iop-del:hover{background:#b91c1c}
 .iop-bar .iop-name{color:#cbd5e1;font-size:.72rem;padding:.32rem .45rem;white-space:nowrap;letter-spacing:.02em}
 
+/* a block inside a column: quieter hover ring and a smaller bar, so the Columns block's own toolbar
+   (which shows at the same time, because hovering a child hovers the parent) stays readable */
+.column{min-height:4.5rem}
+.column [data-b]:hover{outline-color:#e0f2fe}
+/* left, not right: the Columns block's own bar is top-right and shows at the same time */
+.column [data-b]>.iop-bar{top:.15rem;right:auto;left:.15rem;transform:scale(.85);transform-origin:top left}
+
 /* --- editable fields ------------------------------------------------------ */
 [data-f]{cursor:text}
 [data-f]:focus{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}

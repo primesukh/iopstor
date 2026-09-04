@@ -14,7 +14,7 @@ from werkzeug.exceptions import HTTPException
 from . import db, seo
 from .admin_api import apply_post
 from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login
-from .blocks import BLOCKS, EDITOR, LAYOUTS, render_blocks
+from .blocks import BLOCKS, EDITOR, LAYOUTS, at_path, render_blocks
 from .storage import delete_media, save_upload
 
 ui = Blueprint("admin_ui", __name__, url_prefix="/admin", template_folder="templates")
@@ -241,16 +241,19 @@ def delete_post(pk):
 def canvas():
     """The visual editor's iframe. Renders the blocks the browser currently holds — unsaved ones
     included — through the same render_blocks() the public site uses, with edit markers on.
-    With ?i=N it returns just that one block, so an edit swaps one <section> instead of reloading."""
+    With ?p=PATH it returns just that one block, so an edit swaps one <section> instead of reloading.
+    PATH is a data-b path ("3", or "3.1.0" for a block inside a column), and the fragment comes back
+    already carrying it, so the browser does not have to renumber what it just dropped in."""
     try:
         blocks = json.loads(request.form.get("blocks") or "[]")
     except ValueError:
         blocks = []
     if not isinstance(blocks, list):
         blocks = []
-    i = request.form.get("i", type=int)
-    if i is not None:
-        return render_blocks(blocks[i:i + 1], edit=True) if 0 <= i < len(blocks) else ""
+    path = request.form.get("p")
+    if path is not None:
+        one = at_path(blocks, path)
+        return render_blocks([one], edit=True, path=path) if one else ""
     return render_template("admin/canvas.html", body=render_blocks(blocks, edit=True),
                            title=request.form.get("title", ""), excerpt=request.form.get("excerpt", ""),
                            has_hero=bool(blocks) and isinstance(blocks[0], dict) and blocks[0].get("type") == "hero")

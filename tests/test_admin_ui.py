@@ -107,8 +107,16 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
     page = client.post("/admin/canvas", data={"csrf": csrf, "blocks": blocks, "title": "zz-test"})
     assert page.status_code == 200 and b'data-b="0"' in page.data and b'data-b="1"' in page.data
     assert b'data-f="heading"' in page.data and b"canvas.css" in page.data
-    one = client.post("/admin/canvas", data={"csrf": csrf, "blocks": blocks, "i": "1"})
-    assert one.status_code == 200 and b"<html" not in one.data and b'data-b="0"' in one.data  # bare fragment
+    one = client.post("/admin/canvas", data={"csrf": csrf, "blocks": blocks, "p": "1"})
+    assert one.status_code == 200 and b"<html" not in one.data and b'data-b="1"' in one.data  # bare fragment, own path
+    # a block inside a column comes back at its full path, so the browser never has to renumber it
+    nested = ('[{"type":"columns","data":{"cols":[[{"type":"rich_text","data":{"html":"<p>zz left</p>"}}],'
+              '[{"type":"cta","data":{"heading":"h","button_label":"b","button_url":"/x"}}]]}}]')
+    grid = client.post("/admin/canvas", data={"csrf": csrf, "blocks": nested, "title": "zz-test"})
+    assert b'data-col="1"' in grid.data and b'data-b="0.1.0"' in grid.data
+    cell = client.post("/admin/canvas", data={"csrf": csrf, "blocks": nested, "p": "0.1.0"})
+    assert b"<html" not in cell.data and b'data-b="0.1.0"' in cell.data
+    assert client.post("/admin/canvas", data={"csrf": csrf, "blocks": nested, "p": "0.9.0"}).data == b""
     assert client.post("/admin/canvas", data={"csrf": csrf, "blocks": "not json"}).status_code == 200  # never 500s
     assert client.post("/admin/canvas", data={"blocks": "[]"}).status_code == 400  # CSRF still enforced
 
