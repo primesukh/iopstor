@@ -38,6 +38,11 @@
 .admin .slug-field input[readonly]{background:#f8fafc;color:var(--muted)}
 .slug-taken{color:#b91c1c}
 .admin button.tiny{padding:.25rem .55rem;font-size:.8rem;font-weight:600;line-height:1.2}
+.term-pick{position:relative}   /* anchors the .iop-slash suggestion list under the search box */
+.term-pick .chips{display:flex;flex-wrap:wrap;gap:.35rem;margin:.2rem 0}
+.term-pick .chip{display:inline-flex;align-items:center;gap:.35rem;padding-right:.2rem}
+.term-pick .pill.new{background:#fef3c7;color:#92400e}
+.admin .term-pick .chip button.tiny{background:transparent;border:0;color:inherit;padding:0 .25rem;font-size:.95rem}
 .media-field{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .media-field select{flex:1;min-width:12rem}
 .media-thumb img{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block}

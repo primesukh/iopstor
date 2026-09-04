@@ -88,10 +88,24 @@ The sections available:
 | **Web address** | Made from the title automatically. If another page of the same kind already uses that address, three random letters are added so yours still works — `testing-shc` — and the note under the box tells you so. **Edit** if you really need to change it; it asks first, because changing it breaks existing links. |
 | **Summary** | A sentence or two. Shown in lists, and under the page in Google results. |
 | **Featured image** | The picture used in lists and when the page is shared. **Choose file** uploads on the spot. |
-| **Organise** | The parent page (for services) and any categories or tags. It only appears for types that have one or the other. Nothing here asks you to number your pages — lists show the newest first on their own. |
+| **Organise** | The parent page (for services) and any categories or tags — see below. It only appears for types that have one or the other. Nothing here asks you to number your pages — lists show the newest first on their own. |
 | **Details** | The extra boxes some kinds of content have — a case study's client, an event's dates, a datasheet's PDF. |
 | **Search engine overrides**, **Advanced** | Closed by default. Leave them closed unless you know why you are opening them. |
 | **Delete** | At the very bottom, for administrators. It asks first. |
+
+### Categories and tags
+
+Under **Organise** there is a search box for each one — *Category*, *Tags*, whatever the kind of content
+uses. Start typing and the ones that already exist drop down; click one and it becomes a small chip
+above the box. Add as many as you like, and click the **×** on a chip to take it off again.
+
+If nothing matches what you typed, the last line of the list offers **Create “…”**. Pick it and the chip
+appears in a different colour — that is the one that does not exist yet. It is created when you press
+**Save**, and from then on it is an ordinary category or tag that everybody can pick for other posts.
+Nothing is created if you walk away without saving.
+
+You do not need to worry about making the same tag twice. Typing *All-Flash* when *all flash* already
+exists offers you the one that is there rather than a second copy of it, whatever the spacing or capitals.
 
 ### Writing
 

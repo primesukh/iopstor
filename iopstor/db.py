@@ -174,6 +174,18 @@ def unique_slug(post_type_id, base, exclude_id=None):
     return slug
 
 
+def ensure_term(tax_slug, name):
+    """Id of the term called `name` in this taxonomy, creating the row the first time. Matched on the
+    slug, like every other name here, so "All-Flash" and "all flash" are the same term rather than
+    two. None if the taxonomy does not exist."""
+    tax = one(table("taxonomies").select("id").eq("slug", tax_slug))
+    if tax is None:
+        return None
+    slug = slugify(name)
+    row = one(table("terms").select("id").eq("taxonomy_id", tax["id"]).eq("slug", slug))
+    return (row or insert("terms", {"taxonomy_id": tax["id"], "slug": slug, "name": name[:200]}))["id"]
+
+
 def set_post_terms(post_id, term_ids):
     table("post_terms").delete().eq("post_id", post_id).execute()
     if term_ids:
