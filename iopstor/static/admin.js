@@ -823,10 +823,14 @@
      block, or the editing host) with an offset, not the node you are standing in. Walking up from
      that misses everything below it: quote-off goes undetectable, alignment reads off the wrong
      element, an inline size is invisible. Resolve through startOffset before walking anywhere. */
+  // ponytail: a mixed selection reports the size at its start; showing "several" would need the end
+  // walked too, for a case an editor hits rarely.
   function caretNode() {
-    var n = savedRange.startContainer;
-    if (n.nodeType === 1 && n.childNodes.length) {
-      n = n.childNodes[Math.min(savedRange.startOffset, n.childNodes.length - 1)];
+    var n = savedRange.startContainer, off = savedRange.startOffset, atEnd;
+    while (n.nodeType === 1 && n.childNodes.length) {   // all the way down, not one level: a
+      atEnd = off >= n.childNodes.length;               // selection CONTAINING a span resolves to
+      n = atEnd ? n.lastChild : n.childNodes[off];      // the block, and the span's size is below it
+      off = atEnd && n.childNodes ? n.childNodes.length : 0;
     }
     return n.nodeType === 1 ? n : n.parentNode;
   }

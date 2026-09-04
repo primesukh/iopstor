@@ -390,10 +390,17 @@ happens, which reads as another dead control.
 its level, and offering both there invites an H2 that looks like an H4 — the outline Google reads and
 the one a reader sees disagreeing.
 
-`caretNode()` is shared by `caretBlock()` and `caretSize()`. At a block boundary Gecko names the
-range's container as the *parent* with an offset, not the node you are standing in; walking up from
-that misses everything below it, which is how the inline size became invisible to `syncBar` and the
-control appeared to snap back to *Normal* after every pick.
+`caretNode()` is shared by `caretBlock()` and `caretSize()`, and it descends **all the way** to the
+node at the range's start rather than one level. Two different bugs came out of getting this wrong.
+At a block boundary Gecko names the range's container as the *parent* with an offset, not the node
+you are standing in — walking up from that misses everything below it, so `syncBar` never saw the
+inline size and the control snapped back to *Normal* after every pick. And a **selection** that
+*contains* a sized span (drag-select a line, or Ctrl-A) resolves to the block, with the span a level
+further down — one level of descent still landed above it. Climbing back up to the block afterwards
+is unaffected, so `caretBlock()` gets the deeper start for free.
+
+A mixed selection reports the size at its start; saying "several" would mean walking the end too,
+for a case an editor hits rarely (`ponytail:` in the source).
 
 `HEAD_LEVELS` (one table, shared by the `<option>` list and `syncBar`'s recognised set) is the only
 place a level is declared. Adding or renaming one is that array.
