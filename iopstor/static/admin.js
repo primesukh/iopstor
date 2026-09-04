@@ -23,9 +23,10 @@
      drafted there. Keep the structure, drop the vendor noise: an allowlist of tags, and only
      href/src/alt survive. This is a quality filter, not a security boundary — block HTML is
      still trusted-staff-only on the server (blocks.py). */
-  var PASTE_OK = { P: 1, BR: 1, H2: 1, H3: 1, H4: 1, UL: 1, OL: 1, LI: 1, STRONG: 1, EM: 1, U: 1, A: 1,
+  var PASTE_OK = { P: 1, BR: 1, H2: 1, H3: 1, H4: 1, UL: 1, OL: 1, LI: 1, STRONG: 1, EM: 1, U: 1, A: 1, S: 1,
                    BLOCKQUOTE: 1, TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TH: 1, TD: 1, IMG: 1, HR: 1, CODE: 1, PRE: 1 };
-  var PASTE_AS = { B: "STRONG", I: "EM", DIV: "P", H1: "H2", H5: "H4", H6: "H4" };  // h1 is the page title's alone
+  var PASTE_AS = { B: "STRONG", I: "EM", DIV: "P", H1: "H2", H5: "H4", H6: "H4",  // h1 is the page title's alone
+                   STRIKE: "S", DEL: "S" };
   var PASTE_DROP = { SCRIPT: 1, STYLE: 1, HEAD: 1, META: 1, LINK: 1, TITLE: 1, OBJECT: 1, IFRAME: 1, NOSCRIPT: 1, SVG: 1 };
   var PASTE_ATTR = { href: 1, src: 1, alt: 1 };
 
@@ -717,6 +718,9 @@
     syncBar();
   }
 
+  // ponytail: a re-render (canvasBlock/canvasFull) throws the remembered node away and every command
+  // then no-ops until the editor clicks back into the canvas. Re-derive the field from the block
+  // index if that silence starts costing more than a stray click.
   function restoreSelection() {
     var d = cdoc();
     if (!d || !savedRange || !savedField || !savedField.isConnected) return false;
@@ -727,10 +731,32 @@
     return true;
   }
 
+  // The block element the caret sits in, bounded by the field. sel="…" asks for the nearest
+  // matching ancestor instead. Returns the field itself when the text has no wrapper of its own.
+  function caretBlock(sel) {
+    if (!savedRange || !savedField || !savedField.isConnected) return null;
+    var n = savedRange.startContainer;
+    n = n.nodeType === 1 ? n : n.parentNode;
+    if (!n || !savedField.contains(n)) return null;
+    if (sel) { var hit = n.closest(sel); return hit && savedField.contains(hit) ? hit : null; }
+    while (n !== savedField && n.parentNode !== savedField) n = n.parentNode;
+    return n;
+  }
+
+  var BLOCK_CMD = /^(justify|formatBlock|outdent|indent)/;
+
   function exec(cmd, val) {
     var d = cdoc();
     if (!d || !restoreSelection()) return;
-    d.execCommand("styleWithCSS", false, cmd === "foreColor" || cmd === "hiliteColor");
+    // Bare text straight in the field leaves the browser styling the contenteditable host, whose
+    // attributes the innerHTML write-back drops on the floor. Give a block command a block first.
+    if (BLOCK_CMD.test(cmd) && caretBlock() === savedField) {
+      d.execCommand("formatBlock", false, "<p>");
+      rememberSelection();
+    }
+    // Justify has to win against site.css: styleWithCSS off emits a presentational align="" that
+    // ranks below author styles, so a centred section simply ignores it.
+    d.execCommand("styleWithCSS", false, /^(foreColor|hiliteColor|justify)/.test(cmd));
     d.execCommand(cmd, false, val == null ? null : val);
     if (savedField) fire(savedField);
     rememberSelection();
@@ -783,12 +809,17 @@
     // No Heading 1: post.html already emits the page title as the page's only <h1>.
     [["p", "Normal text"], ["h2", "Heading"], ["h3", "Sub-heading"], ["h4", "Small heading"]]
       .forEach(function (o) { style.appendChild(el("option", { value: o[0], text: o[1] })); });
-    hold(style);
+    // No hold() here: cancelling mousedown on a <select> suppresses the native popup. The caret is
+    // replayed from savedRange anyway. Blanking it on the way in makes picking the shown style —
+    // "Normal text" while the caret is in a blockquote — still raise a change event.
+    style.addEventListener("mousedown", function () { style.selectedIndex = -1; });
+    style.addEventListener("blur", function () { syncBar(); });   // dismissed without picking: show the caret's style again
     style.addEventListener("change", function () { exec("formatBlock", "<" + style.value + ">"); });
 
     var bold = b("B", "Bold", function () { exec("bold"); }, "tb-b"),
         ital = b("I", "Italic", function () { exec("italic"); }, "tb-i"),
-        und = b("U", "Underline", function () { exec("underline"); }, "tb-u");
+        und = b("U", "Underline", function () { exec("underline"); }, "tb-u"),
+        strike = b("S", "Strikethrough", function () { exec("strikeThrough"); }, "tb-s");
 
     var file = el("input", { type: "file", accept: "image/*", style: "display:none" });
     var note = el("small", { "class": "tb-note" });
@@ -818,8 +849,7 @@
 
     function colour(cmd, title, initial) {
       var i = el("input", { type: "color", "class": "tb-colour", title: title, value: initial });
-      hold(i);
-      i.addEventListener("input", function () { exec(cmd, i.value); });
+      i.addEventListener("input", function () { exec(cmd, i.value); });   // no hold(): it would block the picker
       return i;
     }
 
@@ -837,10 +867,15 @@
 
     bar.appendChild(group([b("↶", "Undo", function () { exec("undo"); }), b("↷", "Redo", function () { exec("redo"); })]));
     bar.appendChild(group([style]));
-    bar.appendChild(group([bold, ital, und, b("T̶", "Remove formatting", function () { exec("removeFormat"); })]));
+    bar.appendChild(group([bold, ital, und, strike, b("Tx", "Remove formatting", function () { exec("removeFormat"); })]));
+    // formatBlock only ever wraps, so quote needs its own way back out: outdent is what unwraps a
+    // blockquote in both engines.
+    var quote = b("❝", "Quote", function () {
+      if (caretBlock("blockquote")) exec("outdent"); else exec("formatBlock", "<blockquote>");
+    });
     bar.appendChild(group([b("•", "Bulleted list", function () { exec("insertUnorderedList"); }),
                            b("1.", "Numbered list", function () { exec("insertOrderedList"); }),
-                           b("❝", "Quote", function () { exec("formatBlock", "<blockquote>"); }),
+                           quote,
                            b("—", "Divider", function () { exec("insertHTML", "<hr><p><br></p>"); })]));
     bar.appendChild(group([b("🔗", "Add a link", function () { var u = prompt("Link address", "https://"); if (u) exec("createLink", u); }),
                            b("🖼", "Insert a picture", function () { file.click(); }),
@@ -849,9 +884,10 @@
                              var h = prompt("Paste the embed code (YouTube, Google Maps, …)");
                              if (h) exec("insertHTML", h);
                            })]));
-    bar.appendChild(group([b("⇤", "Align left", function () { exec("justifyLeft"); }),
-                           b("↔", "Centre", function () { exec("justifyCenter"); }),
-                           b("⇥", "Align right", function () { exec("justifyRight"); }),
+    var align = { left: b("⇤", "Align left", function () { exec("justifyLeft"); }),
+                  center: b("↔", "Centre", function () { exec("justifyCenter"); }),
+                  right: b("⇥", "Align right", function () { exec("justifyRight"); }) };
+    bar.appendChild(group([align.left, align.center, align.right,
                            colour("foreColor", "Text colour", "#1f2937"),
                            colour("hiliteColor", "Highlight", "#fef08a")]));
     bar.appendChild(group([b("+ Section", "Insert a designed section", insertSection, "tb-wide")]));
@@ -865,6 +901,12 @@
         bold.classList.toggle("on", d.queryCommandState("bold"));
         ital.classList.toggle("on", d.queryCommandState("italic"));
         und.classList.toggle("on", d.queryCommandState("underline"));
+        strike.classList.toggle("on", d.queryCommandState("strikeThrough"));
+        quote.classList.toggle("on", !!caretBlock("blockquote"));
+        // a lit button is what tells the editor a second click switches it back off
+        var line = caretBlock(), at = line ? d.defaultView.getComputedStyle(line).textAlign : "";
+        if (at === "start" || at === "justify") at = "left";
+        Object.keys(align).forEach(function (k) { align[k].classList.toggle("on", k === at); });
         var blk = (d.queryCommandValue("formatBlock") || "p").toLowerCase();
         style.value = ["p", "h2", "h3", "h4"].indexOf(blk) > -1 ? blk : "p";
       } catch (e) { /* no selection in the canvas yet */ }

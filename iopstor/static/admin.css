@@ -95,7 +95,7 @@
 .admin .doc-toolbar button.tb-wide:hover{background:var(--accent-2)}
 .admin .doc-toolbar select.tb-style{width:auto;min-width:9.5rem;padding:.3rem .5rem;font-size:.9rem}
 .admin .doc-toolbar input.tb-colour{width:1.9rem;height:1.9rem;padding:0;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer}
-.tb-b{font-weight:800}.tb-i{font-style:italic}.tb-u{text-decoration:underline}
+.tb-b{font-weight:800}.tb-i{font-style:italic}.tb-u{text-decoration:underline}.tb-s{text-decoration:line-through}
 .tb-note{flex-basis:100%}
 .tb-alt{flex-basis:100%;display:flex;gap:.4rem;align-items:center;margin-top:.4rem;padding-top:.4rem;border-top:1px solid var(--line)}
 .admin .tb-alt input{flex:1}
