@@ -238,8 +238,9 @@ def apply_post(existing, b):
     exclude = existing["id"] if existing else None
     if b.get("slug"):
         wanted = db.slugify(b["slug"])
-        if db.unique_slug(type_id, wanted, exclude) != wanted:
-            fail("slug already in use", 409, slug=wanted)
+        free = db.unique_slug(type_id, wanted, exclude)
+        if free != wanted:   # a message, like every other field: the form prints fields[k] straight out
+            fail("slug already in use", 409, slug=f"\u201c{wanted}\u201d is already in use \u2014 try \u201c{free}\u201d")
         changes["slug"] = wanted
     elif create:
         changes["slug"] = db.unique_slug(type_id, db.slugify(changes["title"]))

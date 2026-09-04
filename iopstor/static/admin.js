@@ -82,19 +82,46 @@
                .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   }
 
+  // mirrors iopstor/db.py unique_slug(): base, base-2, base-3, ... first one nobody holds
+  function freeSlug(base, taken) {
+    var s = base, n = 1;
+    while (taken.indexOf(s) > -1) { n++; s = base + "-" + n; }
+    return s;
+  }
+
   function initSlug() {
     var title = document.getElementById("post-title"), slug = document.getElementById("post-slug");
     if (!title || !slug) return;
-    var saved = slug.value, unlocked = false;
+    var saved = slug.value, unlocked = false,
+        hint = document.getElementById("slug-hint"),
+        madeFrom = hint ? hint.textContent : "",
+        // ponytail: a page-load snapshot of this type's slugs. A post created in another tab meanwhile
+        // still lands on apply_post()'s 409, which stays the authority.
+        taken = (slug.getAttribute("data-taken") || "").split(" ").filter(Boolean);
+
+    function check() {
+      var v = slugify(slug.value), clash = !!v && taken.indexOf(v) > -1;
+      if (hint) {
+        hint.textContent = clash ? "That address is already used \u2014 try \u201c" + freeSlug(v, taken) + "\u201d." : madeFrom;
+        hint.className = clash ? "slug-taken" : "";
+      }
+      // ponytail: a readonly input is barred from constraint validation, so this only blocks Save once
+      // Edit has unlocked the field. The message above shows either way.
+      slug.setCustomValidity(clash ? "This web address is already used. Pick another one." : "");
+    }
+
     title.addEventListener("input", function () {
       if (!saved && !unlocked) slug.value = slugify(title.value);
+      check();
     });
+    slug.addEventListener("input", check);
     slug.parentNode.appendChild(btn("Edit", "Change the web address", function () {
       if (saved && !confirm("Changing the web address breaks any existing link to this page. Continue?")) return;
       unlocked = true;
       slug.readOnly = false;
       slug.focus();
     }));
+    check();   // a rejected save comes back with the clashing slug already in the field
   }
 
   // ---- media ----------------------------------------------------------------

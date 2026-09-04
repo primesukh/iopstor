@@ -39,8 +39,9 @@
     <label>Publish date <small>(empty = now; a future date schedules it)</small> <input type="datetime-local" name="published_at" value="{{ (p.published_at or '')[:16] }}"></label>
 
     <h3>Web address</h3>
-    <div class="slug-field"><span class="slug-prefix">/{{ (pt.url_prefix ~ '/') if pt.url_prefix else '' }}</span><input type="text" name="slug" id="post-slug" value="{{ p.slug or '' }}" aria-label="Web address" readonly></div>
-    <small>Made from the title.</small>
+    <div class="slug-field"><span class="slug-prefix">/{{ (pt.url_prefix ~ '/') if pt.url_prefix else '' }}</span><input type="text" name="slug" id="post-slug" value="{{ p.slug or '' }}" data-taken="{{ taken_slugs|join(' ') }}" aria-label="Web address" readonly></div>
+    {# data-taken, not #editor-data: initSlug() runs before initBlocks() parses that blob, and slugs are [a-z0-9-] so spaces separate them safely. #}
+    <small id="slug-hint">Made from the title.</small>
 
     <h3>Summary</h3>
     <textarea name="excerpt" aria-label="Summary" placeholder="One or two sentences. Shown in lists, and as the description under the page in search results.">{{ p.excerpt or '' }}</textarea>

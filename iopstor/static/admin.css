@@ -36,6 +36,7 @@
 .slug-field{display:flex;align-items:center;gap:.4rem}
 .slug-field .slug-prefix{color:var(--muted);font-weight:400;white-space:nowrap}
 .admin .slug-field input[readonly]{background:#f8fafc;color:var(--muted)}
+.slug-taken{color:#b91c1c}
 .admin button.tiny{padding:.25rem .55rem;font-size:.8rem;font-weight:600;line-height:1.2}
 .media-field{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .media-field select{flex:1;min-width:12rem}

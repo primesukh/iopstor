@@ -23,6 +23,16 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
     for hook in (b'id="canvas"', b'id="doc-toolbar"', b'id="advanced"', b'name="blocks"', b'"layouts"', b'"seed"', b'"names"'):
         assert hook in form.data, hook
     csrf = re.search(r'name="csrf" value="([^"]+)"', form.text).group(1)
+    assert b'id="slug-hint"' in form.data          # where admin.js says an address is taken
+    assert b'data-taken=""' in form.data            # nothing seeded under Blog, so nothing to clash with
+
+    # Services are seeded and hierarchical: the field carries their slugs for admin.js to check against,
+    # and posting one back is refused. That rejection used to be a 500 — _form_context() filtered the
+    # parent dropdown on post["id"], and the draft rebuilt for a *new* post has no id.
+    svc = client.get("/admin/posts/new?type=service")
+    taken = re.search(r'data-taken="([a-z0-9-]+)', svc.text).group(1)
+    dup = client.post("/admin/posts/new?type=service", data={"csrf": csrf, "title": "zz-test dup", "slug": taken, "blocks": "[]"})
+    assert dup.status_code == 400 and b"already in use" in dup.data
     r = client.post("/admin/posts/new?type=post", data={"csrf": csrf, "title": "zz-test UI Post", "status": "published", "excerpt": "From the browser",
                                                         "blocks": '[{"type":"hero","data":{"heading":"Hi from the form"}}]'})
     assert r.status_code == 302 and "/admin/posts/" in r.headers["Location"]
