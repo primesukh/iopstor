@@ -41,7 +41,7 @@ def test_editor_metadata_covers_every_block():
     for name, (required, optional) in BLOCKS.items():
         for field in required + optional:
             widget = EDITOR["widgets"].get(f"{name}.{field}") or EDITOR["widgets"].get(field) or "text"
-            assert widget in ("text", "textarea", "code", "richtext", "media", "url", "number", "checkbox", "post_type", "kind"), (name, field)
+            assert widget in ("text", "textarea", "code", "richtext", "media", "pdf", "url", "number", "checkbox", "post_type", "kind"), (name, field)
             if field in REPEATERS:
                 assert EDITOR["items"].get(name), f"{name}.{field} is a repeater with no EDITOR['items'] entry"
     assert set(EDITOR["items"]) <= set(BLOCKS)
@@ -56,10 +56,10 @@ def test_inserter_metadata_and_seeds():
         assert icon and label and description.endswith("."), name
         seed = EDITOR["seed"][name]
         assert set(seed) <= set(required + optional), (name, set(seed) - set(required + optional))
-    # a seeded block the editor drops in should save as-is; picture blocks are the honest exception
+    # a seeded block the editor drops in should save as-is; the file blocks are the honest exception
     for name in BLOCKS:
-        if name in ("image", "gallery"):
-            continue  # no placeholder can stand in for a picture: the editor has to choose one
+        if name in ("image", "gallery", "pdf"):
+            continue  # no placeholder can stand in for a picture or a PDF: the editor has to choose one
         assert validate_blocks([{"type": name, "data": EDITOR["seed"][name]}]) == [], name
 
 
@@ -74,6 +74,21 @@ def test_layouts_expand_and_validate():
     a, b = layout("Product page"), layout("Product page")
     a[0]["data"]["heading"] = "changed"
     assert b[0]["data"]["heading"] != "changed"  # seeds must be copied, not shared
+
+
+def test_pdf_block_renders_the_browser_viewer(app, monkeypatch):
+    """The PDF section is an iframe at the file plus a link out — no viewer library, and a way in
+    for the mobile browsers that will not render a framed PDF."""
+    from iopstor import db
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    monkeypatch.setattr(db, "get_media", lambda pk: {"url": "https://x/media/a.pdf"})
+
+    html = render_blocks([{"type": "pdf", "data": {"file_media_id": 7, "heading": "Datasheet"}}])
+    assert '<iframe src="https://x/media/a.pdf#view=FitH"' in html
+    assert 'href="https://x/media/a.pdf"' in html and ">Open the PDF</a>" in html
+    assert validate_blocks([{"type": "pdf", "data": {"heading": "no file"}}]) == ["blocks[0].file_media_id required"]
 
 
 def test_edit_markers_only_in_edit_mode(app, monkeypatch):

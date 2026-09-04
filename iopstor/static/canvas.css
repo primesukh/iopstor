@@ -30,6 +30,10 @@
 .iop-ph{border:2px dashed var(--line);border-radius:var(--radius);padding:1.6rem;text-align:center;color:var(--muted);background:#f8fafc}
 .iop-err{border:2px dashed #fecaca;border-radius:var(--radius);padding:1.2rem;text-align:center;color:#b91c1c;background:#fef2f2}
 
+/* A live PDF viewer would swallow every click: show it, but let the click reach the section.
+   Safe to render for real (unlike embed_html) because it is the public Storage bucket, cross-origin. */
+[data-b] .pdf iframe{pointer-events:none}
+
 /* --- dragging ------------------------------------------------------------- */
 .iop-ghost{opacity:.35}
 .iop-drag{outline:2px solid var(--accent)!important}
