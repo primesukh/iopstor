@@ -55,7 +55,7 @@ Dependency direction: `public.py` and `admin_ui.py` both import from `admin_api.
 
 ## 3. Data model
 
-Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_warranty.sql`.
+Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_warranty.sql` and `0004_warranty_date_check.sql`.
 
 | Table | Purpose | Notable columns |
 |---|---|---|
@@ -72,7 +72,7 @@ Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_w
 | `redirects` | Legacy URL mapping | `from_path` (unique), `to_url`, `code`, `hits` |
 | `schema_migrations` | Applied migration names | created by `0000_bootstrap.sql` |
 
-Indexes: `posts (post_type_id, status, published_at)`, `leads (status, created_at)`, `payments (provider, provider_ref)`, `warranties (expiry_date)`. `posts` is unique on `(post_type_id, slug)` — slugs are unique *per type*, not globally. `warranties` is unique on `serial_key`, a `GENERATED ALWAYS AS (upper(btrim(serial))) STORED` column: it makes the public lookup case- and whitespace-insensitive, stops two records claiming the same serial in different cases, and lets the lookup be an exact `.eq()` — a serial may legitimately contain `%` or `_`, which PostgREST's `ilike` would read as wildcards. Warranty status is **not** stored: "in warranty" is `expiry_date` vs today, worked out at render time by `blocks.warranty_active()` so it can never go stale.
+Indexes: `posts (post_type_id, status, published_at)`, `leads (status, created_at)`, `payments (provider, provider_ref)`, `warranties (expiry_date)`. `posts` is unique on `(post_type_id, slug)` — slugs are unique *per type*, not globally. `warranties` is unique on `serial_key`, a `GENERATED ALWAYS AS (upper(btrim(serial))) STORED` column: it makes the public lookup case- and whitespace-insensitive, stops two records claiming the same serial in different cases, and lets the lookup be an exact `.eq()` — a serial may legitimately contain `%` or `_`, which PostgREST's `ilike` would read as wildcards. A `CHECK` constraint, `warranties_expiry_after_purchase` (`0004`), refuses a record whose `expiry_date` is before its `purchase_date`; `/admin/warranty` pre-checks the same thing so an editor gets a sentence rather than a 502, exactly as it pre-checks the duplicate serial. It was added `NOT VALID` — enforced on every write, existing rows unscanned — because the table already held a record with the dates reversed; `ALTER TABLE warranties VALIDATE CONSTRAINT warranties_expiry_after_purchase;` promotes it once those are fixed. Warranty status is **not** stored: "in warranty" is `expiry_date` vs today, worked out at render time by `blocks.warranty_active()` so it can never go stale.
 
 **Where per-type data lives.** `posts.meta` is a JSON bag described by `post_types.field_schema` — a list of `{key, label, type, required}` descriptors that the admin form renders and the detail template reads back. `posts.blocks` is the ordered page content, `[{type, data}, ...]` — flat, except a `columns` block, whose `data.cols` holds one such list per column (one level deep, see §6).
 

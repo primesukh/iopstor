@@ -300,7 +300,7 @@ Each enquiry can be marked **New**, **In progress** or **Done**, so sales can wo
 | Customer name | The company or person who bought it. |
 | Registered email | Whoever should be contacted about it. Optional. |
 | Purchase date | When they bought it. Optional. |
-| Warranty expiry | The date cover runs out. **Required** — this is what decides "in warranty" or "expired". |
+| Warranty expiry | The date cover runs out. **Required** — this is what decides "in warranty" or "expired". It cannot be earlier than the purchase date; if it is, the record is not saved and you are told which two dates disagree. |
 | AMC status | Yes or No, for an annual maintenance contract. |
 | Remarks | A note to yourself. See below. |
 

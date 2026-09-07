@@ -399,6 +399,9 @@ def warranty():
             flash("Serial number, customer name and warranty expiry are required.")
         elif dupe and str(dupe["id"]) != pk:
             flash(f"Serial number {row['serial']} already has a record.")
+        elif row["purchase_date"] and row["expiry_date"] < row["purchase_date"]:
+            # the friendly half of warranties_expiry_after_purchase (0004); ISO dates compare as dates
+            flash(f"Warranty expiry ({row['expiry_date']}) cannot be before the purchase date ({row['purchase_date']}).")
         elif pk.isdigit():
             db.update("warranties", int(pk), row)
             flash(f"Saved {row['serial']}.")
