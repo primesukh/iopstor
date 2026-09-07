@@ -1,0 +1,24 @@
+{# The serial-number box. `found` comes from render_blocks(): None = nothing asked yet, {} = no such
+   serial, otherwise the warranty row with .active worked out. A GET form posting back to the page
+   itself, so there is no endpoint, no CSRF and the result can be bookmarked or sent to support. #}
+<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
+  {% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}
+  <form class="lead-form warranty-check" method="get" action="{{ request.path }}">
+    <label>Serial number <input name="sn" value="{{ request.args.get('sn', '') }}" required autocomplete="off" spellcheck="false" maxlength="100"></label>
+    <button type="submit" class="btn">Check warranty</button>
+  </form>
+  {% if found is not none %}{% if found %}
+  <div class="warranty-result {{ 'in' if found.active else 'out' }}">
+    <p class="warranty-state">{{ 'In warranty' if found.active else 'Warranty expired' }}</p>
+    <dl>
+      <dt>Serial number</dt><dd>{{ found.serial }}</dd>
+      <dt>Customer</dt><dd>{{ found.customer_name }}</dd>
+      {% if found.email %}<dt>Registered email</dt><dd>{{ found.email }}</dd>{% endif %}
+      {% if found.purchase_date %}<dt>Purchase date</dt><dd>{{ found.purchase_date }}</dd>{% endif %}
+      <dt>Warranty expiry</dt><dd>{{ found.expiry_date }}</dd>
+      <dt>AMC</dt><dd>{{ 'Yes' if found.amc else 'No' }}</dd>
+      {% if found.remarks_public and found.remarks %}<dt>Remarks</dt><dd>{{ found.remarks }}</dd>{% endif %}
+    </dl>
+  </div>
+  {% else %}<p class="notice warranty-none">We have no record of that serial number. Check it and try again, or get in touch and we will look it up for you.</p>{% endif %}{% endif %}
+</div></section>

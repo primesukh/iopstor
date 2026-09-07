@@ -21,6 +21,7 @@
         <li><a href="{{ url_for('admin_ui.posts') }}">Content</a><ul>{% for t in post_types %}<li><a href="{{ url_for('admin_ui.posts', type=t.slug) }}">{{ t.name }}</a></li>{% endfor %}</ul></li>
         <li><a href="{{ url_for('admin_ui.media') }}">Media</a></li>
         <li><a href="{{ url_for('admin_ui.leads') }}">Leads</a></li>
+        <li><a href="{{ url_for('admin_ui.warranty') }}">Warranty</a></li>
         {% if admin_user.role == 'admin' %}<li><a href="{{ url_for('admin_ui.settings') }}">Settings</a></li><li><a href="{{ url_for('admin_ui.users') }}">Users</a></li>{% endif %}
         <li><a href="/" target="_blank" rel="noopener">View site &#8599;</a></li>
         <li class="nav-user"><a href="{{ url_for('admin_ui.logout') }}">Log out <small>{{ admin_user.email }}</small></a></li>

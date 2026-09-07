@@ -1,0 +1,39 @@
+{% extends "admin/base.html" %}{% block title %}Warranty{% endblock %}
+{% block content %}
+{% set e = editing or {} %}
+<h1>Warranty <small>{{ result.total }}</small></h1>
+<form method="get" class="toolbar"><input type="search" name="q" value="{{ request.args.get('q','') }}" placeholder="Serial number, customer or email" aria-label="Search warranty records"><button type="submit" class="secondary">Search</button>{% if request.args.get('q') %}<a class="btn secondary" href="{{ url_for('admin_ui.warranty') }}">Clear</a>{% endif %}</form>
+<table>
+  <tr><th>Serial number</th><th>Customer</th><th>Purchased</th><th>Expires</th><th>AMC</th><th>Status</th><th></th></tr>
+  {% for w in result['items'] %}
+  <tr><td><code>{{ w.serial }}</code></td>
+      <td>{{ w.customer_name }}{% if w.email %}<br><a href="mailto:{{ w.email }}">{{ w.email }}</a>{% endif %}{% if w.remarks %}<br><small>{{ w.remarks }}{% if w.remarks_public %} <em>(shown to the customer)</em>{% endif %}</small>{% endif %}</td>
+      <td>{{ w.purchase_date or '—' }}</td><td>{{ w.expiry_date }}</td><td>{{ 'Yes' if w.amc else 'No' }}</td>
+      <td><span class="pill {{ 'published' if active(w, today) else 'expired' }}">{{ 'in warranty' if active(w, today) else 'expired' }}</span></td>
+      <td><a class="btn secondary" href="{{ url_for('admin_ui.warranty', edit=w.id, q=request.args.get('q'), page=page) }}">Edit</a>
+        {% if admin_user.role == 'admin' %}<form method="post" action="{{ url_for('admin_ui.warranty_delete', pk=w.id, q=request.args.get('q'), page=page) }}" onsubmit="return confirm('Delete this warranty record?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="secondary">Delete</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="7" class="muted">No warranty records yet.</td></tr>{% endfor %}
+</table>
+<p>{% if page > 1 %}<a class="btn secondary" href="?page={{ page-1 }}&q={{ request.args.get('q','') }}">Previous</a>{% endif %} {% if has_next %}<a class="btn secondary" href="?page={{ page+1 }}&q={{ request.args.get('q','') }}">Next</a>{% endif %}</p>
+
+<h2 id="form">{{ 'Edit ' ~ e.serial if e.id else 'Add a warranty record' }}</h2>
+{# data-refused is (field, message) from the server: admin.js puts it on that field as the browser's own
+   validation bubble, so the message lands where the mistake is instead of at the top of the page.
+   The <noscript> copy is the same sentence for a browser that will not run it. #}
+<form id="warranty-form" method="post" class="card" style="max-width:640px"
+      {% if refused %}data-refused-field="{{ refused[0] }}" data-refused="{{ refused[1] }}"{% endif %}>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if refused %}<noscript><p class="error">{{ refused[1] }}</p></noscript>{% endif %}
+  {% if e.id %}<input type="hidden" name="id" value="{{ e.id }}">{% endif %}
+  <label>Serial number * <input type="text" name="serial" value="{{ e.serial or '' }}" required maxlength="100" autocomplete="off" spellcheck="false"></label>
+  <label>Customer name * <input type="text" name="customer_name" value="{{ e.customer_name or '' }}" required maxlength="200"></label>
+  <label>Registered email <input type="email" name="email" value="{{ e.email or '' }}" maxlength="300"></label>
+  <label>Purchase date <input type="date" name="purchase_date" value="{{ e.purchase_date or '' }}"></label>
+  <label>Warranty expiry * <input type="date" name="expiry_date" value="{{ e.expiry_date or '' }}" required></label>
+  <label>AMC status <select name="amc"><option value="no" {{ 'selected' if not e.amc }}>No</option><option value="yes" {{ 'selected' if e.amc }}>Yes</option></select></label>
+  <label>Remarks <textarea name="remarks">{{ e.remarks or '' }}</textarea></label>
+  <label class="inline"><input type="checkbox" name="remarks_public" {{ 'checked' if e.remarks_public }}> Show these remarks to the customer</label>
+  <small>Remarks are an internal note unless you tick the box. Everything else is shown to anyone who enters this serial number.</small>
+  <p><button type="submit">{{ 'Save changes' if e.id else 'Add record' }}</button>{% if e.id %} <a class="btn secondary" href="{{ url_for('admin_ui.warranty', q=request.args.get('q'), page=page) }}">Cancel</a>{% endif %}</p>
+</form>
+{% endblock %}

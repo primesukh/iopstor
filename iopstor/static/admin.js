@@ -1935,9 +1935,43 @@
     window.addEventListener("beforeunload", function (e) { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
   }
 
+  // ---- the warranty form ----------------------------------------------------
+  /* Validation messages belong on the field they are about, in the browser's own bubble, not in a
+     banner at the top of a page the form is scrolled below. Same setCustomValidity idiom initSlug()
+     uses for a taken web address: the browser blocks Save and says why, at the input.
+     The dates are checked here so that mistake never costs a round trip; a serial already on file
+     cannot be (it would mean shipping every serial to the page), so the server sends its refusal
+     back in data-refused and this pops it. */
+  function initWarranty() {
+    var form = document.getElementById("warranty-form");
+    if (!form) return;
+    var buy = form.elements.purchase_date, exp = form.elements.expiry_date,
+        field = form.elements[form.getAttribute("data-refused-field")],
+        refused = form.getAttribute("data-refused");
+
+    function checkDates() {
+      // no purchase date means nothing to compare against, so any expiry is allowed -- the same arm
+      // the warranties_expiry_after_purchase constraint has. ISO dates compare as dates.
+      exp.setCustomValidity(buy.value && exp.value && exp.value < buy.value
+        ? "Warranty expiry cannot be before the purchase date (" + buy.value + ")." : "");
+    }
+    buy.addEventListener("input", checkDates);
+    exp.addEventListener("input", checkDates);
+    checkDates();   // a refused save comes back with both dates still in the fields
+
+    if (refused && field) {
+      field.setCustomValidity(refused);
+      // one edit clears it -- only the server can tell whether it is fixed. checkDates() runs after,
+      // so clearing a stale date refusal cannot also clear a date pair that is still wrong.
+      field.addEventListener("input", function () { field.setCustomValidity(""); checkDates(); });
+      if (field.reportValidity) field.reportValidity();   // show it now, focused and scrolled to
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     initSlug();
     initTerms();
+    initWarranty();
     initBlocks();
   });
 })();

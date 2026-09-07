@@ -2,6 +2,7 @@
 Login = Supabase email/password; tokens live in the signed Flask session cookie."""
 import json
 import secrets
+from datetime import date
 from functools import wraps
 from urllib.parse import urlparse
 
@@ -14,7 +15,7 @@ from werkzeug.exceptions import HTTPException
 from . import db, seo
 from .admin_api import apply_post
 from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login
-from .blocks import BLOCKS, EDITOR, LAYOUTS, at_path, render_blocks
+from .blocks import BLOCKS, EDITOR, LAYOUTS, at_path, render_blocks, warranty_active
 from .storage import delete_media, save_upload
 
 ui = Blueprint("admin_ui", __name__, url_prefix="/admin", template_folder="templates")
@@ -377,6 +378,73 @@ def leads():
 def lead_status(pk):
     db.update("leads", pk, {"status": "handled" if request.form.get("status") == "handled" else "new"})
     return redirect(url_for("admin_ui.leads", **{k: v for k, v in request.args.items()}))
+
+
+@ui.route("/warranty", methods=["GET", "POST"])
+@ui_required()
+def warranty():
+    """The warranty register: list, search, add and edit on one page (?edit=<id> loads a record into
+    the form). The public Warranty check section reads the same table by serial number.
+
+    A save that works redirects (post-redirect-get, so a refresh cannot save twice); a save that is
+    refused falls through to the same render with what was typed still in the form, the way the post
+    form re-renders instead of redirecting. Losing a filled-in record to a typo is not a validation
+    message, it is a re-typing exercise.
+
+    A refusal is `(field, message)`, not a flash: the message belongs on the field it is about, so
+    admin.js hands it to the browser's own validation bubble (setCustomValidity, as initSlug already
+    does for a taken web address). Only a success flashes, at the top, where a confirmation belongs."""
+    editing, refused = None, None
+    if request.method == "POST":
+        f = request.form
+        row = {k: f.get(k, "").strip()[:limit] for k, limit in
+               (("serial", 100), ("customer_name", 200), ("email", 300), ("expiry_date", 10), ("purchase_date", 10))}
+        row["remarks"] = f.get("remarks", "").strip()
+        row["amc"] = f.get("amc") == "yes"
+        row["remarks_public"] = bool(f.get("remarks_public"))
+        row["purchase_date"] = row["purchase_date"] or None  # optional: an empty string is not a date
+        pk = f.get("id", "")
+        dupe = db.one(db.table("warranties").select("id").eq("serial_key", row["serial"].upper())) if row["serial"] else None
+        if not (row["serial"] and row["customer_name"] and row["expiry_date"]):
+            refused = ("serial", "Serial number, customer name and warranty expiry are required.")
+        elif dupe and str(dupe["id"]) != pk:
+            # the one the browser cannot check for itself: it would need every serial on file
+            refused = ("serial", f"Serial number {row['serial']} already has a record.")
+        elif row["purchase_date"] and row["expiry_date"] < row["purchase_date"]:
+            # the friendly half of warranties_expiry_after_purchase (0004); ISO dates compare as dates.
+            # No purchase date means no comparison to make: any expiry is allowed.
+            refused = ("expiry_date", f"Warranty expiry cannot be before the purchase date ({row['purchase_date']}).")
+        else:
+            if pk.isdigit():
+                db.update("warranties", int(pk), row)
+                flash(f"Saved {row['serial']}.")
+            else:
+                db.insert("warranties", row)
+                flash(f"Added {row['serial']}.")
+            return redirect(url_for("admin_ui.warranty", q=request.args.get("q"), page=request.args.get("page")))
+        # refused: hand the submitted values back to the form. The id decides add-vs-edit in the
+        # template, so a rejected new record does not come back wearing an Edit heading.
+        editing = {**row, "id": pk} if pk.isdigit() else row
+    q = db.table("warranties").select("*", count="exact")
+    if s := request.args.get("q"):
+        s = s.replace(",", " ").replace("(", " ").replace(")", " ")  # PostgREST's or_ is comma/paren-delimited
+        q = q.or_(f"serial.ilike.%{s}%,customer_name.ilike.%{s}%,email.ilike.%{s}%")
+    page = max(request.args.get("page", 1, type=int) or 1, 1)
+    result = db.paginate(q.order("id", desc=True), page, 50)
+    edit_id = request.args.get("edit", type=int)
+    if editing is None and edit_id:
+        editing = db.one(db.table("warranties").select("*").eq("id", edit_id))
+    return render_template("admin/warranty.html", result=result, page=page, has_next=page * 50 < result["total"],
+                           editing=editing, refused=refused, today=date.today().isoformat(),
+                           active=warranty_active), (400 if refused else 200)
+
+
+@ui.post("/warranty/<int:pk>/delete")
+@ui_required("admin")
+def warranty_delete(pk):
+    db.table("warranties").delete().eq("id", pk).execute()
+    flash("Warranty record removed.")
+    return redirect(url_for("admin_ui.warranty", q=request.args.get("q"), page=request.args.get("page")))
 
 
 @ui.route("/settings", methods=["GET", "POST"])

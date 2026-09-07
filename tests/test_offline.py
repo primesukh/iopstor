@@ -251,3 +251,79 @@ def test_blocks_text_reaches_into_columns_without_leaking_keys():
     txt = blocks_text([_cols([{"type": "rich_text", "data": {"html": "<p>Inside <b>a</b> column</p>"}}],
                              widths="50/50", heading="Side by side")])
     assert txt == "Side by side Inside a column"
+
+
+def test_warranty_active_compares_iso_dates():
+    """ISO date strings sort as dates — the whole warranty status is this one comparison."""
+    from iopstor.blocks import warranty_active
+
+    assert warranty_active({"expiry_date": "2027-03-14"}, today="2026-09-07")
+    assert warranty_active({"expiry_date": "2026-09-07"}, today="2026-09-07")   # expires today = still in
+    assert not warranty_active({"expiry_date": "2026-09-06"}, today="2026-09-07")
+    assert not warranty_active({"expiry_date": None}, today="2026-09-07")
+    assert not warranty_active({}, today="2026-09-07")
+
+
+def test_warranty_check_renders_the_form_without_a_lookup(app, monkeypatch):
+    """edit=True is the admin canvas: it must show the box and never touch the database."""
+    from iopstor import db
+    from iopstor.blocks import render_blocks
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "table", lambda *a, **k: 1 / 0)  # any query here is a bug
+    with app.test_request_context("/warranty?sn=IOP-1"):
+        html = render_blocks([{"type": "warranty_check", "data": {"heading": "Check your warranty"}}], edit=True)
+    assert 'name="sn"' in html and "Check your warranty" in html
+    assert "In warranty" not in html and "no record" not in html
+
+
+def test_warranty_form_hands_back_what_was_typed_when_the_save_is_refused(app, client, monkeypatch):
+    """A refused save must not cost the editor the record they just typed in."""
+    import pytest
+
+    from iopstor import admin_ui, db
+
+    class Q:  # every query the route makes is stubbed below; this only has to chain and come back empty
+        data, count = [], 0
+
+        def __getattr__(self, _name):
+            return lambda *a, **k: self
+
+        def execute(self):
+            return self
+
+    monkeypatch.setattr(admin_ui, "current_user", lambda: {"id": "u1", "email": "e@x.com", "role": "admin"})
+    monkeypatch.setattr(db, "post_types", lambda: [])
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "table", lambda name: Q())
+    monkeypatch.setattr(db, "one", lambda q: None)  # no duplicate serial
+    monkeypatch.setattr(db, "paginate", lambda *a, **k: {"items": [], "total": 0})
+    monkeypatch.setattr(db, "insert", lambda *a: pytest.fail("a refused save must not write"))
+    monkeypatch.setattr(db, "update", lambda *a: pytest.fail("a refused save must not write"))
+
+    with client.session_transaction() as s:
+        s["csrf"] = "tok"
+    typed = {"csrf": "tok", "serial": "IOP-A%1", "customer_name": "Acme & Co", "email": "ram@acme.com",
+             "purchase_date": "2026-06-01", "expiry_date": "2024-06-01", "amc": "yes",
+             "remarks": "PSU swapped", "remarks_public": "on"}
+    r = client.post("/admin/warranty?q=iop", data=typed)
+    body = r.get_data(as_text=True)
+
+    assert r.status_code == 400
+    # the message rides on the field it is about, for admin.js to hand to the browser's validation bubble
+    assert 'data-refused-field="expiry_date"' in body and "cannot be before the purchase date" in body
+    assert "<noscript>" in body                              # ...and is still readable without JS
+    assert 'value="IOP-A%1"' in body and "Acme &amp; Co" in body and 'value="2024-06-01"' in body
+    assert "PSU swapped" in body and "checked" in body        # textarea and the remarks toggle survive too
+    assert "Add a warranty record" in body and 'name="id"' not in body   # a refused new record is still new
+
+    # a refused EDIT comes back as an edit, id and all, so Save changes still targets the same record
+    r = client.post("/admin/warranty", data={**typed, "id": "7"})
+    body = r.get_data(as_text=True)
+    assert r.status_code == 400 and 'name="id" value="7"' in body and "Save changes" in body
+
+    # an empty purchase date leaves the expiry unconstrained: same dates, and it saves
+    saved = {}
+    monkeypatch.setattr(db, "insert", lambda name, r: saved.update(r) or {"id": 1})
+    r = client.post("/admin/warranty", data={**typed, "purchase_date": ""})
+    assert r.status_code == 302 and saved["expiry_date"] == "2024-06-01" and saved["purchase_date"] is None
