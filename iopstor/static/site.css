@@ -218,6 +218,9 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .btn:hover{background:var(--blue-hover);color:var(--white)}
 .btn.dark{background:var(--black)}
 .btn.dark:hover{background:var(--blue)}
+/* on the blue band the generic dark-button hover IS the background, so the button vanishes under
+   the pointer. There it goes the other way, which is what the design does. */
+.band-blue .btn.dark:hover,.t-blue .btn.dark:hover{background:var(--white);color:var(--black)}
 .btn.ghost{background:transparent;color:var(--black);border-color:var(--line-2)}
 .btn.ghost:hover{background:transparent;color:var(--black);border-color:var(--black)}
 .btn.ghost-dark{background:transparent;color:var(--white);border-color:var(--line-dark-2)}
