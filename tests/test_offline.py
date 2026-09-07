@@ -251,3 +251,27 @@ def test_blocks_text_reaches_into_columns_without_leaking_keys():
     txt = blocks_text([_cols([{"type": "rich_text", "data": {"html": "<p>Inside <b>a</b> column</p>"}}],
                              widths="50/50", heading="Side by side")])
     assert txt == "Side by side Inside a column"
+
+
+def test_warranty_active_compares_iso_dates():
+    """ISO date strings sort as dates — the whole warranty status is this one comparison."""
+    from iopstor.blocks import warranty_active
+
+    assert warranty_active({"expiry_date": "2027-03-14"}, today="2026-09-07")
+    assert warranty_active({"expiry_date": "2026-09-07"}, today="2026-09-07")   # expires today = still in
+    assert not warranty_active({"expiry_date": "2026-09-06"}, today="2026-09-07")
+    assert not warranty_active({"expiry_date": None}, today="2026-09-07")
+    assert not warranty_active({}, today="2026-09-07")
+
+
+def test_warranty_check_renders_the_form_without_a_lookup(app, monkeypatch):
+    """edit=True is the admin canvas: it must show the box and never touch the database."""
+    from iopstor import db
+    from iopstor.blocks import render_blocks
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "table", lambda *a, **k: 1 / 0)  # any query here is a bug
+    with app.test_request_context("/warranty?sn=IOP-1"):
+        html = render_blocks([{"type": "warranty_check", "data": {"heading": "Check your warranty"}}], edit=True)
+    assert 'name="sn"' in html and "Check your warranty" in html
+    assert "In warranty" not in html and "no record" not in html

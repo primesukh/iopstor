@@ -163,6 +163,8 @@ on the right included — so you can never fill in a picture or a table box and 
 
 You can also use **+ Section** on the toolbar, which opens the same list with a description of each one. The same menu has *“Start from a layout…”* if you would rather begin from a ready-made Product, Service or Landing page and replace the wording.
 
+One section is worth calling out: **Warranty check**. Drop it on a page and visitors get a box where they type the serial number of their unit and see straight away whether it is still in warranty. What it shows comes from the **Warranty** screen — see section 8 below.
+
 ### Putting things side by side
 
 Most sections run the full width of the page. When you want two, three or four things **next to each other** — a description beside a picture, three features in a row, a bit of text beside an enquiry form — add a **Columns** section.
@@ -286,7 +288,33 @@ Each enquiry can be marked **New**, **In progress** or **Done**, so sales can wo
 
 ---
 
-## 8. Menus, settings and redirects
+## 8. Warranty records
+
+**Warranty** in the admin panel is the register of every unit you have sold and how long it is covered for. It is what the *Warranty check* box on the website reads from — put that section on a page (press `/` and pick **Warranty check**) and customers can look their own unit up instead of emailing to ask.
+
+**Adding a record.** Fill in the form at the bottom of the Warranty screen:
+
+| Field | What to put in it |
+|---|---|
+| Serial number | Exactly as it is printed on the unit. Letters, numbers and symbols are all fine. Capitals do not matter — a customer typing it in lower case will still find it. |
+| Customer name | The company or person who bought it. |
+| Registered email | Whoever should be contacted about it. Optional. |
+| Purchase date | When they bought it. Optional. |
+| Warranty expiry | The date cover runs out. **Required** — this is what decides "in warranty" or "expired". |
+| AMC status | Yes or No, for an annual maintenance contract. |
+| Remarks | A note to yourself. See below. |
+
+**Editing one.** Press **Edit** on any row: the record loads into the form, you change what you need and press **Save changes**. **Search** finds a record by serial number, customer name or email. Only an admin can delete a record.
+
+**Remarks are private unless you say otherwise.** Anything you type in Remarks is an internal note that the customer never sees — unless you tick **"Show these remarks to the customer"**, which puts it on their warranty result. Use the tick for something helpful ("PSU replaced under RMA, October 2025") and leave it clear for anything internal.
+
+**You never set "expired" yourself.** The status is worked out from the expiry date every time someone looks, so a record can never be out of date. A warranty expiring today still counts as in warranty.
+
+**One thing to know.** The serial number is the only thing a visitor has to type, and the result shows the customer's name and registered email along with the dates. That was a deliberate choice — it keeps the check to one box — but it does mean anyone who knows a serial number can see who owns that unit. Everything except Remarks is public in that sense.
+
+---
+
+## 9. Menus, settings and redirects
 
 **Settings** holds the things that appear everywhere: site name, tagline, logo, contact email and phone, address, social links, and the Google Analytics ID.
 
@@ -296,7 +324,7 @@ Each enquiry can be marked **New**, **In progress** or **Done**, so sales can wo
 
 ---
 
-## 9. Being found: search engines and AI
+## 10. Being found: search engines and AI
 
 This was an explicit requirement, so it is built in rather than bolted on. Every page is delivered to Google and to AI crawlers fully formed, with no waiting for scripts to run.
 
@@ -313,21 +341,21 @@ Each page also carries its title, description, social-sharing preview and machin
 
 ---
 
-## 10. Payments
+## 11. Payments
 
 Products can carry a price and a checkout button. The payment step is currently a **placeholder** — it walks through the full flow and records the order, but no money moves. Connecting a real provider such as Razorpay or Stripe is a configuration change, not a rebuild.
 
 ---
 
-## 11. Where the project stands
+## 12. Where the project stands
 
-**Done:** the content system, the public website with its theme, the admin panel, search-engine and AI output, enquiry capture, media library, users and roles, and the payment placeholder.
+**Done:** the content system, the public website with its theme, the admin panel, search-engine and AI output, enquiry capture, the warranty register and its public check, media library, users and roles, and the payment placeholder.
 
 **Still to come:** a live payment provider.
 
 ---
 
-## 12. Quick answers
+## 13. Quick answers
 
 **A long web address or code runs off the edge of the page.** It no longer does — a word too long to
 fit now breaks and carries on on the next line, in the editor and on the live site, instead of
@@ -343,6 +371,8 @@ pushing the page sideways.
 **A page gives "not found".** Its address is built from its slug and its type. A Service named *NAS* filed under *Storage* lives at `/services/storage/nas`, not `/services/nas`. Check the parent is set correctly.
 
 **I need a new kind of content — say, Job Openings.** No development work is needed. An admin can add a new content type through the admin panel, and it gets its own list, its own form and its own web addresses.
+
+**A customer says their serial number is not found.** Check the record exists under **Warranty** — search for part of the serial rather than all of it. Capitals and stray spaces do not matter, but a wrong character does. If it is genuinely missing, add it and they can check again straight away.
 
 **Someone left the company.** An admin should delete their user account. This removes both their login and their access.
 

@@ -55,7 +55,7 @@ Dependency direction: `public.py` and `admin_ui.py` both import from `admin_api.
 
 ## 3. Data model
 
-Eleven tables, created by `migrations/0001_initial.sql`.
+Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_warranty.sql`.
 
 | Table | Purpose | Notable columns |
 |---|---|---|
@@ -65,13 +65,14 @@ Eleven tables, created by `migrations/0001_initial.sql`.
 | `media` | Uploads | `key`, `url`, `mime`, `size`, `alt`, `uploaded_by` |
 | `users` | CMS roles. `id` **is** the GoTrue `sub` | `email`, `name`, `role` |
 | `leads` | Form submissions | `kind`, contact fields, `data` (JSONB), `status` |
+| `warranties` | The warranty register, looked up by serial number | `serial`, `serial_key` (generated), `customer_name`, `email`, `purchase_date`, `expiry_date`, `amc`, `remarks`, `remarks_public` |
 | `payments` | Orders | `provider`, `provider_ref`, `amount`, `currency`, `status`, `raw` |
 | `menus` | Header/footer nav | `items` (JSONB, one level of `children`) |
 | `settings` | Key/value site config | `key`, `value` (JSONB) |
 | `redirects` | Legacy URL mapping | `from_path` (unique), `to_url`, `code`, `hits` |
 | `schema_migrations` | Applied migration names | created by `0000_bootstrap.sql` |
 
-Indexes: `posts (post_type_id, status, published_at)`, `leads (status, created_at)`, `payments (provider, provider_ref)`. `posts` is unique on `(post_type_id, slug)` — slugs are unique *per type*, not globally.
+Indexes: `posts (post_type_id, status, published_at)`, `leads (status, created_at)`, `payments (provider, provider_ref)`, `warranties (expiry_date)`. `posts` is unique on `(post_type_id, slug)` — slugs are unique *per type*, not globally. `warranties` is unique on `serial_key`, a `GENERATED ALWAYS AS (upper(btrim(serial))) STORED` column: it makes the public lookup case- and whitespace-insensitive, stops two records claiming the same serial in different cases, and lets the lookup be an exact `.eq()` — a serial may legitimately contain `%` or `_`, which PostgREST's `ilike` would read as wildcards. Warranty status is **not** stored: "in warranty" is `expiry_date` vs today, worked out at render time by `blocks.warranty_active()` so it can never go stale.
 
 **Where per-type data lives.** `posts.meta` is a JSON bag described by `post_types.field_schema` — a list of `{key, label, type, required}` descriptors that the admin form renders and the detail template reads back. `posts.blocks` is the ordered page content, `[{type, data}, ...]` — flat, except a `columns` block, whose `data.cols` holds one such list per column (one level deep, see §6).
 
@@ -138,7 +139,7 @@ BLOCKS = {  # type: (required fields, optional fields)
 }
 ```
 
-Fifteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`.
+Sixteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`, `warranty_check`.
 
 **Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">…` — `cls` is the layout classes, `sty` an inline width, `fe()` the edit marker (all three below); `render_blocks()` hands all three to every block template. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
 
@@ -167,6 +168,8 @@ Two behaviours worth knowing:
   - **One level only.** `validate_blocks(..., nested=True)` rejects `NEVER_NESTED = ("columns", "hero")` inside a column: a grid inside a grid is how an Elementor page becomes unmaintainable, and a hero is a full-bleed band owning the page's only `<h1>`. `admin.js` mirrors the tuple so the inserter never offers them and a drag into a column is refused.
   - **`col_widths(data)`** turns `"50/25/25"` into the `--cols` custom property `"50fr 25fr 25fr"`. Anything that is not exactly one positive number per column returns `""` (equal columns) — strict, because the value is interpolated into a `style` attribute. `site.css` puts the widths in `--cols` rather than straight into `grid-template-columns` so the `max-width:800px` stacking rule can override them without `!important` beating an inline style.
   - **`at_path(blocks, path)`** resolves a `data-b` path (`"3"`, `"3.1.0"`) to one block. `/admin/canvas?p=` is its only caller.
+- **`warranty_check` is queried at render time too, from the URL.** The section is a plain `method="get"` form posting back to `request.path` with one `sn` field — **no route, no endpoint, no CSRF**: the lookup is a read, and the result is a bookmarkable URL a customer can forward to support. `render_blocks()` hands the block a `found` value from `_warranty()`: `None` when nothing was asked (draw the bare form), `{}` when the serial matched nothing, otherwise the `warranties` row with `active` added. The match is `.eq("serial_key", typed.strip().upper())` — see §3 for why the generated column, and not `ilike`, is the key. `edit=True` short-circuits it to `None`, so the admin canvas draws the box without touching the database. There is deliberately no `intro` field: explanatory copy is a `rich_text` section above it.
+  - **The whole record is public to anyone holding the serial**, customer name and registered email included — the client's decision, so `remarks` is the one field held back unless the record's `remarks_public` is ticked. Marked with a `# ponytail:` comment on `_warranty()`: require the registered email as a second factor, or rate-limit, if serials turn out to be guessable.
 - **`pdf` is an `<iframe>` at the file, nothing more** — the browser's own PDF viewer, no pdf.js. Its field is `file_media_id`, not `media_id`, because `EDITOR["labels"]` is keyed by the bare field name and `media_id` already reads "Image" (it also matches the `file_media_id` meta convention the `datasheet` type uses in `cli.py`). Height is fixed in `site.css` (`min(80vh,900px)`); the `<a class="btn ghost">` under the frame downloads the file — its `href` is the `media_download` Jinja global (`__init__.py`), the public Storage URL plus `?download=<filename>`, which is how Supabase Storage sets `Content-Disposition: attachment` and names the saved file after the upload instead of the uuid in its bucket key. That button is also the way in for iOS Safari and Android Chrome, which render only the first page of a framed PDF or nothing at all — they save it rather than open it in a tab. `.btn.ghost` has to set its own `color` (and its own `:hover`) in `site.css`: `.btn` paints `color:#fff` for the accent fill, so a ghost button that only clears the background is white text and a white `currentColor` border on the light page. Unlike `embed_html` the canvas renders it for real: the src is the public Storage bucket, so it is cross-origin to the admin session. `canvas.css` gives it `pointer-events:none` so a click still selects the section.
 
 **Editor metadata.** Alongside `BLOCKS`, `blocks.py` exports `EDITOR` — how each field is edited in the browser admin, so the field shapes that used to live only in comments are data:
@@ -235,9 +238,11 @@ Writes: `POST /leads` (also the target of the HTML contact form — plain form P
 
 ### `/admin` — browser, `admin_ui.py`
 
-`/login`, `/logout`, `/` (dashboard), `/posts`, `/posts/new`, `/posts/<id>`, `/posts/<id>/delete`, `/media`, `/media/upload`, `/media/<id>/delete`, `/leads`, `/leads/<id>/status`, `/settings`, `/users`, `/users/<uuid>/delete`. Server-rendered forms; `_form_body()` turns form fields into the same body dict the JSON API accepts, so both surfaces share validation. `_safe_next()` restricts post-login redirects to relative same-origin paths.
+`/login`, `/logout`, `/` (dashboard), `/posts`, `/posts/new`, `/posts/<id>`, `/posts/<id>/delete`, `/media`, `/media/upload`, `/media/<id>/delete`, `/leads`, `/leads/<id>/status`, `/warranty`, `/warranty/<id>/delete`, `/settings`, `/users`, `/users/<uuid>/delete`. Server-rendered forms; `_form_body()` turns form fields into the same body dict the JSON API accepts, so both surfaces share validation. `_safe_next()` restricts post-login redirects to relative same-origin paths.
 
 `POST /admin/media/upload` is the one exception to "server-rendered forms": it takes the same multipart body as `POST /admin/media` (`csrf`, `file`, optional `alt`) through the shared `_upload()` helper, and answers `201 {id, url, filename, mime, alt}` or `4xx {error}` instead of redirecting. It exists so the post form's media pickers can upload without leaving the page; session auth and CSRF come from `ui_required()` unchanged.
+
+`/admin/warranty` is the warranty register: list, `?q=` search over serial / customer / email, and one form that adds a record or edits the one named by `?edit=<id>` — the `users` screen's shape, with `db.paginate(..., 50)` and the `page` / `has_next` idiom used by `/admin/leads`. It refuses a duplicate `serial_key` with a `flash()` before writing, rather than letting a unique violation surface as a 502 through `_pg_error`. Editors may add and edit; **only an admin may delete**, matching `/admin/posts/<id>/delete`. The public side of this table needs no endpoint at all (§6, `warranty_check`).
 
 ### Crawler endpoints
 
@@ -270,7 +275,7 @@ Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in nam
 3. Update the code that reads/writes those columns
 4. Commit both together
 
-`0002_enable_rls.sql` enables RLS on every app table, so the anon key cannot read drafts or leads. The app's service-role key bypasses RLS by design.
+`0002_enable_rls.sql` enables RLS on every app table, so the anon key cannot read drafts or leads. The app's service-role key bypasses RLS by design. A new table repeats that one line for itself — `0003_warranty.sql` ends with `ALTER TABLE warranties ENABLE ROW LEVEL SECURITY;`, and defines no policies.
 
 ---
 

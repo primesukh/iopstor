@@ -159,3 +159,11 @@ figure{margin:0}figure img{border-radius:var(--radius)}figcaption{color:var(--mu
 .lead-form input,.lead-form textarea{width:100%;padding:.65rem .75rem;border:1px solid #cbd5e1;border-radius:8px;font:inherit}
 .lead-form textarea{min-height:120px}.lead-form .btn{margin-top:1rem}
 .notice{background:#ecfdf5;border:1px solid #a7f3d0;padding:.8rem 1rem;border-radius:8px;margin-bottom:1rem}
+.warranty-check label{margin-top:0}
+.warranty-result{max-width:var(--w,640px);background:var(--card);border:1px solid var(--line);border-left:4px solid var(--muted);border-radius:var(--radius);padding:1.25rem 1.5rem;margin-top:1rem}
+.warranty-result.in{border-left-color:#16a34a}.warranty-result.out{border-left-color:#dc2626}
+.warranty-state{margin:0 0 .75rem;font-weight:700;font-size:1.15rem}
+.warranty-result.in .warranty-state{color:#166534}.warranty-result.out .warranty-state{color:#991b1b}
+.warranty-result dl{display:grid;grid-template-columns:minmax(9rem,auto) 1fr;gap:.4rem 1rem;margin:0}
+.warranty-result dt{color:var(--muted);font-weight:600}.warranty-result dd{margin:0}
+.warranty-none{background:#fff7ed;border-color:#fed7aa;max-width:var(--w,640px);margin-top:1rem}

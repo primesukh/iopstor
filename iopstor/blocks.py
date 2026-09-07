@@ -1,6 +1,7 @@
 """Block registry. Adding a block = one entry in BLOCKS + templates/blocks/<type>.html."""
 import re
 from copy import deepcopy
+from datetime import date
 
 from flask import render_template
 from markupsafe import Markup, escape
@@ -25,6 +26,9 @@ BLOCKS = {  # type: (required fields, optional fields)
     # file_media_id, not media_id: EDITOR["labels"] is keyed by bare field name and media_id already reads "Image".
     # ponytail: the viewer is a fixed height in site.css; add a "height" field if editors ask for one.
     "pdf": (["file_media_id"], ["heading"]),
+    # nothing required: the section is a serial-number box, and the answer is looked up at render time.
+    # Explanatory copy goes in a rich_text section above it, like any other words on the page.
+    "warranty_check": ([], ["heading"]),
 }
 # Admin editor metadata: how each field is edited in /admin (iopstor/static/admin.js).
 # Field shapes that used to live in the comments above are data here so the editor has one source of truth.
@@ -48,7 +52,7 @@ EDITOR = {
     # order the section picker offers them in, commonest first (Jinja's tojson sorts dict keys,
     # so BLOCKS' own order does not survive the trip to the browser)
     "order": ["hero", "rich_text", "cards", "columns", "cta", "faq", "stats", "testimonial", "spec_table",
-              "image", "gallery", "pdf", "post_list", "contact_form", "embed_html"],
+              "image", "gallery", "pdf", "post_list", "contact_form", "warranty_check", "embed_html"],
     # the visual inserter: icon, plain-English name, one line on what the visitor sees
     "names": {
         "hero": ("\U0001F3D4", "Hero", "The big opening band: headline, one line of text, one button."),
@@ -64,6 +68,7 @@ EDITOR = {
         "gallery": ("\U0001F5C2", "Picture grid", "Several pictures laid out in a grid."),
         "post_list": ("\U0001F4D1", "Automatic list", "Lists pages of a type you choose, and keeps itself up to date."),
         "contact_form": ("\u2709", "Contact form", "A form visitors fill in. Replies arrive under Leads."),
+        "warranty_check": ("\U0001F6E1", "Warranty check", "A box where a customer types their serial number and sees their warranty."),
         "pdf": ("\U0001F4C4", "PDF", "A PDF shown on the page in the reader's own PDF viewer."),
         "embed_html": ("</>", "Embedded code", "Paste code from YouTube, a map or another service."),
     },
@@ -87,6 +92,7 @@ EDITOR = {
                         "role": "Job title", "company": "Company"},
         "spec_table": {"heading": "Specifications", "rows": [{"k": "Capacity", "v": "Up to 5 PB"}, {"k": "Interface", "v": "NFS, SMB, S3"}]},
         "contact_form": {"kind": "contact", "heading": "Get in touch"},
+        "warranty_check": {"heading": "Check your warranty"},
         "post_list": {"post_type": "post", "heading": "Latest"},
         "embed_html": {"html": "<!-- paste the embed code from YouTube, Google Maps, etc. here -->"},
         "image": {"caption": ""},      # media_id must be chosen: no placeholder can stand in for a picture
@@ -239,6 +245,8 @@ def render_blocks(blocks, edit=False, path="0"):
             extra = {}
             if b["type"] == "post_list":
                 extra = {"posts": _post_list(b["data"])}
+            elif b["type"] == "warranty_check":
+                extra = {"found": None if edit else _warranty()}  # the admin canvas gets the bare form, never a lookup
             elif b["type"] == "columns":
                 # the one block that renders other blocks: each column is its own list, one level down
                 cols = b["data"].get("cols") or []
@@ -292,3 +300,32 @@ def _post_list(data):
         q = q.is_("parent_id", "null")
     q = q.order("menu_order").order("published_at", desc=True).limit(int(data.get("limit") or 10))
     return db.with_paths(db.rows(q))
+
+
+def warranty_active(row, today=None):
+    """Is this warranty still running? ISO date strings sort as dates, so the whole check is a
+    string compare — no parsing, and no timezone to get wrong. Expiring today still counts as in."""
+    return bool(row.get("expiry_date")) and row["expiry_date"] >= (today or date.today().isoformat())
+
+
+def _warranty():
+    """The warranty the visitor asked about, for the warranty_check block:
+       None = they have not asked yet (just show the form), {} = they asked and there is no such serial.
+    Matched on serial_key (upper(btrim(serial)), a generated column) so case and stray spaces do not
+    matter, and so the match is an exact one: a serial may contain % or _, which ilike would treat as
+    wildcards.
+    # ponytail: the serial alone is the key, so a guessed serial returns that customer's name and
+    # email. Ask for the registered email too, or rate-limit this, if serials turn out to be guessable."""
+    from flask import has_request_context, request
+
+    from . import db
+
+    if not has_request_context():
+        return None
+    key = (request.args.get("sn") or "").strip().upper()
+    if not key:
+        return None
+    row = db.one(db.table("warranties").select("*").eq("serial_key", key))
+    if row:
+        row["active"] = warranty_active(row)
+    return row or {}
