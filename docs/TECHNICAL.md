@@ -95,6 +95,7 @@ Every query goes through this module. Nothing else builds a PostgREST query.
 | `with_paths()` / `ancestors()` | Attach the computed `path` to posts; builds one per-request hierarchy index rather than walking parents per row |
 | `unique_slug()` | Slug collision resolution within a post type — `base`, else `base-xyz` (three random letters) |
 | `ensure_term()` | Term id for a name in a taxonomy, creating the row the first time. Matched on `slugify(name)`, so "All-Flash" and "all flash" are one term, not two |
+| `set_menu(slug, items)` | The write side of `get_menu()`, so `/admin/menus` keeps every query in this module |
 | `admin_counts()` | `{post-type slug: n}` plus `_leads`, for the sidebar. One query over posts counted in Python — PostgREST has no `GROUP BY`, and an exact-count call per type would be eight round trips a page |
 | `tree(type_slug)` | Top-level live posts of one type, each with `p["children"]`. One query; the parent/child split happens in Python. Feeds the header's services panel, the services archive and `post_list(top_level)` |
 | `paginate()` | Offset/limit + exact count |
@@ -338,6 +339,16 @@ No CSS framework, no build step, no JavaScript framework. Mobile navigation is a
 - **It uses its own class names** (`.adm-shell`, `.adm-side`, `.adm-nav`, `#adm-toggle`), not `.site-header` / `.site-nav` / `.brand` / `#nav-toggle`. Those live in `site.css` and belong to the public header; restyling them here would repaint every public page, and two `#nav-toggle` checkboxes would fight over the same `:checked ~` rule.
 - **One `{% block content %}`, wrapped conditionally.** Jinja refuses the same block name twice in a template even in branches that cannot both run, so the shell opens before the block and closes after it rather than the block appearing in both arms of the `if`.
 - **`.admin-main:has(#post-form)` is `height:100vh`**, not `calc(100vh - 66px)`. The editor now owns a grid column rather than sitting under a top bar, so there is no header height to subtract.
+
+**The settings tabs are CSS, and that is load-bearing.** `settings()` saves `{k: request.form.get(k, "") for k in SETTING_KEYS}`, so **any key missing from the submitted form is blanked**. Rendering only the visible tab would wipe the other three on every save. So all four panes stay in the DOM and a radio + `:checked` sibling rule shows one. The pairing uses explicit ordinal classes (`.t1`/`.p1`), not `:nth-of-type` — the form's hidden CSRF field is an `<input>` too, so type counting put every radio one place out.
+
+The Payments tab shows the provider **read-only**. It comes from the `PAYMENT_PROVIDER` env var through `payments.GATEWAYS`; making it a setting would give the same switch two sources of truth. `currency` and `notify_email` are real settings keys.
+
+**`/admin/menus`** is the screen `NON-TECHNICAL.md` §9 has always promised. It posts flat rows — label, URL, and a level `<select>` — which `menu_items()` rebuilds into the nested `[{label, url, children}]` shape `get_menu()` returns. The level is a **`<select>`, not a checkbox**: an unchecked box posts nothing, so the three `getlist()`s would come back different lengths and every row after the first unticked one would shift a place. `db.set_menu()` is the write side, so every query still lives in `db.py`. SortableJS is loaded by that template alone rather than by `admin/base.html` — it is 45 KB and this is the only screen outside the canvas that drags anything.
+
+**Leads have three states** (`new`, `in_progress`, `handled`) from a whitelist, because `leads.status` is a plain varchar and a toggle would store whatever was posted. No migration.
+
+**Media alt text can be edited after upload** (`POST /admin/media/<id>/alt`). It used to be settable only at upload time, so a picture uploaded without it could never be described. Image dimensions and a "used on" list are **not** implemented: the first needs two new columns, the second a scan of every post's blocks.
 
 `nav_counts` (not `counts`) carries the sidebar's numbers, because the dashboard view passes its own `counts` and a view's context shadows a context processor's — the leads pill would have been empty on exactly that one page.
 

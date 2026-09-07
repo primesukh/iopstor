@@ -236,3 +236,97 @@
 .panel-row:hover{background:var(--grey)}
 .panel-row .sub{display:block;font-size:12.5px;color:var(--muted)}
 .panel-empty{padding:20px;color:var(--muted);font-size:14px}
+
+/* --- the list screens ------------------------------------------------------------------------- */
+.adm-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin:0 0 20px}
+.adm-head h1{margin:0}
+.adm-head .page-sub{margin:6px 0 0}
+.filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 16px}
+.filter-bar input,.filter-bar select{width:auto;min-width:200px;margin:0}
+.filter-bar button,.filter-bar .btn{margin:0}
+.table-card{background:var(--white);border:1px solid var(--line);border-radius:10px;overflow:auto}
+.table-card table{border:0;border-radius:0;min-width:640px}
+.admin th{font:600 12px/1.4 var(--body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.t-title{display:block;font-weight:600;color:var(--ink);text-decoration:none}
+.t-title:hover{color:var(--blue)}
+.t-path{display:block;font:400 13px/1.4 var(--mono);color:var(--muted);text-decoration:none}
+.pager{display:flex;gap:10px;margin:20px 0 0}
+.empty-box{border:1px dashed var(--line-2);border-radius:10px;padding:28px;text-align:center;color:var(--muted);background:var(--white)}
+/* the segmented filter above a list */
+.seg-tabs{display:inline-flex;gap:6px;margin:0 0 20px;flex-wrap:wrap}
+.seg-tabs a{padding:7px 14px;border:1px solid var(--line);border-radius:999px;background:var(--white);color:var(--muted);text-decoration:none;font:600 13.5px/1.3 var(--body)}
+.seg-tabs a:hover{border-color:var(--blue);color:var(--blue)}
+.seg-tabs a.on{background:var(--black);border-color:var(--black);color:var(--white)}
+
+/* leads */
+.lead-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;background:var(--white);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin:0 0 12px}
+.lead-who{margin:0 0 4px;font-size:15px}
+.lead-contact{margin:0 0 8px;font-size:13.5px;color:var(--muted)}
+.lead-contact a{color:var(--blue)}
+.lead-msg{margin:0;font-size:14.5px;color:var(--ink-2);white-space:pre-line}
+.lead-extra{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+.lead-side{text-align:right}
+.lead-side p{margin:0 0 8px;font-size:12px}
+.lead-side select{width:auto;margin:0}
+
+/* media */
+.media-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;align-items:start}
+@media(max-width:900px){.media-grid{grid-template-columns:1fr}}
+.drop-zone{background:var(--white);border:2px dashed var(--line-2);border-radius:10px;padding:22px;margin:0 0 16px;text-align:center}
+.dz-title{margin:0;font-weight:600}
+.dz-hint{margin:4px 0 12px;font-size:12.5px;color:var(--muted)}
+.drop-zone label{text-align:left}
+.tiles-m{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.m-tile{display:block;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--white);text-decoration:none;color:inherit}
+.m-tile.on{border-color:var(--blue);box-shadow:0 0 0 2px rgba(0,140,247,.25)}
+.m-prev{display:flex;align-items:center;justify-content:center;aspect-ratio:1;background:var(--grey)}
+.m-prev img{max-width:100%;max-height:100%;object-fit:contain}
+.m-pdf{display:flex;align-items:center;justify-content:center;width:44px;height:56px;border:2px solid var(--black);border-radius:4px;font:700 10px/1 var(--mono)}
+.m-meta{display:block;padding:10px 12px}
+.m-name{display:block;font:600 13px/1.4 var(--body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m-sub{display:block;font-size:12px;color:var(--muted)}
+.m-sub .ok{color:var(--green);font-weight:600}
+.m-sub .no{color:var(--red);font-weight:600}
+.m-panel{position:sticky;top:20px;background:var(--white);border:1px solid var(--line);border-radius:10px;padding:20px}
+.m-panel h2{margin:0 0 12px}
+.m-big{display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;background:var(--grey);border-radius:8px;margin:0 0 12px}
+.m-big img{max-width:100%;max-height:100%;object-fit:contain}
+.m-title{margin:0;font-weight:700;overflow-wrap:anywhere}
+.m-panel .muted{font-size:12.5px}
+.admin input.mono,.admin .mono{font-family:var(--mono);font-size:13px}
+
+/* users */
+.who{display:flex;align-items:center;gap:10px}
+.avatar{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:999px;color:var(--white);font:700 14px/1 var(--head);flex:none}
+.avatar.admin{background:var(--black)}.avatar.editor{background:var(--blue)}
+.role-cards{display:grid;gap:10px;margin:16px 0 0}
+.role-card{display:flex;gap:10px;align-items:flex-start;margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-weight:400}
+.role-card input{width:auto;margin:2px 0 0}
+.role-card small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.role-card:has(input:checked){border-color:var(--blue);background:var(--blue-tint)}
+
+/* settings: CSS-only tabs, so every field stays submitted whichever one is showing */
+.set-form{max-width:900px}
+.settab{position:absolute;opacity:0;pointer-events:none}
+.set-tabs{display:flex;flex-direction:column;gap:2px}
+.set-tabs label{margin:0;padding:9px 12px;border-radius:6px;color:var(--muted);cursor:pointer;font-weight:500;font-size:14px}
+.set-tabs label:hover{background:var(--white)}
+.set-form{display:grid;grid-template-columns:200px minmax(0,1fr);gap:20px;align-items:start}
+.set-form>input[type=hidden],.set-form>.settab{grid-column:1}
+.set-form>p{grid-column:2}
+.set-panes{grid-column:2}
+.set-pane{display:none;background:var(--white);border:1px solid var(--line);border-radius:10px;padding:24px}
+.set-pane h2{margin:0 0 4px}
+/* paired by an explicit ordinal class, not :nth-of-type: the form's hidden csrf field is an
+   <input> too, so type counting put every radio one place out and tab two opened by default. */
+.t1:checked~.set-tabs .l1,.t2:checked~.set-tabs .l2,.t3:checked~.set-tabs .l3,.t4:checked~.set-tabs .l4{background:var(--black);color:var(--white)}
+.t1:checked~.set-panes .p1,.t2:checked~.set-panes .p2,.t3:checked~.set-panes .p3,.t4:checked~.set-panes .p4{display:block}
+@media(max-width:800px){.set-form{grid-template-columns:1fr}.set-tabs{flex-direction:row;flex-wrap:wrap}.set-form>p,.set-panes{grid-column:1}}
+.notice-amber{background:#fff7e6;border:1px solid #f1dfb0;color:#6b4d0f;border-radius:8px;padding:14px 16px;font-size:14px;margin:16px 0 0}
+
+/* menus */
+.menu-row{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) auto auto;gap:8px;align-items:center;margin:0 0 8px}
+.menu-row.is-child{margin-left:32px;background:var(--grey);border-radius:8px;padding:6px 8px}
+.menu-row input,.menu-row select{margin:0}
+.menu-row .grip{cursor:grab;color:var(--muted);user-select:none}
+.menu-row .row-del{margin:0}

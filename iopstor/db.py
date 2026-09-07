@@ -244,3 +244,8 @@ def admin_counts():
 def get_menu(slug):
     m = one(table("menus").select("*").eq("slug", slug))
     return m["items"] if m else []
+
+
+def set_menu(slug, items):
+    """The write side of get_menu(), so /admin/menus keeps every query in this module."""
+    table("menus").upsert({"slug": slug, "name": slug.title(), "items": items}, on_conflict="slug").execute()

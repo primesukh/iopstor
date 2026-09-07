@@ -1,10 +1,32 @@
 {% extends "admin/base.html" %}{% block title %}Settings{% endblock %}
 {% block content %}
-<h1>Site settings</h1>
-<form method="post" class="card" style="max-width:720px">
+<div class="adm-head"><div><h1>Settings</h1>
+  <p class="page-sub">The details that appear on every page of the site.</p></div></div>
+{# Tabs are CSS: every field stays in the DOM whichever tab is showing, because the save blanks
+   any SETTING_KEYS entry missing from the submitted form. Hiding a tab by not rendering it would
+   wipe half the settings on every save. #}
+<form method="post" class="set-form">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  {% for k in keys %}<label>{{ k.replace('_',' ') }}{% if k in ('social_links','address','robots_extra') %}<textarea name="{{ k }}">{{ s.get(k) or '' }}</textarea>{% else %}<input type="text" name="{{ k }}" value="{{ s.get(k) or '' }}">{% endif %}</label>{% endfor %}
-  <small>social_links: one URL per line. robots_extra: extra lines appended to robots.txt.</small>
-  <p><button type="submit">Save</button></p>
+  {% for name, _ in tabs %}<input type="radio" name="settab" id="settab{{ loop.index }}" class="settab t{{ loop.index }}"{{ ' checked' if loop.first }}>{% endfor %}
+  <nav class="set-tabs">{% for name, _ in tabs %}<label class="l{{ loop.index }}" for="settab{{ loop.index }}">{{ name }}</label>{% endfor %}</nav>
+  <div class="set-panes">
+    {% for name, group in tabs %}
+    <section class="set-pane p{{ loop.index }}">
+      <h2>{{ name }}</h2>
+      <div class="field-grid">
+        {% for k in group %}<label>{{ k.replace('_',' ')|capitalize }}
+          {% if k in ('social_links','address','robots_extra') %}<textarea name="{{ k }}">{{ s.get(k) or '' }}</textarea>
+          {% else %}<input type="text" name="{{ k }}" value="{{ s.get(k) or '' }}">{% endif %}</label>{% endfor %}
+      </div>
+      {% if name == 'Contact details' %}<small>Social links: one URL per line. The address shows in the footer exactly as you type it, line breaks and all.</small>{% endif %}
+      {% if name == 'SEO & analytics' %}<small>Robots extra: lines appended to robots.txt. The sitemap, RSS feed and llms.txt publish themselves.</small>{% endif %}
+      {% if name == 'Payments' %}
+      <p class="notice-amber">The payment provider is <strong>{{ provider }}</strong>, a placeholder that records the order without charging anything.
+        It is set by the <code>PAYMENT_PROVIDER</code> environment variable, not here, so there is only ever one answer to which provider is live.</p>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+  <p><button type="submit">Save settings</button></p>
 </form>
 {% endblock %}

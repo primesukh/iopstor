@@ -76,6 +76,23 @@ def test_layouts_expand_and_validate():
     assert b[0]["data"]["heading"] != "changed"  # seeds must be copied, not shared
 
 
+def test_menu_rows_rebuild_into_one_level_of_children():
+    """The menus screen posts flat rows and a level per row; this is the only place that shape
+    turns back into what base.html renders."""
+    from iopstor.admin_ui import menu_items
+
+    labels = ["Services", "Storage", "Cloud", "Blog", ""]
+    urls = ["/services", "/services/storage", "/services/cloud", "/blog", "/nowhere"]
+    assert menu_items(labels, urls, ["0", "1", "1", "0", "0"]) == [
+        {"label": "Services", "url": "/services", "children": [
+            {"label": "Storage", "url": "/services/storage"},
+            {"label": "Cloud", "url": "/services/cloud"}]},
+        {"label": "Blog", "url": "/blog"}]                      # the label-less row deletes itself
+    # a child with nothing above it is promoted, not dropped
+    assert menu_items(["Orphan"], ["/o"], ["1"]) == [{"label": "Orphan", "url": "/o"}]
+    assert menu_items([], [], []) == []
+
+
 def test_seeded_content_is_valid_blocks():
     """The seed writes these arrays straight into posts.blocks. A bad one would only show up as a
     failed insert half way through `flask seed`, on the user's database."""

@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}{% block title %}Menus{% endblock %}
+{% block content %}
+<div class="adm-head"><div><h1>Menus</h1>
+  <p class="page-sub">The links across the top of the site, and in its footer.</p></div></div>
+<nav class="seg-tabs" aria-label="Menu">
+  <a href="?slug=header"{% if slug == 'header' %} class="on"{% endif %}>Header</a>
+  <a href="?slug=footer"{% if slug == 'footer' %} class="on"{% endif %}>Footer</a>
+</nav>
+<form method="post" id="menus-form" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div id="menu-rows">
+    {% for r in rows %}<div class="menu-row{{ ' is-child' if r.level }}">
+      <span class="grip" aria-hidden="true">&#10247;</span>
+      <input name="label" value="{{ r.label }}" placeholder="Label">
+      <input name="url" value="{{ r.url }}" placeholder="/where-it-goes" class="mono">
+      <select name="level"><option value="0" {{ 'selected' if not r.level }}>Top level</option><option value="1" {{ 'selected' if r.level }}>Under the one above</option></select>
+      <button type="button" class="secondary row-del" title="Remove">&#10005;</button>
+    </div>{% endfor %}
+  </div>
+  <p><button type="button" id="menu-add" class="secondary">+ Add item</button></p>
+  <p><button type="submit">Save menu</button></p>
+  <small>An item set to “Under the one above” becomes a drop-down entry of the item before it. One level deep is all the site shows.</small>
+</form>
+{# loaded here, not in admin/base.html: it is 45 KB and this is the only screen outside the
+   editor canvas that drags anything. A plain script runs before DOMContentLoaded, so admin.js's
+   deferred initMenus() finds Sortable already there. #}
+<script src="{{ url_for('static', filename='vendor/sortable.min.js') }}"></script>
+{% endblock %}
