@@ -136,12 +136,19 @@ Resulting scheme:
 
 ```python
 BLOCKS = {  # type: (required fields, optional fields)
-    "hero": (["heading"], ["subheading", "image", "cta_label", "cta_url"]),
+    "hero": (["heading"], ["eyebrow", "subheading", "image", "cta_label", "cta_url",
+                           "cta2_label", "cta2_url", "dark"]),
     ...
 }
 ```
 
 Sixteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`, `warranty_check`.
+
+Three types carry a variant switch, and all three are **checkboxes**, never free text: `hero.dark` (the full-bleed band, where `image` becomes a faded backdrop instead of the art beside the words), `testimonial.dark`, and `contact_form`'s existing `kind`. The template tests them for equality (`{{ ' hero-dark' if data.dark }}`), so nothing an editor types can reach a class attribute — which is the same reason `section_class()` is a whitelist.
+
+`post_list` gained `eyebrow`, `link_label` and `link_url` (the "All services →" link in a section header), and `render_blocks()` hands its template a **`pt_slug`** extra alongside `posts`. That becomes `pl-<slug>` on the section, and `site.css` styles one card per post type from it — the number for services, the logo for partners, the 16:9 picture and date for blog posts, the industry/solution chips for case studies. One template, the variants in CSS. `pt_slug` comes from the resolved `post_types` row, never from the block's own data, so it is safe in a class name.
+
+When `top_level` is set on a hierarchical type, `_post_list()` also hangs each parent's live children off `p["children"]` for the chips under the card, reusing `db.tree()` — already memoised for the request by the header's services panel, so on most pages it costs nothing.
 
 **Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">…` — `cls` is the layout classes, `sty` an inline width, `fe()` the edit marker (all three below); `render_blocks()` hands all three to every block template. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
 
@@ -159,6 +166,8 @@ Two functions carry them onto the root `<section>`, both **whitelists** rather t
 - **`section_style(data)`** → `' style="--w:950px"'` for a **digits-only** `width` in `1..MAX_W` (4000), `""` for everything else, a named width included (that one is a class).
 
 `--w` *is* the content measure: `site.css` writes every relevant `max-width` as `var(--w, <the theme's own value>)`, so an unset section renders exactly as designed, a number narrows or widens it, and `.w-wide` / `.w-full` set `--w:100%` from CSS. `.column{--w:initial}` stops a width set on a Columns section leaking into the sections inside it.
+
+**`--w-def` is what makes that sentence true.** The shared rule is `.section>.wrap>*{max-width:var(--w,var(--w-def,none))}`, and it is (0,2,0); every block's own rule (`.rich-text`, `.testimonial`, `.specs`, `.faq details`, `.lead-form`) is (0,1,0) or (0,1,1) and loses to it. So the fallback `none` used to win outright and the designed measures never applied at all — a section was only ever as wide as `--w` said, and unset meant full width. Each of those blocks now declares its measure as `--w-def` on itself, which the shared rule reads *inside* the fallback. `--w` stays the override it is documented to be, and `--w:initial` in a column still falls through to the block's own measure.
 
 All three keys are in `_NON_TEXT_KEYS`, so "center" and "950" never reach `llms-full.txt`, the feed or admin search, and all three are deliberately **not** fields in `BLOCKS`: layout belongs to every section, so `admin.js` renders one set of controls for all types (§12.1) and `validate_blocks()` simply tolerates the extra keys. `.cta` and table cells keep their own `text-align`, so a centred section does not restyle a CTA band or a spec table.
 

@@ -163,6 +163,13 @@ on the right included — so you can never fill in a picture or a table box and 
 
 You can also use **+ Section** on the toolbar, which opens the same list with a description of each one. The same menu has *“Start from a layout…”* if you would rather begin from a ready-made Product, Service or Landing page and replace the wording.
 
+A few sections gained settings worth knowing about, all under the section's own **⚙**:
+
+- **Hero** — the big opening band. *Small label above the heading* is the short blue line above the headline ("The Storage Specialist"). There is a **second button** now, which draws as an outline next to the main one. And **Dark background** turns the hero into the full-width black band used on About Us — in that mode the picture you choose becomes a faded backdrop *behind* the words instead of sitting beside them.
+- **Automatic list** — the section that lists your pages and keeps itself up to date. *Header link text* and *Header link* put a link like "All services →" on the right of the section's heading. The cards style themselves to suit what they are listing: services show a number and their sub-services, products show the product picture, case studies show their industry and solution, blog posts show the date. You do not choose that; it follows the content type.
+- **Customer quote** also has a **Dark background** tick, for a quote on a dark card.
+- **Contact form** — when *Form type* is **quote**, the form draws as the dark panel from the Contact page and asks two extra questions: what the visitor is interested in, and how many users. Those answers arrive with the enquiry under **Leads**.
+
 One section is worth calling out: **Warranty check**. Drop it on a page and visitors get a box where they type the serial number of their unit and see straight away whether it is still in warranty. What it shows comes from the **Warranty** screen — see section 8 below.
 
 ### Putting things side by side

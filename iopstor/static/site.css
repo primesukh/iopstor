@@ -143,30 +143,54 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 
 /* page chrome */
 main{min-height:60vh}
-.breadcrumb{font-size:.9rem;color:var(--muted);padding:1rem 0 0}
-.breadcrumb ol{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:.35rem}
-.breadcrumb li+li::before{content:"›";margin-right:.35rem;color:#94a3b8}
-.breadcrumb a{color:var(--muted);text-decoration:none}.breadcrumb a:hover{color:var(--accent-2)}
-.page-head{padding:1.5rem 0 0}
-.page-title{margin:0 0 .5rem;font-size:2.4rem}
-.lead{font-size:1.15rem;color:var(--muted);margin:0 0 1rem;max-width:760px}
-.post-meta{color:var(--muted);font-size:.9rem;margin:0 0 1.5rem}
-.section{padding:3rem 0}
-.section-title{font-size:1.9rem;margin:0 0 1.5rem}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.5rem;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem}
+.breadcrumb{font-size:13px;color:var(--muted);padding:0}
+.breadcrumb ol{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap}
+.breadcrumb li+li::before{content:"/";margin:0 8px;color:var(--line-2)}
+.breadcrumb a{color:var(--muted);text-decoration:none}.breadcrumb a:hover{color:var(--blue)}
+.breadcrumb li:last-child{color:var(--black)}
+.page-head{padding:48px 0 56px}
+.page-title{margin:0 0 14px;font-size:clamp(34px,4.5vw,52px);line-height:1.05}
+.lead{font-size:18px;line-height:1.6;color:var(--muted);margin:0 0 20px;max-width:var(--w,640px)}
+.post-meta{color:var(--muted);font-size:14px;margin:0 0 20px}
+.btns{display:flex;gap:12px;flex-wrap:wrap;margin:0}
+
+/* A section is a full-width band. band-dark and band-blue are written by the block's own template
+   (stats, cta), never by an editor, so a row of figures is the black strip wherever it is used. */
+.section{padding:80px 0}
+.band-dark{background:var(--black);color:var(--muted-dark)}
+.band-dark h1,.band-dark h2,.band-dark h3{color:var(--white)}
+.band-blue{background:var(--blue);color:var(--white)}
+.band-blue h2{color:var(--white)}
+.section-title{font-size:clamp(28px,3.5vw,40px);margin:0 0 24px}
+/* the row above a grid: eyebrow and title left, "All services →" right */
+.sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin:0 0 28px}
+.sec-head>div{flex:1 1 320px;min-width:0}   /* or a long title's max-content basis wraps the link onto its own row */
+.sec-head .section-title{margin:0}
+.sec-head .eyebrow{margin:0 0 8px}
+.sec-link{font:600 15px/1 var(--body);color:var(--black);text-decoration:none;white-space:nowrap}
+.sec-link:hover{color:var(--blue)}
+.band-dark .sec-link{color:var(--white)}.band-dark .sec-link:hover{color:var(--blue)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+.card{background:var(--white);border:1px solid var(--line);border-radius:12px;padding:28px}
 /* columns block. The widths go in --cols (not straight into grid-template-columns) so the stacking
    media query below can win without !important beating an inline style. A nested block keeps its own
    <section class="section"><div class="wrap">, so both are neutralised inside a column. */
-.columns{display:grid;gap:1.75rem;grid-template-columns:var(--cols,repeat(auto-fit,minmax(240px,1fr)))}
+.columns{display:grid;gap:48px;grid-template-columns:var(--cols,repeat(auto-fit,minmax(240px,1fr)))}
 @media(max-width:800px){.columns{grid-template-columns:1fr}}
 .column>.section{padding:0}
-.column>.section+.section{padding-top:1.5rem}
+.column>.section+.section{padding-top:24px}
 .column .wrap{max-width:none;padding:0}
-.card h3{margin:0 0 .5rem;font-size:1.15rem}.card p{margin:0;color:var(--muted)}
-.card .date{display:block;font-size:.85rem;color:var(--muted);margin-bottom:.4rem}
-a.card{text-decoration:none;color:inherit;transition:transform .15s,box-shadow .15s;display:block}
-a.card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(15,27,45,.12)}
+.card h3{margin:0 0 8px;font-size:20px}
+.card p{margin:0;color:var(--muted);font-size:15px;line-height:1.6}
+.card .date{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+.card-icon{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;background:rgba(0,140,247,.12);font-size:18px;margin:0 0 14px}
+a.card{text-decoration:none;color:inherit;display:block;transition:border-color .15s,transform .15s}
+a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
+@media(prefers-reduced-motion:reduce){a.card:hover{transform:none}}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.chips-kids{margin:12px 0 0}
+.chip{font-size:12.5px;line-height:1.4;padding:4px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}
 /* Four buttons. Each variant names its own colour: .btn paints white on blue, so a variant that
    drops the fill is white-on-white until it says otherwise, and each needs its own :hover for the
    same reason — .btn:hover and .btn.ghost have equal specificity, so the fill would come back. */
@@ -179,11 +203,15 @@ a.card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(15,27,45,.12
 .btn.ghost-dark{background:transparent;color:var(--white);border-color:var(--line-dark-2)}
 .btn.ghost-dark:hover{background:transparent;color:var(--white);border-color:var(--white)}
 @media(max-width:700px){.btn{min-height:44px;padding:15px 22px}}   /* the 44px touch target */
-.pagination{display:flex;gap:.75rem;margin:2rem 0}
-.featured{border-radius:var(--radius);margin:1rem 0 1.5rem;width:100%;max-height:440px;object-fit:cover}
-.terms a{display:inline-block;background:#e0f2fe;color:var(--accent-2);padding:.2rem .7rem;border-radius:999px;text-decoration:none;font-size:.85rem;margin:0 .35rem .35rem 0}
-.details{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin:1.5rem 0;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.25rem}
-.details dt{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}.details dd{margin:.1rem 0 0;font-weight:600}
+.pagination{display:flex;gap:12px;margin:40px 0 0}
+.featured{border-radius:12px;margin:0;width:100%;max-height:440px;object-fit:cover}
+.terms a{display:inline-block;background:var(--blue-tint);color:var(--blue-hover);padding:4px 10px;border-radius:999px;text-decoration:none;font-size:13px;margin:0 6px 6px 0}
+/* The meta strip: one tile per field. dl > div > dt + dd is valid HTML5 and is what lets each pair
+   be one grid cell — a flat dl scatters every dt and dd into a cell of its own. */
+.details{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:0;padding:0;background:none;border:0}
+.details>div{background:var(--white);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.details dt{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.details dd{margin:4px 0 0;font-weight:600}
 .error-page{background:var(--black);color:var(--muted-dark);min-height:60vh;display:flex;align-items:center;padding:80px 0}
 .error-page>.wrap{width:100%}   /* a flex item shrink-wraps, and margin:0 auto would then centre it */
 .error-page .code{margin:0;font:800 clamp(80px,16vw,160px)/1 var(--head);color:var(--blue);letter-spacing:-.04em}
@@ -206,65 +234,167 @@ a.card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(15,27,45,.12
    in the theme falls back from it, so an unset section looks exactly as it was designed. The two
    named steps set it here, an exact number of pixels arrives inline from blocks.py section_style(),
    and only w-full also lets the section out of the page's 1200px column. */
-.section>.wrap>*,.hero>.wrap>*{max-width:var(--w,none)}
+/* --w-def is each block's designed measure, declared on the block itself. The shared rule below
+   is (0,2,0) and every block rule is (0,1,0) or (0,1,1), so before this the fallback `none` simply
+   beat .rich-text's 760px, .testimonial's 900px and the rest: a section's measure was only ever
+   whatever --w said, and the designed defaults never applied. Reading --w-def inside the fallback
+   keeps --w the override it is documented to be, and gives the blocks their measure back. */
+.section>.wrap>*,.hero>.wrap>*{max-width:var(--w,var(--w-def,none))}
 .w-wide{--w:100%}
 .w-full{--w:100%}.w-full>.wrap{max-width:none}
 .column{--w:initial}   /* a section inside a column keeps its own measure, not the grid's */
 
-/* blocks */
-.hero{background:linear-gradient(120deg,var(--navy) 0%,#1e3a5f 55%,var(--accent) 160%);color:#fff;padding:5rem 0}
-.hero h1{font-size:2.9rem;margin:0 0 1rem;max-width:var(--w,820px);color:#fff}
-.hero p{font-size:1.25rem;max-width:var(--w,720px);color:#dbeafe;margin:0 0 1.75rem}
-.hero img{margin-top:2rem;border-radius:var(--radius)}
-@media(max-width:700px){.hero{padding:3rem 0}.hero h1{font-size:2.1rem}}
+/* --- blocks ---------------------------------------------------------------------------------
+   One rule-group per type, in the order they appear in BLOCKS. */
+
+/* hero: words left, picture right. .hero-dark is the full-bleed variant, where the picture is a
+   faded backdrop behind the words instead of the art beside them. */
+.hero{position:relative;background:var(--white);border-bottom:1px solid var(--line);padding:72px 0 56px}
+.hero>.wrap{display:grid;gap:40px;align-items:center}
+.hero-split>.wrap{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.hero-text{min-width:0}
+.hero h1{margin:0 0 16px;font-size:clamp(36px,5vw,60px);line-height:1.05;max-width:var(--w,820px)}
+.hero .lead{max-width:540px;margin-bottom:28px}
+.hero-media{position:relative;min-width:0}
+.hero-media::before{content:"";position:absolute;inset:10% -4%;background:radial-gradient(closest-side,rgba(0,140,247,.16),transparent)}
+.hero-media img{position:relative;display:block;width:100%;max-width:620px;margin-inline:auto}
+.hero-dark{background:var(--black);color:#d1d6de;border-bottom:0;padding:96px 0 80px;overflow:hidden}
+.hero-dark h1{color:var(--white)}
+.hero-dark .lead{color:#d1d6de;max-width:640px}
+.hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.18}
+.hero-dark>.wrap{position:relative}
+@media(max-width:700px){.hero{padding:48px 0 40px}.hero-dark{padding:64px 0 56px}}
+
 /* Prose typed in the admin's document editor. Everything an editor can produce with the
    toolbar needs a rule here, or it falls through to the browser default and looks unfinished. */
-.rich-text{max-width:var(--w,820px)}.rich-text p{margin:0 0 1rem}
-.rich-text h1{font-size:2.1rem;margin:2rem 0 1rem}.rich-text h2{font-size:1.6rem;margin-top:2rem}
-.rich-text h3{font-size:1.3rem;margin:1.6rem 0 .5rem}.rich-text h4{margin:1.3rem 0 .4rem;font-size:1.1rem}
-.rich-text h5{margin:1.2rem 0 .35rem;font-size:1rem}
-.rich-text h6{margin:1.1rem 0 .3rem;font-size:.95rem}
+.rich-text{--w-def:var(--reading);max-width:var(--w,var(--reading));font-size:17px;line-height:1.7;color:var(--ink-2)}
+.rich-text p{margin:0 0 1rem}
+.rich-text h1{font-size:34px;margin:2rem 0 1rem}.rich-text h2{font-size:28px;margin:2.2rem 0 .8rem}
+.rich-text h3{font-size:21px;margin:1.8rem 0 .6rem}.rich-text h4{margin:1.4rem 0 .4rem;font-size:18px}
+.rich-text h5{margin:1.2rem 0 .35rem;font-size:16px}
+.rich-text h6{margin:1.1rem 0 .3rem;font-size:15px}
 .rich-text ul,.rich-text ol{margin:0 0 1rem;padding-left:1.35rem}.rich-text li{margin-bottom:.4rem}
 .rich-text li>ul,.rich-text li>ol{margin:.4rem 0 0}
-.rich-text blockquote{border-left:4px solid var(--accent);margin:1.5rem 0;padding:.75rem 1.25rem;background:var(--card);border-radius:0 8px 8px 0;color:var(--muted)}
+.rich-text blockquote{border-left:3px solid var(--blue);margin:1.5rem 0;padding:.25rem 0 .25rem 1.25rem;font-style:italic;color:var(--muted)}
 .rich-text blockquote p:last-child{margin:0}
-.rich-text table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin:1.5rem 0}
+.rich-text table{width:100%;border-collapse:collapse;background:var(--white);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:1.5rem 0;font-size:15px}
 .rich-text th,.rich-text td{padding:.7rem 1rem;border-bottom:1px solid var(--line);text-align:left}
-.rich-text th{background:#f1f5f9;font-weight:600}.rich-text tr:last-child td{border-bottom:0}
+.rich-text th{background:var(--grey);font-weight:600;color:var(--ink)}.rich-text tr:last-child td{border-bottom:0}
 /* cells only carried a border-bottom, which reads as a list; a real grid needs the column lines too */
 .rich-text th+th,.rich-text td+td{border-left:1px solid var(--line)}
 /* only a table whose columns have been resized is pinned to those widths; the rest still auto-fit */
 .rich-text table:has(colgroup){table-layout:fixed}
-.rich-text img{display:block;margin:1.5rem 0;border-radius:var(--radius)}
+.rich-text img{display:block;margin:1.5rem 0;border-radius:12px}
 .rich-text hr{border:0;border-top:1px solid var(--line);margin:2.5rem 0}
-.rich-text code{background:#f1f5f9;padding:.1rem .35rem;border-radius:4px;font-size:.92em}
+.rich-text code{background:var(--grey);padding:.1rem .35rem;border-radius:4px;font:.92em var(--mono)}
 .rich-text>*:first-child{margin-top:0}
-.cta{background:var(--navy);color:#fff;text-align:center;padding:3.5rem 1.5rem;border-radius:var(--radius)}
-.cta h2{margin:0 0 .5rem;color:#fff}.cta p{color:#cbd5e1;margin:0 0 1.5rem}
-.stats{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1rem;text-align:center}
-.stats li{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.5rem}
-.stats strong{display:block;font-size:2.1rem;color:var(--accent-2)}.stats span{color:var(--muted)}
-.faq details{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.9rem 1.2rem;margin-bottom:.6rem}
-.faq summary{cursor:pointer;font-weight:600}.faq details>div{padding-top:.6rem;color:var(--muted)}
-.testimonial{border-left:4px solid var(--accent);margin:0;padding:1.25rem 1.5rem;background:var(--card);border-radius:0 var(--radius) var(--radius) 0;font-size:1.15rem}
-.testimonial p{margin:0}.testimonial footer{margin-top:.6rem;font-size:.95rem;color:var(--muted)}
-figure{margin:0}figure img{border-radius:var(--radius)}figcaption{color:var(--muted);font-size:.9rem;margin-top:.4rem}
-.pdf iframe{width:100%;height:min(80vh,900px);border:1px solid var(--line);border-radius:var(--radius);background:#fff}
-.pdf p{margin:.75rem 0 0}
-.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.75rem}.gallery img{border-radius:8px;width:100%;object-fit:cover;aspect-ratio:4/3}
-.specs{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin:1rem 0}
-.specs th,.specs td{padding:.7rem 1rem;border-bottom:1px solid var(--line);text-align:left}.specs th{width:35%;background:#f1f5f9;font-weight:600}
-.specs caption{caption-side:top;text-align:left;font-weight:700;font-size:1.2rem;margin-bottom:.75rem;color:var(--navy)}
-.lead-form{max-width:var(--w,640px);background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.5rem}
-.lead-form label{display:block;margin:.8rem 0 .25rem;font-weight:600}
-.lead-form input,.lead-form textarea{width:100%;padding:.65rem .75rem;border:1px solid #cbd5e1;border-radius:8px;font:inherit}
-.lead-form textarea{min-height:120px}.lead-form .btn{margin-top:1rem}
-.notice{background:#ecfdf5;border:1px solid #a7f3d0;padding:.8rem 1rem;border-radius:8px;margin-bottom:1rem}
+
+/* image / gallery */
+figure{margin:0}figure img{display:block;width:100%;border-radius:12px}
+figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.gallery img{width:100%;border-radius:8px;object-fit:cover;aspect-ratio:4/3}
+
+/* cta: the blue band, with the words and the button on one row until they will not fit */
+.band-blue.section{padding:64px 0}
+.cta{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.cta h2{margin:0 0 6px;font-size:clamp(26px,3vw,34px)}
+.cta p{margin:0;font-size:17px;color:rgba(255,255,255,.9);max-width:640px}
+
+/* faq */
+.faq details{--w-def:800px;max-width:var(--w,800px);border-top:1px solid var(--line);padding:18px 0}
+.faq summary{display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;font:600 17px/1.4 var(--body);list-style:none}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";flex:none;color:var(--blue);font:700 20px/1 var(--body)}
+.faq details[open] summary::after{content:"\2212"}
+.faq details>div{padding-top:12px;color:var(--muted);font-size:15.5px;line-height:1.7}
+
+/* stats: always inside .band-dark, so a figure is white on black */
+.stats{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px}
+.stats li{border-left:2px solid var(--blue);padding-left:18px}
+.stats strong{display:block;font:800 40px/1 var(--head);color:var(--white);letter-spacing:-.02em}
+.stats span{display:block;margin-top:8px;font-size:14px;line-height:1.5;color:var(--muted-dark)}
+.band-dark.section{padding:40px 0}
+
+/* testimonial */
+.testimonial{--w-def:900px;max-width:var(--w,900px);margin:0;background:var(--grey);border-radius:14px;padding:32px}
+.testimonial p{margin:0;font:500 clamp(20px,2.4vw,26px)/1.4 var(--head);color:var(--black)}
+.testimonial footer{display:flex;align-items:center;gap:12px;margin-top:20px;font-size:14px;color:var(--muted)}
+.testimonial .avatar{flex:none;width:44px;height:44px;border-radius:999px;background:var(--line)}
+.testimonial.t-dark{background:var(--black-3);padding:40px}
+.t-dark p{color:var(--white)}.t-dark footer{color:var(--muted-dark)}.t-dark .avatar{background:var(--line-dark-2)}
+
+/* pdf / embed_html */
+.pdf iframe{width:100%;height:min(80vh,900px);border:1px solid var(--line);border-radius:12px;background:var(--white)}
+.pdf p{margin:16px 0 0}
+.embed iframe,.embed video,.embed embed,.embed object{width:100%;border:1px solid var(--line);border-radius:12px;display:block}
+
+/* --- post_list, one card styled per post type ------------------------------------------------
+   One template; the parts a type does not want are switched off here rather than branched in
+   Jinja, which is what "reuse the card variants by post_type" means in practice. pl-<slug> is
+   written from the resolved post_types row, never from block data. */
+.pl .card-img,.pl .card-n,.pl .chips{display:none}
+.pl .card-img img{display:block;width:100%}
+.pl-service .card-n{display:block;margin:0 0 14px;font:700 12px/1 var(--mono);color:var(--blue)}
+.pl-service .chips-kids{display:flex}
+.pl-product .card{padding:0;overflow:hidden}
+.pl-product .card-img{display:flex;align-items:center;justify-content:center;min-height:150px;padding:20px;background:var(--white);border-bottom:1px solid var(--line)}
+.pl-product .card-img img{width:auto;max-height:150px;object-fit:contain}
+.pl-product .card h3{margin:20px 24px 8px}
+.pl-product .card p{margin:0 24px 24px}
+.pl-case_study .card-img{display:block;min-height:150px;margin:0 0 16px;border-radius:10px;background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)}
+.pl-case_study .card-img img{height:150px;object-fit:cover;border-radius:10px}
+.pl-case_study .chips{display:flex}
+.pl-case_study .chip-industry{background:rgba(0,140,247,.1);border-color:transparent;color:var(--blue-hover)}
+.pl-partner .cards{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.pl-partner .card-img{display:flex;align-items:center;height:64px;margin:0 0 14px}
+.pl-partner .card-img img{width:auto;max-height:64px;object-fit:contain}
+.pl-partner .card h3{font-size:17px}.pl-partner .card p{font-size:13.5px}
+.pl-post .card{padding:0;overflow:hidden}
+.pl-post .card-img{display:block;aspect-ratio:16/9;background:var(--grey)}
+.pl-post .card-img img{height:100%;object-fit:cover}
+.pl-post .card .date{margin:20px 24px 6px}
+.pl-post .card h3{margin:0 24px 8px}
+.pl-post .card p{margin:0 24px 24px}
+
+/* spec_table */
+.specs{--w-def:800px;width:100%;max-width:var(--w,800px);border-collapse:collapse;margin:0;background:none;border:0}
+.specs th,.specs td{padding:14px 0;border-bottom:1px solid var(--line);text-align:left;font-size:15px;vertical-align:top}
+.specs th{width:35%;background:none;font-weight:500;color:var(--muted)}
+.specs caption{caption-side:top;text-align:left;margin-bottom:16px;font:800 22px/1.2 var(--head);color:var(--ink)}
+
+/* contact_form: the light panel, and the dark one a quote form gets */
+.lead-form{--w-def:640px;max-width:var(--w,640px);background:var(--white);border:1px solid var(--line);border-radius:12px;padding:28px}
+.lead-form label{display:block;margin:14px 0 0;font:500 14px/1.4 var(--body);color:var(--ink)}
+.lead-form input,.lead-form textarea,.lead-form select{width:100%;margin-top:6px;padding:12px 14px;border:1px solid var(--line-2);border-radius:6px;background:var(--white);color:var(--ink);font:inherit;font-size:15px}
+.lead-form textarea{min-height:120px}
+.lead-form .btn{margin-top:20px}
+.field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0 16px}
+.lead-form.cf-dark{background:var(--black);border-color:var(--line-dark);color:var(--white);padding:32px}
+.cf-dark label{color:var(--muted-dark)}
+.cf-dark input,.cf-dark textarea,.cf-dark select{background:var(--black-3);border-color:var(--line-dark-2);color:var(--white)}
+.notice{background:var(--green-bg);border:1px solid rgba(10,138,58,.25);color:var(--green);padding:14px 16px;border-radius:8px;margin-bottom:20px;font-size:15px}
+
+/* warranty_check: the box on the left, the answer on the right, nothing on the right until asked */
+.warranty{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:32px;align-items:start}
+.warranty-check{margin:0}
 .warranty-check label{margin-top:0}
-.warranty-result{max-width:var(--w,640px);background:var(--card);border:1px solid var(--line);border-left:4px solid var(--muted);border-radius:var(--radius);padding:1.25rem 1.5rem;margin-top:1rem}
-.warranty-result.in{border-left-color:#16a34a}.warranty-result.out{border-left-color:#dc2626}
-.warranty-state{margin:0 0 .75rem;font-weight:700;font-size:1.15rem}
-.warranty-result.in .warranty-state{color:#166534}.warranty-result.out .warranty-state{color:#991b1b}
-.warranty-result dl{display:grid;grid-template-columns:minmax(9rem,auto) 1fr;gap:.4rem 1rem;margin:0}
-.warranty-result dt{color:var(--muted);font-weight:600}.warranty-result dd{margin:0}
-.warranty-none{background:#fff7ed;border-color:#fed7aa;max-width:var(--w,640px);margin-top:1rem}
+.warranty-check input[name=sn]{padding:14px 16px;border-radius:8px;font:500 15px/1.2 var(--mono);text-transform:uppercase}
+.warranty .hint{margin:8px 0 0;font-size:13px;color:var(--muted)}
+.warranty-result{background:var(--white);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.warranty-banner{padding:24px 28px;color:var(--white)}
+.warranty-result.in .warranty-banner{background:var(--green)}
+.warranty-result.out .warranty-banner{background:var(--red)}
+.warranty-label{margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.08em;opacity:.85}
+.warranty-state{margin:4px 0 6px;font:800 26px/1.1 var(--head)}
+.warranty-note{margin:0;font-size:14px;opacity:.9}
+.warranty-result dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin:0;padding:24px 28px}
+.warranty-result dt{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.warranty-result dd{margin:4px 0 0;font-weight:600}
+.warranty-result dd.mono{font-family:var(--mono);font-weight:500}
+.warranty-remarks{margin:0 28px 24px;padding:14px 16px;background:var(--grey);border-radius:8px;font-size:14px}
+.warranty-foot{display:flex;gap:20px;flex-wrap:wrap;margin:0;padding:16px 28px;border-top:1px solid var(--line)}
+.warranty-foot a{font:600 14px/1 var(--body);color:var(--blue);text-decoration:none}
+.warranty-result.none{padding:28px}
+.warranty-result.none h3{margin:0 0 8px;font-size:20px}
+.warranty-result.none p{margin:0 0 16px;font-size:15px;color:var(--muted)}

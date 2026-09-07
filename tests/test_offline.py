@@ -108,6 +108,27 @@ def test_edit_markers_only_in_edit_mode(app, monkeypatch):
     assert 'data-r="items" data-i="0"' in edit
 
 
+def test_dark_is_a_checkbox_not_a_class_name(app, monkeypatch):
+    """The variant switch is a boolean the template tests for truth, so whatever an editor manages
+    to put in `dark` becomes the same fixed class or none at all — never markup."""
+    from iopstor import db
+    monkeypatch.setattr(db, "settings", lambda: {})   # the base context processor reads site settings
+    monkeypatch.setattr(db, "table", lambda *a, **k: 1 / 0)   # a hero needs no query
+    with app.test_request_context("/"):
+        plain = render_blocks([{"type": "hero", "data": {"heading": "Hi"}}])
+        dark = render_blocks([{"type": "hero", "data": {"heading": "Hi", "dark": True}}])
+        nasty = render_blocks([{"type": "hero", "data": {"heading": "Hi", "dark": '" onload="x'}}])
+
+    assert "hero-dark" not in plain
+    assert 'class="hero hero-dark"' in dark
+    assert 'class="hero hero-dark"' in nasty and "onload" not in nasty
+
+    # ...and neither the flag nor a URL is words on the page, so neither reaches llms-full.txt
+    assert blocks_text([{"type": "hero", "data": {"eyebrow": "Label", "heading": "Hi",
+                                                  "dark": True, "cta2_url": "/x",
+                                                  "cta2_label": "More"}}]) == "Label Hi More"
+
+
 def test_section_alignment_is_a_whitelist(app, monkeypatch):
     """Both alignments reach the section's class, in edit and public alike, and nothing else does."""
     from iopstor import db
