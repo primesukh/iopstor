@@ -11,16 +11,16 @@
       <td>{{ w.purchase_date or '—' }}</td><td>{{ w.expiry_date }}</td><td>{{ 'Yes' if w.amc else 'No' }}</td>
       <td><span class="pill {{ 'published' if active(w, today) else 'expired' }}">{{ 'in warranty' if active(w, today) else 'expired' }}</span></td>
       <td><a class="btn secondary" href="{{ url_for('admin_ui.warranty', edit=w.id, q=request.args.get('q'), page=page) }}">Edit</a>
-        {% if admin_user.role == 'admin' %}<form method="post" action="{{ url_for('admin_ui.warranty_delete', pk=w.id) }}" onsubmit="return confirm('Delete this warranty record?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="secondary">Delete</button></form>{% endif %}</td></tr>
+        {% if admin_user.role == 'admin' %}<form method="post" action="{{ url_for('admin_ui.warranty_delete', pk=w.id, q=request.args.get('q'), page=page) }}" onsubmit="return confirm('Delete this warranty record?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="secondary">Delete</button></form>{% endif %}</td></tr>
   {% else %}<tr><td colspan="7" class="muted">No warranty records yet.</td></tr>{% endfor %}
 </table>
 <p>{% if page > 1 %}<a class="btn secondary" href="?page={{ page-1 }}&q={{ request.args.get('q','') }}">Previous</a>{% endif %} {% if has_next %}<a class="btn secondary" href="?page={{ page+1 }}&q={{ request.args.get('q','') }}">Next</a>{% endif %}</p>
 
-<h2 id="form">{{ 'Edit ' ~ e.serial if editing else 'Add a warranty record' }}</h2>
+<h2 id="form">{{ 'Edit ' ~ e.serial if e.id else 'Add a warranty record' }}</h2>
 <form method="post" class="card" style="max-width:640px">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  {% if editing %}<input type="hidden" name="id" value="{{ e.id }}">{% endif %}
-  <label>Serial number * <input type="text" name="serial" value="{{ e.serial or '' }}" required maxlength="100" autocomplete="off" spellcheck="false"></label>
+  {% if e.id %}<input type="hidden" name="id" value="{{ e.id }}">{% endif %}
+  <label>Serial number * <input type="text" name="serial" value="{{ e.serial or '' }}" required{{ " autofocus" if refused }} maxlength="100" autocomplete="off" spellcheck="false"></label>
   <label>Customer name * <input type="text" name="customer_name" value="{{ e.customer_name or '' }}" required maxlength="200"></label>
   <label>Registered email <input type="email" name="email" value="{{ e.email or '' }}" maxlength="300"></label>
   <label>Purchase date <input type="date" name="purchase_date" value="{{ e.purchase_date or '' }}"></label>
@@ -29,6 +29,6 @@
   <label>Remarks <textarea name="remarks">{{ e.remarks or '' }}</textarea></label>
   <label class="inline"><input type="checkbox" name="remarks_public" {{ 'checked' if e.remarks_public }}> Show these remarks to the customer</label>
   <small>Remarks are an internal note unless you tick the box. Everything else is shown to anyone who enters this serial number.</small>
-  <p><button type="submit">{{ 'Save changes' if editing else 'Add record' }}</button>{% if editing %} <a class="btn secondary" href="{{ url_for('admin_ui.warranty') }}">Cancel</a>{% endif %}</p>
+  <p><button type="submit">{{ 'Save changes' if e.id else 'Add record' }}</button>{% if e.id %} <a class="btn secondary" href="{{ url_for('admin_ui.warranty', q=request.args.get('q'), page=page) }}">Cancel</a>{% endif %}</p>
 </form>
 {% endblock %}

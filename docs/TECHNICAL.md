@@ -244,6 +244,8 @@ Writes: `POST /leads` (also the target of the HTML contact form — plain form P
 
 `/admin/warranty` is the warranty register: list, `?q=` search over serial / customer / email, and one form that adds a record or edits the one named by `?edit=<id>` — the `users` screen's shape, with `db.paginate(..., 50)` and the `page` / `has_next` idiom used by `/admin/leads`. It refuses a duplicate `serial_key` with a `flash()` before writing, rather than letting a unique violation surface as a 502 through `_pg_error`. Editors may add and edit; **only an admin may delete**, matching `/admin/posts/<id>/delete`. The public side of this table needs no endpoint at all (§6, `warranty_check`).
 
+It is post-redirect-get only when the write **succeeds**. A refused save falls through to the same render with the submitted values back in the form and a `400`, the way `new_post` / `edit_post` re-render rather than redirect — a redirect would answer a typo by making the editor retype the record. `editing` is the form's contents, from `request.form` on a refusal and from the row on `?edit=`; the template keys add-vs-edit off `editing.id`, not off `editing` being truthy, so a rejected *new* record does not come back wearing an Edit heading. `?q=` and `?page=` ride through every redirect (save, delete, cancel) so a filtered list survives the round trip.
+
 ### Crawler endpoints
 
 `/sitemap.xml`, `/robots.txt`, `/feed.xml`, `/llms.txt`, `/llms-full.txt`, plus `/healthz`.

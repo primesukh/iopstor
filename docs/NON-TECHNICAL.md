@@ -304,6 +304,8 @@ Each enquiry can be marked **New**, **In progress** or **Done**, so sales can wo
 | AMC status | Yes or No, for an annual maintenance contract. |
 | Remarks | A note to yourself. See below. |
 
+**If a record is refused, nothing is lost.** A missing field, a serial number already on file, or an expiry date before the purchase date leaves everything you typed exactly where it was, with a line at the top of the screen saying what is wrong. Fix that one thing and press the button again — you never have to find the record and type it out a second time. Your search and your place in the list survive too.
+
 **Editing one.** Press **Edit** on any row: the record loads into the form, you change what you need and press **Save changes**. **Search** finds a record by serial number, customer name or email. Only an admin can delete a record.
 
 **Remarks are private unless you say otherwise.** Anything you type in Remarks is an internal note that the customer never sees — unless you tick **"Show these remarks to the customer"**, which puts it on their warranty result. Use the tick for something helpful ("PSU replaced under RMA, October 2025") and leave it clear for anything internal.

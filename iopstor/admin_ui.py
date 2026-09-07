@@ -384,7 +384,13 @@ def lead_status(pk):
 @ui_required()
 def warranty():
     """The warranty register: list, search, add and edit on one page (?edit=<id> loads a record into
-    the form). The public Warranty check section reads the same table by serial number."""
+    the form). The public Warranty check section reads the same table by serial number.
+
+    A save that works redirects (post-redirect-get, so a refresh cannot save twice); a save that is
+    refused falls through to the same render with what was typed still in the form, the way the post
+    form re-renders instead of redirecting. Losing a filled-in record to a typo is not a validation
+    message, it is a re-typing exercise."""
+    editing, refused = None, False
     if request.method == "POST":
         f = request.form
         row = {k: f.get(k, "").strip()[:limit] for k, limit in
@@ -400,15 +406,20 @@ def warranty():
         elif dupe and str(dupe["id"]) != pk:
             flash(f"Serial number {row['serial']} already has a record.")
         elif row["purchase_date"] and row["expiry_date"] < row["purchase_date"]:
-            # the friendly half of warranties_expiry_after_purchase (0004); ISO dates compare as dates
+            # the friendly half of warranties_expiry_after_purchase (0004); ISO dates compare as dates.
+            # No purchase date means no comparison to make: any expiry is allowed.
             flash(f"Warranty expiry ({row['expiry_date']}) cannot be before the purchase date ({row['purchase_date']}).")
-        elif pk.isdigit():
-            db.update("warranties", int(pk), row)
-            flash(f"Saved {row['serial']}.")
         else:
-            db.insert("warranties", row)
-            flash(f"Added {row['serial']}.")
-        return redirect(url_for("admin_ui.warranty"))
+            if pk.isdigit():
+                db.update("warranties", int(pk), row)
+                flash(f"Saved {row['serial']}.")
+            else:
+                db.insert("warranties", row)
+                flash(f"Added {row['serial']}.")
+            return redirect(url_for("admin_ui.warranty", q=request.args.get("q"), page=request.args.get("page")))
+        # refused: hand the submitted values back to the form. The id decides add-vs-edit in the
+        # template, so a rejected new record does not come back wearing an Edit heading.
+        editing, refused = ({**row, "id": pk} if pk.isdigit() else row), True
     q = db.table("warranties").select("*", count="exact")
     if s := request.args.get("q"):
         s = s.replace(",", " ").replace("(", " ").replace(")", " ")  # PostgREST's or_ is comma/paren-delimited
@@ -416,9 +427,11 @@ def warranty():
     page = max(request.args.get("page", 1, type=int) or 1, 1)
     result = db.paginate(q.order("id", desc=True), page, 50)
     edit_id = request.args.get("edit", type=int)
-    editing = db.one(db.table("warranties").select("*").eq("id", edit_id)) if edit_id else None
+    if editing is None and edit_id:
+        editing = db.one(db.table("warranties").select("*").eq("id", edit_id))
     return render_template("admin/warranty.html", result=result, page=page, has_next=page * 50 < result["total"],
-                           editing=editing, today=date.today().isoformat(), active=warranty_active)
+                           editing=editing, refused=refused, today=date.today().isoformat(),
+                           active=warranty_active), (400 if refused else 200)
 
 
 @ui.post("/warranty/<int:pk>/delete")
@@ -426,7 +439,7 @@ def warranty():
 def warranty_delete(pk):
     db.table("warranties").delete().eq("id", pk).execute()
     flash("Warranty record removed.")
-    return redirect(url_for("admin_ui.warranty"))
+    return redirect(url_for("admin_ui.warranty", q=request.args.get("q"), page=request.args.get("page")))
 
 
 @ui.route("/settings", methods=["GET", "POST"])
