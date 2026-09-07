@@ -155,7 +155,14 @@ PARTNERS = [
     ("SanDisk", "sandisk-logo-pan.jpg"), ("Supermicro", "supermicro-logo-1.png"),
     ("VMware", "vmware_cloud_logo.jpg"), ("Western Digital", "western_digital-logo.jpg"),
 ]
-HERO_IMAGE, ZFS_IMAGE, ABOUT_IMAGE = "banner-homepage-96tb.png", "DSC_0305n.png", "background1.jpg"
+# The mock's hero is assets/introducing-rack.png, alt "IOPStor 24-bay 2U all-flash array" --
+# that is Untitled-4.png, the 24-bay array with the wordmark over it. Its rack-96tb.png is
+# banner-homepage-96tb.png, the 8-bay 2U; the "96tb" in both filenames settles it. tower.png
+# is DSC_0305n.png, the Classic.
+HERO_IMAGE = "Untitled-4.png"
+RACK_IMAGE = "banner-homepage-96tb.png"
+TOWER_IMAGE = "DSC_0305n.png"
+ABOUT_IMAGE = "background1.jpg"
 
 
 def media_id(filename):
@@ -196,8 +203,8 @@ def home_blocks(media=lambda name: None):
                                        "heading": "Storage, virtualisation and cloud, delivered as one stack",
                                        "link_label": "All services", "link_url": "/services"}},
         {"type": "columns", "data": {"cols": [
-            [{"type": "image", "data": {"media_id": media(ZFS_IMAGE), "alt": "An IOPStor appliance"}}]
-            if media(ZFS_IMAGE) else
+            [{"type": "image", "data": {"media_id": media(RACK_IMAGE), "alt": "An IOPStor appliance"}}]
+            if media(RACK_IMAGE) else
             [{"type": "rich_text", "data": {"html": "<ul>" + "".join(
                 f"<li><strong>{t}</strong> \u2014 {d}</li>" for t, d in ZFS_FEATURES[:5]) + "</ul>"}}],
             [{"type": "rich_text", "data": {"html":
@@ -205,7 +212,7 @@ def home_blocks(media=lambda name: None):
                 "<p>ZFS is a file system and logical volume manager that changes how storage is administered. "
                 "Every block is checksummed, every snapshot is instant, and a failed drive never costs you a day's work.</p>"
                 + ("<ul>" + "".join(f"<li><strong>{t}</strong> \u2014 {d}</li>" for t, d in ZFS_FEATURES[:4]) + "</ul>"
-                   if media(ZFS_IMAGE) else "")
+                   if media(RACK_IMAGE) else "")
                 + "<p><a href=\"/services/storage/nas\">All ZFS features &rarr;</a></p>"}}]]}},
         {"type": "post_list", "data": {"post_type": "product", "limit": 6, "eyebrow": "Appliances",
                                        "heading": "Sized from 5 users upward",
@@ -283,7 +290,7 @@ def run_seed():
         _post(types["event"], title, meta={"start_date": start})
     for i, (title, users, specs) in enumerate(PRODUCTS):
         _post(types["product"], title, menu_order=i, meta={"specs": specs},
-              featured=media_id(ZFS_IMAGE if "Classic" in title else HERO_IMAGE),
+              featured=media_id(TOWER_IMAGE if "Classic" in title else RACK_IMAGE),
               excerpt=f"Appliance workload {users}. Zero touch setup and management through a web GUI, and one source for support.",
               blocks=[{"type": "hero", "data": {"heading": title, "eyebrow": "Appliance",
                                                 "subheading": f"Sized for {users}. Xeon, enterprise SSD and 10G networking, on ZFS.",
