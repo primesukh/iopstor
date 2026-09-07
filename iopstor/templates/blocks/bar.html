@@ -1,0 +1,10 @@
+{# The header strip. It renders the theme's .site-header, so sticky, the 66px rail and the mobile
+   drawer come from site.css unchanged — per bar, which is what lets a top strip scroll away while
+   the main bar sticks. Slots are data.cols exactly as columns has them; data-col is the editor's
+   address and is written only under edit. A <div>, not <header>: a bar may also sit in <footer>.
+   Sticky is the class-less default, so the shipped header still says class="site-header" and nothing else.
+   ponytail: two sticky bars both stick at top:0 and overlap — untick Sticky on the upper one. A
+   transparent bar is laid over the page, not sticky; solid-on-scroll needs JS. #}
+<div class="site-header{{ cls }}{% if data.sticky == false %} static{% endif %}{% if data.transparent %} over{% endif %}"{{ sty }}{{ fe() }}>
+  <div class="wrap">{% for c in data['cols'] %}<div class="slot"{% if edit %} data-col="{{ loop.index0 }}"{% endif %}>{{ col(loop.index0) }}</div>{% endfor %}</div>
+</div>

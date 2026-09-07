@@ -357,9 +357,12 @@ def test_shipped_chrome_is_valid_and_renders(app, monkeypatch):
     assert validate_blocks(DEFAULT_HEADER) == [] and validate_blocks(DEFAULT_FOOTER) == []
 
     head = render_blocks(DEFAULT_HEADER)
+    # sticky is the class-less default: the shipped bar is the theme's header and nothing more
+    assert head.startswith('\n<div class="site-header">') and "static" not in head
     # the CSS-only mobile menu is `.nav-toggle:checked~.site-nav`, so the checkbox must precede <nav>
     assert head.index("nav-toggle") < head.index('<nav class="site-nav"')
     assert '<a href="/blog">Blog</a>' in head and ">Contact us<" in head
+    assert 'id="nav-toggle-0.1.0-header"' in head   # from the block path + menu, so two navs do not share one
 
     foot = render_blocks(DEFAULT_FOOTER)
     assert "IOPSTOR" in foot and "SDS" in foot and "mailto:a@b.c" in foot
@@ -367,7 +370,7 @@ def test_shipped_chrome_is_valid_and_renders(app, monkeypatch):
 
     # edit mode is where fe() runs, so a chrome template with a broken marker only shows up here
     edit = render_blocks(DEFAULT_HEADER, edit=True) + render_blocks(DEFAULT_FOOTER, edit=True)
-    assert 'data-b="0"' in edit and 'data-f="cta_label"' in edit
+    assert 'data-b="0"' in edit and 'data-b="0.1.1"' in edit and 'data-f="label"' in edit
     assert "iop-err" not in edit          # edit mode swallows a template error into this class
     assert "data-b=" not in render_blocks(DEFAULT_HEADER)   # and never leaks to the public page
 
@@ -391,7 +394,7 @@ def test_chrome_html_falls_back_instead_of_500ing_the_site(app, monkeypatch):
         with pytest.raises(RuntimeError):
             render_blocks([{"type": "nav", "data": {"menu": "boom"}}])   # the raw renderer still raises
         html = public.chrome_html("header")                              # the guarded one does not
-    assert '<header class="site-header' in html   # the shipped default, not the broken saved one
+    assert '<div class="site-header' in html   # the shipped default, not the broken saved one
 
     monkeypatch.setattr(db, "get_menu", lambda slug: 1 / 0)              # now the default breaks too
     with app.test_request_context("/"):
@@ -413,4 +416,42 @@ def test_inserters_are_scoped_to_their_surface(app):
 def test_a_broken_chrome_array_is_refused_before_it_is_stored():
     """The guard on PUT /settings and /admin/design: nav without a menu never reaches the DB."""
     assert validate_blocks([{"type": "nav", "data": {}}]) == ["blocks[0].menu required"]
-    assert validate_blocks([{"type": "site_bar", "data": {}}]) == []   # every field optional
+    assert validate_blocks([{"type": "bar", "data": {}}]) == []   # every field optional
+    # a bar is a container like columns: its slots are validated, and it cannot sit in a column
+    assert validate_blocks([{"type": "bar", "data": {"cols": [[{"type": "button", "data": {}}]]}}]) == [
+        "blocks[0].cols[0][0].label required", "blocks[0].cols[0][0].url required"]
+    assert validate_blocks([{"type": "columns", "data": {"cols": [[{"type": "bar", "data": {}}]]}}]) == [
+        "blocks[0].cols[0][0]: a bar section cannot go inside a column"]
+
+
+def test_bar_and_elements_render_by_where_they_sit(app, monkeypatch):
+    """A nav is the menu bar (with the ☰ checkbox) inside a bar and a plain list inside a column; a
+    bar's flags become classes; colours and height are whitelisted into custom properties."""
+    from iopstor import db
+    from iopstor.blocks import at_path, section_style
+
+    monkeypatch.setattr(db, "settings", lambda: {"contact_phone": "+91 22 1234", "social_links": ["https://www.linkedin.com/company/x", "https://example.org/y"]})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [{"label": "Top", "url": "/t", "children": [{"label": "Under", "url": "/u"}]}])
+
+    bar = [{"type": "bar", "data": {"sticky": False, "transparent": True, "height": "80", "bg": "#112233", "cols": [
+        [{"type": "nav", "data": {"menu": "header", "dropdowns": True}}, {"type": "phone", "data": {}}, {"type": "social", "data": {}}]]}}]
+    html = render_blocks(bar)
+    assert '<div class="site-header static over" style="--h:80px;--band:#112233">' in html
+    assert '<nav class="site-nav"' in html and ">Under<" in html            # in a bar: the menu, drop-downs on
+    assert 'href="tel:+91221234">&#9742; <span>+91 22 1234</span>' in html
+    assert 'aria-label="linkedin.com"' in html and ">in</a>" in html and ">e</a>" in html   # badge letters by host
+
+    col = [{"type": "columns", "data": {"cols": [[{"type": "nav", "data": {"menu": "footer", "heading": "Company"}}]]}}]
+    html = render_blocks(col)
+    assert '<ul class="nav-list">' in html and "nav-toggle" not in html and ">Under<" not in html   # a list, top level only
+    assert render_blocks(col, edit=True).count("nav-toggle") == 0
+
+    # the style whitelist: digits and six-digit hex only, because this lands in a style attribute
+    assert section_style({"bg": "#0f1b2d", "color": "#FFFFFF"}) == ' style="--band:#0f1b2d;--ink:#FFFFFF"'
+    for bad in ("red", "#fff", "#12345g", "url(x)", "#000000;x:y"):
+        assert section_style({"bg": bad, "color": bad}) == "", bad
+    assert section_style({"height": "0"}) == "" and section_style({"height": 66}) == ' style="--h:66px"'
+
+    # slots address like columns: block 0, slot 0, element 1 is the phone
+    assert at_path(bar, "0.0.1")["type"] == "phone"
+

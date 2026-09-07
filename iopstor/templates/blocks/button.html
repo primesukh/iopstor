@@ -1,0 +1,2 @@
+{# One button. Outline drops the fill (the theme's .btn.ghost); the label is edited on the page. #}
+<a class="btn{% if data.outline %} ghost{% endif %}{{ cls }}"{{ sty }}{{ fe() }} href="{{ data.url or '#' }}"{{ fe('label') }}>{{ data.label }}</a>

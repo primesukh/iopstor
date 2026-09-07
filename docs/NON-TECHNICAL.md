@@ -322,23 +322,31 @@ A serial number already on file is the one thing the browser cannot know by itse
 
 ### Design — your header and footer
 
-Every page on the site shares a strip along the top and a block along the bottom. **Design** is where you edit them, and it works exactly like writing a page: the same canvas, the same `/` to add a section, the same drag to reorder.
+Every page on the site shares a strip along the top and a block along the bottom. **Design** is where you edit them, and it works like writing a page: the same canvas, the same `/` to add something, the same drag to move it.
 
 At the top of the screen there are two tabs, **Header** and **Footer**. Pick one, change it, press **Save**, and it changes on every page at once.
 
-The sections you will find here are the ones a header or footer needs:
+**The header is a bar with slots.** Think of the bar as a shelf with two or three compartments: what you put in the first slot sits on the left, what you put in the last slot sits on the right. Click inside a slot and press `/` to drop an element in, and drag elements between slots to move them. Click the bar itself and press ⚙ to change the bar: its **background** and **text colour**, whether it is **sticky** (stays at the top while the page scrolls), its **height**, and how many **slots** it has. You can have more than one bar — a thin strip above the main one for your phone number and social links is the usual reason — and each bar decides for itself whether it sticks.
 
-| Section | What it is |
+The elements you can drop into a bar, or into a footer column:
+
+| Element | What it is |
 |---|---|
-| **Header bar** | The whole top strip: your logo, the menu and one button. This is one piece rather than loose parts, because the bar has to stay stuck to the top of the screen and turn into a ☰ button on a phone. |
-| **Menu** | A list of links, taken from one of your menus. Pick which one. |
-| **Site details** | Your name, tagline and address. |
-| **Contact details** | Your email, phone and social links. |
+| **Logo** | Your logo, linking to the home page. It uses the logo from **Settings** unless you pick a different picture; ⚙ also sets its height. |
+| **Menu** | The links from one of your menus. In the header it is the menu bar itself, and it turns into the ☰ button on phones. Tick *Show drop-downs* to show the links underneath each one. In a footer column it is a plain list with a heading. |
+| **Button** | One button. Type the words on the page; ⚙ sets the link, and *Outline style* makes it hollow. |
+| **Phone**, **Email** | Your phone number and email address from **Settings**, tappable. You can type different words over them on the page. |
+| **Social icons** | A small round badge for every social link in **Settings**. |
+| **Text**, **Picture** | The same as on a page — a line of words, or an image. |
+| **Site details** | Your name, tagline and address, from Settings. |
+| **Contact details** | Your email, phone and social links as a list, from Settings. |
 | **Small print** | The thin line at the very bottom. Type `{year}` and it becomes the current year on its own, so the copyright never goes stale. |
 
-*Site details* and *Contact details* have nothing to type in them on purpose. Those words live in **Settings**, so you change them once and they update in the footer, on every page, by themselves — rather than being typed in two places and slowly disagreeing.
+*Logo*, *Phone*, *Email*, *Social icons*, *Site details* and *Contact details* take their words from **Settings** on purpose. You change the phone number once, and it changes everywhere.
 
-To lay the footer out in columns, add a **Columns** section and drop the others inside it, exactly as you would on a page.
+**The footer** is laid out with a **Columns** section: drop the elements you want into each column — a logo, a line of text and social badges in the first, a menu in the second, phone, email and a button in the third. Click the Columns section and press ⚙ to set its **background** and **text colour**; the *Small print* line has its own.
+
+**On phones**, the menu folds into a ☰ button and everything else in the bar stays where it is, so keep the header to a logo, the menu and one button if you want it to fit on a small screen.
 
 **If you make a mess of it**, open *Advanced* at the bottom of the panel, delete everything in the box, and save. That puts the original header or footer back.
 

@@ -139,11 +139,11 @@ BLOCKS = {  # type: (required fields, optional fields)
 }
 ```
 
-Twenty-one types ship. Sixteen are page sections: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`, `warranty_check`. Five are **site chrome** — the header and footer (§6.1): `site_bar`, `nav`, `site_info`, `contact_info`, `legal`.
+Twenty-six types ship. Sixteen are page sections: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`, `warranty_check`. Ten are **site chrome** — the header and footer (§6.1): the `bar` container, the elements `logo`, `nav`, `button`, `phone`, `email`, `social`, and the footer conveniences `site_info`, `contact_info`, `legal`.
 
-`CHROME` names those five and `blocks_for(region)` scopes the two inserters: `blocks_for("page")` is everything except the chrome, `blocks_for("chrome")` is the chrome plus `CHROME_EXTRAS` (`rich_text`, `columns`, `image`, `embed_html`). Only the **inserter** is scoped — `validate_blocks()` stays permissive both ways, so a hero pasted into the header under *Advanced* still saves (`ponytail:` marked).
+`CHROME` names those ten and `blocks_for(region)` scopes the two inserters: `blocks_for("page")` is everything except the chrome, `blocks_for("chrome")` is the chrome plus `CHROME_EXTRAS` (`rich_text`, `columns`, `image`, `embed_html`). Only the **inserter** is scoped — `validate_blocks()` stays permissive both ways, so a hero pasted into the header under *Advanced* still saves (`ponytail:` marked).
 
-**Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">…` — `cls` is the layout classes, `sty` an inline width, `fe()` the edit marker (all three below); `render_blocks()` hands all three to every block template. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
+**Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">…` — `cls` is the layout classes, `sty` the inline custom properties, `fe()` the edit marker (all three below); `render_blocks()` hands all three to every block template, plus `path` (the block's `data-b` address) and `inside` (the container type it sits in, `None` at the top). The chrome elements (§6.1) are the one exception to the `.section` wrapper: they are inline things, but their root carries the same three. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
 
 ### 6.1 Site chrome — the header and footer
 
@@ -164,32 +164,42 @@ The header and footer are **block documents**, not template markup. `base.html` 
 
 **`chrome_html()` fails soft, and `render_blocks()` does not.** `render_blocks()` re-raises on a public render by design (`blocks.py`), so a broken page fails loudly. That is right for one page and wrong for the chrome, where one bad block would 500 **every URL on the site**. `chrome_html()` therefore falls back to the shipped default, and to `""` if even that cannot render — a page with no header beats a site that serves nothing. Both paths `logger.exception()`.
 
-**The five chrome blocks.**
+**The model: a bar of slots, and loose elements.** The header is one or more `bar` blocks. A bar is a **container like `columns`** — its slots live under `data.cols`, each an ordered block list — so everything that already handles columns handles a bar: `at_path()`, `validate_blocks()` recursion, the editor's path arithmetic, drag between containers, and the ⚙ panel's slot repeater. `CONTAINERS = ("columns", "bar")` is the only place that knowledge lives; `NEVER_NESTED` now holds `columns`, `bar` and `hero`, so a bar cannot sit in a column and a column cannot sit in a bar. The elements are small inline blocks that sit side by side in a slot and stack in a footer column; none is a `.section` band.
 
 | Type | Fields | Notes |
 |---|---|---|
-| `site_bar` | `menu`, `cta_label`, `cta_url`, `logo_media_id` | Renders `<header class="site-header">` itself, **not** a `.section` band: it is a sticky rail. The `#nav-toggle` checkbox must stay before `<nav>` — the mobile menu is `.nav-toggle:checked~.site-nav`, a sibling combinator. Falls back to `site.logo` when no logo is picked. |
-| `nav` | `menu` (required), `heading` | One `menus` row as a list. Top level only, as the old footer was. |
+| `bar` | `cols`, `sticky`, `transparent`, `height` | Renders **the theme's `.site-header`** (a `<div>`, so it may also sit in the footer) with one `.slot` per column: the first slot sits left, each further slot pushes right (`.slot+.slot{margin-left:auto}`), so 1–3 slots read left / right / spread. Sticky is the **class-less default** — the shipped bar emits exactly `class="site-header"` — and `sticky: false` adds `.static`; `transparent` adds `.over` (absolute over the page, no background). `height` → `--h`, the `.wrap`'s `min-height`. Because each bar is its own sticky element, a top strip with Sticky off scrolls away while the main bar sticks. `ponytail:` two sticky bars overlap at `top:0`; transparent is not combinable with sticky (solid-on-scroll needs JS). |
+| `logo` | `media_id`, `height` | `<a class="brand">`: the picked image, else `site.logo`, else the site name. The height is written inline on the `<img>`, not via `--h`, because custom properties inherit and the bar's own `--h` would reach it. |
+| `nav` | `menu` (required), `heading`, `dropdowns` | Two shapes from one root, chosen by `inside`: **in a bar**, the horizontal menu that **owns the mobile ☰** — checkbox, label, `<nav class="site-nav">`, in that order, because the drawer is the sibling combinator `.nav-toggle:checked~.site-nav`; the checkbox id is `nav-toggle-<path>-<menu>`. **In a column**, an `<h4>` and a plain `<ul class="nav-list">`. Children render only when `dropdowns` is true. `ponytail:` the id collides only if a footer bar holds a nav for the same menu at the same path as the header's. |
+| `button` | `label`, `url` (required), `outline` | The theme's `.btn`, `.ghost` when `outline`; the label is edited on the page. |
+| `phone`, `email` | `label` | `tel:` / `mailto:` links **from Settings**; the label replaces the visible text. Render nothing when Settings has none — except in edit mode, where a placeholder keeps them selectable. |
+| `social` | — | One `.soc` badge per `site.social` link, lettered by host (`in`, `X`, `f`, `ig`, `▶`, `gh`, else the first letter), `aria-label` = host. `ponytail:` letters, not brand SVGs; swap the `SOCIAL` map in the template for paths if brand marks are wanted. |
 | `site_info` | `heading` | Name, tagline, address — **from Settings**. |
 | `contact_info` | `heading` | Email, phone, social — **from Settings**. |
 | `legal` | `text`, `items` (`[{label, url}]`) | The thin bottom line. `{year}` and `{site}` in `text` are expanded in the template from the `year` / `site` globals — no helper. Renders `.legal`, not a `.section`. |
 
-`site_info` and `contact_info` deliberately have **no content fields**: those values already live in Settings, and an editor typing them in two places is how they drift.
+`site_info`, `contact_info`, `phone`, `email` and `social` deliberately have **no content fields**: those values already live in Settings, and an editor typing them in two places is how they drift.
 
-**The `menu` widget.** `EDITOR["widgets"]["menu"] = "menu"` renders a `<select>` of menu slugs in the settings popover, fed by `menus` in `#editor-data` (`_menu_slugs()`). A slug is picked, never typed — `/admin/menus` owns the list.
+**Colours.** `bg` and `color` are two more universal layout keys (below) that `section_style()` turns into `--band` / `--ink`. A header bar paints `background:var(--band,var(--navy));color:var(--ink,#fff)`; in the footer, the `<footer>` shell keeps only its top margin and **each top-level block is its own band** (`.site-footer>.section`, `.site-footer>.legal`) painting the same two properties, so a colour picked under ⚙ covers exactly that band and the unset default is pixel-identical to the old single band. Links and headings inside read `var(--ink, …)` too, or a chosen text colour would leave them unchanged. The ⚙ panel shows the two colour rows **only when `SPEC.type === "chrome"`** (`admin.js` `colorPick()`): a page keeps the theme's palette. Not `--bg`: that is already the page background in `:root`.
 
-**Layout keys.** Three optional keys on any block's `data`, absent = the theme's own layout:
+**The canvas and the chrome.** `admin.js` `ask()` posts the editor's `type` with every canvas request, and `POST /admin/canvas` skips the page heading when it is `chrome` — otherwise the header preview carries an "Untitled page" `<h1>`. For a nested `?p=` fragment the route derives `inside` from the parent block (`at_path()` on the path minus its last two parts), so a nav re-rendered after a ⚙ change stays a menu bar. `canvas.css` gives `.slot` the `.column` editing rules plus three of its own: the toolbar hangs **below** an element (`top:100%`) rather than over a 38px logo, the add strips keep their own width (they are flex items in a slot), and an empty slot keeps a `min-width` so it is still a drop target. `ponytail:` inside the canvas `[data-b]{position:relative}` anchors the mobile drawer under the nav element, not the bar; the public render is unaffected.
+
+**Old saves.** A `header_blocks` value saved before this model (the one-piece `site_bar`) no longer validates or renders; `chrome_html()` serves the default and logs, and *Advanced → empty → Save* clears it.
+
+**Layout keys.** Five optional keys on any block's `data`, absent = the theme's own layout:
 
 | Key | Values | What it does |
 |---|---|---|
 | `align` | `left` \| `center` \| `right` | how the content inside the section lines up (headings, text, buttons, captions, images) |
 | `align_box` | `left` \| `center` \| `right` | where the section's own box sits — only visible once the box is narrower than the page |
 | `width` | `wide` \| `full` \| a number of px | the section's content measure; `full` also breaks it out of the page column |
+| `bg`, `color` | `#rrggbb` | the band's background and text colour, as `--band` / `--ink` — read by the header bar and the footer bands only (§6.1); offered in the chrome editor only |
+| `height` | a number of px | `--h`; a bar's minimum height (§6.1) |
 
 Two functions carry them onto the root `<section>`, both **whitelists** rather than passthroughs, because the values land in attributes — the same reason `col_widths()` is strict:
 
 - **`section_class(data)`** → `" al-center alb-right w-full"`, interpolated into the root `class`. `ALIGNS` and `WIDTHS` are the only values that survive.
-- **`section_style(data)`** → `' style="--w:950px"'` for a **digits-only** `width` in `1..MAX_W` (4000), `""` for everything else, a named width included (that one is a class).
+- **`section_style(data)`** → one `style` attribute of custom properties: `--w` for a **digits-only** `width` in `1..MAX_W` (4000), `--h` likewise for `height`, `--band` / `--ink` for a `bg` / `color` that is exactly `#` + six hex digits. Anything else is dropped, a named width included (that one is a class); no keys → `""`. Width alone is still byte-for-byte `' style="--w:950px"'`.
 
 `--w` *is* the content measure: `site.css` writes every relevant `max-width` as `var(--w, <the theme's own value>)`, so an unset section renders exactly as designed, a number narrows or widens it, and `.w-wide` / `.w-full` set `--w:100%` from CSS. `.column{--w:initial}` stops a width set on a Columns section leaking into the sections inside it.
 
@@ -651,6 +661,24 @@ breakpoints answer honestly. A 500 ms debounce on any form `input` keeps it a st
 One CSS rule underpins all the show/hide: `.admin [hidden]{display:none!important}`. Author display
 rules outrank the UA's `[hidden]{display:none}`, so toggling `hidden` on a flex or grid element
 silently does nothing — the bug that once showed the layout chooser and the canvas at the same time.
+
+### 12.3 Design — the header and footer canvas
+
+`admin/design.html` is the post form with everything that is not the canvas cut away: it carries the
+same ids `admin.js` binds to (`#editor-data`, `#post-form`, `#doc-toolbar`, `#canvas-wrap`, `#canvas`,
+`#pane-hint`, `#advanced` + `textarea[name="blocks"]`) and nothing else — no title, address, summary,
+publish or SEO — so one region is one flat block array and the editor needs no mode. `#editor-data`
+says `"type": "chrome"`, which is what scopes the inserter (`blocks_for("chrome")`, §6), adds the two
+colour rows to ⚙ (`colorPick()`), and travels with every canvas request so `POST /admin/canvas` skips
+the page heading (§6.1). `?part=header|footer` picks the region; the tab strip is plain links, not a
+toggle. A save is `validate_blocks()` then `db.set_settings({"<part>_blocks": …})` — the keys are
+deliberately **not** in `SETTING_KEYS`, because `/admin/settings` writes every key in that tuple from
+its form and would blank them. `#view-mode` is absent on purpose: the canvas already shows the real
+header and footer, so `initPreview()` returns early.
+
+Inside the canvas a bar's slots are `[data-col]` containers exactly like columns, so click-a-gap,
+`/`, drag and ⚙ → *Slots* all work unchanged; `canvas.css` only teaches `.slot` the `.column`
+editing rules and hangs the toolbar below an element (§6.1).
 
 ---
 

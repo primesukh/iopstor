@@ -1,0 +1,4 @@
+{# A picked image, else the logo from Settings, else the site name. The height goes inline on the
+   <img>, not through --h: custom properties inherit, and the bar's own --h would reach in here. #}
+{% set img = data.media_id and media_url(data.media_id) or site.logo %}
+<a class="brand{{ cls }}"{{ sty }}{{ fe() }} href="/" rel="home">{% if img %}<img src="{{ img }}" alt="{{ site.name }}"{% if data.height|int %} style="height:{{ data.height|int }}px"{% endif %}>{% else %}{{ site.name }}{% endif %}</a>

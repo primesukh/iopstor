@@ -12,17 +12,29 @@ h1,h2,h3,h4,h5,h6{line-height:1.2;color:var(--navy)}
 .wrap{max-width:var(--max);margin:0 auto;padding:0 1.25rem}
 .skip{position:absolute;left:-999px}.skip:focus{left:1rem;top:1rem;background:#fff;padding:.5rem;z-index:100}
 
-/* header */
-.site-header{background:var(--navy);color:#fff;position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,.25)}
-.site-header .wrap{display:flex;align-items:center;gap:1.5rem;min-height:66px;position:relative}
-.brand{color:#fff;text-decoration:none;font-weight:800;font-size:1.4rem;letter-spacing:.06em;display:flex;align-items:center;gap:.5rem}
+/* header. A `bar` block (blocks.DEFAULT_HEADER) renders this strip — one per bar, so each is
+   sticky on its own (.static opts out, .over lays it across the top of the page instead). --band,
+   --ink and --h arrive inline from blocks.py section_style() when an editor picks colours or a
+   height under ⚙; unset, this is the theme. The admin's own header uses the same class. */
+.site-header{background:var(--band,var(--navy));color:var(--ink,#fff);position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.site-header.static{position:relative}   /* relative, not static: the editor's toolbar is positioned against it */
+.site-header.over{position:absolute;left:0;right:0;background:transparent;box-shadow:none}
+.site-header .wrap{display:flex;align-items:center;gap:1.5rem;min-height:var(--h,66px);position:relative}
+/* the slots of a bar: the first sits left, every next one pushes right, so 1–3 slots read as
+   left / right / spread. The elements inside a slot sit side by side. */
+.site-header .slot{display:flex;align-items:center;gap:1rem;min-width:0}
+.site-header .slot+.slot{margin-left:auto}
+.slot .site-nav,.slot .nav-toggle-label{margin-left:0}
+.site-header .btn{padding:.5rem 1rem}
+.site-header .btn.ghost{color:var(--ink,#fff)}
+.brand{color:var(--ink,#fff);text-decoration:none;font-weight:800;font-size:1.4rem;letter-spacing:.06em;display:flex;align-items:center;gap:.5rem}
 .brand img{height:38px}
 .nav-toggle{display:none}
 .nav-toggle-label{display:none;margin-left:auto;font-size:1.7rem;cursor:pointer;line-height:1}
 .site-nav{margin-left:auto}
 .site-nav ul{list-style:none;margin:0;padding:0;display:flex;gap:.15rem;align-items:center}
 .site-nav li{position:relative}
-.site-nav a{color:#e2e8f0;text-decoration:none;padding:.6rem .85rem;display:block;border-radius:6px;font-weight:500}
+.site-nav a{color:var(--ink,#e2e8f0);text-decoration:none;padding:.6rem .85rem;display:block;border-radius:6px;font-weight:500}
 .site-nav a:hover{background:var(--navy-2);color:#fff}
 .site-nav li ul{display:none;position:absolute;top:100%;left:0;background:#fff;min-width:230px;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,.18);border-radius:10px;padding:.4rem;gap:0;align-items:stretch}
 .site-nav li:hover>ul,.site-nav li:focus-within>ul{display:flex}
@@ -32,25 +44,35 @@ h1,h2,h3,h4,h5,h6{line-height:1.2;color:var(--navy)}
 .site-nav .nav-cta a:hover{background:var(--accent-2)}
 @media(max-width:960px){
   .nav-toggle-label{display:block}
-  .site-nav{display:none;position:absolute;left:0;right:0;top:66px;background:var(--navy);padding:.5rem 1.25rem 1rem;box-shadow:0 10px 20px rgba(0,0,0,.3)}
+  .site-nav{display:none;position:absolute;left:0;right:0;top:100%;background:var(--band,var(--navy));padding:.5rem 1.25rem 1rem;box-shadow:0 10px 20px rgba(0,0,0,.3)}
   .nav-toggle:checked~.site-nav{display:block}
   .site-nav ul{flex-direction:column;align-items:stretch}
   .site-nav li ul{display:flex;position:static;background:transparent;box-shadow:none;padding:0 0 0 1rem}
   .site-nav li ul a{color:#cbd5e1}
   .site-nav .nav-cta a{margin:.5rem 0 0}
 }
+/* the loose elements a bar or a footer column holds (blocks.py CHROME) */
+.contact-link{color:var(--ink,#e2e8f0);text-decoration:none;white-space:nowrap}.contact-link:hover{color:var(--accent)}
+.social{display:inline-flex;gap:.5rem;align-items:center}
+.soc{display:inline-flex;width:2rem;height:2rem;border-radius:50%;border:1.5px solid currentColor;align-items:center;justify-content:center;
+     font-size:.75rem;font-weight:700;text-decoration:none;color:inherit;line-height:1}
+.soc:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+.nav-list,.nav-list ul{list-style:none;margin:0;padding:0}.nav-list ul{padding-left:1rem}
+/* stacked in a footer column, an element is its own line */
+.column>.brand,.column>.btn,.column>.contact-link,.column>.social{display:inline-flex;margin-bottom:.75rem}
 
-/* footer */
-.site-footer{background:var(--navy);color:#cbd5e1;margin-top:4rem;padding:3rem 0 1.5rem}
-/* The footer is block-built (blocks.DEFAULT_FOOTER): a columns section plus a legal block. The band
-   already pads itself, so the section inside it must not pad again; .column>.section handles depth 2. */
-.site-footer>.section{padding:0}
+/* footer. Block-built (blocks.DEFAULT_FOOTER): each top-level block is its own band and paints
+   itself with --band / --ink, so a colour picked under ⚙ covers exactly that band. Unset, every
+   band is navy and the two bands read as one; the paddings add up to what the single band had. */
+.site-footer{margin-top:4rem}
+.site-footer>.section,.site-footer>.legal{background:var(--band,var(--navy));color:var(--ink,#cbd5e1)}
+.site-footer>.section{padding:3rem 0 1.5rem}
+.site-footer>.legal{padding:.5rem 0 1.5rem}
 @media(max-width:800px){.site-footer .columns{grid-template-columns:1fr}}
-.site-footer h4{color:#fff;margin:0 0 .75rem;font-size:1rem;text-transform:uppercase;letter-spacing:.06em}
+.site-footer h4{color:var(--ink,#fff);margin:0 0 .75rem;font-size:1rem;text-transform:uppercase;letter-spacing:.06em}
 .site-footer p{margin:0 0 .5rem}
-.site-footer a{color:#e2e8f0;text-decoration:none}.site-footer a:hover{color:var(--accent)}
+.site-footer a{color:var(--ink,#e2e8f0);text-decoration:none}.site-footer a:hover{color:var(--accent)}
 .site-footer ul{list-style:none;padding:0;margin:0}.site-footer li{margin:.35rem 0}
-.site-footer .legal{margin-top:2rem}
 .legal>.wrap{border-top:1px solid rgba(255,255,255,.12);padding-top:1rem;font-size:.9rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem}
 
 /* page chrome */
@@ -72,9 +94,10 @@ main{min-height:60vh}
    <section class="section"><div class="wrap">, so both are neutralised inside a column. */
 .columns{display:grid;gap:1.75rem;grid-template-columns:var(--cols,repeat(auto-fit,minmax(240px,1fr)))}
 @media(max-width:800px){.columns{grid-template-columns:1fr}}
-.column>.section{padding:0}
+.column>.section,.slot>.section{padding:0}
 .column>.section+.section{padding-top:1.5rem}
-.column .wrap{max-width:none;padding:0}
+.column .wrap,.slot .wrap{max-width:none;padding:0}
+.slot .rich-text p{margin:0}   /* a line of words in a bar is a line, not a paragraph */
 .card h3{margin:0 0 .5rem;font-size:1.15rem}.card p{margin:0;color:var(--muted)}
 .card .date{display:block;font-size:.85rem;color:var(--muted);margin-bottom:.4rem}
 a.card{text-decoration:none;color:inherit;transition:transform .15s,box-shadow .15s;display:block}

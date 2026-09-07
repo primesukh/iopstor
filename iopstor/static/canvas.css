@@ -23,9 +23,17 @@
 /* a block inside a column: quieter hover ring and a smaller bar, so the Columns block's own toolbar
    (which shows at the same time, because hovering a child hovers the parent) stays readable */
 .column{min-height:4.5rem}
-.column [data-b]:hover{outline-color:#e0f2fe}
+.column [data-b]:hover,.slot [data-b]:hover{outline-color:#e0f2fe}
 /* left, not right: the Columns block's own bar is top-right and shows at the same time */
 .column [data-b]>.iop-bar{top:.15rem;right:auto;left:.15rem;transform:scale(.85);transform-origin:top left}
+/* a bar's slot holds small things — a 38px logo, a button — so the toolbar hangs below the element
+   rather than covering it and its neighbour */
+.slot [data-b]>.iop-bar{top:100%;right:auto;left:0;transform:scale(.85);transform-origin:top left}
+.slot{min-width:3rem}   /* an empty slot is still somewhere to drop an element */
+/* the add strips are flex items inside a slot: keep them to their own width, or their invisible
+   820px buttons push the elements apart */
+.slot>.iop-add{padding:0}
+.slot>.iop-add button{width:auto;max-width:none;white-space:nowrap}
 
 /* --- editable fields ------------------------------------------------------ */
 [data-f]{cursor:text}
@@ -54,8 +62,9 @@
 /* An empty column holds nothing but its own strip, so hover-to-reveal makes it look like a dead box.
    Show it, and make it read as somewhere to drop a section. */
 .column>.iop-add:only-child{padding:1.1rem 0}
-.column>.iop-add:only-child button{opacity:1;text-align:center;background:#f8fafc;border:1px dashed #cbd5e1;cursor:pointer}
-.column>.iop-add:only-child button:hover{background:#f1f5f9;color:var(--accent-2);border-color:var(--accent)}
+.column>.iop-add:only-child button,.slot>.iop-add:only-child button{opacity:1;text-align:center;background:#f8fafc;border:1px dashed #cbd5e1;cursor:pointer}
+.column>.iop-add:only-child button:hover,.slot>.iop-add:only-child button:hover{background:#f1f5f9;color:var(--accent-2);border-color:var(--accent)}
+.slot>.iop-add:only-child button{background:rgba(255,255,255,.08);color:#cbd5e1;border-color:rgba(255,255,255,.35)}
 
 /* --- table columns: drag an edge to resize ------------------------------- */
 [data-rich] th,[data-rich] td{position:relative}
@@ -66,3 +75,4 @@
 /* a blank document needs a comfortable click target, not a single line of placeholder */
 .rich-text[data-f]{min-height:6rem}
 .column .rich-text[data-f]{min-height:2.5rem}   /* a column is not a blank document: 6rem dominates it */
+.slot .rich-text[data-f]{min-height:1.5rem}     /* and a bar is one line */

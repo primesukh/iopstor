@@ -1,6 +1,18 @@
-{# One menus row as a list. The drop-downs are edited under /admin/menus; a footer column shows the
-   top level only, which is what base.html always did. #}
-<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
+{# One menus row. Inside a bar it is the horizontal menu, and it owns the ☰ on phones: the checkbox
+   MUST precede <nav>, because the drawer is .nav-toggle:checked~.site-nav (site.css), a sibling
+   combinator. In a column it is a heading and a plain list. Drop-downs only when ticked.
+   ponytail: the toggle id is the block path plus the menu slug, so a footer bar holding a nav for
+   the same menu at the same path as the header's would collide with it. #}
+{% macro links(items, dropdowns) %}{% for i in items %}<li><a href="{{ i.url }}">{{ i.label }}</a>{% if dropdowns and i.children %}<ul>{% for c in i.children %}<li><a href="{{ c.url }}">{{ c.label }}</a></li>{% endfor %}</ul>{% endif %}</li>{% endfor %}{% endmacro %}
+{% if inside == 'bar' %}{% set uid = 'nav-toggle-' ~ path ~ '-' ~ data.menu %}
+<div class="nav{{ cls }}"{{ sty }}{{ fe() }}>
+  <input type="checkbox" id="{{ uid }}" class="nav-toggle" aria-hidden="true">
+  <label for="{{ uid }}" class="nav-toggle-label" aria-label="Menu">&#9776;</label>
+  <nav class="site-nav" aria-label="Main"><ul>{{ links(menu(data.menu), data.dropdowns) }}</ul></nav>
+</div>
+{% else %}
+<div class="nav{{ cls }}"{{ sty }}{{ fe() }}>
   {% if data.heading or edit %}<h4{{ fe('heading') }}>{{ data.heading }}</h4>{% endif %}
-  <ul>{% for i in menu(data.menu) %}<li><a href="{{ i.url }}">{{ i.label }}</a></li>{% endfor %}</ul>
-</div></section>
+  <ul class="nav-list">{{ links(menu(data.menu), data.dropdowns) }}</ul>
+</div>
+{% endif %}

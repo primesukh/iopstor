@@ -183,11 +183,21 @@ def test_design_and_menus_pages(client, seeded, monkeypatch):
         assert hook in page.data, hook
     # the inserter is driven by SPEC.blocks, so that map — not the shared `ui` metadata — is what is scoped
     spec = _json.loads(re.search(r'id="editor-data">(.*?)</script>', page.text, re.S).group(1))
-    assert "site_bar" in spec["blocks"] and "hero" not in spec["blocks"]
+    assert "bar" in spec["blocks"] and "logo" in spec["blocks"] and "hero" not in spec["blocks"]
     assert spec["menus"] and "header" in spec["menus"]   # feeds the "menu" select on a nav block
     assert client.get("/admin/design?part=footer").status_code == 200
     assert client.get("/admin/design?part=nope").status_code == 404
     csrf = re.search(r'name="csrf" value="([^"]+)"', page.text).group(1)
+
+    # the canvas: the chrome has no page heading (admin.js sends the editor's type), and a nested
+    # fragment knows its container, so a nav inside a bar re-renders as the menu bar, not a list
+    from iopstor.blocks import DEFAULT_HEADER
+    blocks = _json.dumps(DEFAULT_HEADER)
+    canvas = client.post("/admin/canvas", data={"csrf": csrf, "blocks": blocks, "type": "chrome"}).data
+    assert b"Untitled page" not in canvas and b'class="site-header" data-b="0"' in canvas
+    assert b"Untitled page" in client.post("/admin/canvas", data={"csrf": csrf, "blocks": blocks, "type": "post"}).data
+    frag = client.post("/admin/canvas", data={"csrf": csrf, "blocks": blocks, "p": "0.1.0"}).data
+    assert b'data-b="0.1.0"' in frag and b"nav-toggle" in frag and b"nav-list" not in frag
 
     # reaching a page by URL is not the same as being able to find it: both need a nav entry, and
     # the menus page needs SortableJS in ahead of admin.js (deferred scripts run in document order).
@@ -203,7 +213,8 @@ def test_design_and_menus_pages(client, seeded, monkeypatch):
                                       "child": ["0", "1", "0"]})
     assert db.get_menu("zz-test-nav") == [{"label": "Top", "url": "/a", "children": [{"label": "Under", "url": "/b"}]}]
 
-    saved = [{"type": "site_bar", "data": {"menu": "header", "cta_label": "zz-test CTA", "cta_url": "/x"}}]
+    saved = [{"type": "bar", "data": {"cols": [[{"type": "logo", "data": {}}],
+                                              [{"type": "button", "data": {"label": "zz-test CTA", "url": "/x"}}]]}}]
     try:
         bad = client.post("/admin/design?part=header", data={"csrf": csrf, "blocks": '[{"type":"nav","data":{}}]'})
         assert bad.status_code == 400 and b"menu required" in bad.data      # refused, and says why

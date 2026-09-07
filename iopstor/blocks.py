@@ -30,20 +30,27 @@ BLOCKS = {  # type: (required fields, optional fields)
     # Explanatory copy goes in a rich_text section above it, like any other words on the page.
     "warranty_check": ([], ["heading"]),
     # --- site chrome: the header and footer, edited at /admin/design ---------
-    # A header is a sticky bar, not a band of content, so it is one block rather than free-form
-    # elements: the 66px rail, the hover drop-downs and the CSS-only mobile toggle are structural.
-    "site_bar": ([], ["menu", "cta_label", "cta_url", "logo_media_id"]),
-    "nav": (["menu"], ["heading"]),  # a menus row rendered as a list; the drop-downs live in /admin/menus
+    # A bar is a strip with slots (cols, exactly as columns has them) that loose elements drop into.
+    # It renders the theme's .site-header, so the 66px rail, sticky and the mobile drawer are CSS,
+    # not fields. sticky is on unless it is false; transparent lays the bar over the page.
+    "bar": ([], ["cols", "sticky", "transparent", "height"]),
+    # The elements. None is a .section band: they sit side by side in a bar's slot and stack in a
+    # footer column. logo, phone, email and social take their content from Settings, so it is typed once.
+    "logo": ([], ["media_id", "height"]),  # a picked image beats the Settings logo, which beats the site name
+    "nav": (["menu"], ["heading", "dropdowns"]),  # in a bar: the horizontal menu that owns the ☰; in a column: a list
+    "button": (["label", "url"], ["outline"]),
+    "phone": ([], ["label"]),
+    "email": ([], ["label"]),
+    "social": ([], []),
     # site_info and contact_info take no content fields on purpose: name, tagline, address, email,
     # phone and social already live in Settings, and an editor typing them twice is how they drift.
     "site_info": ([], ["heading"]),
-    # No fields but the heading: email, phone and social come from Settings, so they stay in one place.
     "contact_info": ([], ["heading"]),
     "legal": ([], ["text", "items"]),  # items: [{label, url}]; {year} in text becomes the current year
 }
 # Chrome blocks belong to the header/footer, not to a page: the two inserters scope themselves with
 # this, one filtering it out and the other filtering it in.
-CHROME = ("site_bar", "nav", "site_info", "contact_info", "legal")
+CHROME = ("bar", "logo", "nav", "button", "phone", "email", "social", "site_info", "contact_info", "legal")
 # Admin editor metadata: how each field is edited in /admin (iopstor/static/admin.js).
 # Field shapes that used to live in the comments above are data here so the editor has one source of truth.
 EDITOR = {
@@ -52,24 +59,26 @@ EDITOR = {
                 "caption": "textarea", "quote": "textarea", "image": "media", "media_id": "media", "file_media_id": "pdf",
                 "url": "url", "cta_url": "url", "button_url": "url", "limit": "number",
                 "top_level": "checkbox", "post_type": "post_type", "kind": "kind",
-                "menu": "menu", "logo_media_id": "media"},
+                "menu": "menu", "height": "number",
+                "dropdowns": "checkbox", "sticky": "checkbox", "transparent": "checkbox", "outline": "checkbox"},
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
     "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label"],
               "spec_table": ["k", "v"], "gallery": ["media_id", "alt"],
               "legal": ["label", "url"],
-              "columns": []},  # a column is a list of blocks, not a row of fields: the panel only adds/moves/removes it
+              "columns": [], "bar": []},  # a column or a slot is a list of blocks, not a row of fields: the panel only adds/moves/removes it
     # friendlier labels; anything missing is the key with underscores as spaces
     "labels": {"q": "Question", "a": "Answer", "k": "Label", "v": "Value", "html": "Content", "kind": "Form type",
                "cols": "Columns", "widths": "Column widths, e.g. 50/25/25",
                "cta_url": "Button link", "cta_label": "Button text", "top_level": "Top-level only",
                "media_id": "Image", "image": "Image", "file_media_id": "PDF file", "post_type": "Content type",
-               "term": "Term slug", "menu": "Menu", "logo_media_id": "Logo"},
+               "term": "Term slug", "menu": "Menu", "dropdowns": "Show drop-downs", "outline": "Outline style",
+               "height": "Height (px)", "sticky": "Sticky", "transparent": "Transparent, over the page"},
     "kinds": ["contact", "quote", "career"],
     # order the section picker offers them in, commonest first (Jinja's tojson sorts dict keys,
     # so BLOCKS' own order does not survive the trip to the browser)
     "order": ["hero", "rich_text", "cards", "columns", "cta", "faq", "stats", "testimonial", "spec_table",
               "image", "gallery", "pdf", "post_list", "contact_form", "warranty_check", "embed_html",
-              "site_bar", "nav", "site_info", "contact_info", "legal"],
+              "bar", "logo", "nav", "button", "phone", "email", "social", "site_info", "contact_info", "legal"],
     # the visual inserter: icon, plain-English name, one line on what the visitor sees
     "names": {
         "hero": ("\U0001F3D4", "Hero", "The big opening band: headline, one line of text, one button."),
@@ -88,9 +97,14 @@ EDITOR = {
         "warranty_check": ("\U0001F6E1", "Warranty check", "A box where a customer types their serial number and sees their warranty."),
         "pdf": ("\U0001F4C4", "PDF", "A PDF shown on the page in the reader's own PDF viewer."),
         "embed_html": ("</>", "Embedded code", "Paste code from YouTube, a map or another service."),
-        "site_bar": ("\u2630", "Header bar", "The bar across the top: logo, menu and one button."),
+        "bar": ("\u2630", "Bar", "A strip across the page with slots to drop elements into: the header itself."),
+        "logo": ("\u25C6", "Logo", "Your logo, linking home."),
+        "nav": ("\u2261", "Menu", "The links from one of your menus, with the \u2630 button on phones."),
+        "button": ("\u25AD", "Button", "One button with a link."),
+        "phone": ("\u260E", "Phone", "Your phone number from Settings, tappable."),
+        "email": ("\u2709", "Email", "Your email address from Settings, clickable."),
+        "social": ("\u25CE", "Social icons", "An icon for each social link in Settings."),
         "site_info": ("\u2302", "Site details", "Your site name, tagline and address, kept up to date from Settings."),
-        "nav": ("\u2261", "Menu", "A list of links from one of your menus."),
         "contact_info": ("\u260E", "Contact details", "Your email, phone and social links, kept up to date from Settings."),
         "legal": ("\u00A9", "Small print", "The thin line at the very bottom: copyright and a few links."),
     },
@@ -120,8 +134,11 @@ EDITOR = {
         "image": {"caption": ""},      # media_id must be chosen: no placeholder can stand in for a picture
         "pdf": {"heading": ""},        # same for the file: an empty viewer is worse than an empty section
         "gallery": {"images": []},
-        "site_bar": {"menu": "header", "cta_label": "Contact us", "cta_url": "/contact-us"},
-        "nav": {"menu": "footer", "heading": "Company"},
+        "bar": {"cols": [[], []], "sticky": True},   # two empty slots, each showing where to drop an element
+        "logo": {},
+        "nav": {"menu": "header", "dropdowns": True},
+        "button": {"label": "Contact us", "url": "/contact-us"},
+        "phone": {}, "email": {}, "social": {},
         "site_info": {},
         "contact_info": {"heading": "Contact"},
         "legal": {"text": "\u00A9 {year} {site}. All rights reserved.",
@@ -146,7 +163,11 @@ def layout(name):
 # The header and footer as they ship. These ARE the theme's chrome — base.html renders these blocks
 # and nothing else, so the markup lives in one place rather than being duplicated as a Jinja fallback.
 # An editor's saved version replaces them wholesale; deleting the setting brings these back.
-DEFAULT_HEADER = [{"type": "site_bar", "data": {"menu": "header", "cta_label": "Contact us", "cta_url": "/contact-us"}}]
+DEFAULT_HEADER = [{"type": "bar", "data": {"sticky": True, "cols": [
+    [{"type": "logo", "data": {}}],
+    [{"type": "nav", "data": {"menu": "header", "dropdowns": True}},
+     {"type": "button", "data": {"label": "Contact us", "url": "/contact-us"}}],
+]}}]
 DEFAULT_FOOTER = [
     {"type": "columns", "data": {"widths": "2/1/1", "cols": [
         [{"type": "site_info", "data": {}}],
@@ -180,17 +201,19 @@ def chrome(which):
     saved = db.settings().get(f"{which}_blocks")
     return saved if isinstance(saved, list) and saved else default
 
-_NON_TEXT_KEYS = {"url", "cta_url", "button_url", "icon", "image", "media_id", "file_media_id", "post_type", "term", "limit", "kind", "top_level", "type", "widths", "align", "align_box", "width", "menu", "logo_media_id"}
+_NON_TEXT_KEYS = {"url", "cta_url", "button_url", "icon", "image", "media_id", "file_media_id", "post_type", "term", "limit", "kind", "top_level", "type", "widths", "align", "align_box", "width", "menu", "bg", "color", "height"}
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
 _TEXT_ORDER = ("heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company", "value", "label", "k", "v",
                "caption", "alt", "cta_label", "button_label", "items", "images", "rows", "cols")
 _RANK = {k: i for i, k in enumerate(_TEXT_ORDER)}
 
 
+# The two blocks that hold other blocks, both under data.cols: a columns grid and a header bar's slots.
+CONTAINERS = ("columns", "bar")
 # A column holds sections, but not another grid (one level is enough to lay a page out, and nesting
-# grids is how an Elementor page becomes unmaintainable) and not a hero, which is a full-bleed band
-# owning the page's only <h1>.
-NEVER_NESTED = ("columns", "hero")
+# grids is how an Elementor page becomes unmaintainable), not a bar, and not a hero, which is a
+# full-bleed band owning the page's only <h1>.
+NEVER_NESTED = ("columns", "bar", "hero")
 
 
 def validate_blocks(blocks, where="blocks", nested=False):
@@ -212,7 +235,7 @@ def validate_blocks(blocks, where="blocks", nested=False):
         for field in spec[0]:
             if b["data"].get(field) in (None, "", []):
                 errors.append(f"{at}.{field} required")
-        if b["type"] == "columns":
+        if b["type"] in CONTAINERS:
             cols = b["data"].get("cols")
             if isinstance(cols, list):
                 for c, col in enumerate(cols):
@@ -236,6 +259,7 @@ def col_widths(data):
 ALIGNS = ("left", "center", "right")
 WIDTHS = {"wide": "w-wide", "full": "w-full"}   # "width" also takes a number of pixels; see section_style()
 MAX_W = 4000
+_HEX = re.compile(r"#[0-9a-fA-F]{6}")
 
 
 def section_class(data):
@@ -249,12 +273,23 @@ def section_class(data):
     return (" " + " ".join(out)) if out else ""
 
 
+def _px(v):
+    v = str(v or "").strip()
+    return f"{v}px" if v.isdigit() and 0 < int(v) <= MAX_W else None
+
+
 def section_style(data):
-    """An exact content width as the --w custom property, which is what every max-width in the theme
-    falls back from. Digits only, 1..MAX_W: this one lands in a style attribute, so nothing that is
-    not a plain number gets in. A named width returns "" — it is a class instead."""
-    w = str(data.get("width") or "").strip()
-    return Markup(f' style="--w:{w}px"') if w.isdigit() and 0 < int(w) <= MAX_W else ""
+    """The per-block custom properties, as one style attribute: --w is the content width every
+    max-width in the theme falls back from, --h a bar's height, --band and --ink the background and
+    text colour a header bar or footer band paints itself with (site.css). Every value is whitelisted
+    — digits or a six-digit hex — because this lands in a style attribute. A named width returns
+    nothing here: it is a class instead (section_class())."""
+    out = [f"--w:{_px(data.get('width'))}" if _px(data.get("width")) else None,
+           f"--h:{_px(data.get('height'))}" if _px(data.get("height")) else None,
+           f"--band:{data['bg']}" if _HEX.fullmatch(str(data.get("bg") or "")) else None,
+           f"--ink:{data['color']}" if _HEX.fullmatch(str(data.get("color") or "")) else None]
+    out = [o for o in out if o]
+    return Markup(f' style="{";".join(out)}"') if out else ""
 
 
 def at_path(blocks, path):
@@ -300,9 +335,10 @@ def _fe(path):
     return fe
 
 
-def render_blocks(blocks, edit=False, path="0"):
+def render_blocks(blocks, edit=False, path="0", inside=None):
     """`path` is the data-b path of the FIRST block; its siblings increment the last part. The page
-    itself starts at "0"; column 1 of block 2 renders with path "2.1.0"."""
+    itself starts at "0"; column 1 of block 2 renders with path "2.1.0". `inside` is the container
+    type this list sits in (None at the top), which is how a nav knows to be a menu bar or a list."""
     head, _, first = path.rpartition(".")
     out = []
     for i, b in enumerate(blocks):
@@ -313,12 +349,12 @@ def render_blocks(blocks, edit=False, path="0"):
                 extra = {"posts": _post_list(b["data"])}
             elif b["type"] == "warranty_check":
                 extra = {"found": None if edit else _warranty()}  # the admin canvas gets the bare form, never a lookup
-            elif b["type"] == "columns":
-                # the one block that renders other blocks: each column is its own list, one level down
+            elif b["type"] in CONTAINERS:
+                # the blocks that render other blocks: each column or slot is its own list, one level down
                 cols = b["data"].get("cols") or []
-                extra = {"col": lambda n, p=p, cols=cols: render_blocks(cols[n], edit, f"{p}.{n}.0"),
+                extra = {"col": lambda n, p=p, cols=cols, t=b["type"]: render_blocks(cols[n], edit, f"{p}.{n}.0", inside=t),
                          "widths": col_widths(b["data"])}
-            out.append(render_template(f"blocks/{b['type']}.html", data=b["data"], edit=edit,
+            out.append(render_template(f"blocks/{b['type']}.html", data=b["data"], edit=edit, path=p, inside=inside,
                                        cls=section_class(b["data"]), sty=section_style(b["data"]),
                                        fe=_fe(p) if edit else _no_fe, **extra))
         except Exception as e:

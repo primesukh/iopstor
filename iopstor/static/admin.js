@@ -393,7 +393,8 @@
   var TEXT_SIZES = [["0.875rem", "Small"], ["normal", "Normal"], ["1.25rem", "Large"],
                     ["1.5rem", "Larger"], ["2rem", "Huge"]];
   var BLOCK_NAMES = { cta: "CTA", faq: "FAQ", embed_html: "Embed HTML", rich_text: "Rich text" };
-  var NEVER_NESTED = ["columns", "hero"];   // mirrors blocks.py; a column holds sections, not a grid or the page H1
+  var CONTAINERS = ["columns", "bar"];      // mirrors blocks.py: the blocks whose data.cols hold other blocks
+  var NEVER_NESTED = ["columns", "bar", "hero"];   // mirrors blocks.py; a column holds sections, not a grid, a bar or the page H1
   function nameFor(type) {
     var n = SPEC && SPEC.ui.names && SPEC.ui.names[type];
     return (n && n[1]) || BLOCK_NAMES[type] || (type.charAt(0).toUpperCase() + type.slice(1)).replace(/_/g, " ");
@@ -500,6 +501,23 @@
      is in play — picking it is meaningless, so it is disabled. */
   var WIDTHS = [["", "Default"], ["wide", "Wide"], ["full", "Full width"]];
 
+  /* Colour belongs to the chrome only: a page keeps the theme's palette, a header bar or footer band
+     is painted by the editor (blocks.py section_style() -> --band / --ink). A native colour input
+     always holds a value, so "Theme" is how the key is removed — the same contract as alignPick:
+     an untouched block stays byte-identical. */
+  function colorPick(label, key, data) {
+    var c = el("input", { type: "color", title: label }),
+        reset = el("button", { type: "button", "class": "secondary tiny", text: "Theme", title: "Back to the theme's colour" });
+    function show() {
+      c.value = data[key] || (key === "bg" ? "#0f1b2d" : "#ffffff");
+      reset.hidden = !data[key];
+    }
+    c.addEventListener("input", function () { data[key] = c.value; show(); });
+    reset.addEventListener("click", function () { delete data[key]; show(); });
+    show();
+    return labelled(label, false, el("span", { "class": "wid" }, [c, reset]));
+  }
+
   function widthPick(data) {
     var s = el("select", { title: "How wide the section's content is" }),
         n = el("input", { type: "number", "class": "wid-px", min: "1", max: "4000", step: "10", placeholder: "px" });
@@ -531,6 +549,10 @@
       body.appendChild(alignPick("Align the content", "align", block.data));
       body.appendChild(alignPick("Align the section", "align_box", block.data));
       body.appendChild(widthPick(block.data));
+      if (SPEC.type === "chrome") {
+        body.appendChild(colorPick("Background", "bg", block.data));
+        body.appendChild(colorPick("Text colour", "color", block.data));
+      }
       fieldsOf(block.type).forEach(function (f) {
         // a rich_text section IS its html, edited on the page; a second document editor in a 23rem
         // popover is a trap, so the panel here is layout only
@@ -540,8 +562,8 @@
           body.appendChild(repeater(block.type, "cols", block.data,
             function () { return []; },
             function (col, i) {
-              return [el("span", { text: "Column " + (i + 1) + " \u2014 " +
-                                        col.length + " section" + (col.length === 1 ? "" : "s") })];
+              return [el("span", { text: (block.type === "bar" ? "Slot " : "Column ") + (i + 1) + " \u2014 " +
+                                        col.length + (block.type === "bar" ? " element" : " section") + (col.length === 1 ? "" : "s") })];
             }));
         } else if (SPEC.ui.items[block.type] && (f.key === "items" || f.key === "images" || f.key === "rows")) {
           body.appendChild(repeater(block.type, f.key, block.data));
@@ -593,7 +615,7 @@
   // paragraph an editor still has the caret in.
   function prune(list) {
     return list.filter(written).map(function (b) {
-      if (b.type !== "columns" || !b.data || !Array.isArray(b.data.cols)) return b;
+      if (CONTAINERS.indexOf(b.type) < 0 || !b.data || !Array.isArray(b.data.cols)) return b;
       var data = {};
       for (var k in b.data) data[k] = b.data[k];
       data.cols = b.data.cols.map(prune);
@@ -620,6 +642,7 @@
     body.append("blocks", JSON.stringify(MODEL));
     body.append("title", title ? title.value : "");
     body.append("excerpt", excerpt ? excerpt.value : "");
+    body.append("type", SPEC ? SPEC.type || "" : "");   // "chrome" = no page heading on the canvas
     for (var k in extra || {}) body.append(k, extra[k]);
     var mine = tokens[key] = (tokens[key] || 0) + 1;
     fetch("/admin/canvas", { method: "POST", body: body, credentials: "same-origin" })

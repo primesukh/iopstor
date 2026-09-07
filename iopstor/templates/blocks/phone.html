@@ -1,0 +1,3 @@
+{# The phone number from Settings, tappable. Nothing at all when Settings has none — except in the
+   editor, which needs something to select and delete. The label can replace the number as the text. #}
+{% if site.phone %}<a class="contact-link{{ cls }}"{{ sty }}{{ fe() }} href="tel:{{ site.phone|replace(' ', '') }}">&#9742; <span{{ fe('label') }}>{{ data.label or site.phone }}</span></a>{% elif edit %}<span class="contact-link iop-ph-inline"{{ fe() }}>No phone number in Settings</span>{% endif %}

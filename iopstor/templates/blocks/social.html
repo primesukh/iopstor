@@ -1,0 +1,5 @@
+{# One badge per social link in Settings, named by its host. Lettered badges rather than brand
+   marks: an SVG path nobody can check by eye is how a footer ends up with a mangled bird.
+   ponytail: swap the letters for inline SVG in SOCIAL below if brand icons are wanted. #}
+{% set SOCIAL = {'linkedin': 'in', 'x': 'X', 'twitter': 'X', 'facebook': 'f', 'instagram': 'ig', 'youtube': '▶', 'youtu': '▶', 'github': 'gh'} %}
+<span class="social{{ cls }}"{{ sty }}{{ fe() }}>{% for s in site.social %}{% set host = (s.split('/')[2] if '//' in s else s)|lower|replace('www.', '') %}<a class="soc" href="{{ s }}" rel="me noopener" aria-label="{{ host }}" title="{{ host }}">{{ SOCIAL.get(host.split('.')[0], host[:1]) }}</a>{% else %}{% if edit %}<span class="iop-ph-inline">No social links in Settings</span>{% endif %}{% endfor %}</span>

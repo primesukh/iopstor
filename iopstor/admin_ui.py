@@ -256,10 +256,16 @@ def canvas():
     path = request.form.get("p")
     if path is not None:
         one = at_path(blocks, path)
-        return render_blocks([one], edit=True, path=path) if one else ""
+        # a nested block renders as its container's child (a nav is a menu bar inside a bar, a list
+        # inside a column), so the fragment needs to know what it sits in, as the full render does
+        parts = path.split(".")
+        parent = at_path(blocks, ".".join(parts[:-2])) if len(parts) > 2 else None
+        return render_blocks([one], edit=True, path=path, inside=parent and parent.get("type")) if one else ""
+    # the header and footer ("chrome") have no page heading: admin.js sends the editor's type along
     return render_template("admin/canvas.html", body=render_blocks(blocks, edit=True),
                            title=request.form.get("title", ""), excerpt=request.form.get("excerpt", ""),
-                           has_hero=bool(blocks) and isinstance(blocks[0], dict) and blocks[0].get("type") == "hero")
+                           has_hero=(bool(blocks) and isinstance(blocks[0], dict) and blocks[0].get("type") == "hero")
+                           or request.form.get("type") == "chrome")
 
 
 def _preview_post(pt, b, existing):

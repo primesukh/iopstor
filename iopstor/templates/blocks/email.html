@@ -1,0 +1,2 @@
+{# The email address from Settings, as phone.html. #}
+{% if site.email %}<a class="contact-link{{ cls }}"{{ sty }}{{ fe() }} href="mailto:{{ site.email }}">&#9993; <span{{ fe('label') }}>{{ data.label or site.email }}</span></a>{% elif edit %}<span class="contact-link iop-ph-inline"{{ fe() }}>No email address in Settings</span>{% endif %}
