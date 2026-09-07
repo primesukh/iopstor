@@ -2,6 +2,7 @@
 import pathlib
 
 import click
+from flask import current_app
 from flask.cli import with_appcontext
 from postgrest import APIError
 
@@ -297,6 +298,58 @@ def seed(reset_content):
     click.echo(f"seeded: {n} posts, {len(db.post_types())} post types")
 
 
+@click.command("import-media")
+@click.argument("directory", type=click.Path(exists=True, file_okay=False))
+@click.option("--dry-run", is_flag=True, help="List what would be uploaded, without uploading anything.")
+@with_appcontext
+def import_media(directory, dry_run):
+    """Upload every image/PDF under DIRECTORY into the Supabase media bucket and the media table.
+
+    The same key scheme and public URL as /admin/media, so an imported file is indistinguishable
+    from one an editor uploaded. Idempotent on filename: re-running skips what is already there,
+    which is what makes it safe to point at a folder you have added one file to.
+    Alt text is derived from the filename ("rack-96tb.png" -> "rack 96tb"); edit it under Media.
+    """
+    import mimetypes
+    import uuid
+    from datetime import datetime, timezone
+
+    from .storage import ALLOWED
+
+    have = {m["filename"] for m in db.rows(db.table("media").select("filename").limit(5000))}
+    bucket = db.sb().storage.from_(current_app.config["MEDIA_BUCKET"])
+    added = skipped = 0
+    for path in sorted(pathlib.Path(directory).rglob("*")):
+        if not path.is_file():
+            continue
+        mime = mimetypes.guess_type(path.name)[0]
+        if mime not in ALLOWED:
+            continue
+        if path.name in have:
+            click.echo(f"  skip  {path.name}")
+            skipped += 1
+            continue
+        if dry_run:
+            click.echo(f"  would upload {path.name} ({mime})")
+            added += 1
+            continue
+        data = path.read_bytes()
+        key = f"{datetime.now(timezone.utc):%Y/%m}/{uuid.uuid4().hex}{ALLOWED[mime]}"
+        bucket.upload(key, data, {"content-type": mime, "upsert": "false"})
+        row = db.insert("media", {"key": key, "url": bucket.get_public_url(key), "filename": path.name[:300],
+                                  "mime": mime, "size": len(data), "alt": alt_from_name(path.name)})
+        click.echo(f"  #{row['id']:<5} {path.name}")
+        have.add(path.name)
+        added += 1
+    click.echo(f"{'would add' if dry_run else 'added'} {added}, skipped {skipped}")
+
+
+def alt_from_name(filename):
+    """A first draft of the alt text, so nothing lands with an empty one. Editors fix it under Media."""
+    stem = pathlib.Path(filename).stem.replace("_", " ").replace("-", " ")
+    return " ".join(stem.split())[:300]
+
+
 @click.command("create-admin")
 @click.argument("email")
 @click.argument("password")
@@ -317,5 +370,5 @@ def create_admin(email, password):
 
 
 def register(app):
-    for cmd in (migrate, seed, create_admin):
+    for cmd in (migrate, seed, import_media, create_admin):
         app.cli.add_command(cmd)

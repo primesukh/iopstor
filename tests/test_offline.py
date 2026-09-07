@@ -93,6 +93,17 @@ def test_menu_rows_rebuild_into_one_level_of_children():
     assert menu_items([], [], []) == []
 
 
+def test_alt_from_name_is_a_readable_first_draft():
+    """Imported files must not land with an empty alt: an undescribed picture is the one thing
+    the media screen flags in red, and a bulk import could add dozens at once."""
+    from iopstor.cli import alt_from_name
+
+    assert alt_from_name("rack-96tb.png") == "rack 96tb"
+    assert alt_from_name("650x180_micronlogo.png") == "650x180 micronlogo"
+    assert alt_from_name("Western_Digital-logo.jpg") == "Western Digital logo"
+    assert alt_from_name("a" * 400 + ".png") == "a" * 300      # the column is varchar(300)
+
+
 def test_seeded_content_is_valid_blocks():
     """The seed writes these arrays straight into posts.blocks. A bad one would only show up as a
     failed insert half way through `flask seed`, on the user's database."""

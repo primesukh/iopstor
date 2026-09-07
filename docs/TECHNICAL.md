@@ -41,7 +41,7 @@ iopstor/payments.py   PaymentGateway ABC, DummyGateway, GATEWAYS
 iopstor/admin_api.py  /api/admin/v1 — JWT-protected REST. apply_post() is the single validation path.
 iopstor/admin_ui.py   /admin — session-based browser admin, reusing admin_api's validation
 iopstor/public.py     catch-all resolver, crawler endpoints, /api/v1 public read API, leads, checkout
-iopstor/cli.py        flask migrate | seed | create-admin
+iopstor/cli.py        flask migrate | seed | import-media | create-admin
 iopstor/templates/    base/post/archive/404, blocks/<type>.html, admin/*.html
 iopstor/static/       site.css (the whole public theme) + admin.css (admin extras, layered on top)
                       + canvas.css (editor chrome), favicon.svg, vendor/sortable.min.js

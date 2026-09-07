@@ -291,6 +291,10 @@ The **Media** section is the shared library for every image, logo and PDF.
 
 ---
 
+**Adding a lot of files at once.** Uploading forty partner logos one at a time through this screen is nobody's idea of a good afternoon. Put the folder somewhere on the server and ask a developer to run `flask import-media <folder>` — everything lands in Media exactly as if you had uploaded it, with a first draft of the alt text taken from each filename. It skips anything already there, so it is safe to run twice.
+
+---
+
 ## 7. Enquiries from the website
 
 Everything sent through a form on the site arrives under **Leads**, with the person's name, company, email, phone and message — and, for a quote request, what they said they were interested in and how many users.
