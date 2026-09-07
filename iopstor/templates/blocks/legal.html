@@ -1,0 +1,6 @@
+{# The thin line at the very bottom. {year} and {site} are expanded here rather than by a helper:
+   `year` and `site` are already template globals, so a replace on the way out is the whole feature. #}
+<div class="legal{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
+  <span{{ fe('text') }}>{{ (data.text or '')|replace('{year}', year|string)|replace('{site}', site.name) }}</span>
+  {% if data['items'] %}<span>{% for i in data['items'] %}{% if not loop.first %} &middot; {% endif %}<a href="{{ i.url }}"{{ fe('items', loop.index0) }}>{{ i.label }}</a>{% endfor %}</span>{% endif %}
+</div></div>

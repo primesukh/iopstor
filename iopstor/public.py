@@ -1,12 +1,13 @@
 """Public site: catch-all page resolver, SEO endpoints (sitemap/robots/llms/feed), and the read-only JSON API."""
 from datetime import date
 
-from flask import Blueprint, Response, abort, jsonify, redirect, render_template, request
+from flask import Blueprint, Response, abort, current_app, jsonify, redirect, render_template, request
 from markupsafe import escape
 from postgrest import APIError
 from werkzeug.exceptions import HTTPException
 
 from . import db, seo
+from . import blocks as blocks_mod
 from .admin_api import _http_error, _pg_error, page_args
 from .blocks import blocks_text, render_blocks
 from .payments import GATEWAYS, gateway
@@ -19,9 +20,27 @@ api.register_error_handler(APIError, _pg_error)
 PUBLIC_SETTINGS = ("site_name", "tagline", "logo_url", "social_links", "contact_email", "contact_phone", "address")
 
 
+def chrome_html(which):
+    """The header or footer, rendered from blocks. render_blocks() re-raises on a public page by
+    design — right for one page, wrong for the chrome, where a bad block would 500 every URL on the
+    site. So this falls back to the shipped default instead, and says so in the log."""
+    try:
+        return render_blocks(blocks_mod.chrome(which))
+    except Exception:
+        current_app.logger.exception("%s blocks failed to render, falling back to the default", which)
+    try:
+        return render_blocks(blocks_mod.DEFAULT_HEADER if which == "header" else blocks_mod.DEFAULT_FOOTER)
+    except Exception:
+        # Whatever broke is below the blocks themselves (settings, menus). A page with no header is
+        # bad; every URL on the site returning 500 is worse.
+        current_app.logger.exception("the default %s failed to render too, serving nothing", which)
+        return ""
+
+
 @pub.app_context_processor
 def _template_globals():
-    return {"site": seo.site(), "menu": db.get_menu, "render_blocks": render_blocks, "year": date.today().year}
+    return {"site": seo.site(), "menu": db.get_menu, "render_blocks": render_blocks,
+            "chrome_html": chrome_html, "year": date.today().year}
 
 
 def _live_post(pt, slug):

@@ -162,3 +162,54 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
 
     client.get("/admin/logout")
     assert client.get("/admin/").status_code == 302
+
+
+def test_design_and_menus_pages(client, seeded, monkeypatch):
+    """The header/footer editor and the menu editor, end to end: the canvas hooks are on the page,
+    a save reaches the public site, and saving Settings afterwards does not wipe it."""
+    import json as _json
+
+    from iopstor import admin_ui
+
+    user = make_user("admin")
+    fake = {"access_token": make_token(user["id"]), "refresh_token": "r", "expires_in": 3600, "user_id": user["id"]}
+    monkeypatch.setattr(admin_ui, "login", lambda email, password: fake)
+    client.post("/admin/login", data={"email": user["email"], "password": "x"})
+
+    page = client.get("/admin/design?part=header")
+    assert page.status_code == 200
+    # the same editor the post form mounts: admin.js binds by id, so these ARE the integration
+    for hook in (b'id="editor-data"', b'id="post-form"', b'id="canvas"', b'id="doc-toolbar"', b'name="blocks"'):
+        assert hook in page.data, hook
+    # the inserter is driven by SPEC.blocks, so that map — not the shared `ui` metadata — is what is scoped
+    spec = _json.loads(re.search(r'id="editor-data">(.*?)</script>', page.text, re.S).group(1))
+    assert "site_bar" in spec["blocks"] and "hero" not in spec["blocks"]
+    assert spec["menus"] and "header" in spec["menus"]   # feeds the "menu" select on a nav block
+    assert client.get("/admin/design?part=footer").status_code == 200
+    assert client.get("/admin/design?part=nope").status_code == 404
+    csrf = re.search(r'name="csrf" value="([^"]+)"', page.text).group(1)
+
+    assert client.get("/admin/menus").status_code == 200
+    # a menu round-trips through the flat rows + level select the form posts
+    client.post("/admin/menus", data={"csrf": csrf, "slug": "zz-test-nav", "name": "ZZ",
+                                      "label": ["Top", "Under", ""], "url": ["/a", "/b", "/c"],
+                                      "child": ["0", "1", "0"]})
+    assert db.get_menu("zz-test-nav") == [{"label": "Top", "url": "/a", "children": [{"label": "Under", "url": "/b"}]}]
+
+    saved = [{"type": "site_bar", "data": {"menu": "header", "cta_label": "zz-test CTA", "cta_url": "/x"}}]
+    try:
+        bad = client.post("/admin/design?part=header", data={"csrf": csrf, "blocks": '[{"type":"nav","data":{}}]'})
+        assert bad.status_code == 400 and b"menu required" in bad.data      # refused, and says why
+
+        ok = client.post("/admin/design?part=header", data={"csrf": csrf, "blocks": _json.dumps(saved)})
+        assert ok.status_code == 302
+        assert b"zz-test CTA" in client.get("/").data                        # live on the public site
+
+        # the trap: /admin/settings writes every key in SETTING_KEYS from the form, so the chrome
+        # keys must stay out of that tuple or a Settings save would blank the header.
+        assert client.post("/admin/settings", data={"csrf": csrf, "site_name": "IOPSTOR"}).status_code == 302
+        assert b"zz-test CTA" in client.get("/").data
+    finally:
+        db.table("settings").delete().eq("key", "header_blocks").execute()
+        db.uncache("settings")   # the fixture's app context outlives a request, so g keeps the old read
+    assert b"zz-test CTA" not in client.get("/").data                        # back to the shipped default

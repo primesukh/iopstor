@@ -205,5 +205,9 @@ def get_media(pk):
 
 
 def get_menu(slug):
-    m = one(table("menus").select("*").eq("slug", slug))
-    return m["items"] if m else []
+    # per-request memo: the header bar and every footer nav block ask for their menu separately
+    def load():
+        m = one(table("menus").select("*").eq("slug", slug))
+        return m["items"] if m else []
+
+    return _cached(f"menu_{slug}", load)

@@ -41,7 +41,7 @@ def test_editor_metadata_covers_every_block():
     for name, (required, optional) in BLOCKS.items():
         for field in required + optional:
             widget = EDITOR["widgets"].get(f"{name}.{field}") or EDITOR["widgets"].get(field) or "text"
-            assert widget in ("text", "textarea", "code", "richtext", "media", "pdf", "url", "number", "checkbox", "post_type", "kind"), (name, field)
+            assert widget in ("text", "textarea", "code", "richtext", "media", "pdf", "url", "number", "checkbox", "post_type", "kind", "menu"), (name, field)
             if field in REPEATERS:
                 assert EDITOR["items"].get(name) is not None, f"{name}.{field} is a repeater with no EDITOR['items'] entry"
     assert set(EDITOR["items"]) <= set(BLOCKS)
@@ -327,3 +327,90 @@ def test_warranty_form_hands_back_what_was_typed_when_the_save_is_refused(app, c
     monkeypatch.setattr(db, "insert", lambda name, r: saved.update(r) or {"id": 1})
     r = client.post("/admin/warranty", data={**typed, "purchase_date": ""})
     assert r.status_code == 302 and saved["expiry_date"] == "2024-06-01" and saved["purchase_date"] is None
+
+
+# ---- the site chrome: header and footer as blocks ---------------------------
+
+def test_chrome_falls_back_to_the_shipped_default(app, monkeypatch):
+    """No saved blocks -> the built-in header/footer, which is what keeps a fresh install looking
+    like it always did and every other test in this file rendering base.html unchanged."""
+    from iopstor import db
+    from iopstor.blocks import DEFAULT_FOOTER, DEFAULT_HEADER, chrome
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    assert chrome("header") == DEFAULT_HEADER and chrome("footer") == DEFAULT_FOOTER
+
+    saved = [{"type": "legal", "data": {"text": "mine"}}]
+    monkeypatch.setattr(db, "settings", lambda: {"header_blocks": saved})
+    assert chrome("header") == saved
+    assert chrome("footer") == DEFAULT_FOOTER          # the other region is untouched
+    monkeypatch.setattr(db, "settings", lambda: {"header_blocks": []})
+    assert chrome("header") == DEFAULT_HEADER          # emptied on purpose = back to the default
+
+
+def test_shipped_chrome_is_valid_and_renders(app, monkeypatch):
+    from iopstor import db
+    from iopstor.blocks import DEFAULT_FOOTER, DEFAULT_HEADER
+
+    monkeypatch.setattr(db, "settings", lambda: {"site_name": "IOPSTOR", "tagline": "SDS", "contact_email": "a@b.c"})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [{"label": "Blog", "url": "/blog"}])
+    assert validate_blocks(DEFAULT_HEADER) == [] and validate_blocks(DEFAULT_FOOTER) == []
+
+    head = render_blocks(DEFAULT_HEADER)
+    # the CSS-only mobile menu is `.nav-toggle:checked~.site-nav`, so the checkbox must precede <nav>
+    assert head.index("nav-toggle") < head.index('<nav class="site-nav"')
+    assert '<a href="/blog">Blog</a>' in head and ">Contact us<" in head
+
+    foot = render_blocks(DEFAULT_FOOTER)
+    assert "IOPSTOR" in foot and "SDS" in foot and "mailto:a@b.c" in foot
+    assert "{year}" not in foot and "{site}" not in foot   # the legal block expands both
+
+    # edit mode is where fe() runs, so a chrome template with a broken marker only shows up here
+    edit = render_blocks(DEFAULT_HEADER, edit=True) + render_blocks(DEFAULT_FOOTER, edit=True)
+    assert 'data-b="0"' in edit and 'data-f="cta_label"' in edit
+    assert "iop-err" not in edit          # edit mode swallows a template error into this class
+    assert "data-b=" not in render_blocks(DEFAULT_HEADER)   # and never leaks to the public page
+
+
+def test_chrome_html_falls_back_instead_of_500ing_the_site(app, monkeypatch):
+    """render_blocks() re-raises on a public page by design. For the chrome that would take every
+    URL down, so public.chrome_html() serves the default instead — and nothing at all if even that
+    cannot render, because a missing header beats every page on the site returning 500."""
+    import pytest
+
+    from iopstor import db, public
+
+    def boom(slug):
+        if slug == "boom":
+            raise RuntimeError("this menu is broken")
+        return []
+
+    monkeypatch.setattr(db, "settings", lambda: {"header_blocks": [{"type": "nav", "data": {"menu": "boom"}}]})
+    monkeypatch.setattr(db, "get_menu", boom)
+    with app.test_request_context("/"):
+        with pytest.raises(RuntimeError):
+            render_blocks([{"type": "nav", "data": {"menu": "boom"}}])   # the raw renderer still raises
+        html = public.chrome_html("header")                              # the guarded one does not
+    assert '<header class="site-header' in html   # the shipped default, not the broken saved one
+
+    monkeypatch.setattr(db, "get_menu", lambda slug: 1 / 0)              # now the default breaks too
+    with app.test_request_context("/"):
+        assert public.chrome_html("header") == ""
+
+
+def test_inserters_are_scoped_to_their_surface(app):
+    """A page must not offer a header bar, and the chrome must not offer a hero: it owns the page H1."""
+    from iopstor.blocks import BLOCKS, CHROME, blocks_for
+
+    page, chrome_blocks = blocks_for("page"), blocks_for("chrome")
+    assert not (set(page) & set(CHROME))
+    assert set(CHROME) <= set(chrome_blocks)
+    assert "hero" not in chrome_blocks and "post_list" not in chrome_blocks
+    assert "columns" in chrome_blocks           # laying a footer out needs it
+    assert set(page) | set(chrome_blocks) == set(BLOCKS)
+
+
+def test_a_broken_chrome_array_is_refused_before_it_is_stored():
+    """The guard on PUT /settings and /admin/design: nav without a menu never reaches the DB."""
+    assert validate_blocks([{"type": "nav", "data": {}}]) == ["blocks[0].menu required"]
+    assert validate_blocks([{"type": "site_bar", "data": {}}]) == []   # every field optional

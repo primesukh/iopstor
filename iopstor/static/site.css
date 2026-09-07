@@ -42,13 +42,16 @@ h1,h2,h3,h4,h5,h6{line-height:1.2;color:var(--navy)}
 
 /* footer */
 .site-footer{background:var(--navy);color:#cbd5e1;margin-top:4rem;padding:3rem 0 1.5rem}
-.site-footer .cols{display:grid;grid-template-columns:2fr 1fr 1fr;gap:2rem}
-@media(max-width:800px){.site-footer .cols{grid-template-columns:1fr}}
+/* The footer is block-built (blocks.DEFAULT_FOOTER): a columns section plus a legal block. The band
+   already pads itself, so the section inside it must not pad again; .column>.section handles depth 2. */
+.site-footer>.section{padding:0}
+@media(max-width:800px){.site-footer .columns{grid-template-columns:1fr}}
 .site-footer h4{color:#fff;margin:0 0 .75rem;font-size:1rem;text-transform:uppercase;letter-spacing:.06em}
 .site-footer p{margin:0 0 .5rem}
 .site-footer a{color:#e2e8f0;text-decoration:none}.site-footer a:hover{color:var(--accent)}
 .site-footer ul{list-style:none;padding:0;margin:0}.site-footer li{margin:.35rem 0}
-.site-footer .legal{border-top:1px solid rgba(255,255,255,.12);margin-top:2rem;padding-top:1rem;font-size:.9rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem}
+.site-footer .legal{margin-top:2rem}
+.legal>.wrap{border-top:1px solid rgba(255,255,255,.12);padding-top:1rem;font-size:.9rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem}
 
 /* page chrome */
 main{min-height:60vh}

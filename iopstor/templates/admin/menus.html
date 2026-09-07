@@ -1,0 +1,43 @@
+{% extends "admin/base.html" %}{% block title %}Menus{% endblock %}
+{# Already vendored for the canvas; reordering menu rows is the same job. Loaded before admin.js so
+   window.Sortable exists by the time initMenus() runs (both deferred = document order). #}
+{% block head %}<script defer src="{{ url_for('static', filename='vendor/sortable.min.js') }}"></script>{% endblock %}
+{% block content %}
+<h1>Menus</h1>
+<p>These are the links in your header and footer. A <em>drop-down</em> row appears under the row above
+   it — that is how <em>Services</em> and <em>Company</em> expand in the header.</p>
+{% for m in menus %}
+<form method="post" class="card menus-form" data-menu>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="slug" value="{{ m.slug }}">
+  <input type="hidden" name="name" value="{{ m.name }}">
+  <h2>{{ m.name }} <small>/{{ m.slug }}</small></h2>
+  {# Flat rows plus a level select, not a nested tree: the shape is one level deep, this is far less
+     markup and JS than a real tree, and it reads the way the nesting does anyway. A <select> rather
+     than a checkbox because an unchecked box posts nothing, which would misalign the three getlists. #}
+  <ol class="menu-rows">
+    {% for i in m['items'] %}
+    <li class="menu-row"><span class="drag" title="Drag to reorder">&#8942;</span>
+      <input type="text" name="label" value="{{ i.label }}" aria-label="Link text" placeholder="Link text">
+      <input type="text" name="url" value="{{ i.url }}" aria-label="Address" placeholder="/where-it-goes">
+      <select name="child" aria-label="Level"><option value="0" selected>Top level</option><option value="1">Drop-down</option></select>
+      <button type="button" class="danger row-del" title="Remove">&times;</button>
+    </li>
+    {% for c in i.children or [] %}
+    <li class="menu-row is-child"><span class="drag" title="Drag to reorder">&#8942;</span>
+      <input type="text" name="label" value="{{ c.label }}" aria-label="Link text" placeholder="Link text">
+      <input type="text" name="url" value="{{ c.url }}" aria-label="Address" placeholder="/where-it-goes">
+      <select name="child" aria-label="Level"><option value="0">Top level</option><option value="1" selected>Drop-down</option></select>
+      <button type="button" class="danger row-del" title="Remove">&times;</button>
+    </li>
+    {% endfor %}
+    {% endfor %}
+  </ol>
+  <p><button type="button" class="secondary row-add">+ Add a link</button>
+     <button type="submit">Save {{ m.name }}</button></p>
+  <small>Clearing a link's text removes it when you save.</small>
+</form>
+{% else %}
+<p class="card">No menus yet. Run <code>flask seed</code>, or add one in Supabase Studio.</p>
+{% endfor %}
+{% endblock %}

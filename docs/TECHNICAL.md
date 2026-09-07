@@ -139,9 +139,44 @@ BLOCKS = {  # type: (required fields, optional fields)
 }
 ```
 
-Sixteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`, `warranty_check`.
+Twenty-one types ship. Sixteen are page sections: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`, `warranty_check`. Five are **site chrome** — the header and footer (§6.1): `site_bar`, `nav`, `site_info`, `contact_info`, `legal`.
+
+`CHROME` names those five and `blocks_for(region)` scopes the two inserters: `blocks_for("page")` is everything except the chrome, `blocks_for("chrome")` is the chrome plus `CHROME_EXTRAS` (`rich_text`, `columns`, `image`, `embed_html`). Only the **inserter** is scoped — `validate_blocks()` stays permissive both ways, so a hero pasted into the header under *Advanced* still saves (`ponytail:` marked).
 
 **Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">…` — `cls` is the layout classes, `sty` an inline width, `fe()` the edit marker (all three below); `render_blocks()` hands all three to every block template. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
+
+### 6.1 Site chrome — the header and footer
+
+The header and footer are **block documents**, not template markup. `base.html` is three lines:
+
+```html
+{{ chrome_html('header') }}
+<main id="main">{% block content %}{% endblock %}</main>
+<footer class="site-footer">{{ chrome_html('footer') }}</footer>
+```
+
+| | |
+|---|---|
+| **Stored** | `settings["header_blocks"]` / `["footer_blocks"]`, each a block array. `settings.value` is already JSONB, so **no migration**. |
+| **Default** | `blocks.DEFAULT_HEADER` / `DEFAULT_FOOTER`. `chrome(which)` returns the saved list, or the default when the key is absent, not a list, or empty. The defaults **are** the theme's chrome — there is no duplicate Jinja fallback, and emptying the setting restores them. |
+| **Edited** | `/admin/design?part=header\|footer` (§12.3). |
+| **Guarded** | `public.chrome_html()` — see below. |
+
+**`chrome_html()` fails soft, and `render_blocks()` does not.** `render_blocks()` re-raises on a public render by design (`blocks.py`), so a broken page fails loudly. That is right for one page and wrong for the chrome, where one bad block would 500 **every URL on the site**. `chrome_html()` therefore falls back to the shipped default, and to `""` if even that cannot render — a page with no header beats a site that serves nothing. Both paths `logger.exception()`.
+
+**The five chrome blocks.**
+
+| Type | Fields | Notes |
+|---|---|---|
+| `site_bar` | `menu`, `cta_label`, `cta_url`, `logo_media_id` | Renders `<header class="site-header">` itself, **not** a `.section` band: it is a sticky rail. The `#nav-toggle` checkbox must stay before `<nav>` — the mobile menu is `.nav-toggle:checked~.site-nav`, a sibling combinator. Falls back to `site.logo` when no logo is picked. |
+| `nav` | `menu` (required), `heading` | One `menus` row as a list. Top level only, as the old footer was. |
+| `site_info` | `heading` | Name, tagline, address — **from Settings**. |
+| `contact_info` | `heading` | Email, phone, social — **from Settings**. |
+| `legal` | `text`, `items` (`[{label, url}]`) | The thin bottom line. `{year}` and `{site}` in `text` are expanded in the template from the `year` / `site` globals — no helper. Renders `.legal`, not a `.section`. |
+
+`site_info` and `contact_info` deliberately have **no content fields**: those values already live in Settings, and an editor typing them in two places is how they drift.
+
+**The `menu` widget.** `EDITOR["widgets"]["menu"] = "menu"` renders a `<select>` of menu slugs in the settings popover, fed by `menus` in `#editor-data` (`_menu_slugs()`). A slug is picked, never typed — `/admin/menus` owns the list.
 
 **Layout keys.** Three optional keys on any block's `data`, absent = the theme's own layout:
 
@@ -238,7 +273,7 @@ Writes: `POST /leads` (also the target of the HTML contact form — plain form P
 
 ### `/admin` — browser, `admin_ui.py`
 
-`/login`, `/logout`, `/` (dashboard), `/posts`, `/posts/new`, `/posts/<id>`, `/posts/<id>/delete`, `/media`, `/media/upload`, `/media/<id>/delete`, `/leads`, `/leads/<id>/status`, `/warranty`, `/warranty/<id>/delete`, `/settings`, `/users`, `/users/<uuid>/delete`. Server-rendered forms; `_form_body()` turns form fields into the same body dict the JSON API accepts, so both surfaces share validation. `_safe_next()` restricts post-login redirects to relative same-origin paths.
+`/login`, `/logout`, `/` (dashboard), `/posts`, `/posts/new`, `/posts/<id>`, `/posts/<id>/delete`, `/media`, `/media/upload`, `/media/<id>/delete`, `/leads`, `/leads/<id>/status`, `/warranty`, `/warranty/<id>/delete`, `/design` (`?part=header|footer`, admin), `/menus` (admin), `/settings`, `/users`, `/users/<uuid>/delete`. Server-rendered forms; `_form_body()` turns form fields into the same body dict the JSON API accepts, so both surfaces share validation. `_safe_next()` restricts post-login redirects to relative same-origin paths.
 
 `POST /admin/media/upload` is the one exception to "server-rendered forms": it takes the same multipart body as `POST /admin/media` (`csrf`, `file`, optional `alt`) through the shared `_upload()` helper, and answers `201 {id, url, filename, mime, alt}` or `4xx {error}` instead of redirecting. It exists so the post form's media pickers can upload without leaving the page; session auth and CSRF come from `ui_required()` unchanged.
 

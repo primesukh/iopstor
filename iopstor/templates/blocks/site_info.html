@@ -1,0 +1,6 @@
+{# Name, tagline and address — all from Settings, never typed here, so they cannot drift. #}
+<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
+  <h4{{ fe('heading') }}>{{ data.heading or site.name }}</h4>
+  {% if site.tagline %}<p>{{ site.tagline }}</p>{% endif %}
+  {% if site.address %}<p>{{ site.address }}</p>{% endif %}
+</div></section>

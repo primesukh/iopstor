@@ -29,7 +29,21 @@ BLOCKS = {  # type: (required fields, optional fields)
     # nothing required: the section is a serial-number box, and the answer is looked up at render time.
     # Explanatory copy goes in a rich_text section above it, like any other words on the page.
     "warranty_check": ([], ["heading"]),
+    # --- site chrome: the header and footer, edited at /admin/design ---------
+    # A header is a sticky bar, not a band of content, so it is one block rather than free-form
+    # elements: the 66px rail, the hover drop-downs and the CSS-only mobile toggle are structural.
+    "site_bar": ([], ["menu", "cta_label", "cta_url", "logo_media_id"]),
+    "nav": (["menu"], ["heading"]),  # a menus row rendered as a list; the drop-downs live in /admin/menus
+    # site_info and contact_info take no content fields on purpose: name, tagline, address, email,
+    # phone and social already live in Settings, and an editor typing them twice is how they drift.
+    "site_info": ([], ["heading"]),
+    # No fields but the heading: email, phone and social come from Settings, so they stay in one place.
+    "contact_info": ([], ["heading"]),
+    "legal": ([], ["text", "items"]),  # items: [{label, url}]; {year} in text becomes the current year
 }
+# Chrome blocks belong to the header/footer, not to a page: the two inserters scope themselves with
+# this, one filtering it out and the other filtering it in.
+CHROME = ("site_bar", "nav", "site_info", "contact_info", "legal")
 # Admin editor metadata: how each field is edited in /admin (iopstor/static/admin.js).
 # Field shapes that used to live in the comments above are data here so the editor has one source of truth.
 EDITOR = {
@@ -37,22 +51,25 @@ EDITOR = {
     "widgets": {"html": "richtext", "embed_html.html": "code", "text": "textarea", "a": "textarea", "subheading": "textarea",
                 "caption": "textarea", "quote": "textarea", "image": "media", "media_id": "media", "file_media_id": "pdf",
                 "url": "url", "cta_url": "url", "button_url": "url", "limit": "number",
-                "top_level": "checkbox", "post_type": "post_type", "kind": "kind"},
+                "top_level": "checkbox", "post_type": "post_type", "kind": "kind",
+                "menu": "menu", "logo_media_id": "media"},
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
     "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label"],
               "spec_table": ["k", "v"], "gallery": ["media_id", "alt"],
+              "legal": ["label", "url"],
               "columns": []},  # a column is a list of blocks, not a row of fields: the panel only adds/moves/removes it
     # friendlier labels; anything missing is the key with underscores as spaces
     "labels": {"q": "Question", "a": "Answer", "k": "Label", "v": "Value", "html": "Content", "kind": "Form type",
                "cols": "Columns", "widths": "Column widths, e.g. 50/25/25",
                "cta_url": "Button link", "cta_label": "Button text", "top_level": "Top-level only",
                "media_id": "Image", "image": "Image", "file_media_id": "PDF file", "post_type": "Content type",
-               "term": "Term slug"},
+               "term": "Term slug", "menu": "Menu", "logo_media_id": "Logo"},
     "kinds": ["contact", "quote", "career"],
     # order the section picker offers them in, commonest first (Jinja's tojson sorts dict keys,
     # so BLOCKS' own order does not survive the trip to the browser)
     "order": ["hero", "rich_text", "cards", "columns", "cta", "faq", "stats", "testimonial", "spec_table",
-              "image", "gallery", "pdf", "post_list", "contact_form", "warranty_check", "embed_html"],
+              "image", "gallery", "pdf", "post_list", "contact_form", "warranty_check", "embed_html",
+              "site_bar", "nav", "site_info", "contact_info", "legal"],
     # the visual inserter: icon, plain-English name, one line on what the visitor sees
     "names": {
         "hero": ("\U0001F3D4", "Hero", "The big opening band: headline, one line of text, one button."),
@@ -71,6 +88,11 @@ EDITOR = {
         "warranty_check": ("\U0001F6E1", "Warranty check", "A box where a customer types their serial number and sees their warranty."),
         "pdf": ("\U0001F4C4", "PDF", "A PDF shown on the page in the reader's own PDF viewer."),
         "embed_html": ("</>", "Embedded code", "Paste code from YouTube, a map or another service."),
+        "site_bar": ("\u2630", "Header bar", "The bar across the top: logo, menu and one button."),
+        "site_info": ("\u2302", "Site details", "Your site name, tagline and address, kept up to date from Settings."),
+        "nav": ("\u2261", "Menu", "A list of links from one of your menus."),
+        "contact_info": ("\u260E", "Contact details", "Your email, phone and social links, kept up to date from Settings."),
+        "legal": ("\u00A9", "Small print", "The thin line at the very bottom: copyright and a few links."),
     },
     # starting content for a freshly inserted block, so a new section is visible and clickable.
     # Anything with placeholder copy also passes validate_blocks(), so the page saves straight away.
@@ -98,6 +120,12 @@ EDITOR = {
         "image": {"caption": ""},      # media_id must be chosen: no placeholder can stand in for a picture
         "pdf": {"heading": ""},        # same for the file: an empty viewer is worse than an empty section
         "gallery": {"images": []},
+        "site_bar": {"menu": "header", "cta_label": "Contact us", "cta_url": "/contact-us"},
+        "nav": {"menu": "footer", "heading": "Company"},
+        "site_info": {},
+        "contact_info": {"heading": "Contact"},
+        "legal": {"text": "\u00A9 {year} {site}. All rights reserved.",
+                  "items": [{"label": "Sitemap", "url": "/sitemap.xml"}, {"label": "RSS", "url": "/feed.xml"}]},
     },
 }
 REPEATERS = ("items", "images", "rows", "cols")
@@ -114,7 +142,45 @@ def layout(name):
     """Expand a LAYOUTS entry into real blocks. Unknown name -> a blank page."""
     return [{"type": t, "data": deepcopy(EDITOR["seed"].get(t) or {})} for t in LAYOUTS.get(name, [])]
 
-_NON_TEXT_KEYS = {"url", "cta_url", "button_url", "icon", "image", "media_id", "file_media_id", "post_type", "term", "limit", "kind", "top_level", "type", "widths", "align", "align_box", "width"}
+
+# The header and footer as they ship. These ARE the theme's chrome — base.html renders these blocks
+# and nothing else, so the markup lives in one place rather than being duplicated as a Jinja fallback.
+# An editor's saved version replaces them wholesale; deleting the setting brings these back.
+DEFAULT_HEADER = [{"type": "site_bar", "data": {"menu": "header", "cta_label": "Contact us", "cta_url": "/contact-us"}}]
+DEFAULT_FOOTER = [
+    {"type": "columns", "data": {"widths": "2/1/1", "cols": [
+        [{"type": "site_info", "data": {}}],
+        [{"type": "nav", "data": {"menu": "footer", "heading": "Company"}}],
+        [{"type": "contact_info", "data": {"heading": "Contact"}}],
+    ]}},
+    {"type": "legal", "data": {"text": "\u00A9 {year} {site}. All rights reserved.",
+                               "items": [{"label": "Sitemap", "url": "/sitemap.xml"}, {"label": "RSS", "url": "/feed.xml"}]}},
+]
+
+
+# Also offered in the header/footer inserter: laying a footer out needs columns, and a chrome region
+# still wants plain words and the odd picture. A page keeps everything except the chrome types.
+CHROME_EXTRAS = ("rich_text", "columns", "image", "embed_html")
+
+
+def blocks_for(region):
+    """The BLOCKS subset one editing surface offers. region: "page" or "chrome".
+    Only the inserter is scoped — validate_blocks() stays permissive both ways.
+    ponytail: so a hero pasted into the header under Advanced still saves. Add a per-region
+    whitelist to validate_blocks() if that ever actually happens to someone."""
+    if region == "page":
+        return {k: v for k, v in BLOCKS.items() if k not in CHROME}
+    return {k: v for k, v in BLOCKS.items() if k in CHROME or k in CHROME_EXTRAS}
+
+
+def chrome(which):
+    """The header's or footer's block list: what an editor saved, else the built-in default."""
+    from . import db
+    default = DEFAULT_HEADER if which == "header" else DEFAULT_FOOTER
+    saved = db.settings().get(f"{which}_blocks")
+    return saved if isinstance(saved, list) and saved else default
+
+_NON_TEXT_KEYS = {"url", "cta_url", "button_url", "icon", "image", "media_id", "file_media_id", "post_type", "term", "limit", "kind", "top_level", "type", "widths", "align", "align_box", "width", "menu", "logo_media_id"}
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
 _TEXT_ORDER = ("heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company", "value", "label", "k", "v",
                "caption", "alt", "cta_label", "button_label", "items", "images", "rows", "cols")

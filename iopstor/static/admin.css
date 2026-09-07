@@ -171,3 +171,24 @@
 .share-body{padding:.6rem .8rem;background:#f8fafc}
 .share-site{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 .share-body strong{display:block;margin:.15rem 0;color:var(--navy)}
+
+/* ---- Header & footer (/admin/design) and Menus (/admin/menus) ------------- */
+/* The design page reuses .ed / .ed-bar / .ed-side wholesale; it only needs the segmented control to
+   accept links (the region switch is navigation, not a toggle) and a static heading in place of the
+   post form's title input. */
+.admin .seg a{background:#fff;color:var(--navy);border-right:1px solid var(--line);text-decoration:none;
+  padding:.4rem .9rem;display:inline-block;font-weight:600}
+.admin .seg a:last-child{border-right:0}
+.admin .seg a:hover{background:#f1f5f9}
+.admin .seg a.on{background:var(--accent);color:#fff}
+.ed-title-static{font-size:1.6rem;margin:0 0 .5rem}
+
+.menu-rows{list-style:none;margin:.5rem 0;padding:0}
+.menu-row{display:flex;align-items:center;gap:.5rem;padding:.35rem 0}
+.menu-row .drag{cursor:grab;color:var(--muted);padding:0 .25rem;user-select:none}
+.menu-row input[type=text]{margin:0;flex:1;min-width:8rem}
+.menu-row select{margin:0;width:auto;flex:0 0 auto}
+.menu-row button{padding:.3rem .6rem}
+/* A drop-down row sits under its parent, which is the only thing that says so on a flat list. */
+.menu-row.is-child{margin-left:2rem}
+.menu-row.is-child .drag::before{content:"\21B3";margin-right:.35rem}

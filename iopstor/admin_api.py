@@ -476,7 +476,15 @@ def get_settings():
 @bp.put("/settings")
 @require_role("admin")
 def put_settings():
-    db.set_settings(body())
+    b = body()
+    # header_blocks/footer_blocks are the site chrome: this route used to write any key straight
+    # through, which for those two would be unvalidated markup on every page. Same validator the
+    # post form and /admin/design run.
+    errors = {k: validate_blocks(b[k]) for k in ("header_blocks", "footer_blocks")
+              if k in b and validate_blocks(b[k])}
+    if errors:
+        fail("validation failed", **errors)
+    db.set_settings(b)
     return jsonify(db.settings())
 
 

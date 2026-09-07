@@ -378,7 +378,7 @@
   }
 
   // ---- a section's fields ---------------------------------------------------
-  var SPEC = null;  // {blocks: {type: [required, optional]}, ui: {widgets, items, labels, kinds}, media, post_types}
+  var SPEC = null;  // {blocks: {type: [required, optional]}, ui: {widgets, items, labels, kinds}, media, post_types, menus}
 
   function widgetFor(type, field) {
     return SPEC.ui.widgets[type + "." + field] || SPEC.ui.widgets[field] || "text";
@@ -422,10 +422,11 @@
     var input;
     if (widget === "textarea" || widget === "code") {
       input = el("textarea", widget === "code" ? { "class": "code" } : {});
-    } else if (widget === "post_type" || widget === "kind") {
+    } else if (widget === "post_type" || widget === "kind" || widget === "menu") {
       input = el("select");
       input.appendChild(el("option", { value: "", text: "— choose —" }));
-      (widget === "kind" ? SPEC.ui.kinds : SPEC.post_types).forEach(function (o) {
+      // a menu slug is picked, never typed: /admin/menus owns the list, this only points at one
+      (widget === "kind" ? SPEC.ui.kinds : widget === "menu" ? (SPEC.menus || []) : SPEC.post_types).forEach(function (o) {
         input.appendChild(el("option", { value: o, text: o }));
       });
     } else {
@@ -1968,10 +1969,61 @@
     }
   }
 
+  /* The menus page. Rows are flat with a level select; the server nests them back on save, so all
+     this does is add, remove and reorder <li>s. No model, no serialisation -- the form is the model. */
+  function initMenus() {
+    var forms = document.querySelectorAll("form[data-menu]");
+    if (!forms.length) return;
+    Array.prototype.forEach.call(forms, function (form) {
+      var list = form.querySelector(".menu-rows");
+      if (!list) return;
+      function paint() {   // a first row has nothing to hang under, so it cannot be a drop-down
+        Array.prototype.forEach.call(list.children, function (li, i) {
+          var sel = li.querySelector('select[name="child"]');
+          if (!sel) return;
+          if (i === 0 && sel.value === "1") sel.value = "0";
+          sel.disabled = i === 0;
+          li.classList.toggle("is-child", sel.value === "1");
+        });
+      }
+      list.addEventListener("change", paint);
+      list.addEventListener("click", function (e) {
+        var del = e.target.closest && e.target.closest(".row-del");
+        if (!del) return;
+        del.closest("li").remove();
+        paint();
+      });
+      var add = form.querySelector(".row-add");
+      if (add) add.addEventListener("click", function () {
+        var last = list.lastElementChild, li;
+        if (last) {
+          li = last.cloneNode(true);
+          Array.prototype.forEach.call(li.querySelectorAll("input"), function (i) { i.value = ""; });
+        } else {   // every row was deleted: build one, so the menu is not a dead end
+          li = el("li", { "class": "menu-row" });
+          li.innerHTML = '<span class="drag" title="Drag to reorder">&#8942;</span>'
+            + '<input type="text" name="label" aria-label="Link text" placeholder="Link text">'
+            + '<input type="text" name="url" aria-label="Address" placeholder="/where-it-goes">'
+            + '<select name="child" aria-label="Level"><option value="0">Top level</option><option value="1">Drop-down</option></select>'
+            + '<button type="button" class="danger row-del" title="Remove">&times;</button>';
+        }
+        var sel = li.querySelector('select[name="child"]');
+        if (sel) { sel.value = "0"; sel.disabled = false; }
+        list.appendChild(li);
+        paint();
+        var first = li.querySelector("input");
+        if (first) first.focus();
+      });
+      if (window.Sortable) window.Sortable.create(list, { draggable: "li", handle: ".drag", animation: 140, onEnd: paint });
+      paint();
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     initSlug();
     initTerms();
     initWarranty();
+    initMenus();
     initBlocks();
   });
 })();

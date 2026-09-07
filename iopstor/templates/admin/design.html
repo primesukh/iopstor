@@ -1,0 +1,38 @@
+{% extends "admin/base.html" %}{% block title %}Header &amp; footer{% endblock %}
+{% block content %}
+{# The same canvas the post form uses. admin.js binds by id and no-ops when a hook is absent, so
+   carrying #editor-data, #post-form, #canvas and textarea[name="blocks"] is the whole integration —
+   no JS changes. Publish/address/summary/SEO are all dropped: none of them apply to the chrome, and
+   dropping them is most of what makes this usable by someone non-technical.
+   #view-mode is deliberately absent: the canvas already shows the real header and footer, so there
+   is nothing a Preview toggle would add, and initPreview() returns early without it. #}
+<script type="application/json" id="editor-data">{{ {"blocks": blocks, "ui": blocks_ui, "layouts": [], "media": media, "menus": menus, "type": "chrome", "pk": none, "post_types": []}|tojson }}</script>
+<form method="post" id="post-form" class="ed">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="ed-bar">
+    <span class="seg">
+      <a href="{{ url_for('admin_ui.design', part='header') }}" class="{{ 'on' if part == 'header' }}">Header</a>
+      <a href="{{ url_for('admin_ui.design', part='footer') }}" class="{{ 'on' if part == 'footer' }}">Footer</a>
+    </span>
+    <span class="spacer"></span>
+    <a class="btn secondary" href="/" target="_blank" rel="noopener">View site &#8599;</a>
+    <button type="submit">Save</button>
+  </div>
+  <div class="ed-main">
+    {% if errors %}<div class="error"><strong>Not saved.</strong><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+    <h1 class="ed-title-static">{{ part.capitalize() }}</h1>
+    <div id="doc-toolbar" class="doc-toolbar"></div>
+    <div id="canvas-wrap"><iframe id="canvas" title="Your {{ part }}, as a visitor will see it"></iframe></div>
+    <small id="pane-hint">Press <kbd>/</kbd> on an empty line to drop in a section. Nav links are edited under <a href="{{ url_for('admin_ui.menus') }}">Menus</a>.</small>
+  </div>
+  <aside class="ed-side">
+    <h3>{{ part.capitalize() }}</h3>
+    <small>This is what every page on the site shows {{ 'above' if part == 'header' else 'below' }} its content. Changes go live as soon as you save.</small>
+    <details class="ed-more" id="advanced"><summary>Advanced</summary>
+      <small>The {{ part }}'s sections as data, for developers: a list of {"type", "data"}.</small>
+      <textarea name="blocks" class="code" aria-label="Sections as JSON">{{ blocks_json }}</textarea>
+      <small>Empty it and save to go back to the {{ part }} the site ships with.</small>
+    </details>
+  </aside>
+</form>
+{% endblock %}

@@ -15,7 +15,8 @@ from werkzeug.exceptions import HTTPException
 from . import db, seo
 from .admin_api import apply_post
 from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login
-from .blocks import BLOCKS, EDITOR, LAYOUTS, at_path, render_blocks, warranty_active
+from .blocks import (EDITOR, LAYOUTS, at_path, blocks_for, chrome, render_blocks, validate_blocks,
+                     warranty_active)
 from .storage import delete_media, save_upload
 
 ui = Blueprint("admin_ui", __name__, url_prefix="/admin", template_folder="templates")
@@ -171,7 +172,8 @@ def _form_context(pt, post, errors=None):
     return dict(pt=pt, post=post, errors=errors or {}, taxonomies=taxonomies,
                 parents=[p for p in siblings if p["id"] != pk] if pt["hierarchical"] else [],
                 taken_slugs=[s["slug"] for s in siblings if s["id"] != pk],
-                media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps((post or {}).get("blocks") or [], indent=2, ensure_ascii=False),
+                media=media, term_ids=term_ids, blocks=blocks_for("page"), blocks_ui=EDITOR,
+                layouts=list(LAYOUTS.items()), blocks_json=json.dumps((post or {}).get("blocks") or [], indent=2, ensure_ascii=False),
                 seo_keys=SEO_KEYS)
 
 
@@ -445,6 +447,67 @@ def warranty_delete(pk):
     db.table("warranties").delete().eq("id", pk).execute()
     flash("Warranty record removed.")
     return redirect(url_for("admin_ui.warranty", q=request.args.get("q"), page=request.args.get("page")))
+
+
+def _menu_slugs():
+    return [m["slug"] for m in db.rows(db.table("menus").select("slug").order("slug"))]
+
+
+@ui.route("/design", methods=["GET", "POST"])
+@ui_required("admin")
+def design():
+    """The header and footer, edited in the same canvas a page uses. ?part=header|footer picks the
+    region; one region at a time, so admin.js keeps editing a single flat array and needs no changes.
+    Stored in settings as header_blocks/footer_blocks — deliberately NOT in SETTING_KEYS, because
+    that route writes every key in the tuple from the form and would blank them."""
+    part = request.args.get("part", "header")
+    if part not in ("header", "footer"):
+        abort(404)
+    blocks_json = json.dumps(chrome(part), indent=2, ensure_ascii=False)
+    if request.method == "POST":
+        raw = request.form.get("blocks") or "[]"
+        try:
+            parsed = json.loads(raw)
+        except ValueError as e:
+            parsed = f"invalid JSON: {e}"
+        errors = validate_blocks(parsed) if isinstance(parsed, list) else [str(parsed)]
+        if errors:
+            return render_template("admin/design.html", part=part, blocks_json=raw, errors=errors,
+                                   **_design_context()), 400
+        db.set_settings({f"{part}_blocks": parsed})
+        flash(f"{part.capitalize()} saved.")
+        return redirect(url_for("admin_ui.design", part=part))
+    return render_template("admin/design.html", part=part, blocks_json=blocks_json, errors=None, **_design_context())
+
+
+def _design_context():
+    return dict(blocks=blocks_for("chrome"), blocks_ui=EDITOR, menus=_menu_slugs(),
+                media=db.rows(db.table("media").select("id,filename,url,mime,alt").order("id", desc=True).limit(200)))
+
+
+@ui.route("/menus", methods=["GET", "POST"])
+@ui_required("admin")
+def menus():
+    """The nav items behind every `nav` block and the header bar. Rows are flat with a child flag,
+    which is how the form posts them; they are nested back into [{label, url, children}] on save."""
+    if request.method == "POST":
+        slug = request.form.get("slug", "")
+        if not slug:
+            abort(400, "no menu named")
+        items, labels = [], request.form.getlist("label")
+        for label, url, child in zip(labels, request.form.getlist("url"), request.form.getlist("child")):
+            if not label.strip():
+                continue   # a row left blank is how you delete one
+            row = {"label": label.strip(), "url": url.strip()}
+            if child == "1" and items:
+                items[-1].setdefault("children", []).append(row)
+            else:
+                items.append(row)
+        db.table("menus").upsert({"slug": slug, "name": request.form.get("name") or slug.capitalize(),
+                                  "items": items}, on_conflict="slug").execute()
+        flash("Menu saved.")
+        return redirect(url_for("admin_ui.menus"))
+    return render_template("admin/menus.html", menus=db.rows(db.table("menus").select("*").order("slug")))
 
 
 @ui.route("/settings", methods=["GET", "POST"])

@@ -318,11 +318,43 @@ A serial number already on file is the one thing the browser cannot know by itse
 
 ---
 
-## 9. Menus, settings and redirects
+## 9. The header, the footer, menus and settings
 
-**Settings** holds the things that appear everywhere: site name, tagline, logo, contact email and phone, address, social links, and the Google Analytics ID.
+### Design — your header and footer
 
-**Menus** control the header and footer navigation. The header menu supports one level of drop-down, which is how *Services* and *Company* expand.
+Every page on the site shares a strip along the top and a block along the bottom. **Design** is where you edit them, and it works exactly like writing a page: the same canvas, the same `/` to add a section, the same drag to reorder.
+
+At the top of the screen there are two tabs, **Header** and **Footer**. Pick one, change it, press **Save**, and it changes on every page at once.
+
+The sections you will find here are the ones a header or footer needs:
+
+| Section | What it is |
+|---|---|
+| **Header bar** | The whole top strip: your logo, the menu and one button. This is one piece rather than loose parts, because the bar has to stay stuck to the top of the screen and turn into a ☰ button on a phone. |
+| **Menu** | A list of links, taken from one of your menus. Pick which one. |
+| **Site details** | Your name, tagline and address. |
+| **Contact details** | Your email, phone and social links. |
+| **Small print** | The thin line at the very bottom. Type `{year}` and it becomes the current year on its own, so the copyright never goes stale. |
+
+*Site details* and *Contact details* have nothing to type in them on purpose. Those words live in **Settings**, so you change them once and they update in the footer, on every page, by themselves — rather than being typed in two places and slowly disagreeing.
+
+To lay the footer out in columns, add a **Columns** section and drop the others inside it, exactly as you would on a page.
+
+**If you make a mess of it**, open *Advanced* at the bottom of the panel, delete everything in the box, and save. That puts the original header or footer back.
+
+### Menus — your navigation links
+
+**Menus** are the lists of links used by the header bar and by any *Menu* section in the footer.
+
+Each link is one row: the words a visitor sees, and where it goes. The box on the right of each row says whether it is a **top-level** link or a **drop-down** — a drop-down link appears underneath the link above it, which is how *Services* and *Company* expand in the header. Drag the ⋮ handle to reorder, **+ Add a link** for a new one, and **×** to remove one. Clearing a link's text also removes it when you save.
+
+Menus are separate from Design on purpose: one menu can be used in the header and the footer at once, so you keep your links in a single place.
+
+### Settings
+
+**Settings** holds the things that appear everywhere: site name, tagline, logo, contact email and phone, address, social links, and the Google Analytics ID. Saving Settings never affects your header or footer layout — the two are stored separately.
+
+### Redirects
 
 **Redirects** send an old address to a new one. If a page moves — or you are bringing across links from the old website — add a redirect so the old link keeps working and nobody hits a "not found" page. This protects the search rankings you have already earned.
 
@@ -353,7 +385,7 @@ Products can carry a price and a checkout button. The payment step is currently 
 
 ## 12. Where the project stands
 
-**Done:** the content system, the public website with its theme, the admin panel, search-engine and AI output, enquiry capture, the warranty register and its public check, media library, users and roles, and the payment placeholder.
+**Done:** the content system, the public website with its theme, the admin panel, an editable header and footer with a menu editor, search-engine and AI output, enquiry capture, the warranty register and its public check, media library, users and roles, and the payment placeholder.
 
 **Still to come:** a live payment provider.
 
