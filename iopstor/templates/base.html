@@ -14,13 +14,18 @@
 <meta property="og:url" content="{{ meta.canonical }}">
 {% if meta.image %}<meta property="og:image" content="{{ meta.image }}">
 {% endif %}<meta name="twitter:card" content="{{ 'summary_large_image' if meta.image else 'summary' }}">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 <link rel="alternate" type="application/rss+xml" title="{{ site.name }} blog" href="{{ site.url }}/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@700;800&display=swap">
 <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}">
 {% for node in jsonld %}<script type="application/ld+json">{{ node|tojson }}</script>
 {% endfor %}{% if site.ga_id and not preview %}<script async src="https://www.googletagmanager.com/gtag/js?id={{ site.ga_id }}"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','{{ site.ga_id }}');</script>
 {% endif %}</head>
 <body>
+{% set svc = service_nav() %}
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-header">
   <div class="wrap">
@@ -29,7 +34,13 @@
     <label for="nav-toggle" class="nav-toggle-label" aria-label="Menu">&#9776;</label>
     <nav class="site-nav" aria-label="Main">
       <ul>
-        {% for i in menu('header') %}<li><a href="{{ i.url }}">{{ i.label }}</a>{% if i.children %}<ul>{% for c in i.children %}<li><a href="{{ c.url }}">{{ c.label }}</a></li>{% endfor %}</ul>{% endif %}</li>{% endfor %}
+        {% for i in menu('header') %}{% set is_mega = svc and i.url == svc.url %}<li{% if is_mega %} class="nav-mega"{% endif %}><a href="{{ i.url }}">{{ i.label }}{% if is_mega or i.children %} <span aria-hidden="true">&#9662;</span>{% endif %}</a>
+          {%- if is_mega %}<div class="mega"><div class="wrap">
+            <div class="mega-groups">{% for g in svc.groups %}<a class="mega-g" href="{{ g.path }}"><span class="n">{{ '%02d' % loop.index }}</span>{{ g.title }}<span class="arrow" aria-hidden="true">&rarr;</span></a>{% endfor %}</div>
+            <div class="mega-panes">{% for g in svc.groups %}<div class="mega-pane"><h3>{{ g.title }}</h3>{% if g.excerpt %}<p class="blurb">{{ g.excerpt }}</p>{% endif %}<div class="mega-tiles">{% for c in g.children %}<a href="{{ c.path }}">{{ c.title }}<span class="arrow" aria-hidden="true">&rarr;</span></a>{% endfor %}</div></div>{% endfor %}</div>
+            <div class="mega-foot"><a href="{{ i.url }}">All services &rarr;</a><a class="q" href="/contact-us">Request a quote &rarr;</a></div>
+          </div></div>
+          {%- elif i.children %}<ul class="sub">{% for c in i.children %}<li><a href="{{ c.url }}">{{ c.label }}</a></li>{% endfor %}</ul>{% endif %}</li>{% endfor %}
         <li class="nav-cta"><a href="/contact-us">Contact us</a></li>
       </ul>
     </nav>
@@ -39,15 +50,22 @@
 <footer class="site-footer">
   <div class="wrap">
     <div class="cols">
-      <div><h4>{{ site.name }}</h4><p>{{ site.tagline }}</p>{% if site.address %}<p>{{ site.address }}</p>{% endif %}</div>
+      <div>
+        <a class="brand" href="/" rel="home">{% if site.logo %}<img src="{{ site.logo }}" alt="{{ site.name }}">{% else %}{{ site.name }}{% endif %}</a>
+        {% if site.tagline %}<p>{{ site.tagline }}</p>{% endif %}
+        {% if site.address %}<p>{{ site.address }}</p>{% endif %}
+      </div>
+      {% if svc %}<div><h4>Services</h4><ul>{% for g in svc.groups %}<li><a href="{{ g.path }}">{{ g.title }}</a></li>{% endfor %}</ul></div>{% endif %}
       <div><h4>Company</h4><ul>{% for i in menu('footer') %}<li><a href="{{ i.url }}">{{ i.label }}</a></li>{% endfor %}</ul></div>
       <div><h4>Contact</h4><ul>
-        {% if site.email %}<li><a href="mailto:{{ site.email }}">{{ site.email }}</a></li>{% endif %}
         {% if site.phone %}<li><a href="tel:{{ site.phone|replace(' ', '') }}">{{ site.phone }}</a></li>{% endif %}
+        {% if site.email %}<li><a href="mailto:{{ site.email }}">{{ site.email }}</a></li>{% endif %}
         {% for s in site.social %}<li><a href="{{ s }}" rel="me noopener">{{ s.split('/')[2] if '//' in s else s }}</a></li>{% endfor %}
+        <li><a href="/datasheets">Datasheets</a></li>
+        <li><a class="q" href="/contact-us">Request a quote &rarr;</a></li>
       </ul></div>
     </div>
-    <div class="legal"><span>&copy; {{ year }} {{ site.name }}. All rights reserved.</span><span><a href="/sitemap.xml">Sitemap</a> &middot; <a href="/feed.xml">RSS</a></span></div>
+    <div class="legal"><span>&copy; {{ year }} {{ site.name }}. All rights reserved.</span><span><a href="/sitemap.xml">Sitemap</a> &middot; <a href="/feed.xml">RSS</a> &middot; <a href="/llms.txt">llms.txt</a></span></div>
   </div>
 </footer>
 </body>

@@ -44,6 +44,7 @@ iopstor/public.py     catch-all resolver, crawler endpoints, /api/v1 public read
 iopstor/cli.py        flask migrate | seed | create-admin
 iopstor/templates/    base/post/archive/404, blocks/<type>.html, admin/*.html
 iopstor/static/       site.css (the whole public theme) + admin.css (admin extras, layered on top)
+                      + canvas.css (editor chrome), favicon.svg, vendor/sortable.min.js
 migrations/           0000_bootstrap.sql (run once by hand) + NNNN_name.sql applied by `flask migrate`
 tests/                test_offline.py always runs; the rest need a live Supabase and skip without it
 docs/                 this file + NON-TECHNICAL.md
@@ -94,6 +95,7 @@ Every query goes through this module. Nothing else builds a PostgREST query.
 | `with_paths()` / `ancestors()` | Attach the computed `path` to posts; builds one per-request hierarchy index rather than walking parents per row |
 | `unique_slug()` | Slug collision resolution within a post type — `base`, else `base-xyz` (three random letters) |
 | `ensure_term()` | Term id for a name in a taxonomy, creating the row the first time. Matched on `slugify(name)`, so "All-Flash" and "all flash" are one term, not two |
+| `tree(type_slug)` | Top-level live posts of one type, each with `p["children"]`. One query; the parent/child split happens in Python. Feeds the header's services panel, the services archive and `post_list(top_level)` |
 | `paginate()` | Offset/limit + exact count |
 | `post_types()` / `settings()` | Process-level caches, invalidated with `uncache()` |
 
@@ -260,6 +262,8 @@ Everything is server-rendered from `seo.py` + `public.py`; keep it there.
 - `jsonld()` — structured data driven by `post_types.jsonld_type` plus BreadcrumbList from the resolver's crumbs
 - `_indexable()` — a post whose `seo.robots` starts with `noindex` is kept out of the sitemap
 
+`base.html`'s `<head>` also carries the favicon (`static/favicon.svg`, the black square with the blue bar and white ring) and the two web fonts. The fonts come from Google Fonts on a `<link>`, which is the one external request the public site makes; `admin/canvas.html` repeats that link because it is a standalone document, and without it the editor canvas would preview the page in a different typeface from the page itself.
+
 > **Known gap.** The `faq` block emits Q&A markup but is not currently wired into FAQPage JSON-LD. The knowledge graph flagged this edge as AMBIGUOUS; it is a genuine, unimplemented opportunity.
 
 ---
@@ -289,7 +293,17 @@ Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in nam
 
 ## 12. Theme
 
-One stylesheet, `static/site.css`, with CSS variables at the top, then header/footer, then `.cards` / `.card` / `.btn` / `.section`, then the section-layout group (`.al-*` / `.alb-*` alignment and `.w-*` / `--w` width, §6), then one rule-group per block. `static/admin.css` layers admin-only rules on top, so `/admin` inherits the public theme.
+One stylesheet, `static/site.css`, with the design tokens at the top, then header / mega menu / footer, then `.cards` / `.card` / `.btn` / `.section`, then the section-layout group (`.al-*` / `.alb-*` alignment and `.w-*` / `--w` width, §6), then one rule-group per block. `static/admin.css` layers admin-only rules on top, so `/admin` inherits the public theme.
+
+**`site.css` is shared three ways** — the public site, `body.admin` (through `templates/admin/base.html`) and the editor canvas iframe (`templates/admin/canvas.html` loads it, then `canvas.css`). A change to `.card`, `.btn`, `.specs` or `.lead-form` shows up in all three, which is the point: the canvas is a real render of the real theme.
+
+**Tokens.** `:root` holds the palette the design ships with — `--black`/`--black-2`/`--black-3` and `--line-dark`/`--line-dark-2` for the dark bands, `--blue`/`--blue-hover`/`--blue-tint`/`--blue-light`, `--white`/`--grey`/`--line`/`--line-2` for the light ones, `--ink`/`--ink-2`/`--muted`/`--muted-dark`/`--muted-dark-2` for text, `--green`/`--red` (plus `-bg`) for status, `--wrap` (1200px) and `--reading` (760px) for measure, and `--head`/`--body`/`--mono` for the three type stacks. Headings are Manrope 800, body is IBM Plex Sans.
+
+A second, shorter line under them maps the *old* token names (`--navy`, `--accent`, `--accent-2`, `--text`, `--card`, `--radius`) onto the new palette. `admin.css` and `canvas.css` still reference those in ~90 places; the aliases keep the admin rendering while it is restyled in its own PR, and are marked `ponytail:` for deletion once nothing uses them.
+
+**The services mega panel** is CSS only, like everything else on the public site. Its markup is a child of the Services `<li>`, absolutely positioned against `.site-header` — sticky is a positioned element, so it is the containing block, which is how the panel spans the viewport instead of the 1200px column. That is also why the Services `<li>` is `position:static` while every other one is `relative`: the Company drop-down has to anchor to its own item. **Opening is plain `:hover` / `:focus-within`**, so it works everywhere; only switching the visible group needs `:has()`, and a browser without it still opens the panel showing the first group. Eight groups is the ceiling (one `:has()` rule per index), marked `ponytail:` in the file. Under 960px the panel collapses into the checkbox sheet as a plain indented list — group column hidden, every pane shown, blurbs dropped.
+
+Its data comes from `service_nav()` (`public.py`), a template global over `db.tree("service")` — `menu('header')` carries labels and URLs only, and the panel needs each group's `excerpt` and children. It is a callable rather than a value because the context processor is app-wide and an `/admin` page has no use for a posts query.
 
 **Long words wrap.** `body` carries `overflow-wrap:break-word`, so an unbroken string (a pasted URL, a hash) breaks instead of running off the right of its section and giving the page a horizontal scrollbar — and it is inherited, so the editor canvas gets it too. `break-word` only wraps *inside* a box, and a grid track or a table column is sized from min-content, which a 300-character word still blows out; the boxes that size to their content (`.card`, `.column`, `.stats li`, table cells) get `overflow-wrap:anywhere`, which counts in that size. Not on `body`: `anywhere` would let the header nav break mid-word.
 

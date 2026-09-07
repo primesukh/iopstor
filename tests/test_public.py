@@ -10,6 +10,12 @@ def _jsonld(html):
     return [json.loads(m) for m in re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.S)]
 
 
+def _main(resp):
+    """The page body alone. The header's services panel lists every child service on every page,
+    so "is this link on the page" has to mean the page, not the chrome."""
+    return re.search(r'<main id="main">(.*)</main>', resp.text, re.S).group(1)
+
+
 def test_hierarchical_service_url_and_breadcrumb(client, seeded):
     r = client.get("/services/storage/nas")
     assert r.status_code == 200
@@ -19,9 +25,10 @@ def test_hierarchical_service_url_and_breadcrumb(client, seeded):
     assert crumbs["itemListElement"][-1]["item"] == "http://test/services/storage/nas"
     assert any(n["@type"] == "Service" for n in ld)
     assert client.get("/services/nas").status_code == 404  # child only lives under its parent
-    assert b"/services/storage/nas" in client.get("/services/storage").data
+    assert "/services/storage/nas" in _main(client.get("/services/storage"))
     archive = client.get("/services")
-    assert archive.status_code == 200 and b"Storage" in archive.data and b"/services/storage/nas" not in archive.data
+    assert archive.status_code == 200 and b"Storage" in archive.data
+    assert "/services/storage/nas" not in _main(archive)   # the archive lists parents only
     home = client.get("/")
     assert home.status_code == 200 and b'"WebSite"' in home.data and b'<link rel="canonical" href="http://test/">' in home.data
     assert client.get("/home").status_code == 301

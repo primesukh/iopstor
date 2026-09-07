@@ -322,7 +322,11 @@ A serial number already on file is the one thing the browser cannot know by itse
 
 **Settings** holds the things that appear everywhere: site name, tagline, logo, contact email and phone, address, social links, and the Google Analytics ID.
 
-**Menus** control the header and footer navigation. The header menu supports one level of drop-down, which is how *Services* and *Company* expand.
+**Menus** control the header and footer navigation. The header menu supports one level of drop-down, which is how *Company* expands.
+
+**The Services menu builds itself.** Hovering *Services* in the header opens a wide panel: your top-level services down the left, and whichever one you are pointing at expands on the right with its summary and its sub-services. You do not edit that panel anywhere — it is your Services pages. Change a service's **title** and the panel's wording changes; change its **Summary** (the box in the right-hand panel of the page editor) and the sentence under the name changes; add a sub-service under a service and it appears as a new tile. Publishing or unpublishing a service adds or removes it. The same list fills the *Services* column in the footer.
+
+Two things follow from that. A service with no Summary shows its name and its sub-services but no sentence, so it is worth writing one. And the panel has room for eight top-level services; a ninth would not get its own tab.
 
 **Redirects** send an old address to a new one. If a page moves — or you are bringing across links from the old website — add a redirect so the old link keeps working and nobody hits a "not found" page. This protects the search rankings you have already earned.
 

@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>{{ title or 'Untitled' }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+{# a standalone document, so it needs the site's fonts itself or the canvas previews in a
+   different typeface from the page it is previewing #}
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@700;800&display=swap">
 <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='canvas.css') }}">
 <script src="{{ url_for('static', filename='vendor/sortable.min.js') }}"></script>
