@@ -165,6 +165,20 @@ main{min-height:60vh}
 .band-dark h1,.band-dark h2,.band-dark h3{color:var(--white)}
 .band-blue{background:var(--blue);color:var(--white)}
 .band-blue h2{color:var(--white)}
+/* The band a section sits on, chosen per section under its own gear (blocks.py section_class).
+   After .band-* on purpose: both are one class on the same element, so a tone an editor picked
+   beats the block's own default on source order. The design alternates white and grey down a
+   page for rhythm, which is why this is a setting and not baked into each block. */
+.t-grey{background:var(--grey)}
+.t-blue{background:var(--blue);color:var(--white)}
+.t-blue h2,.t-blue h3{color:var(--white)}
+.t-dark{background:var(--black);color:var(--muted-dark)}
+.t-dark h1,.t-dark h2,.t-dark h3{color:var(--white)}
+.t-dark .card{background:var(--black-3);border-color:var(--line-dark)}
+.t-dark .card p{color:var(--muted-dark)}
+.t-dark .chip{border-color:var(--line-dark-2);color:var(--muted-dark)}
+.t-dark .chip-industry{background:rgba(0,140,247,.15);color:var(--blue-light)}
+.t-dark a.card:hover{border-color:var(--blue)}
 .section-title{font-size:clamp(28px,3.5vw,40px);margin:0 0 24px}
 /* the row above a grid: eyebrow and title left, "All services →" right */
 .sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin:0 0 28px}
@@ -181,6 +195,8 @@ main{min-height:60vh}
    media query below can win without !important beating an inline style. A nested block keeps its own
    <section class="section"><div class="wrap">, so both are neutralised inside a column. */
 .columns{display:grid;gap:48px;grid-template-columns:var(--cols,repeat(auto-fit,minmax(240px,1fr)))}
+/* a picture beside words lines up on their centre; three text columns still top-align */
+.columns:has(figure){align-items:center}
 @media(max-width:800px){.columns{grid-template-columns:1fr}}
 .column>.section{padding:0}
 .column>.section+.section{padding-top:24px}
@@ -291,6 +307,15 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .rich-text img{display:block;margin:1.5rem 0;border-radius:12px}
 .rich-text hr{border:0;border-top:1px solid var(--line);margin:2.5rem 0}
 .rich-text code{background:var(--grey);padding:.1rem .35rem;border-radius:4px;font:.92em var(--mono)}
+/* A rich_text block can carry a whole section: its eyebrow, its heading, its list and its button.
+   Each needs to out-specify the element rules above -- `.rich-text h2` is (0,1,1) and would beat a
+   bare `.section-title`. The dash list is the design's feature list: a blue em dash, not a bullet. */
+.rich-text .eyebrow{margin:0 0 10px}
+.rich-text .section-title{margin:0 0 18px;font-size:clamp(28px,3.5vw,40px)}
+.rich-text .lead{margin:0 0 24px;max-width:none;font-size:17px;line-height:1.6}
+.rich-text ul.dash{margin:0 0 28px;padding:0;list-style:none;display:grid;gap:10px;color:var(--ink);font-size:15.5px}
+.rich-text ul.dash li{display:flex;gap:12px;margin:0}
+.rich-text ul.dash li::before{content:"\2014";flex:none;color:var(--blue);font-weight:700}
 .rich-text>*:first-child{margin-top:0}
 
 /* image / gallery */
@@ -353,6 +378,18 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pl-case_study .chips{display:flex}
 .pl-case_study .chip-industry{background:rgba(0,140,247,.1);border-color:transparent;color:var(--blue-hover)}
 .pl-partner .cards{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+/* On a page the partner list is a logo strip -- no card, no name, just the marks in a row, greyed
+   back until you point at one. The archive (.arch-body) keeps the cards, which is where the names
+   and roles belong. */
+.pl-partner:not(.arch-body){border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:56px 0}
+.pl-partner:not(.arch-body) .sec-head{justify-content:center;margin-bottom:28px}
+.pl-partner:not(.arch-body) .eyebrow{color:var(--muted);text-align:center;margin:0}
+.pl-partner:not(.arch-body) .cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;align-items:center}
+.pl-partner:not(.arch-body) .card{height:64px;display:flex;align-items:center;justify-content:center;padding:10px 16px;border:0;background:none;border-radius:0;filter:grayscale(1);opacity:.7;transition:filter .2s,opacity .2s}
+.pl-partner:not(.arch-body) a.card:hover{filter:none;opacity:1;transform:none;border:0}
+.pl-partner:not(.arch-body) .card h3,.pl-partner:not(.arch-body) .card p{display:none}
+.pl-partner:not(.arch-body) .card-img{height:100%;margin:0}
+.pl-partner:not(.arch-body) .card-img img{max-height:100%;max-width:100%;object-fit:contain}
 .pl-partner .card-img{display:flex;align-items:center;height:64px;margin:0 0 14px}
 .pl-partner .card-img img{width:auto;max-height:64px;object-fit:contain}
 .pl-partner .card h3{font-size:17px}.pl-partner .card p{font-size:13.5px}

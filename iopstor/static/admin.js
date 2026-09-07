@@ -499,6 +499,19 @@
      is in play — picking it is meaningless, so it is disabled. */
   var WIDTHS = [["", "Default"], ["wide", "Wide"], ["full", "Full width"]];
 
+  /* The band a section sits on. Same shape as alignPick: picking the blank option deletes the key,
+     so an untouched section stays byte-identical in the saved JSON. */
+  var TONES = [["", "Page background"], ["grey", "Light grey"], ["dark", "Dark"], ["blue", "Blue"]];
+  function tonePick(data) {
+    var sel = el("select");
+    TONES.forEach(function (t) { sel.appendChild(el("option", {value: t[0], text: t[1]})); });
+    sel.value = data.tone || "";
+    sel.addEventListener("change", function () {
+      if (sel.value) data.tone = sel.value; else delete data.tone;
+    });
+    return labelled("Background", false, sel);
+  }
+
   function widthPick(data) {
     var s = el("select", { title: "How wide the section's content is" }),
         n = el("input", { type: "number", "class": "wid-px", min: "1", max: "4000", step: "10", placeholder: "px" });
@@ -529,6 +542,7 @@
     } else {
       body.appendChild(alignPick("Align the content", "align", block.data));
       body.appendChild(alignPick("Align the section", "align_box", block.data));
+      body.appendChild(tonePick(block.data));
       body.appendChild(widthPick(block.data));
       fieldsOf(block.type).forEach(function (f) {
         // a rich_text section IS its html, edited on the page; a second document editor in a 23rem

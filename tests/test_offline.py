@@ -194,6 +194,21 @@ def test_section_alignment_is_a_whitelist(app, monkeypatch):
     assert blocks_text(blocks) == "Hi One x"   # the heading, not "center right"
 
 
+def test_tone_is_a_whitelisted_band(app, monkeypatch):
+    """The design alternates white and grey down a page, so the band is a per-section setting --
+    and like align and width it is a whitelist, because it lands in a class attribute."""
+    from iopstor.blocks import section_class
+
+    assert section_class({"tone": "grey"}) == " t-grey"
+    assert section_class({"tone": "dark", "align": "center"}) == " al-center t-dark"
+    assert section_class({"tone": 'x" onload="'}) == ""      # not a passthrough
+    assert section_class({"tone": "puce"}) == ""
+    assert section_class({}) == ""
+    monkeypatch.setattr("iopstor.db.settings", lambda: {})
+    assert 'class="section t-grey"' in render_blocks(
+        [{"type": "cards", "data": {"tone": "grey", "items": [{"title": "Hi"}]}}])
+
+
 def test_section_width_is_a_named_step_or_a_plain_number(app, monkeypatch):
     """One key, two carriers: a named width is a class, an exact one is the --w custom property."""
     from iopstor import db

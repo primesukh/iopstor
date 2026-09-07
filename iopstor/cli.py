@@ -199,25 +199,30 @@ def home_blocks(media=lambda name: None):
             {"value": "25+ yrs", "label": "of productivity and innovative solutions"},
             {"value": "3 yr", "label": "hardware warranty, unlimited support in year one"},
             {"value": "Zero", "label": "hidden or repetitive licence costs"}]}},
-        {"type": "post_list", "data": {"post_type": "service", "top_level": True, "limit": 6, "eyebrow": "What we do",
+        {"type": "post_list", "data": {"tone": "grey", "post_type": "service", "top_level": True, "limit": 6, "eyebrow": "What we do",
                                        "heading": "Storage, virtualisation and cloud, delivered as one stack",
                                        "link_label": "All services", "link_url": "/services"}},
         {"type": "columns", "data": {"cols": [
-            [{"type": "image", "data": {"media_id": media(RACK_IMAGE), "alt": "An IOPStor appliance"}}]
-            if media(RACK_IMAGE) else
-            [{"type": "rich_text", "data": {"html": "<ul>" + "".join(
-                f"<li><strong>{t}</strong> \u2014 {d}</li>" for t, d in ZFS_FEATURES[:5]) + "</ul>"}}],
+            [{"type": "image", "data": {"media_id": media(RACK_IMAGE), "alt": "IOPStor 2U rackmount"}}]
+            if media(RACK_IMAGE) else [],
             [{"type": "rich_text", "data": {"html":
-                "<h2>The file system trusted by Fortune 500 companies, universities and data centres</h2>"
-                "<p>ZFS is a file system and logical volume manager that changes how storage is administered. "
-                "Every block is checksummed, every snapshot is instant, and a failed drive never costs you a day's work.</p>"
-                + ("<ul>" + "".join(f"<li><strong>{t}</strong> \u2014 {d}</li>" for t, d in ZFS_FEATURES[:4]) + "</ul>"
-                   if media(RACK_IMAGE) else "")
-                + "<p><a href=\"/services/storage/nas\">All ZFS features &rarr;</a></p>"}}]]}},
-        {"type": "post_list", "data": {"post_type": "product", "limit": 6, "eyebrow": "Appliances",
+                '<p class="eyebrow">Built on ZFS</p>'
+                '<h2 class="section-title">The file system trusted by Fortune 500 companies, '
+                'universities and data centres</h2>'
+                '<p class="lead">ZFS never compromises on data safety. Every IOPStor appliance '
+                'inherits it: end-to-end checksums, self-healing pools, and snapshots that recover '
+                'deleted or corrupt data and protect against ransomware.</p>'
+                '<ul class="dash">'
+                '<li>Unlimited snapshots and clones: go back to yesterday, last week or last month</li>'
+                '<li>RAID-Z: instantaneous build, no write hole, multiple-disk failure tolerance</li>'
+                '<li>RAM / SSD / NVMe read-write cache, compression and de-duplication</li>'
+                '<li>Hardware agnostic: replace any component from any vendor</li>'
+                '</ul>'
+                '<p><a class="btn dark" href="/services/storage/nas">All ZFS features</a></p>'}}]]}},
+        {"type": "post_list", "data": {"tone": "grey", "post_type": "product", "limit": 6, "eyebrow": "Appliances",
                                        "heading": "Sized from 5 users upward",
                                        "link_label": "All appliances", "link_url": "/products"}},
-        {"type": "post_list", "data": {"post_type": "case_study", "limit": 4, "eyebrow": "Case studies",
+        {"type": "post_list", "data": {"tone": "dark", "post_type": "case_study", "limit": 4, "eyebrow": "Case studies",
                                        "heading": "Proven across finance, education, media and logistics",
                                        "link_label": "All case studies", "link_url": "/case-studies"}},
         {"type": "columns", "data": {"cols": [

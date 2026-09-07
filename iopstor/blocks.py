@@ -178,6 +178,7 @@ def col_widths(data):
     return " ".join(f"{n:g}fr" for n in nums) if all(n > 0 for n in nums) else ""
 
 
+TONES = ("grey", "dark", "blue")   # the bands a section can sit on; absent = the page's own white
 ALIGNS = ("left", "center", "right")
 WIDTHS = {"wide": "w-wide", "full": "w-full"}   # "width" also takes a number of pixels; see section_style()
 MAX_W = 4000
@@ -185,11 +186,13 @@ MAX_W = 4000
 
 def section_class(data):
     """The layout classes for one section, from three optional keys — absent means the theme's own
-    layout. "align" lines up what is inside it, "align_box" moves the box, "width" is either a named
+    layout. "align" lines up what is inside it, "align_box" moves the box, "tone" is the band it sits
+    on (the design alternates white and grey down a page for rhythm), "width" is either a named
     step (wide / full) or a number of pixels, which section_style() carries instead. A whitelist, not
     a passthrough: the result goes straight into a class attribute, the same reason col_widths() is
     strict. Returns "" or " al-center", " al-center alb-right w-full", …"""
     out = [p + data[k] for k, p in (("align", "al-"), ("align_box", "alb-")) if data.get(k) in ALIGNS]
+    out += ["t-" + data["tone"]] if data.get("tone") in TONES else []
     out += [WIDTHS[str(data.get("width"))]] if str(data.get("width")) in WIDTHS else []
     return (" " + " ".join(out)) if out else ""
 

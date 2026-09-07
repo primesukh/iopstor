@@ -168,7 +168,7 @@ The seed's pictures are looked up **by filename** through `cli.media_id()`, whic
 
 **Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">…` — `cls` is the layout classes, `sty` an inline width, `fe()` the edit marker (all three below); `render_blocks()` hands all three to every block template. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
 
-**Layout keys.** Three optional keys on any block's `data`, absent = the theme's own layout:
+**Layout keys.** Four optional keys on any block's `data`, absent = the theme's own layout:
 
 | Key | Values | What it does |
 |---|---|---|
@@ -183,7 +183,9 @@ Two functions carry them onto the root `<section>`, both **whitelists** rather t
 
 `--w` *is* the content measure: `site.css` writes every relevant `max-width` as `var(--w, <the theme's own value>)`, so an unset section renders exactly as designed, a number narrows or widens it, and `.w-wide` / `.w-full` set `--w:100%` from CSS. `.column{--w:initial}` stops a width set on a Columns section leaking into the sections inside it.
 
-**`--w-def` is what makes that sentence true.** The shared rule is `.section>.wrap>*{max-width:var(--w,var(--w-def,none))}`, and it is (0,2,0); every block's own rule (`.rich-text`, `.testimonial`, `.specs`, `.faq details`, `.lead-form`) is (0,1,0) or (0,1,1) and loses to it. So the fallback `none` used to win outright and the designed measures never applied at all — a section was only ever as wide as `--w` said, and unset meant full width. Each of those blocks now declares its measure as `--w-def` on itself, which the shared rule reads *inside* the fallback. `--w` stays the override it is documented to be, and `--w:initial` in a column still falls through to the block's own measure.
+****`tone`** is the band a section sits on — `grey`, `dark` or `blue`, absent means the page's own white. The design alternates white and grey down the home page for rhythm and drops case studies onto black, and that is a per-section decision an editor makes, not something baked into a block type. Like `align` and `width` it is a **whitelist** in `section_class()`, because the value lands in a class attribute. Its rules sit *after* `.band-*` in `site.css`, so a tone an editor picks beats a block's own default (`stats` is dark, `cta` is blue) on source order rather than needing `!important`.
+
+`--w-def` is what makes that sentence true.** The shared rule is `.section>.wrap>*{max-width:var(--w,var(--w-def,none))}`, and it is (0,2,0); every block's own rule (`.rich-text`, `.testimonial`, `.specs`, `.faq details`, `.lead-form`) is (0,1,0) or (0,1,1) and loses to it. So the fallback `none` used to win outright and the designed measures never applied at all — a section was only ever as wide as `--w` said, and unset meant full width. Each of those blocks now declares its measure as `--w-def` on itself, which the shared rule reads *inside* the fallback. `--w` stays the override it is documented to be, and `--w:initial` in a column still falls through to the block's own measure.
 
 All three keys are in `_NON_TEXT_KEYS`, so "center" and "950" never reach `llms-full.txt`, the feed or admin search, and all three are deliberately **not** fields in `BLOCKS`: layout belongs to every section, so `admin.js` renders one set of controls for all types (§12.1) and `validate_blocks()` simply tolerates the extra keys. `.cta` and table cells keep their own `text-align`, so a centred section does not restyle a CTA band or a spec table.
 
