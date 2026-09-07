@@ -310,7 +310,9 @@ def test_warranty_form_hands_back_what_was_typed_when_the_save_is_refused(app, c
     body = r.get_data(as_text=True)
 
     assert r.status_code == 400
-    assert "cannot be before the purchase date" in body      # the message is on the page, not lost to a redirect
+    # the message rides on the field it is about, for admin.js to hand to the browser's validation bubble
+    assert 'data-refused-field="expiry_date"' in body and "cannot be before the purchase date" in body
+    assert "<noscript>" in body                              # ...and is still readable without JS
     assert 'value="IOP-A%1"' in body and "Acme &amp; Co" in body and 'value="2024-06-01"' in body
     assert "PSU swapped" in body and "checked" in body        # textarea and the remarks toggle survive too
     assert "Add a warranty record" in body and 'name="id"' not in body   # a refused new record is still new

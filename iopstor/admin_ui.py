@@ -389,8 +389,12 @@ def warranty():
     A save that works redirects (post-redirect-get, so a refresh cannot save twice); a save that is
     refused falls through to the same render with what was typed still in the form, the way the post
     form re-renders instead of redirecting. Losing a filled-in record to a typo is not a validation
-    message, it is a re-typing exercise."""
-    editing, refused = None, False
+    message, it is a re-typing exercise.
+
+    A refusal is `(field, message)`, not a flash: the message belongs on the field it is about, so
+    admin.js hands it to the browser's own validation bubble (setCustomValidity, as initSlug already
+    does for a taken web address). Only a success flashes, at the top, where a confirmation belongs."""
+    editing, refused = None, None
     if request.method == "POST":
         f = request.form
         row = {k: f.get(k, "").strip()[:limit] for k, limit in
@@ -402,13 +406,14 @@ def warranty():
         pk = f.get("id", "")
         dupe = db.one(db.table("warranties").select("id").eq("serial_key", row["serial"].upper())) if row["serial"] else None
         if not (row["serial"] and row["customer_name"] and row["expiry_date"]):
-            flash("Serial number, customer name and warranty expiry are required.")
+            refused = ("serial", "Serial number, customer name and warranty expiry are required.")
         elif dupe and str(dupe["id"]) != pk:
-            flash(f"Serial number {row['serial']} already has a record.")
+            # the one the browser cannot check for itself: it would need every serial on file
+            refused = ("serial", f"Serial number {row['serial']} already has a record.")
         elif row["purchase_date"] and row["expiry_date"] < row["purchase_date"]:
             # the friendly half of warranties_expiry_after_purchase (0004); ISO dates compare as dates.
             # No purchase date means no comparison to make: any expiry is allowed.
-            flash(f"Warranty expiry ({row['expiry_date']}) cannot be before the purchase date ({row['purchase_date']}).")
+            refused = ("expiry_date", f"Warranty expiry cannot be before the purchase date ({row['purchase_date']}).")
         else:
             if pk.isdigit():
                 db.update("warranties", int(pk), row)
@@ -419,7 +424,7 @@ def warranty():
             return redirect(url_for("admin_ui.warranty", q=request.args.get("q"), page=request.args.get("page")))
         # refused: hand the submitted values back to the form. The id decides add-vs-edit in the
         # template, so a rejected new record does not come back wearing an Edit heading.
-        editing, refused = ({**row, "id": pk} if pk.isdigit() else row), True
+        editing = {**row, "id": pk} if pk.isdigit() else row
     q = db.table("warranties").select("*", count="exact")
     if s := request.args.get("q"):
         s = s.replace(",", " ").replace("(", " ").replace(")", " ")  # PostgREST's or_ is comma/paren-delimited

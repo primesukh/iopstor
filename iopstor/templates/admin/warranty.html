@@ -17,10 +17,15 @@
 <p>{% if page > 1 %}<a class="btn secondary" href="?page={{ page-1 }}&q={{ request.args.get('q','') }}">Previous</a>{% endif %} {% if has_next %}<a class="btn secondary" href="?page={{ page+1 }}&q={{ request.args.get('q','') }}">Next</a>{% endif %}</p>
 
 <h2 id="form">{{ 'Edit ' ~ e.serial if e.id else 'Add a warranty record' }}</h2>
-<form method="post" class="card" style="max-width:640px">
+{# data-refused is (field, message) from the server: admin.js puts it on that field as the browser's own
+   validation bubble, so the message lands where the mistake is instead of at the top of the page.
+   The <noscript> copy is the same sentence for a browser that will not run it. #}
+<form id="warranty-form" method="post" class="card" style="max-width:640px"
+      {% if refused %}data-refused-field="{{ refused[0] }}" data-refused="{{ refused[1] }}"{% endif %}>
   <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if refused %}<noscript><p class="error">{{ refused[1] }}</p></noscript>{% endif %}
   {% if e.id %}<input type="hidden" name="id" value="{{ e.id }}">{% endif %}
-  <label>Serial number * <input type="text" name="serial" value="{{ e.serial or '' }}" required{{ " autofocus" if refused }} maxlength="100" autocomplete="off" spellcheck="false"></label>
+  <label>Serial number * <input type="text" name="serial" value="{{ e.serial or '' }}" required maxlength="100" autocomplete="off" spellcheck="false"></label>
   <label>Customer name * <input type="text" name="customer_name" value="{{ e.customer_name or '' }}" required maxlength="200"></label>
   <label>Registered email <input type="email" name="email" value="{{ e.email or '' }}" maxlength="300"></label>
   <label>Purchase date <input type="date" name="purchase_date" value="{{ e.purchase_date or '' }}"></label>

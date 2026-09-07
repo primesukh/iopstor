@@ -304,7 +304,9 @@ Each enquiry can be marked **New**, **In progress** or **Done**, so sales can wo
 | AMC status | Yes or No, for an annual maintenance contract. |
 | Remarks | A note to yourself. See below. |
 
-**If a record is refused, nothing is lost.** A missing field, a serial number already on file, or an expiry date before the purchase date leaves everything you typed exactly where it was, with a line at the top of the screen saying what is wrong. Fix that one thing and press the button again — you never have to find the record and type it out a second time. Your search and your place in the list survive too.
+**If something is wrong, the message appears on the field.** Put an expiry date earlier than the purchase date and the browser stops you the moment you press the button, with its own little message next to the date box — the same way it tells you a required field is empty. Nothing is sent and nothing is lost. Leave the purchase date empty and no such check applies: any expiry date is allowed.
+
+A serial number already on file is the one thing the browser cannot know by itself, so that check happens when you press the button — the message comes back on the serial number box, and everything you typed is still exactly where it was. Fix that one thing and press the button again; you never have to find the record and type it out a second time. Your search and your place in the list survive too.
 
 **Editing one.** Press **Edit** on any row: the record loads into the form, you change what you need and press **Save changes**. **Search** finds a record by serial number, customer name or email. Only an admin can delete a record.
 
