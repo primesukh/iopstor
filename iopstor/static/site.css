@@ -335,6 +335,8 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
    written from the resolved post_types row, never from block data. */
 .pl .card-img,.pl .card-n,.pl .chips{display:none}
 .pl .card-img img{display:block;width:100%}
+/* the design's empty state for a picture the CMS does not have yet */
+.card-img-empty{background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)}
 .pl-service .card-n{display:block;margin:0 0 14px;font:700 12px/1 var(--mono);color:var(--blue)}
 .pl-service .chips-kids{display:flex}
 .pl-product .card{padding:0;overflow:hidden}
@@ -342,7 +344,7 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pl-product .card-img img{width:auto;max-height:150px;object-fit:contain}
 .pl-product .card h3{margin:20px 24px 8px}
 .pl-product .card p{margin:0 24px 24px}
-.pl-case_study .card-img{display:block;min-height:150px;margin:0 0 16px;border-radius:10px;background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)}
+.pl-case_study .card-img{display:block;min-height:150px;margin:0 0 16px;border-radius:10px}
 .pl-case_study .card-img img{height:150px;object-fit:cover;border-radius:10px}
 .pl-case_study .chips{display:flex}
 .pl-case_study .chip-industry{background:rgba(0,140,247,.1);border-color:transparent;color:var(--blue-hover)}
@@ -398,3 +400,49 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .warranty-result.none{padding:28px}
 .warranty-result.none h3{margin:0 0 8px;font-size:20px}
 .warranty-result.none p{margin:0 0 16px;font-size:15px;color:var(--muted)}
+
+/* --- archives and detail pages ----------------------------------------------------------------
+   Two header treatments: the catalogue types get the black band (band-dark, the same class the
+   stats block uses), the reading types get the white one. archive.html picks which. */
+.arch-head{background:var(--white);border-bottom:1px solid var(--line);padding:56px 0 40px}
+.arch-head .page-title{margin-top:14px}
+.arch-head .lead{max-width:640px}
+.arch-head.band-dark{background:var(--black);border-bottom:0;padding:64px 0 56px}   /* names the background again: .arch-head is later in the file than .band-dark and ties on specificity */
+.band-dark .breadcrumb,.band-dark .breadcrumb a{color:var(--muted-dark)}
+.band-dark .breadcrumb li:last-child{color:var(--white)}
+.band-dark .breadcrumb li+li::before{color:var(--muted-dark-2)}
+.band-dark .lead{color:var(--muted-dark)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 0}
+.filters .chip{padding:6px 14px;font-size:14px;text-decoration:none;transition:border-color .15s,color .15s}
+.filters .chip:hover{border-color:var(--blue);color:var(--blue)}
+.band-dark .filters .chip{border-color:var(--line-dark-2);color:var(--muted-dark)}
+.band-dark .filters .chip:hover{border-color:var(--blue);color:var(--white)}
+.arch-body{background:var(--grey);padding:56px 0 48px}
+
+/* a detail page's head: words left, featured image right when there is one */
+.page-head>.wrap{display:grid;gap:48px;align-items:center}
+.page-head.has-media>.wrap{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.page-head-text{min-width:0}
+.page-head .breadcrumb{margin:0 0 16px}
+.page-head .chips{margin:0 0 20px}
+.page-media img{max-width:440px;margin-inline:auto}
+a.chip{text-decoration:none}
+a.chip:hover{border-color:var(--blue);color:var(--blue)}
+.chip-industry{background:rgba(0,140,247,.1);border-color:transparent;color:var(--blue-hover)}
+.meta-strip{background:var(--grey);padding:32px 0}
+/* long fields read as the article; short ones are the tiles above. white-space:pre-line keeps the
+   editor's paragraph breaks without letting any markup through. */
+.meta-prose{max-width:var(--reading)}
+.meta-prose section+section{margin-top:32px}
+.meta-prose h2{margin:0 0 12px;font-size:24px}
+.meta-prose p{margin:0;font-size:17px;line-height:1.7;color:var(--ink-2);white-space:pre-line}
+
+/* checkout: the design's modal, as a page, because the public site ships no JavaScript */
+.checkout-card{max-width:460px;margin:32px 0 0;background:var(--white);border:1px solid var(--line);border-radius:14px;padding:28px}
+.checkout-card h1{margin:0 0 20px;font-size:22px}
+.checkout-card .total{display:flex;align-items:center;justify-content:space-between;margin:0;padding:16px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:15px;color:var(--muted)}
+.checkout-card .total strong{font:800 20px/1 var(--head);color:var(--ink)}
+.checkout-card label{display:block;margin:16px 0 0;font:500 14px/1.4 var(--body)}
+.checkout-card input{width:100%;margin-top:6px;padding:12px 14px;border:1px solid var(--line-2);border-radius:6px;font:inherit;font-size:15px}
+.checkout-card .btn{width:100%;margin-top:20px;text-align:center}
+.checkout-card .hint{margin:14px 0 0;font-size:12.5px;color:var(--muted)}

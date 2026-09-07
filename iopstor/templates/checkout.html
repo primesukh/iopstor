@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+{# The design's checkout is an overlay. The public site ships no JavaScript, so it is a page —
+   the handoff offers that as the alternative. A plain form post; /api/v1/payments/checkout
+   answers a browser with a 303 to the gateway and a JSON client with JSON. #}
+{% set meta_ = post.meta or {} %}
+<section class="section checkout"><div class="wrap">
+  <nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav>
+  <div class="checkout-card">
+    <p class="eyebrow">Checkout</p>
+    <h1>{{ post.title }}</h1>
+    <p class="total"><span>Total</span><strong>{{ meta_.get('currency', 'INR') }} {{ '{:,.0f}'.format(meta_.price|float) if meta_.price is number else meta_.price }}</strong></p>
+    <form method="post" action="/api/v1/payments/checkout">
+      <input type="hidden" name="product_id" value="{{ post.id }}">
+      <label>Name <input name="name" autocomplete="name"></label>
+      <label>Email <input type="email" name="email" required autocomplete="email"></label>
+      <button type="submit" class="btn dark">Continue to payment</button>
+    </form>
+    <p class="hint">Payment provider is a placeholder for now.</p>
+  </div>
+</div></section>
+{% endblock %}

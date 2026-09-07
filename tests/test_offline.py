@@ -76,6 +76,18 @@ def test_layouts_expand_and_validate():
     assert b[0]["data"]["heading"] != "changed"  # seeds must be copied, not shared
 
 
+def test_seeded_content_is_valid_blocks():
+    """The seed writes these arrays straight into posts.blocks. A bad one would only show up as a
+    failed insert half way through `flask seed`, on the user's database."""
+    from iopstor.cli import HOME, WHY_NAS, ZFS_FEATURES
+
+    assert len(HOME) == 9 and validate_blocks(HOME) == []       # the design's nine home sections
+    cards = [{"type": "cards", "data": {"heading": h, "items": [
+        {"title": t, "text": d, "icon": "", "url": ""} for t, d in rows]}}
+        for h, rows in (("Why choose our NAS?", WHY_NAS), ("ZFS, feature by feature", ZFS_FEATURES))]
+    assert validate_blocks(cards) == []
+
+
 def test_pdf_block_renders_the_browser_viewer(app, monkeypatch):
     """The PDF section is an iframe at the file plus a download button — no viewer library, and a way
     in for the mobile browsers that will not render a framed PDF. The button saves the file under the

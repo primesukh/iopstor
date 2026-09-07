@@ -335,6 +335,8 @@ A serial number already on file is the one thing the browser cannot know by itse
 
 Two things follow from that. A service with no Summary shows its name and its sub-services but no sentence, so it is worth writing one. And the panel has room for eight top-level services; a ninth would not get its own tab.
 
+**The contact details in Settings are used in three places** — the footer address block, the phone and email links, and the search-engine data. They are filled in from the company flyers: Prime ABGB, Simlim Square, and the +91 98219 09800 number.
+
 **Redirects** send an old address to a new one. If a page moves — or you are bringing across links from the old website — add a redirect so the old link keeps working and nobody hits a "not found" page. This protects the search rankings you have already earned.
 
 ---
