@@ -107,9 +107,13 @@ def test_alt_from_name_is_a_readable_first_draft():
 def test_seeded_content_is_valid_blocks():
     """The seed writes these arrays straight into posts.blocks. A bad one would only show up as a
     failed insert half way through `flask seed`, on the user's database."""
-    from iopstor.cli import HOME, WHY_NAS, ZFS_FEATURES
+    from iopstor.cli import WHY_NAS, ZFS_FEATURES, home_blocks
 
-    assert len(HOME) == 9 and validate_blocks(HOME) == []       # the design's nine home sections
+    # both shapes: a fresh instance with no media, and one where the pictures are imported
+    for media in (lambda name: None, lambda name: 1):
+        blocks = home_blocks(media)
+        assert len(blocks) == 9 and validate_blocks(blocks) == []   # the design's nine sections
+    assert "image" not in home_blocks()[0]["data"]   # no null key left behind before an import
     cards = [{"type": "cards", "data": {"heading": h, "items": [
         {"title": t, "text": d, "icon": "", "url": ""} for t, d in rows]}}
         for h, rows in (("Why choose our NAS?", WHY_NAS), ("ZFS, feature by feature", ZFS_FEATURES))]

@@ -145,47 +145,82 @@ PRODUCTS = [  # title, users, specs — the appliance details from the flyers
 ]
 
 
-# The home page, in the order the design lays it out. A module constant so test_offline can run
-# validate_blocks() over it without a database -- a bad array here would only surface at insert.
-HOME = [
-    {"type": "hero", "data": {"eyebrow": "The Storage Specialist",
-                              "heading": "Your data. Safer. Smarter. Forever.",
-                              "subheading": "Software-defined NAS, hyper-converged appliances and private cloud, all built on ZFS. "
-                                            "Meet business needs now and tomorrow with converged infrastructure.",
-                              "cta_label": "Talk to an engineer", "cta_url": "/contact-us",
-                              "cta2_label": "See the appliances", "cta2_url": "/products"}},
-    {"type": "stats", "data": {"items": [
-        {"value": "300+", "label": "satisfied customers across the country"},
-        {"value": "25+ yrs", "label": "of productivity and innovative solutions"},
-        {"value": "3 yr", "label": "hardware warranty, unlimited support in year one"},
-        {"value": "Zero", "label": "hidden or repetitive licence costs"}]}},
-    {"type": "post_list", "data": {"post_type": "service", "top_level": True, "limit": 6, "eyebrow": "What we do",
-                                   "heading": "Storage, virtualisation and cloud, delivered as one stack",
-                                   "link_label": "All services", "link_url": "/services"}},
-    # ponytail: two text columns because the client's rack photo is not in Media yet. Drop an
-    # image section into the left column once it is uploaded; that is what the design shows.
-    {"type": "columns", "data": {"cols": [
-        [{"type": "rich_text", "data": {"html":
-            "<h2>The file system trusted by Fortune 500 companies, universities and data centres</h2>"
-            "<p>ZFS is a file system and logical volume manager that changes how storage is administered. "
-            "Every block is checksummed, every snapshot is instant, and a failed drive never costs you a day's work.</p>"
-            "<p><a href=\"/services/storage/nas\">All ZFS features &rarr;</a></p>"}}],
-        [{"type": "rich_text", "data": {"html": "<ul>" + "".join(
-            f"<li><strong>{t}</strong> — {d}</li>" for t, d in ZFS_FEATURES[:5]) + "</ul>"}}]]}},
-    {"type": "post_list", "data": {"post_type": "product", "limit": 6, "eyebrow": "Appliances",
-                                   "heading": "Sized from 5 users upward",
-                                   "link_label": "All appliances", "link_url": "/products"}},
-    {"type": "post_list", "data": {"post_type": "case_study", "limit": 4, "eyebrow": "Case studies",
-                                   "heading": "Proven across finance, education, media and logistics",
-                                   "link_label": "All case studies", "link_url": "/case-studies"}},
-    {"type": "columns", "data": {"cols": [
-        [{"type": "testimonial", "data": {"quote": TESTIMONIALS[0][0], "author": TESTIMONIALS[0][1], "role": TESTIMONIALS[0][2]}}],
-        [{"type": "testimonial", "data": {"quote": TESTIMONIALS[1][0], "author": TESTIMONIALS[1][1], "role": TESTIMONIALS[1][2]}}]]}},
-    {"type": "post_list", "data": {"post_type": "partner", "limit": 24, "eyebrow": "Technology partners"}},
-    {"type": "cta", "data": {"heading": "Don't just store data. Protect it.",
-                             "text": "Tell us the workload and the user count. We come back with a configuration and a one-time price, "
-                                     "with no hidden or repetitive costs.",
-                             "button_label": "Request a quote", "button_url": "/contact-us"}}]
+# The design's fourteen technology partners, and the logo each one uses.
+PARTNERS = [
+    ("Micron", "650x180_micronlogo.png"), ("CentOS", "Centos-logo-light.svg_.png"),
+    ("HGST", "HGST_logo_2012.png"), ("NVM Express", "NVM_Express_logo.svg_.png"),
+    ("OmniOS", "OmniOS_logo.png"), ("Red Hat", "RedHat.svg_.png"),
+    ("Samsung", "Samsung_logo-2.jpg"), ("Solaris", "Solaris_OS_logo.svg_.png"),
+    ("Toshiba", "Toshiba-Leading-Innovation-Logo.png"), ("Microsoft", "microsoft-80658_960_720.png"),
+    ("SanDisk", "sandisk-logo-pan.jpg"), ("Supermicro", "supermicro-logo-1.png"),
+    ("VMware", "vmware_cloud_logo.jpg"), ("Western Digital", "western_digital-logo.jpg"),
+]
+HERO_IMAGE, ZFS_IMAGE, ABOUT_IMAGE = "banner-homepage-96tb.png", "DSC_0305n.png", "background1.jpg"
+
+
+def media_id(filename):
+    """The id of an imported file, or None when it is not in the library. Every use is conditional:
+    the seed has to run on a fresh instance where nothing has been uploaded yet."""
+    m = db.one(db.table("media").select("id").eq("filename", filename))
+    return m["id"] if m else None
+
+
+def _clean(blocks):
+    """Strip keys whose value is None, so a seed run before `flask import-media` does not leave
+    `"image": null` sitting in the saved JSON for an editor to wonder about."""
+    for b in blocks:
+        b["data"] = {k: v for k, v in b["data"].items() if v is not None}
+        for col in b["data"].get("cols") or []:
+            _clean(col)
+    return blocks
+
+
+def home_blocks(media=lambda name: None):
+    """The home page, in the order the design lays it out. A function rather than a constant so it
+    can carry media ids, which only exist once someone has run `flask import-media`; the default
+    lookup returns None, which is both the fresh-instance case and what test_offline validates."""
+    return _clean([
+        {"type": "hero", "data": {"eyebrow": "The Storage Specialist",
+                                  "image": media(HERO_IMAGE),
+                                  "heading": "Your data. Safer. Smarter. Forever.",
+                                  "subheading": "Software-defined NAS, hyper-converged appliances and private cloud, all built on ZFS. "
+                                                "Meet business needs now and tomorrow with converged infrastructure.",
+                                  "cta_label": "Talk to an engineer", "cta_url": "/contact-us",
+                                  "cta2_label": "See the appliances", "cta2_url": "/products"}},
+        {"type": "stats", "data": {"items": [
+            {"value": "300+", "label": "satisfied customers across the country"},
+            {"value": "25+ yrs", "label": "of productivity and innovative solutions"},
+            {"value": "3 yr", "label": "hardware warranty, unlimited support in year one"},
+            {"value": "Zero", "label": "hidden or repetitive licence costs"}]}},
+        {"type": "post_list", "data": {"post_type": "service", "top_level": True, "limit": 6, "eyebrow": "What we do",
+                                       "heading": "Storage, virtualisation and cloud, delivered as one stack",
+                                       "link_label": "All services", "link_url": "/services"}},
+        {"type": "columns", "data": {"cols": [
+            [{"type": "image", "data": {"media_id": media(ZFS_IMAGE), "alt": "An IOPStor appliance"}}]
+            if media(ZFS_IMAGE) else
+            [{"type": "rich_text", "data": {"html": "<ul>" + "".join(
+                f"<li><strong>{t}</strong> \u2014 {d}</li>" for t, d in ZFS_FEATURES[:5]) + "</ul>"}}],
+            [{"type": "rich_text", "data": {"html":
+                "<h2>The file system trusted by Fortune 500 companies, universities and data centres</h2>"
+                "<p>ZFS is a file system and logical volume manager that changes how storage is administered. "
+                "Every block is checksummed, every snapshot is instant, and a failed drive never costs you a day's work.</p>"
+                + ("<ul>" + "".join(f"<li><strong>{t}</strong> \u2014 {d}</li>" for t, d in ZFS_FEATURES[:4]) + "</ul>"
+                   if media(ZFS_IMAGE) else "")
+                + "<p><a href=\"/services/storage/nas\">All ZFS features &rarr;</a></p>"}}]]}},
+        {"type": "post_list", "data": {"post_type": "product", "limit": 6, "eyebrow": "Appliances",
+                                       "heading": "Sized from 5 users upward",
+                                       "link_label": "All appliances", "link_url": "/products"}},
+        {"type": "post_list", "data": {"post_type": "case_study", "limit": 4, "eyebrow": "Case studies",
+                                       "heading": "Proven across finance, education, media and logistics",
+                                       "link_label": "All case studies", "link_url": "/case-studies"}},
+        {"type": "columns", "data": {"cols": [
+            [{"type": "testimonial", "data": {"quote": TESTIMONIALS[0][0], "author": TESTIMONIALS[0][1], "role": TESTIMONIALS[0][2]}}],
+            [{"type": "testimonial", "data": {"quote": TESTIMONIALS[1][0], "author": TESTIMONIALS[1][1], "role": TESTIMONIALS[1][2]}}]]}},
+        {"type": "post_list", "data": {"post_type": "partner", "limit": 24, "eyebrow": "Technology partners"}},
+        {"type": "cta", "data": {"heading": "Don't just store data. Protect it.",
+                                 "text": "Tell us the workload and the user count. We come back with a configuration and a one-time price, "
+                                         "with no hidden or repetitive costs.",
+                                 "button_label": "Request a quote", "button_url": "/contact-us"}}])
 
 
 def _get_or_create(name, keys, defaults=None):
@@ -198,17 +233,20 @@ def _get_or_create(name, keys, defaults=None):
 RESET = False  # set by `flask seed --reset-content`: overwrite blocks/excerpt/meta of the seed-defined posts
 
 
-def _post(pt, title, *, slug=None, parent=None, blocks=None, meta=None, terms=(), excerpt="", menu_order=0):
+def _post(pt, title, *, slug=None, parent=None, blocks=None, meta=None, terms=(), excerpt="", menu_order=0, featured=None):
     """Get-or-create a published post; never overwrites existing content unless RESET."""
     slug = slug or slugify(title)
     blocks = blocks if blocks is not None else [{"type": "hero", "data": {"heading": title}}]
     post = db.one(db.table("posts").select("id").eq("post_type_id", pt["id"]).eq("slug", slug))
     if post is not None and RESET:
-        db.update("posts", post["id"], {"blocks": blocks, "excerpt": excerpt, "meta": meta or {}, "menu_order": menu_order})
+        changes = {"blocks": blocks, "excerpt": excerpt, "meta": meta or {}, "menu_order": menu_order}
+        if featured:
+            changes["featured_media_id"] = featured
+        db.update("posts", post["id"], changes)
     if post is None:
         post = db.insert("posts", {
             "post_type_id": pt["id"], "slug": slug, "title": title, "parent_id": parent["id"] if parent else None, "excerpt": excerpt,
-            "blocks": blocks, "meta": meta or {},
+            "blocks": blocks, "meta": meta or {}, "featured_media_id": featured,
             "status": "published", "published_at": db.now_iso(), "menu_order": menu_order})
         if terms:
             db.set_post_terms(post["id"], [t["id"] for t in terms])
@@ -245,15 +283,20 @@ def run_seed():
         _post(types["event"], title, meta={"start_date": start})
     for i, (title, users, specs) in enumerate(PRODUCTS):
         _post(types["product"], title, menu_order=i, meta={"specs": specs},
+              featured=media_id(ZFS_IMAGE if "Classic" in title else HERO_IMAGE),
               excerpt=f"Appliance workload {users}. Zero touch setup and management through a web GUI, and one source for support.",
               blocks=[{"type": "hero", "data": {"heading": title, "eyebrow": "Appliance",
                                                 "subheading": f"Sized for {users}. Xeon, enterprise SSD and 10G networking, on ZFS.",
                                                 "cta_label": "Request a quote", "cta_url": "/contact-us"}}])
+    for i, (name, logo) in enumerate(PARTNERS):
+        _post(types["partner"], name, menu_order=i, meta={"logo_media_id": media_id(logo)},
+              excerpt=f"{name} hardware and software, supported in every IOPStor build.",
+              blocks=[{"type": "rich_text", "data": {"html": f"<p>IOPStor builds and supports {name} technology.</p>"}}])
     page = types["page"]
     # The home page, in the order the design lays it out.
-    _post(page, "Home", slug="home", excerpt=SETTINGS["tagline"], blocks=HOME)
+    _post(page, "Home", slug="home", excerpt=SETTINGS["tagline"], blocks=home_blocks(media_id))
     _post(page, "About Us", excerpt="Customised storage for a market nobody else was serving.", blocks=[
-        {"type": "hero", "data": {"dark": True, "eyebrow": "About us",
+        {"type": "hero", "data": {"dark": True, "eyebrow": "About us", "image": media_id(ABOUT_IMAGE),
                                   "heading": "Customised storage for a market nobody else was serving",
                                   "subheading": "IOPStor was built by people who had spent decades watching SMBs pay enterprise prices for "
                                                 "storage that still did not fit them."}},
@@ -266,6 +309,9 @@ def run_seed():
     _post(page, "Careers", blocks=[{"type": "hero", "data": {"heading": "Careers"}}, {"type": "contact_form", "data": {"kind": "career", "heading": "Send us your CV"}}])
     _post(page, "Contact Us", blocks=[{"type": "hero", "data": {"heading": "Contact Us"}}, {"type": "contact_form", "data": {"kind": "contact"}}])
     _post(page, "Technology Partners", blocks=[{"type": "hero", "data": {"heading": "Technology Partners"}}, {"type": "post_list", "data": {"post_type": "partner", "limit": 50}}])
+    logo = db.one(db.table("media").select("url").eq("filename", "iopstor_logo-png1.png"))
+    if logo:
+        SETTINGS["logo_url"] = logo["url"]
     existing = db.settings()
     # fill a key that is missing OR blank -- every key exists from the first seed as "", so
     # "not already there" would mean the contact details could never land. A value someone has

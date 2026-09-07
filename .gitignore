@@ -7,3 +7,4 @@ media/
 instance/
 .pytest_cache/
 graphify-out/
+website_assets/   # staging for `flask import-media`; the images live in Supabase

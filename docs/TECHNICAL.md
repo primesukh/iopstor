@@ -164,6 +164,8 @@ When `top_level` is set on a hierarchical type, `_post_list()` also hangs each p
 
 `archive.html`, `post.html` and `post_list.html` all draw their card from one macro, `templates/_card.html` — the same snippet used to be copied into three templates and drift between them.
 
+The seed's pictures are looked up **by filename** through `cli.media_id()`, which returns `None` when the library is empty. That is why `home_blocks()` is a function rather than a constant, and why `_clean()` drops keys whose value is `None`: a seed run before `flask import-media` must still produce a valid page, and it must not leave `"image": null` in the saved JSON. The pairing is `banner-homepage-96tb.png` → home hero and IOPStor Edge, `DSC_0305n.png` → the ZFS section and IOPStor Classic, `background1.jpg` → the About Us backdrop, `iopstor_logo-png1.png` → `settings.logo_url`, and `partners/*` → the fourteen partner posts' `logo_media_id`.
+
 **Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">…` — `cls` is the layout classes, `sty` an inline width, `fe()` the edit marker (all three below); `render_blocks()` hands all three to every block template. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
 
 **Layout keys.** Three optional keys on any block's `data`, absent = the theme's own layout:
