@@ -189,7 +189,14 @@ def test_design_and_menus_pages(client, seeded, monkeypatch):
     assert client.get("/admin/design?part=nope").status_code == 404
     csrf = re.search(r'name="csrf" value="([^"]+)"', page.text).group(1)
 
-    assert client.get("/admin/menus").status_code == 200
+    # reaching a page by URL is not the same as being able to find it: both need a nav entry, and
+    # the menus page needs SortableJS in ahead of admin.js (deferred scripts run in document order).
+    nav = client.get("/admin/").text
+    assert '/admin/design?part=header' in nav and '/admin/menus' in nav
+
+    menus_page = client.get("/admin/menus")
+    assert menus_page.status_code == 200
+    assert menus_page.text.index("sortable.min.js") < menus_page.text.index("admin.js")
     # a menu round-trips through the flat rows + level select the form posts
     client.post("/admin/menus", data={"csrf": csrf, "slug": "zz-test-nav", "name": "ZZ",
                                       "label": ["Top", "Under", ""], "url": ["/a", "/b", "/c"],
