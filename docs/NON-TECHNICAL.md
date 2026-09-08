@@ -57,6 +57,15 @@ The site ships pre-loaded with the real IOPSTOR service catalogue (Storage, Hype
 
 Some types ask for a few extra details. A Case Study asks for Client, Challenge, Solution and Results. An Event asks for start date, end date and location. A Datasheet asks you to attach the PDF. These extra boxes appear automatically on the form — just fill in what applies.
 
+**The listing page for each type now looks like the thing it is listing**, and you do not have to set any of it up:
+
+- **Products** (`/products`) shows the price and a **Buy** button on each card. The button only appears once you have filled in *Price* on that product — leave it blank and the card simply ends at the description, which is the right thing when a price is on request.
+- **Services** (`/services`) is one wide row per group, with every sub-service beside it as a button a visitor can click straight through to.
+- **Events** (`/events`) is a list with the year and month on a black tile at the left of each row.
+- **Datasheets** (`/datasheets`) is a list of rows with a PDF mark and a **Download** button.
+
+A service page with no sub-services of its own now ends with **"Other &lt;group&gt; services"** — the rest of its group, so a visitor reading about NAS can step sideways to DAS or SAS.
+
 ---
 
 ## 4. Writing a page
@@ -170,9 +179,10 @@ You can also use **+ Section** on the toolbar, which opens the same list with a 
 A few sections gained settings worth knowing about, all under the section's own **⚙**:
 
 - **Hero** — the big opening band. *Small label above the heading* is the short blue line above the headline ("The Storage Specialist"). There is a **second button** now, which draws as an outline next to the main one. And **Dark background** turns the hero into the full-width black band used on About Us — in that mode the picture you choose becomes a faded backdrop *behind* the words instead of sitting beside them.
+  A hero can also hold **more than one picture**. Under *Pictures that take turns*, add a row per picture; from two rows up they fade from one to the next on their own, about four and a half seconds each, with small bars underneath showing which one is up. That is what the home page does with the three appliances. One picture, or none, behaves exactly as before — and a visitor whose device is set to reduce motion simply sees the first picture, still.
 - **Automatic list** — the section that lists your pages and keeps itself up to date. *Header link text* and *Header link* put a link like "All services →" on the right of the section's heading. The cards style themselves to suit what they are listing: services show a number and their sub-services, products show the product picture, case studies show their industry and solution, blog posts show the date. You do not choose that; it follows the content type.
 - **Customer quote** also has a **Dark background** tick, for a quote on a dark card.
-- **Contact form** — when *Form type* is **quote**, the form draws as the dark panel from the Contact page and asks two extra questions: what the visitor is interested in, and how many users. Those answers arrive with the enquiry under **Leads**.
+- **Contact form** — *Form type* also picks how the form looks. **quote** is the dark panel from the Contact page, and it asks two extra questions — what the visitor is interested in, and how many users — which arrive with the enquiry under **Leads**. **career** is the soft grey panel used on Careers. **contact** is the plain white card. Whatever you type in *Heading* sits inside the panel, at the top of the form.
 
 One section is worth calling out: **Warranty check**. Drop it on a page and visitors get a box where they type the serial number of their unit and see straight away whether it is still in warranty. What it shows comes from the **Warranty** screen — see section 8 below.
 
@@ -383,6 +393,12 @@ Products can carry a price and a checkout button. The payment step is currently 
 ## 12. Where the project stands
 
 **Done:** the content system, the public website with its theme, the admin panel, search-engine and AI output, enquiry capture, the warranty register and its public check, media library, users and roles, and the payment placeholder.
+
+**Two things changed across every page** and need nothing from you: the bar at the top of the site is
+now **white with black text**, with the IOPSTOR logo in its own blue-and-black rather than knocked out
+to white — the footer stays dark, and the logo is still white down there. And the little icon that
+shows in a browser tab (the "favicon") is now the IOPSTOR mark at every size a phone or a bookmark
+asks for.
 
 **Still to come:** a live payment provider.
 
