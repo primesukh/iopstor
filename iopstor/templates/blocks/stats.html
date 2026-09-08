@@ -1,1 +1,2 @@
-<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap"><ul class="stats">{% for s in data['items'] %}<li{{ fe('items', loop.index0) }}><strong{{ fe('value') }}>{{ s.value }}</strong> <span{{ fe('label') }}>{{ s.label }}</span></li>{% endfor %}</ul></div></section>
+{# always the dark band: on the design's pages a row of figures is the black strip under the hero #}
+<section class="section band-dark{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap"><ul class="stats">{% for s in data['items'] %}<li{{ fe('items', loop.index0) }}><strong{{ fe('value') }}>{{ s.value }}</strong> <span{{ fe('label') }}>{{ s.label }}</span></li>{% endfor %}</ul></div></section>

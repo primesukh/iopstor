@@ -1,4 +1,21 @@
-<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
-  {% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}
-  <div class="cards">{% for p in posts %}<a class="card" href="{{ p.path }}">{% if p.post_type.slug == 'post' and p.published_at %}<span class="date">{{ p.published_at[:10] }}</span>{% endif %}<h3>{{ p.title }}</h3>{% if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}</a>{% else %}<p class="lead">Coming soon.</p>{% endfor %}</div>
+{# One card, styled per post type. pt_slug comes from the resolved post_types row (blocks.py), not
+   from the block's data, so it is safe in a class name; site.css turns the parts on and off from
+   there — the number for services, the logo for partners, the date for blog posts. Nothing inside a
+   card carries fe(): these belong to other posts and are not edited here. #}
+<section class="section pl pl-{{ pt_slug }}{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
+  {% if data.heading or data.eyebrow or data.link_url or edit %}<div class="sec-head">
+    <div>{% if data.eyebrow or edit %}<p class="eyebrow"{{ fe('eyebrow') }}>{{ data.eyebrow }}</p>{% endif %}{% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}</div>
+    {% if data.link_url %}<a class="sec-link" href="{{ data.link_url }}"{{ fe('link_label') }}>{{ data.link_label or 'See all' }} &rarr;</a>{% endif %}
+  </div>{% endif %}
+  <div class="cards">{% for p in posts %}<a class="card" href="{{ p.path }}">
+    {%- if p.post_type.slug == 'partner' and p.meta and p.meta.logo_media_id %}<span class="card-img"><img src="{{ media_url(p.meta.logo_media_id) }}" alt="{{ p.title }}" loading="lazy"></span>
+    {%- elif p.featured_media %}<span class="card-img"><img src="{{ p.featured_media.url }}" alt="{{ p.featured_media.alt or '' }}" loading="lazy"></span>
+    {%- else %}<span class="card-img card-img-empty"></span>{% endif %}
+    <span class="card-n">{{ '%02d' % loop.index }}</span>
+    {%- if p.terms %}<span class="chips">{% for t in p.terms %}<span class="chip chip-{{ t.taxonomy.slug }}">{{ t.name }}</span>{% endfor %}</span>{% endif %}
+    {%- if p.post_type.slug == 'post' and p.published_at %}<span class="date">{{ p.published_at[:10] }}</span>{% endif %}
+    <h3>{{ p.title }}</h3>
+    {%- if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}
+    {%- if p.children %}<span class="chips chips-kids">{% for c in p.children %}<span class="chip">{{ c.title }}</span>{% endfor %}</span>{% endif %}
+  </a>{% else %}<p class="lead">Coming soon.</p>{% endfor %}</div>
 </div></section>

@@ -1,6 +1,19 @@
-<section class="hero{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
-  <h1{{ fe('heading') }}>{{ data.heading }}</h1>
-  {% if data.subheading or edit %}<p{{ fe('subheading') }}>{{ data.subheading }}</p>{% endif %}
-  {% if data.cta_url %}<a class="btn" href="{{ data.cta_url }}"{{ fe('cta_label') }}>{{ data.cta_label or 'Learn more' }}</a>{% endif %}
-  {% if data.image %}<img src="{{ media_url(data.image) }}" alt="{{ data.heading }}">{% endif %}
-</div></section>
+{# Two shapes in one block. Default: words left, picture right, on white. "dark" makes it the
+   full-bleed band, where the picture becomes a faded backdrop instead of the art beside the words.
+   The backdrop is an <img>, not a CSS background, because section_style() already owns the style
+   attribute and a second one would be dropped by the parser. #}
+<section class="hero{{ ' hero-dark' if data.dark }}{{ ' hero-split' if data.image and not data.dark }}{{ cls }}"{{ sty }}{{ fe() }}>
+  {%- if data.image and data.dark %}<img class="hero-bg" src="{{ media_url(data.image) }}" alt="" aria-hidden="true">{% endif %}
+  <div class="wrap">
+    <div class="hero-text">
+      {%- if data.eyebrow or edit %}<p class="eyebrow"{{ fe('eyebrow') }}>{{ data.eyebrow }}</p>{% endif %}
+      <h1{{ fe('heading') }}>{{ data.heading }}</h1>
+      {%- if data.subheading or edit %}<p class="lead"{{ fe('subheading') }}>{{ data.subheading }}</p>{% endif %}
+      {%- if data.cta_url or data.cta2_url %}<p class="btns">
+        {%- if data.cta_url %}<a class="btn" href="{{ data.cta_url }}"{{ fe('cta_label') }}>{{ data.cta_label or 'Learn more' }}</a>{% endif %}
+        {%- if data.cta2_url %}<a class="btn {{ 'ghost-dark' if data.dark else 'ghost' }}" href="{{ data.cta2_url }}"{{ fe('cta2_label') }}>{{ data.cta2_label or 'Learn more' }}</a>{% endif %}
+      </p>{% endif %}
+    </div>
+    {%- if data.image and not data.dark %}<div class="hero-media"><img src="{{ media_url(data.image) }}" alt="{{ data.heading }}"></div>{% endif %}
+  </div>
+</section>
