@@ -496,10 +496,17 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pl-post .card h3{margin:0 24px 8px}
 .pl-post .card p{margin:0 24px 24px}
 
+/* An archive holds however many posts happen to be published, so its grid is auto-FILL: the empty
+   tracks stay, and one blog post keeps a tile's width instead of stretching into a billboard across
+   the page. A deck inside a page is auto-fit, because there the editor chose the count. 300px is the
+   design's measure for the blog and case-study grids -- three across at 1200. */
+.arch-body .cards{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.arch-body.pl-partner .cards{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+
 /* The four shapes an archive gives a type that a card deck cannot. Each keys off .arch-body, so the
    same list inside a page (a post_list section) stays the deck the home page wants. */
 /* products: the archive card is taller, prices and sells */
-.arch-body.pl-product .cards{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.arch-body.pl-product .cards{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
 .arch-body.pl-product .card{display:flex;flex-direction:column}
 .arch-body.pl-product .card-img{min-height:180px;padding:28px}
 .arch-body.pl-product .card-img img{max-height:160px}

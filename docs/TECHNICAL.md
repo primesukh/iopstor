@@ -360,6 +360,8 @@ Its data comes from `service_nav()` (`public.py`), a template global over `db.tr
 
 No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS, and the public site ships no JavaScript at all.
 
+**An archive's grid is `auto-fill`, a page's deck is `auto-fit`.** An archive holds however many posts happen to be published, and `auto-fit` collapses its empty tracks — one blog post stretched into a full-width billboard. `auto-fill` keeps them, so a short list still reads as tiles. A deck inside a page keeps `auto-fit`, because there the editor chose the count. The measures are the design's: 300px for blog and case studies (three across at 1200), 280px for products, 220px for partners.
+
 **Four archive shapes**, each scoped to `.arch-body` so the same list inside a page stays the card deck the home page wants: `pl-product` (a taller picture area, the price and Buy in a footer row), `pl-service` (one full-width row per group, the words in column one and the child tiles in column two — the card's children are a flat list, so each names its own grid column rather than being wrapped in a div for it), `pl-event` (a row led by an 84px dark date tile) and `pl-datasheet` (a row with the outline PDF mark and its own Download button).
 
 **Shapes the design draws inside prose**, so they need no block of their own — the same trusted-staff HTML the ZFS dash list already uses: `.founders` (the pair on About), `dl.contact-dl` (the labelled contact list), `.map-ph` (the striped box standing in for the map until an `embed_html` replaces it) and `dl.zfs` (the ruled term/description rows on a service page). A `table.specs` pasted into prose is styled as a spec table rather than a prose table.
