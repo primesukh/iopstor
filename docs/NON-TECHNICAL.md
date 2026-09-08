@@ -64,6 +64,8 @@ Some types ask for a few extra details. A Case Study asks for Client, Challenge,
 - **Events** (`/events`) is a list with the year and month on a black tile at the left of each row.
 - **Datasheets** (`/datasheets`) is a list of rows with a PDF mark and a **Download** button.
 
+**A blog article reads top to bottom**: the title, the date under it, the picture across the full width, a line, then what you wrote. You do not arrange any of that — write the article and choose a *Featured image*, and it lays itself out. Every other kind of page still puts its picture beside the words.
+
 A service page with no sub-services of its own now ends with **"Other &lt;group&gt; services"** — the rest of its group, so a visitor reading about NAS can step sideways to DAS or SAS.
 
 ---
