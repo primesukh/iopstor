@@ -9,7 +9,10 @@ from markupsafe import Markup, escape
 BLOCKS = {  # type: (required fields, optional fields)
     # dark: the full-bleed variant, where "image" becomes the faded backdrop rather than the art
     # beside the words. A checkbox, not a free-text "tone": nothing typed reaches a class name.
-    "hero": (["heading"], ["eyebrow", "subheading", "image", "cta_label", "cta_url",
+    # image is the single picture; images (>= 2) turns it into the rotator that takes turns on its
+    # own, in CSS. Both are kept: images wins when it has two or more rows, so nothing already
+    # published changes shape.
+    "hero": (["heading"], ["eyebrow", "subheading", "image", "images", "cta_label", "cta_url",
                            "cta2_label", "cta2_url", "dark"]),
     "rich_text": (["html"], []),  # ponytail: raw HTML from trusted staff; add nh3 sanitising if untrusted authors appear
     "image": (["media_id"], ["alt", "caption"]),
@@ -46,13 +49,13 @@ EDITOR = {
                 "cta2_url": "url", "link_url": "url", "dark": "checkbox"},
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
     "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label"],
-              "spec_table": ["k", "v"], "gallery": ["media_id", "alt"],
+              "spec_table": ["k", "v"], "gallery": ["media_id", "alt"], "hero": ["media_id", "alt"],
               "columns": []},  # a column is a list of blocks, not a row of fields: the panel only adds/moves/removes it
     # friendlier labels; anything missing is the key with underscores as spaces
     "labels": {"q": "Question", "a": "Answer", "k": "Label", "v": "Value", "html": "Content", "kind": "Form type",
                "cols": "Columns", "widths": "Column widths, e.g. 50/25/25",
                "cta_url": "Button link", "cta_label": "Button text", "top_level": "Top-level only",
-               "media_id": "Image", "image": "Image", "file_media_id": "PDF file", "post_type": "Content type",
+               "media_id": "Image", "image": "Image", "images": "Pictures that take turns", "file_media_id": "PDF file", "post_type": "Content type",
                "term": "Term slug", "eyebrow": "Small label above the heading",
                "cta2_label": "Second button text", "cta2_url": "Second button link",
                "link_label": "Header link text", "link_url": "Header link",
@@ -178,6 +181,7 @@ def col_widths(data):
     return " ".join(f"{n:g}fr" for n in nums) if all(n > 0 for n in nums) else ""
 
 
+TONES = ("grey", "dark", "blue")   # the bands a section can sit on; absent = the page's own white
 ALIGNS = ("left", "center", "right")
 WIDTHS = {"wide": "w-wide", "full": "w-full"}   # "width" also takes a number of pixels; see section_style()
 MAX_W = 4000
@@ -185,11 +189,13 @@ MAX_W = 4000
 
 def section_class(data):
     """The layout classes for one section, from three optional keys — absent means the theme's own
-    layout. "align" lines up what is inside it, "align_box" moves the box, "width" is either a named
+    layout. "align" lines up what is inside it, "align_box" moves the box, "tone" is the band it sits
+    on (the design alternates white and grey down a page for rhythm), "width" is either a named
     step (wide / full) or a number of pixels, which section_style() carries instead. A whitelist, not
     a passthrough: the result goes straight into a class attribute, the same reason col_widths() is
     strict. Returns "" or " al-center", " al-center alb-right w-full", …"""
     out = [p + data[k] for k, p in (("align", "al-"), ("align_box", "alb-")) if data.get(k) in ALIGNS]
+    out += ["t-" + data["tone"]] if data.get("tone") in TONES else []
     out += [WIDTHS[str(data.get("width"))]] if str(data.get("width")) in WIDTHS else []
     return (" " + " ".join(out)) if out else ""
 

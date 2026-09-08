@@ -16,7 +16,7 @@
 <section class="section arch-body pl pl-{{ slug }}"><div class="wrap">
   {% from "_card.html" import card %}
   <div class="cards">
-    {% for p in posts %}{{ card(p, loop.index) }}
+    {% for p in posts %}{{ card(p, loop.index, actions=true) }}
     {% else %}<p class="lead">Nothing published here yet.</p>{% endfor %}
   </div>
   {% if page > 1 or has_next %}<nav class="pagination" aria-label="Pages">

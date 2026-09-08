@@ -1,19 +1,22 @@
 {% extends "base.html" %}
 {% block content %}
 {% set pt = post.post_type %}{% set meta_ = post.meta or {} %}
-{% set has_hero = post.blocks and post.blocks[0].type == 'hero' %}
+{% set has_hero = post.blocks and post.blocks[0].type in ('hero', 'columns') %}
+{# An article reads down the page rather than across: title, date, picture full width, a rule, then
+   the writing. Every other type keeps the two-column head, with the picture beside the words. #}
+{% set article = pt.slug == 'post' %}
 {# The eyebrow above the title is where you already are: the parent for a nested page, the content
    type otherwise. crumbs already holds that chain, so nothing new is looked up. #}
 {% set eyebrow = crumbs[-2][0] if crumbs|length > 2 else (pt.name if pt.url_prefix else '') %}
 <article class="pt-{{ pt.slug }}">
   {% if not has_hero %}
-  <div class="page-head{{ ' has-media' if post.featured_media }}"><div class="wrap">
+  <div class="page-head{{ ' has-media' if post.featured_media and not article }}"><div class="wrap">
     <div class="page-head-text">
       {% if crumbs|length > 1 %}<nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav>{% endif %}
-      {% if eyebrow %}<p class="eyebrow">{{ eyebrow }}</p>{% endif %}
+      {% if eyebrow and not article %}<p class="eyebrow">{{ eyebrow }}</p>{% endif %}
       <h1 class="page-title">{{ post.title }}</h1>
+      {% if article and post.published_at %}<p class="post-meta"><time datetime="{{ post.published_at }}">{{ post.published_at[:10] }}</time></p>{% endif %}
       {% if post.excerpt %}<p class="lead">{{ post.excerpt }}</p>{% endif %}
-      {% if pt.slug == 'post' and post.published_at %}<p class="post-meta"><time datetime="{{ post.published_at }}">{{ post.published_at[:10] }}</time></p>{% endif %}
       {% if post.terms %}<p class="chips">{% for t in post.terms %}<a class="chip chip-{{ t.taxonomy.slug }}" href="/{{ t.taxonomy.slug }}/{{ t.slug }}">{{ t.name }}</a>{% endfor %}</p>{% endif %}
       {% if pt.slug in ('service', 'product') %}<p class="btns">
         <a class="btn" href="/contact-us?product={{ post.slug }}">Request a quote</a>
@@ -40,10 +43,9 @@
   <div class="section"><div class="wrap"><table class="specs"><caption>{{ f.label }}</caption><tbody>{% for k, v in meta_[f.key].items() %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}</tbody></table></div></div>
   {% endfor %}
   {% if children %}
-  {% from "_card.html" import card %}
-  <section class="section arch-body pl pl-{{ pt.slug }}"><div class="wrap">
-    <h2 class="section-title">{{ post.title }} solutions</h2>
-    <div class="cards">{% for c in children %}{{ card(c, loop.index) }}{% endfor %}</div>
+  <section class="section t-grey siblings"><div class="wrap">
+    <h2 class="section-title">{% if siblings %}Other {{ crumbs[-2][0] }} services{% else %}{{ post.title }} solutions{% endif %}</h2>
+    <div class="tiles">{% for c in children %}<a href="{{ c.path }}">{{ c.title }} <i aria-hidden="true">&rarr;</i></a>{% endfor %}</div>
   </div></section>
   {% endif %}
 </article>

@@ -82,16 +82,27 @@ CASE_STUDIES = [  # client, industry, solution
     ("KLPL", "Logistics", "Private Cloud"),
 ]
 EVENTS = [("Broadcast 2018", "2018-01-01"), ("Seagate Collaboration December 2018", "2018-12-01")]
-ABOUT = (
-    "IOPStor specializes in software defined storage and solves the productivity problems SMBs and large enterprises face every day.\n\n"
-    "With our unique convergence of hardware, software, and storage expertise, we bring you IOPStor flash and all-flash storage arrays, "
-    "offering enterprise reliability and performance at a value unheard of in storage.\n\n"
-    "Unify your business-critical applications with an IOPStor storage array that fits the performance and capacity requirements of your "
-    "application. IOPStor unifies block and file storage, grows to nearly 5PB in a rack, is available in hybrid and all-flash configurations, "
-    "and uses the block storage file system to guarantee data stays pristine and safe.\n\n"
-    "With storage needs growing and an opportunity to serve an under-served market for customized storage, IOPStor was founded by "
-    "Gulbirr Bhatia (Prime ABGB) and Noshir Dalal, who have a cumulative experience of more than 50 years in the IT space."
+# About Us reads as two columns in the design, so the copy is two constants rather than one run of
+# paragraphs, and the founders are their own small list.
+ABOUT_LEAD = ("IOPStor specialises in software-defined storage and solves the productivity problems SMBs and "
+              "large enterprises face every day.")
+ABOUT_BUILD = (
+    "With our convergence of hardware, software and storage expertise, we bring you IOPStor flash and hybrid arrays, "
+    "hyper-converged appliances and private cloud, offering enterprise reliability and performance at a value unheard "
+    "of in storage.\n\n"
+    "Unify your business-critical applications with an array that fits their performance and capacity. IOPStor unifies "
+    "block and file storage and grows to nearly 5 PB in a rack.\n\n"
+    "Every appliance is built on ZFS, is hardware agnostic, and is priced once: no software licence renewals, no "
+    "repetitive costs. Three years of hardware warranty, with unlimited telephone and web support in the first year."
 )
+ABOUT_WHO = (
+    "With the need for storage growing, and an opportunity to serve an under-served market for customised storage, "
+    "IOPStor was founded by Gulbirr Bhatia (Prime ABGB) and Noshir Dalal, who together bring more than 50 years of "
+    "experience in the IT space.\n\n"
+    "IOPStor is marketed by Prime ABGB Pvt. Ltd., Mumbai, an organisation with 25+ years of providing productivity "
+    "solutions to 300+ customers across the country."
+)
+FOUNDERS = [("Gulbirr Bhatia", "Co-founder \u00b7 Prime ABGB"), ("Noshir Dalal", "Co-founder")]
 SETTINGS = {
     "site_name": "IOPSTOR",
     "tagline": "The Storage Specialist. Meet business needs now and tomorrow with converged infrastructure.",
@@ -137,6 +148,15 @@ TESTIMONIALS = [
     ("I sleep better knowing my family photos and business files are in a ZFS NAS.", "Sarah M.", "Photographer"),
     ("Set it up once. Haven't had to touch it in 2 years.", "Mark D.", "Small Business Owner"),
 ]
+# The configuration panel beside the ZFS list on the NAS page, from the Classic's flyer.
+NAS_CONFIG = [
+    ("CPU", "Intel Celeron J1900, 10 W, 4 core"),
+    ("RAM", "8 GB DDR3 1600"),
+    ("Boot", "120 GB SATA SSD"),
+    ("HDD capacity", "4 / 8 / 16 TB (4 \u00d7 1 / 2 / 4 TB)"),
+    ("SSD capacity", "720 / 1440 / 2880 GB (3 \u00d7 240 / 480 / 960 GB)"),
+    ("Workload", "5 \u2013 10 users*"),
+]
 PRODUCTS = [  # title, users, specs — the appliance details from the flyers
     ("IOPStor Classic", "5 - 10 users", {"CPU": "Xeon 4 core", "Memory": "32GB DDR4 2400", "Storage": "480GB Enterprise SSD",
                                          "Network": "10G x 2, 1G x 2", "Appliance workload": "5 - 10 users"}),
@@ -155,7 +175,14 @@ PARTNERS = [
     ("SanDisk", "sandisk-logo-pan.jpg"), ("Supermicro", "supermicro-logo-1.png"),
     ("VMware", "vmware_cloud_logo.jpg"), ("Western Digital", "western_digital-logo.jpg"),
 ]
-HERO_IMAGE, ZFS_IMAGE, ABOUT_IMAGE = "banner-homepage-96tb.png", "DSC_0305n.png", "background1.jpg"
+# The mock's hero is assets/introducing-rack.png, alt "IOPStor 24-bay 2U all-flash array" --
+# that is Untitled-4.png, the 24-bay array with the wordmark over it. Its rack-96tb.png is
+# banner-homepage-96tb.png, the 8-bay 2U; the "96tb" in both filenames settles it. tower.png
+# is DSC_0305n.png, the Classic.
+HERO_IMAGE = "Untitled-4.png"
+RACK_IMAGE = "banner-homepage-96tb.png"
+TOWER_IMAGE = "DSC_0305n.png"
+ABOUT_IMAGE = "background1.jpg"
 
 
 def media_id(filename):
@@ -182,6 +209,12 @@ def home_blocks(media=lambda name: None):
     return _clean([
         {"type": "hero", "data": {"eyebrow": "The Storage Specialist",
                                   "image": media(HERO_IMAGE),
+                                  # the design cycles all three appliances; the CSS falls back to
+                                  # "image" alone when fewer than two of them are in the library
+                                  "images": [{"media_id": media(f), "alt": a} for f, a in (
+                                      (HERO_IMAGE, "IOPStor 24-bay 2U all-flash array"),
+                                      (RACK_IMAGE, "IOPStor 2U 8-bay rackmount"),
+                                      (TOWER_IMAGE, "IOPStor Classic NAS mini tower")) if media(f)] or None,
                                   "heading": "Your data. Safer. Smarter. Forever.",
                                   "subheading": "Software-defined NAS, hyper-converged appliances and private cloud, all built on ZFS. "
                                                 "Meet business needs now and tomorrow with converged infrastructure.",
@@ -192,25 +225,30 @@ def home_blocks(media=lambda name: None):
             {"value": "25+ yrs", "label": "of productivity and innovative solutions"},
             {"value": "3 yr", "label": "hardware warranty, unlimited support in year one"},
             {"value": "Zero", "label": "hidden or repetitive licence costs"}]}},
-        {"type": "post_list", "data": {"post_type": "service", "top_level": True, "limit": 6, "eyebrow": "What we do",
+        {"type": "post_list", "data": {"tone": "grey", "post_type": "service", "top_level": True, "limit": 6, "eyebrow": "What we do",
                                        "heading": "Storage, virtualisation and cloud, delivered as one stack",
                                        "link_label": "All services", "link_url": "/services"}},
         {"type": "columns", "data": {"cols": [
-            [{"type": "image", "data": {"media_id": media(ZFS_IMAGE), "alt": "An IOPStor appliance"}}]
-            if media(ZFS_IMAGE) else
-            [{"type": "rich_text", "data": {"html": "<ul>" + "".join(
-                f"<li><strong>{t}</strong> \u2014 {d}</li>" for t, d in ZFS_FEATURES[:5]) + "</ul>"}}],
+            [{"type": "image", "data": {"media_id": media(RACK_IMAGE), "alt": "IOPStor 2U rackmount"}}]
+            if media(RACK_IMAGE) else [],
             [{"type": "rich_text", "data": {"html":
-                "<h2>The file system trusted by Fortune 500 companies, universities and data centres</h2>"
-                "<p>ZFS is a file system and logical volume manager that changes how storage is administered. "
-                "Every block is checksummed, every snapshot is instant, and a failed drive never costs you a day's work.</p>"
-                + ("<ul>" + "".join(f"<li><strong>{t}</strong> \u2014 {d}</li>" for t, d in ZFS_FEATURES[:4]) + "</ul>"
-                   if media(ZFS_IMAGE) else "")
-                + "<p><a href=\"/services/storage/nas\">All ZFS features &rarr;</a></p>"}}]]}},
-        {"type": "post_list", "data": {"post_type": "product", "limit": 6, "eyebrow": "Appliances",
+                '<p class="eyebrow">Built on ZFS</p>'
+                '<h2 class="section-title">The file system trusted by Fortune 500 companies, '
+                'universities and data centres</h2>'
+                '<p class="lead">ZFS never compromises on data safety. Every IOPStor appliance '
+                'inherits it: end-to-end checksums, self-healing pools, and snapshots that recover '
+                'deleted or corrupt data and protect against ransomware.</p>'
+                '<ul class="dash">'
+                '<li>Unlimited snapshots and clones: go back to yesterday, last week or last month</li>'
+                '<li>RAID-Z: instantaneous build, no write hole, multiple-disk failure tolerance</li>'
+                '<li>RAM / SSD / NVMe read-write cache, compression and de-duplication</li>'
+                '<li>Hardware agnostic: replace any component from any vendor</li>'
+                '</ul>'
+                '<p><a class="btn dark" href="/services/storage/nas">All ZFS features</a></p>'}}]]}},
+        {"type": "post_list", "data": {"tone": "grey", "post_type": "product", "limit": 6, "eyebrow": "Appliances",
                                        "heading": "Sized from 5 users upward",
                                        "link_label": "All appliances", "link_url": "/products"}},
-        {"type": "post_list", "data": {"post_type": "case_study", "limit": 4, "eyebrow": "Case studies",
+        {"type": "post_list", "data": {"tone": "dark", "post_type": "case_study", "limit": 4, "eyebrow": "Case studies",
                                        "heading": "Proven across finance, education, media and logistics",
                                        "link_label": "All case studies", "link_url": "/case-studies"}},
         {"type": "columns", "data": {"cols": [
@@ -270,8 +308,21 @@ def run_seed():
         for j, child in enumerate(children):
             why = [{"type": "cards", "data": {"heading": "Why choose our NAS?", "items": [
                 {"title": t, "text": d, "icon": f"{n + 1:02d}", "url": ""} for n, (t, d) in enumerate(WHY_NAS)]}},
-                {"type": "cards", "data": {"heading": "ZFS, feature by feature", "items": [
-                    {"title": t, "text": d, "icon": "", "url": ""} for t, d in ZFS_FEATURES]}}] if child == "NAS" else []
+                # the design sets the ZFS list as a description list with the configuration panel
+                # beside it, not as a second deck of cards
+                {"type": "columns", "data": {"cols": [
+                    [{"type": "rich_text", "data": {"html":
+                        '<h2 class="section-title">ZFS features, in plain terms</h2><dl class="zfs">'
+                        + "".join(f"<div><dt>{t}</dt><dd>{d}</dd></div>" for t, d in ZFS_FEATURES)
+                        + '</dl>'}}],
+                    [{"type": "rich_text", "data": {"tone": "dark", "html":
+                        '<p class="eyebrow">Configuration \u00b7 IOPStor Classic</p>'
+                        '<h3>Model IOP4MB</h3>'
+                        '<table class="specs"><tbody>'
+                        + "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in NAS_CONFIG)
+                        + '</tbody></table>'
+                        '<p class="foot">* Minimum and maximum users based on application usage.</p>'
+                        '<p><a class="btn" href="/products/iopstor-classic">See the appliance</a></p>'}}]]}}] if child == "NAS" else []
             _post(types["service"], child, parent=parent, menu_order=j, excerpt=f"{child} solutions, sized for your workload.",
                   blocks=[{"type": "hero", "data": {"heading": child, "eyebrow": group, "subheading": f"Enterprise-grade {child} from IOPSTOR.", "cta_label": "Request a quote", "cta_url": "/contact-us"}}]
                          + why
@@ -283,7 +334,7 @@ def run_seed():
         _post(types["event"], title, meta={"start_date": start})
     for i, (title, users, specs) in enumerate(PRODUCTS):
         _post(types["product"], title, menu_order=i, meta={"specs": specs},
-              featured=media_id(ZFS_IMAGE if "Classic" in title else HERO_IMAGE),
+              featured=media_id(TOWER_IMAGE if "Classic" in title else RACK_IMAGE),
               excerpt=f"Appliance workload {users}. Zero touch setup and management through a web GUI, and one source for support.",
               blocks=[{"type": "hero", "data": {"heading": title, "eyebrow": "Appliance",
                                                 "subheading": f"Sized for {users}. Xeon, enterprise SSD and 10G networking, on ZFS.",
@@ -298,16 +349,45 @@ def run_seed():
     _post(page, "About Us", excerpt="Customised storage for a market nobody else was serving.", blocks=[
         {"type": "hero", "data": {"dark": True, "eyebrow": "About us", "image": media_id(ABOUT_IMAGE),
                                   "heading": "Customised storage for a market nobody else was serving",
-                                  "subheading": "IOPStor was built by people who had spent decades watching SMBs pay enterprise prices for "
-                                                "storage that still did not fit them."}},
-        {"type": "rich_text", "data": {"html": "".join(f"<p>{p}</p>" for p in ABOUT.split("\n\n"))}}])
+                                  "subheading": ABOUT_LEAD}},
+        {"type": "columns", "data": {"cols": [
+            [{"type": "rich_text", "data": {"html":
+                '<h2>What we build</h2>' + "".join(f"<p>{p}</p>" for p in ABOUT_BUILD.split("\n\n"))}}],
+            [{"type": "rich_text", "data": {"html":
+                '<h2>Who we are</h2>' + "".join(f"<p>{p}</p>" for p in ABOUT_WHO.split("\n\n"))
+                + '<div class="founders">'
+                + "".join(f'<div><span class="ava"></span><b>{n}</b><i>{r}</i></div>' for n, r in FOUNDERS)
+                + '</div>'}}]]}}])
     _post(page, "Warranty Check", slug="warranty-check", excerpt="Check what cover your appliance still has.", blocks=[
         {"type": "hero", "data": {"dark": True, "eyebrow": "Support", "heading": "Check your warranty",
                                   "subheading": "Every IOPStor appliance ships with a three-year hardware warranty, and unlimited telephone "
                                                 "and web support in the first year. Type your serial number to see where yours stands."}},
         {"type": "warranty_check", "data": {"heading": ""}}])
-    _post(page, "Careers", blocks=[{"type": "hero", "data": {"heading": "Careers"}}, {"type": "contact_form", "data": {"kind": "career", "heading": "Send us your CV"}}])
-    _post(page, "Contact Us", blocks=[{"type": "hero", "data": {"heading": "Contact Us"}}, {"type": "contact_form", "data": {"kind": "contact"}}])
+    _post(page, "Careers", excerpt="Small team, real hardware, customers who call you by name.", blocks=[
+        {"type": "hero", "data": {"dark": True, "heading": "Careers",
+                                  "subheading": "Small team, real hardware, customers who call you by name. Open roles are listed "
+                                                "below; if none fit, send us a note anyway."}},
+        {"type": "columns", "data": {"cols": [
+            [{"type": "rich_text", "data": {"html":
+                '<h2>Open roles</h2>'
+                '<p>No openings are listed at the moment. We still read every application, so tell us '
+                'what you do and we will come back to you when something fits.</p>'}}],
+            [{"type": "contact_form", "data": {"kind": "career", "heading": "Apply"}}]]}}])
+    # Opening on columns, not a hero: the design puts the H1 in the left column beside the form,
+    # and post.html leaves the page title to a first section that writes its own.
+    _post(page, "Contact Us", excerpt="Describe the workload, the number of users and the timeline.", blocks=[
+        {"type": "columns", "data": {"cols": [
+            [{"type": "rich_text", "data": {"html":
+                '<h1 class="page-title">Contact Us</h1>'
+                '<p class="lead">Describe the workload, the number of users and the timeline. '
+                'A real person replies, not a bot or a ticket queue.</p>'
+                '<dl class="contact-dl">'
+                f'<div><dt>Phone</dt><dd><a href="tel:{SETTINGS["contact_phone"].replace(" ", "")}">{SETTINGS["contact_phone"]}</a></dd></div>'
+                f'<div><dt>Email</dt><dd><a href="mailto:{SETTINGS["contact_email"]}">{SETTINGS["contact_email"]}</a></dd></div>'
+                '<div><dt>Office</dt><dd>' + SETTINGS["address"].replace("\n", "<br>") + '</dd></div>'
+                '</dl>'
+                '<div class="map-ph">Replace with an Embedded code section holding the Google Maps embed</div>'}}],
+            [{"type": "contact_form", "data": {"kind": "quote", "heading": "Request a quote"}}]]}}])
     _post(page, "Technology Partners", blocks=[{"type": "hero", "data": {"heading": "Technology Partners"}}, {"type": "post_list", "data": {"post_type": "partner", "limit": 50}}])
     logo = db.one(db.table("media").select("url").eq("filename", "iopstor_logo-png1.png"))
     if logo:
@@ -326,8 +406,10 @@ def run_seed():
             {"label": "About Us", "url": "/about-us"}, {"label": "Technology Partners", "url": "/technology-partners"},
             {"label": "Events", "url": "/events"}, {"label": "Datasheets", "url": "/datasheets"},
             {"label": "Careers", "url": "/careers"}]}]})
-    _get_or_create("menus", {"slug": "footer"}, {"name": "Footer", "items": [{"label": "About Us", "url": "/about-us"}, {"label": "Contact Us", "url": "/contact-us"},
-                                                                          {"label": "Careers", "url": "/careers"}, {"label": "Blog", "url": "/blog"}]})
+    _get_or_create("menus", {"slug": "footer"}, {"name": "Footer", "items": [
+        {"label": "About Us", "url": "/about-us"}, {"label": "Case Studies", "url": "/case-studies"},
+        {"label": "Technology Partners", "url": "/technology-partners"}, {"label": "Events", "url": "/events"},
+        {"label": "Careers", "url": "/careers"}, {"label": "Blog", "url": "/blog"}]})
     db.uncache("post_types", "settings")
 
 

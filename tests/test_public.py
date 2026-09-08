@@ -28,7 +28,11 @@ def test_hierarchical_service_url_and_breadcrumb(client, seeded):
     assert "/services/storage/nas" in _main(client.get("/services/storage"))
     archive = client.get("/services")
     assert archive.status_code == 200 and b"Storage" in archive.data
-    assert "/services/storage/nas" not in _main(archive)   # the archive lists parents only
+    body = _main(archive)
+    # The archive is one row per group, and a child appears in it only as a tile inside its parent's
+    # row -- never as a row of its own. That is the design's services archive.
+    assert '<h3><a href="/services/storage/nas">' not in body
+    assert 'class="chip" href="/services/storage/nas"' in body
     home = client.get("/")
     assert home.status_code == 200 and b'"WebSite"' in home.data and b'<link rel="canonical" href="http://test/">' in home.data
     assert client.get("/home").status_code == 301

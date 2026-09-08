@@ -2,7 +2,7 @@
    full-bleed band, where the picture becomes a faded backdrop instead of the art beside the words.
    The backdrop is an <img>, not a CSS background, because section_style() already owns the style
    attribute and a second one would be dropped by the parser. #}
-<section class="hero{{ ' hero-dark' if data.dark }}{{ ' hero-split' if data.image and not data.dark }}{{ cls }}"{{ sty }}{{ fe() }}>
+<section class="hero{{ ' hero-dark' if data.dark }}{{ ' hero-split' if (data.image or data.images) and not data.dark }}{{ cls }}"{{ sty }}{{ fe() }}>
   {%- if data.image and data.dark %}<img class="hero-bg" src="{{ media_url(data.image) }}" alt="" aria-hidden="true">{% endif %}
   <div class="wrap">
     <div class="hero-text">
@@ -14,6 +14,12 @@
         {%- if data.cta2_url %}<a class="btn {{ 'ghost-dark' if data.dark else 'ghost' }}" href="{{ data.cta2_url }}"{{ fe('cta2_label') }}>{{ data.cta2_label or 'Learn more' }}</a>{% endif %}
       </p>{% endif %}
     </div>
-    {%- if data.image and not data.dark %}<div class="hero-media"><img src="{{ media_url(data.image) }}" alt="{{ data.heading }}"></div>{% endif %}
+    {%- if data.images and data.images|length > 1 and not data.dark %}{% set n = data.images|length %}<div class="hero-media">
+      <div class="hero-slides" style="--n:{{ n }}">
+        {%- for im in data.images %}<div class="hero-slide" style="--i:{{ loop.index0 }}"><img src="{{ media_url(im.media_id) }}" alt="{{ im.alt or data.heading }}"></div>{% endfor %}
+        <div class="hero-dots" style="--n:{{ n }}" aria-hidden="true">{% for im in data.images %}<span style="--i:{{ loop.index0 }}"></span>{% endfor %}</div>
+      </div>
+    </div>
+    {%- elif data.image and not data.dark %}<div class="hero-media"><img src="{{ media_url(data.image) }}" alt="{{ data.heading }}"></div>{% endif %}
   </div>
 </section>
