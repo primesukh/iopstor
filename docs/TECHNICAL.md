@@ -41,7 +41,7 @@ iopstor/payments.py   PaymentGateway ABC, DummyGateway, GATEWAYS
 iopstor/admin_api.py  /api/admin/v1 — JWT-protected REST. apply_post() is the single validation path.
 iopstor/admin_ui.py   /admin — session-based browser admin, reusing admin_api's validation
 iopstor/public.py     catch-all resolver, crawler endpoints, /api/v1 public read API, leads, checkout
-iopstor/cli.py        flask migrate | seed | create-admin
+iopstor/cli.py        flask migrate | seed | import-media | create-admin
 iopstor/templates/    base/post/archive/404, blocks/<type>.html, admin/*.html
 iopstor/static/       site.css (the whole public theme) + admin.css (admin extras, layered on top)
                       + canvas.css (editor chrome), favicon.svg, vendor/sortable.min.js
@@ -163,6 +163,8 @@ Three types carry a variant switch, and all three are **checkboxes**, never free
 When `top_level` is set on a hierarchical type, `_post_list()` also hangs each parent's live children off `p["children"]` for the chips under the card, reusing `db.tree()` — already memoised for the request by the header's services panel, so on most pages it costs nothing.
 
 `archive.html`, `post.html` and `post_list.html` all draw their card from one macro, `templates/_card.html` — the same snippet used to be copied into three templates and drift between them.
+
+The seed's pictures are looked up **by filename** through `cli.media_id()`, which returns `None` when the library is empty. That is why `home_blocks()` is a function rather than a constant, and why `_clean()` drops keys whose value is `None`: a seed run before `flask import-media` must still produce a valid page, and it must not leave `"image": null` in the saved JSON. The pairing is `banner-homepage-96tb.png` → home hero and IOPStor Edge, `DSC_0305n.png` → the ZFS section and IOPStor Classic, `background1.jpg` → the About Us backdrop, `iopstor_logo-png1.png` → `settings.logo_url`, and `partners/*` → the fourteen partner posts' `logo_media_id`.
 
 **Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">…` — `cls` is the layout classes, `sty` an inline width, `fe()` the edit marker (all three below); `render_blocks()` hands all three to every block template. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
 
