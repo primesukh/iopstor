@@ -1,16 +1,35 @@
 {% extends "admin/base.html" %}{% block title %}Leads{% endblock %}
 {% block content %}
-<h1>Leads <small>{{ result.total }}</small> <a class="btn secondary" href="?status=new">new</a> <a class="btn secondary" href="?status=handled">handled</a> <a class="btn secondary" href="?">all</a></h1>
-<table>
-  <tr><th>When</th><th>Kind</th><th>Who</th><th>Message</th><th>About</th><th>Status</th></tr>
-  {% for l in result['items'] %}
-  <tr><td><small>{{ l.created_at[:16].replace('T',' ') }}</small></td><td>{{ l.kind }}</td>
-      <td>{{ l.name }}<br><a href="mailto:{{ l.email }}">{{ l.email }}</a>{% if l.phone %}<br>{{ l.phone }}{% endif %}{% if l.company %}<br><small>{{ l.company }}</small>{% endif %}</td>
-      <td>{{ l.message }}{% if l.data %}<br><small>{{ l.data|tojson }}</small>{% endif %}</td>
-      <td>{{ l.post.title if l.post else '' }}</td>
-      <td><form method="post" action="{{ url_for('admin_ui.lead_status', pk=l.id, **request.args) }}"><input type="hidden" name="csrf" value="{{ csrf }}">
-        <input type="hidden" name="status" value="{{ 'new' if l.status == 'handled' else 'handled' }}"><button type="submit" class="secondary">{{ 'Reopen' if l.status == 'handled' else 'Mark handled' }}</button></form></td></tr>
-  {% else %}<tr><td colspan="6" class="muted">No leads.</td></tr>{% endfor %}
-</table>
-<p>{% if page > 1 %}<a class="btn secondary" href="?page={{ page-1 }}">Previous</a>{% endif %} {% if has_next %}<a class="btn secondary" href="?page={{ page+1 }}">Next</a>{% endif %}</p>
+{% set here = request.args.get('status') %}
+<div class="adm-head"><div><h1>Leads <small>{{ result.total }}</small></h1>
+  <p class="page-sub">Enquiries from the website. Change the status to move one along.</p></div></div>
+<nav class="seg-tabs" aria-label="Status">
+  <a href="?status=new"{% if here == 'new' %} class="on"{% endif %}>New</a>
+  <a href="?status=in_progress"{% if here == 'in_progress' %} class="on"{% endif %}>In progress</a>
+  <a href="?status=handled"{% if here == 'handled' %} class="on"{% endif %}>Done</a>
+  <a href="?"{% if not here %} class="on"{% endif %}>All</a>
+</nav>
+{% for l in result['items'] %}
+<div class="lead-card">
+  <div>
+    <p class="lead-who"><strong>{{ l.name }}</strong>{% if l.company %} <span class="muted">{{ l.company }}</span>{% endif %} <span class="pill scheduled">{{ l.kind }}</span></p>
+    <p class="lead-contact"><a href="mailto:{{ l.email }}">{{ l.email }}</a>{% if l.phone %} &middot; {{ l.phone }}{% endif %}{% if l.post %} &middot; about {{ l.post.title }}{% endif %}</p>
+    {% if l.message %}<p class="lead-msg">{{ l.message }}</p>{% endif %}
+    {% if l.data %}<p class="lead-extra">{% for k, v in l.data.items() %}<span class="chip">{{ k.replace('_',' ') }}: {{ v }}</span>{% endfor %}</p>{% endif %}
+  </div>
+  <div class="lead-side">
+    <p class="muted">{{ l.created_at[:16].replace('T',' ') }}</p>
+    <form method="post" action="{{ url_for('admin_ui.lead_status', pk=l.id, **request.args) }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <select name="status" onchange="this.form.submit()">
+        <option value="new" {{ 'selected' if l.status == 'new' }}>New</option>
+        <option value="in_progress" {{ 'selected' if l.status == 'in_progress' }}>In progress</option>
+        <option value="handled" {{ 'selected' if l.status == 'handled' }}>Done</option>
+      </select>
+      <noscript><button type="submit" class="secondary">Save</button></noscript>
+    </form>
+  </div>
+</div>
+{% else %}<p class="empty-box">Nothing here yet.</p>{% endfor %}
+<p class="pager">{% if page > 1 %}<a class="btn secondary" href="?page={{ page-1 }}">Previous</a>{% endif %} {% if has_next %}<a class="btn secondary" href="?page={{ page+1 }}">Next</a>{% endif %}</p>
 {% endblock %}

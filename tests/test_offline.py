@@ -76,6 +76,68 @@ def test_layouts_expand_and_validate():
     assert b[0]["data"]["heading"] != "changed"  # seeds must be copied, not shared
 
 
+def test_menu_rows_rebuild_into_one_level_of_children():
+    """The menus screen posts flat rows and a level per row; this is the only place that shape
+    turns back into what base.html renders."""
+    from iopstor.admin_ui import menu_items
+
+    labels = ["Services", "Storage", "Cloud", "Blog", ""]
+    urls = ["/services", "/services/storage", "/services/cloud", "/blog", "/nowhere"]
+    assert menu_items(labels, urls, ["0", "1", "1", "0", "0"]) == [
+        {"label": "Services", "url": "/services", "children": [
+            {"label": "Storage", "url": "/services/storage"},
+            {"label": "Cloud", "url": "/services/cloud"}]},
+        {"label": "Blog", "url": "/blog"}]                      # the label-less row deletes itself
+    # a child with nothing above it is promoted, not dropped
+    assert menu_items(["Orphan"], ["/o"], ["1"]) == [{"label": "Orphan", "url": "/o"}]
+    assert menu_items([], [], []) == []
+
+
+def test_alt_from_name_is_a_readable_first_draft():
+    """Imported files must not land with an empty alt: an undescribed picture is the one thing
+    the media screen flags in red, and a bulk import could add dozens at once."""
+    from iopstor.cli import alt_from_name
+
+    assert alt_from_name("rack-96tb.png") == "rack 96tb"
+    assert alt_from_name("650x180_micronlogo.png") == "650x180 micronlogo"
+    assert alt_from_name("Western_Digital-logo.jpg") == "Western Digital logo"
+    assert alt_from_name("a" * 400 + ".png") == "a" * 300      # the column is varchar(300)
+
+
+def test_seeded_content_is_valid_blocks():
+    """The seed writes these arrays straight into posts.blocks. A bad one would only show up as a
+    failed insert half way through `flask seed`, on the user's database."""
+    from iopstor.cli import WHY_NAS, ZFS_FEATURES, home_blocks
+
+    # both shapes: a fresh instance with no media, and one where the pictures are imported
+    for media in (lambda name: None, lambda name: 1):
+        blocks = home_blocks(media)
+        assert len(blocks) == 9 and validate_blocks(blocks) == []   # the design's nine sections
+    assert "image" not in home_blocks()[0]["data"]   # no null key left behind before an import
+    assert "images" not in home_blocks()[0]["data"]  # nor an empty rotator
+    assert len(home_blocks(lambda name: 1)[0]["data"]["images"]) == 3   # the design cycles all three
+    cards = [{"type": "cards", "data": {"heading": h, "items": [
+        {"title": t, "text": d, "icon": "", "url": ""} for t, d in rows]}}
+        for h, rows in (("Why choose our NAS?", WHY_NAS), ("ZFS, feature by feature", ZFS_FEATURES))]
+    assert validate_blocks(cards) == []
+
+
+def test_hero_takes_turns_only_with_two_pictures_or_more(app, monkeypatch):
+    """The rotator is CSS: each slide carries its turn as --i and the container the count as --n, and
+    one picture stays the single <img> it always was, dots and all switched off."""
+    monkeypatch.setattr("iopstor.blocks.media_url", lambda i: f"/m/{i}", raising=False)
+    one = [{"type": "hero", "data": {"heading": "Hi", "images": [{"media_id": 1, "alt": "a"}]}}]
+    three = [{"type": "hero", "data": {"heading": "Hi", "images": [
+        {"media_id": i, "alt": f"a{i}"} for i in (1, 2, 3)]}}]
+    assert validate_blocks(one) == [] and validate_blocks(three) == []
+    with app.test_request_context("/"):
+        assert "hero-slides" not in render_blocks(one)
+        html = render_blocks(three)
+    assert html.count("hero-slide\"") == 3 and '--n:3' in html
+    assert '--i:0' in html and '--i:2' in html
+    assert "hero-dots" in html
+
+
 def test_pdf_block_renders_the_browser_viewer(app, monkeypatch):
     """The PDF section is an iframe at the file plus a download button — no viewer library, and a way
     in for the mobile browsers that will not render a framed PDF. The button saves the file under the
@@ -108,6 +170,27 @@ def test_edit_markers_only_in_edit_mode(app, monkeypatch):
     assert 'data-r="items" data-i="0"' in edit
 
 
+def test_dark_is_a_checkbox_not_a_class_name(app, monkeypatch):
+    """The variant switch is a boolean the template tests for truth, so whatever an editor manages
+    to put in `dark` becomes the same fixed class or none at all — never markup."""
+    from iopstor import db
+    monkeypatch.setattr(db, "settings", lambda: {})   # the base context processor reads site settings
+    monkeypatch.setattr(db, "table", lambda *a, **k: 1 / 0)   # a hero needs no query
+    with app.test_request_context("/"):
+        plain = render_blocks([{"type": "hero", "data": {"heading": "Hi"}}])
+        dark = render_blocks([{"type": "hero", "data": {"heading": "Hi", "dark": True}}])
+        nasty = render_blocks([{"type": "hero", "data": {"heading": "Hi", "dark": '" onload="x'}}])
+
+    assert "hero-dark" not in plain
+    assert 'class="hero hero-dark"' in dark
+    assert 'class="hero hero-dark"' in nasty and "onload" not in nasty
+
+    # ...and neither the flag nor a URL is words on the page, so neither reaches llms-full.txt
+    assert blocks_text([{"type": "hero", "data": {"eyebrow": "Label", "heading": "Hi",
+                                                  "dark": True, "cta2_url": "/x",
+                                                  "cta2_label": "More"}}]) == "Label Hi More"
+
+
 def test_section_alignment_is_a_whitelist(app, monkeypatch):
     """Both alignments reach the section's class, in edit and public alike, and nothing else does."""
     from iopstor import db
@@ -127,6 +210,21 @@ def test_section_alignment_is_a_whitelist(app, monkeypatch):
     assert section_class({}) == ""
     # and an alignment is layout, not words: it must not reach llms.txt, the feed or admin search
     assert blocks_text(blocks) == "Hi One x"   # the heading, not "center right"
+
+
+def test_tone_is_a_whitelisted_band(app, monkeypatch):
+    """The design alternates white and grey down a page, so the band is a per-section setting --
+    and like align and width it is a whitelist, because it lands in a class attribute."""
+    from iopstor.blocks import section_class
+
+    assert section_class({"tone": "grey"}) == " t-grey"
+    assert section_class({"tone": "dark", "align": "center"}) == " al-center t-dark"
+    assert section_class({"tone": 'x" onload="'}) == ""      # not a passthrough
+    assert section_class({"tone": "puce"}) == ""
+    assert section_class({}) == ""
+    monkeypatch.setattr("iopstor.db.settings", lambda: {})
+    assert 'class="section t-grey"' in render_blocks(
+        [{"type": "cards", "data": {"tone": "grey", "items": [{"title": "Hi"}]}}])
 
 
 def test_section_width_is_a_named_step_or_a_plain_number(app, monkeypatch):

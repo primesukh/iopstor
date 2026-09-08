@@ -7,7 +7,13 @@ from flask import render_template
 from markupsafe import Markup, escape
 
 BLOCKS = {  # type: (required fields, optional fields)
-    "hero": (["heading"], ["subheading", "image", "cta_label", "cta_url"]),
+    # dark: the full-bleed variant, where "image" becomes the faded backdrop rather than the art
+    # beside the words. A checkbox, not a free-text "tone": nothing typed reaches a class name.
+    # image is the single picture; images (>= 2) turns it into the rotator that takes turns on its
+    # own, in CSS. Both are kept: images wins when it has two or more rows, so nothing already
+    # published changes shape.
+    "hero": (["heading"], ["eyebrow", "subheading", "image", "images", "cta_label", "cta_url",
+                           "cta2_label", "cta2_url", "dark"]),
     "rich_text": (["html"], []),  # ponytail: raw HTML from trusted staff; add nh3 sanitising if untrusted authors appear
     "image": (["media_id"], ["alt", "caption"]),
     "gallery": (["images"], []),  # images: [{media_id, alt}]
@@ -18,9 +24,11 @@ BLOCKS = {  # type: (required fields, optional fields)
     "cta": (["heading", "button_label", "button_url"], ["text"]),
     "faq": (["items"], ["heading"]),  # items: [{q, a}] → also emits FAQPage JSON-LD
     "stats": (["items"], []),  # items: [{value, label}]
-    "testimonial": (["quote", "author"], ["role", "company"]),
+    "testimonial": (["quote", "author"], ["role", "company", "dark"]),
     "embed_html": (["html"], []),
-    "post_list": (["post_type"], ["heading", "term", "limit", "top_level"]),  # queried at render time; top_level=true → parents only
+    # link_label/link_url are the "All services →" link in the section header.
+    "post_list": (["post_type"], ["heading", "eyebrow", "term", "limit", "top_level",
+                                  "link_label", "link_url"]),  # queried at render time; top_level=true → parents only
     "spec_table": (["rows"], ["heading"]),  # rows: [{k, v}]
     "contact_form": (["kind"], ["heading"]),  # kind: contact | quote | career → POST /api/v1/leads
     # file_media_id, not media_id: EDITOR["labels"] is keyed by bare field name and media_id already reads "Image".
@@ -37,17 +45,21 @@ EDITOR = {
     "widgets": {"html": "richtext", "embed_html.html": "code", "text": "textarea", "a": "textarea", "subheading": "textarea",
                 "caption": "textarea", "quote": "textarea", "image": "media", "media_id": "media", "file_media_id": "pdf",
                 "url": "url", "cta_url": "url", "button_url": "url", "limit": "number",
-                "top_level": "checkbox", "post_type": "post_type", "kind": "kind"},
+                "top_level": "checkbox", "post_type": "post_type", "kind": "kind",
+                "cta2_url": "url", "link_url": "url", "dark": "checkbox"},
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
     "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label"],
-              "spec_table": ["k", "v"], "gallery": ["media_id", "alt"],
+              "spec_table": ["k", "v"], "gallery": ["media_id", "alt"], "hero": ["media_id", "alt"],
               "columns": []},  # a column is a list of blocks, not a row of fields: the panel only adds/moves/removes it
     # friendlier labels; anything missing is the key with underscores as spaces
     "labels": {"q": "Question", "a": "Answer", "k": "Label", "v": "Value", "html": "Content", "kind": "Form type",
                "cols": "Columns", "widths": "Column widths, e.g. 50/25/25",
                "cta_url": "Button link", "cta_label": "Button text", "top_level": "Top-level only",
-               "media_id": "Image", "image": "Image", "file_media_id": "PDF file", "post_type": "Content type",
-               "term": "Term slug"},
+               "media_id": "Image", "image": "Image", "images": "Pictures that take turns", "file_media_id": "PDF file", "post_type": "Content type",
+               "term": "Term slug", "eyebrow": "Small label above the heading",
+               "cta2_label": "Second button text", "cta2_url": "Second button link",
+               "link_label": "Header link text", "link_url": "Header link",
+               "dark": "Dark background"},
     "kinds": ["contact", "quote", "career"],
     # order the section picker offers them in, commonest first (Jinja's tojson sorts dict keys,
     # so BLOCKS' own order does not survive the trip to the browser)
@@ -114,10 +126,12 @@ def layout(name):
     """Expand a LAYOUTS entry into real blocks. Unknown name -> a blank page."""
     return [{"type": t, "data": deepcopy(EDITOR["seed"].get(t) or {})} for t in LAYOUTS.get(name, [])]
 
-_NON_TEXT_KEYS = {"url", "cta_url", "button_url", "icon", "image", "media_id", "file_media_id", "post_type", "term", "limit", "kind", "top_level", "type", "widths", "align", "align_box", "width"}
+_NON_TEXT_KEYS = {"url", "cta_url", "cta2_url", "button_url", "link_url", "icon", "image", "media_id", "file_media_id",
+                  "post_type", "term", "limit", "kind", "top_level", "dark", "type", "widths", "align", "align_box", "width"}
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
-_TEXT_ORDER = ("heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company", "value", "label", "k", "v",
-               "caption", "alt", "cta_label", "button_label", "items", "images", "rows", "cols")
+_TEXT_ORDER = ("eyebrow", "heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company",
+               "value", "label", "k", "v", "caption", "alt", "cta_label", "cta2_label", "button_label", "link_label",
+               "items", "images", "rows", "cols")
 _RANK = {k: i for i, k in enumerate(_TEXT_ORDER)}
 
 
@@ -167,6 +181,7 @@ def col_widths(data):
     return " ".join(f"{n:g}fr" for n in nums) if all(n > 0 for n in nums) else ""
 
 
+TONES = ("grey", "dark", "blue")   # the bands a section can sit on; absent = the page's own white
 ALIGNS = ("left", "center", "right")
 WIDTHS = {"wide": "w-wide", "full": "w-full"}   # "width" also takes a number of pixels; see section_style()
 MAX_W = 4000
@@ -174,11 +189,13 @@ MAX_W = 4000
 
 def section_class(data):
     """The layout classes for one section, from three optional keys — absent means the theme's own
-    layout. "align" lines up what is inside it, "align_box" moves the box, "width" is either a named
+    layout. "align" lines up what is inside it, "align_box" moves the box, "tone" is the band it sits
+    on (the design alternates white and grey down a page for rhythm), "width" is either a named
     step (wide / full) or a number of pixels, which section_style() carries instead. A whitelist, not
     a passthrough: the result goes straight into a class attribute, the same reason col_widths() is
     strict. Returns "" or " al-center", " al-center alb-right w-full", …"""
     out = [p + data[k] for k, p in (("align", "al-"), ("align_box", "alb-")) if data.get(k) in ALIGNS]
+    out += ["t-" + data["tone"]] if data.get("tone") in TONES else []
     out += [WIDTHS[str(data.get("width"))]] if str(data.get("width")) in WIDTHS else []
     return (" " + " ".join(out)) if out else ""
 
@@ -244,7 +261,10 @@ def render_blocks(blocks, edit=False, path="0"):
         try:
             extra = {}
             if b["type"] == "post_list":
-                extra = {"posts": _post_list(b["data"])}
+                # pt_slug comes from the DB lookup, never from b["data"], so the class it becomes in
+                # the template cannot be anything an editor typed.
+                posts, pt_slug = _post_list(b["data"])
+                extra = {"posts": posts, "pt_slug": pt_slug}
             elif b["type"] == "warranty_check":
                 extra = {"found": None if edit else _warranty()}  # the admin canvas gets the bare form, never a lookup
             elif b["type"] == "columns":
@@ -283,15 +303,17 @@ def blocks_text(blocks):
 
 
 def _post_list(data):
+    """(posts, post-type slug). The slug is the design's per-type card variant, and it comes from
+    the resolved row rather than the block's own data, so it is safe to put in a class name."""
     from . import db
 
     pt = db.post_type(slug=data["post_type"])
     if pt is None:
-        return []
+        return [], ""
     if data.get("term"):
         term = db.one(db.table("terms").select("id").eq("slug", data["term"]))
         if term is None:
-            return []
+            return [], pt["slug"]
         q = db.table("posts").select(db.POST_SELECT_BY_TERM).eq("post_terms.term_id", term["id"])
     else:
         q = db.select_posts()
@@ -299,7 +321,14 @@ def _post_list(data):
     if data.get("top_level"):
         q = q.is_("parent_id", "null")
     q = q.order("menu_order").order("published_at", desc=True).limit(int(data.get("limit") or 10))
-    return db.with_paths(db.rows(q))
+    posts = db.with_paths(db.rows(q))
+    if data.get("top_level") and pt["hierarchical"]:
+        # the child chips under each card. db.tree() is already memoised for this request by the
+        # header's services panel, so on most pages this costs nothing.
+        kids = {t["id"]: t["children"] for t in db.tree(pt["slug"])}
+        for p in posts:
+            p["children"] = kids.get(p["id"], [])
+    return posts, pt["slug"]
 
 
 def warranty_active(row, today=None):

@@ -41,7 +41,7 @@ iopstor/payments.py   PaymentGateway ABC, DummyGateway, GATEWAYS
 iopstor/admin_api.py  /api/admin/v1 — JWT-protected REST. apply_post() is the single validation path.
 iopstor/admin_ui.py   /admin — session-based browser admin, reusing admin_api's validation
 iopstor/public.py     catch-all resolver, crawler endpoints, /api/v1 public read API, leads, checkout
-iopstor/cli.py        flask migrate | seed | create-admin
+iopstor/cli.py        flask migrate | seed | import-media | create-admin
 iopstor/templates/    base/post/archive/404, blocks/<type>.html, admin/*.html
 iopstor/static/       site.css (the whole public theme) + admin.css (admin extras, layered on top)
                       + canvas.css (editor chrome), favicon.svg, vendor/sortable.min.js
@@ -95,6 +95,8 @@ Every query goes through this module. Nothing else builds a PostgREST query.
 | `with_paths()` / `ancestors()` | Attach the computed `path` to posts; builds one per-request hierarchy index rather than walking parents per row |
 | `unique_slug()` | Slug collision resolution within a post type — `base`, else `base-xyz` (three random letters) |
 | `ensure_term()` | Term id for a name in a taxonomy, creating the row the first time. Matched on `slugify(name)`, so "All-Flash" and "all flash" are one term, not two |
+| `set_menu(slug, items)` | The write side of `get_menu()`, so `/admin/menus` keeps every query in this module |
+| `admin_counts()` | `{post-type slug: n}` plus `_leads`, for the sidebar. One query over posts counted in Python — PostgREST has no `GROUP BY`, and an exact-count call per type would be eight round trips a page |
 | `tree(type_slug)` | Top-level live posts of one type, each with `p["children"]`. One query; the parent/child split happens in Python. Feeds the header's services panel, the services archive and `post_list(top_level)` |
 | `paginate()` | Offset/limit + exact count |
 | `post_types()` / `settings()` | Process-level caches, invalidated with `uncache()` |
@@ -130,22 +132,61 @@ Resulting scheme:
 
 ---
 
+### 5.1 Checkout
+
+The design's Buy flow is a modal. The public site ships no JavaScript, so it is a page instead — which the handoff offers as the alternative. It is handled **inside the catch-all**, not as its own rule: a rule shaped `/<a>/<b>/checkout` would have to out-rank `/<path:path>`, and reading the last segment where the resolver already has the post type is six lines. A trailing `checkout` under a type's prefix resolves the segment before it, and 404s unless that post is live, sits at that exact path, and has a `meta.price`.
+
+`POST /api/v1/payments/checkout` answers both callers: a JSON body still gets JSON and a `201`, and a plain form post gets a `303` to the gateway's `redirect_url` — the same `request.is_json` split `/api/v1/leads` already uses for `_form_redirect()`.
+
+> `# ponytail:` `checkout` is a reserved last segment, so a product slugged `checkout` would be unreachable.
+
+---
+
 ## 6. Blocks
 
 `iopstor/blocks.py` is the only place a block type is declared:
 
 ```python
 BLOCKS = {  # type: (required fields, optional fields)
-    "hero": (["heading"], ["subheading", "image", "cta_label", "cta_url"]),
+    "hero": (["heading"], ["eyebrow", "subheading", "image", "images", "cta_label", "cta_url",
+                           "cta2_label", "cta2_url", "dark"]),
     ...
 }
 ```
 
 Sixteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`, `warranty_check`.
 
+`hero` takes either one picture or several. `image` is the single one; `images` is a repeater of
+`{media_id, alt}` and, from two rows up, becomes the design's rotator — the pictures take turns on
+their own, in CSS (§12). Both keys stay, `images` wins when it holds two or more, so a hero that was
+saved before this exists is untouched.
+
+Three types carry a variant switch, and all three are **checkboxes**, never free text: `hero.dark` (the full-bleed band, where `image` becomes a faded backdrop instead of the art beside the words), `testimonial.dark`, and `contact_form`'s existing `kind`. The template tests them for equality (`{{ ' hero-dark' if data.dark }}`), so nothing an editor types can reach a class attribute — which is the same reason `section_class()` is a whitelist.
+
+`post_list` gained `eyebrow`, `link_label` and `link_url` (the "All services →" link in a section header), and `render_blocks()` hands its template a **`pt_slug`** extra alongside `posts`. That becomes `pl-<slug>` on the section, and `site.css` styles one card per post type from it — the number for services, the logo for partners, the 16:9 picture and date for blog posts, the industry/solution chips for case studies. One template, the variants in CSS. `pt_slug` comes from the resolved `post_types` row, never from the block's own data, so it is safe in a class name.
+
+When `top_level` is set on a hierarchical type, `_post_list()` also hangs each parent's live children off `p["children"]` for the chips under the card, reusing `db.tree()` — already memoised for the request by the header's services panel, so on most pages it costs nothing.
+
+`archive.html`, `post.html` and `post_list.html` all draw their card from one macro, `templates/_card.html` — the same snippet used to be copied into three templates and drift between them.
+
+The macro takes **`actions`**, which `archive.html` passes and the other two do not. Three types answer
+it with a control of their own — a product's price and **Buy**, a datasheet's **Download**, a service's
+child tiles — and an `<a>` cannot contain another `<a>`, so for those three the card becomes a `<div>`
+with its title linked instead. Every other type, and every list inside a page, keeps the single-anchor
+card it has always been. Two more inert spans ride along and are switched on by the `pl-<slug>` rule:
+`.card-date` (an event's year and month, cut out of `meta.start_date`) and `.card-pdf` (a datasheet's
+outline mark).
+
+`render_archive()` hangs children off each row for a **hierarchical** type, the same `db.tree()` lookup
+`_post_list()` uses, so the services archive can draw its child tiles. `render_post()` does the mirror
+of it: a page with no children of its own but a parent gets its **siblings** instead, which is the
+"Other Storage services" row the design ends a service page on (`siblings=True` only changes the heading).
+
+The seed's pictures are looked up **by filename** through `cli.media_id()`, which returns `None` when the library is empty. That is why `home_blocks()` is a function rather than a constant, and why `_clean()` drops keys whose value is `None`: a seed run before `flask import-media` must still produce a valid page, and it must not leave `"image": null` in the saved JSON. The pairing is `Untitled-4.png` → the home hero, `banner-homepage-96tb.png` → the ZFS section and IOPStor Edge, `DSC_0305n.png` → IOPStor Classic, all three of them → the home hero's rotator in that order, `background1.jpg` → the About Us backdrop, `iopstor_logo-png1.png` → `settings.logo_url`, and `partners/*` → the fourteen partner posts' `logo_media_id`.
+
 **Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">…` — `cls` is the layout classes, `sty` an inline width, `fe()` the edit marker (all three below); `render_blocks()` hands all three to every block template. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
 
-**Layout keys.** Three optional keys on any block's `data`, absent = the theme's own layout:
+**Layout keys.** Four optional keys on any block's `data`, absent = the theme's own layout:
 
 | Key | Values | What it does |
 |---|---|---|
@@ -159,6 +200,10 @@ Two functions carry them onto the root `<section>`, both **whitelists** rather t
 - **`section_style(data)`** → `' style="--w:950px"'` for a **digits-only** `width` in `1..MAX_W` (4000), `""` for everything else, a named width included (that one is a class).
 
 `--w` *is* the content measure: `site.css` writes every relevant `max-width` as `var(--w, <the theme's own value>)`, so an unset section renders exactly as designed, a number narrows or widens it, and `.w-wide` / `.w-full` set `--w:100%` from CSS. `.column{--w:initial}` stops a width set on a Columns section leaking into the sections inside it.
+
+****`tone`** is the band a section sits on — `grey`, `dark` or `blue`, absent means the page's own white. The design alternates white and grey down the home page for rhythm and drops case studies onto black, and that is a per-section decision an editor makes, not something baked into a block type. Like `align` and `width` it is a **whitelist** in `section_class()`, because the value lands in a class attribute. Its rules sit *after* `.band-*` in `site.css`, so a tone an editor picks beats a block's own default (`stats` is dark, `cta` is blue) on source order rather than needing `!important`.
+
+`--w-def` is what makes that sentence true.** The shared rule is `.section>.wrap>*{max-width:var(--w,var(--w-def,none))}`, and it is (0,2,0); every block's own rule (`.rich-text`, `.testimonial`, `.specs`, `.faq details`, `.lead-form`) is (0,1,0) or (0,1,1) and loses to it. So the fallback `none` used to win outright and the designed measures never applied at all — a section was only ever as wide as `--w` said, and unset meant full width. Each of those blocks now declares its measure as `--w-def` on itself, which the shared rule reads *inside* the fallback. `--w` stays the override it is documented to be, and `--w:initial` in a column still falls through to the block's own measure.
 
 All three keys are in `_NON_TEXT_KEYS`, so "center" and "950" never reach `llms-full.txt`, the feed or admin search, and all three are deliberately **not** fields in `BLOCKS`: layout belongs to every section, so `admin.js` renders one set of controls for all types (§12.1) and `validate_blocks()` simply tolerates the extra keys. `.cta` and table cells keep their own `text-align`, so a centred section does not restyle a CTA band or a spec table.
 
@@ -301,6 +346,12 @@ One stylesheet, `static/site.css`, with the design tokens at the top, then heade
 
 A second, shorter line under them maps the *old* token names (`--navy`, `--accent`, `--accent-2`, `--text`, `--card`, `--radius`) onto the new palette. `admin.css` and `canvas.css` still reference those in ~90 places; the aliases keep the admin rendering while it is restyled in its own PR, and are marked `ponytail:` for deletion once nothing uses them.
 
+**Animations.** Three on menus: `drop` (the mega panel at .22s and the Company drop-down at .2s, `cubic-bezier(.2,.7,.2,1)`), `fade` (the mega's right pane, .2s ease-out, as the pointer moves down the group list) and `slide` (the mobile sheet, .25s ease-out). Five on the hero, from the design's own keyframes: `rise` on the words (.7s), `heroin` on the picture column (.8s), `glow` on the radial wash behind it (5s, infinite), `float` on the picture itself (6s, infinite) and `dot3`/`dot2` on the rotator's progress dots. Every one-shot is `both`-filled so it holds its end state. The entrance pair is scoped to `.hero-split` — the hero with art beside it, which is the only hero the design animates; every other opening band is still. Hover work is `transition` at .15s.
+
+**The hero rotator is CSS.** `hero.images` renders `.hero-slides` with the picture count inline as `--n` and each `.hero-slide` carrying its turn as `--i`. Every slide runs the same loop over the whole cycle (`calc(var(--n) * 4.5s)`) delayed by `calc(var(--i) * 4.5s)`, so exactly one is showing at a time with the design's slide-in / slide-out either side of its turn. The dots are `<span>`s, not buttons: they report which picture is up and fill blue across its 4.5 seconds, and they are `aria-hidden` because they say nothing the pictures' `alt` text does not. There is one keyframe set per count — `slides2`/`dot2` and `slides3`/`dot3` — because a slide's share of the cycle is written into the percentages; a fourth picture needs a fourth set, marked `ponytail:` in the file. Under `prefers-reduced-motion` the slides are stood down explicitly and the first picture is left showing: the mock's blanket `animation-duration:.01ms` would have parked every slide on its final frame, which is the hidden one.
+
+**The header is white**, not the mock's black — the client asked for it, with the logo in its own colours rather than knocked out. The knock-out filter therefore lives on `.site-footer .brand img`, not on `.brand img`, because the footer is still the dark band. The mobile sheet follows the header: a white panel with `--line` rules and `--ink` rows. Nothing else in the design changed colour.
+
 **The services mega panel** is CSS only, like everything else on the public site. Its markup is a child of the Services `<li>`, absolutely positioned against `.site-header` — sticky is a positioned element, so it is the containing block, which is how the panel spans the viewport instead of the 1200px column. That is also why the Services `<li>` is `position:static` while every other one is `relative`: the Company drop-down has to anchor to its own item. **Opening is plain `:hover` / `:focus-within`**, so it works everywhere; only switching the visible group needs `:has()`, and a browser without it still opens the panel showing the first group. Eight groups is the ceiling (one `:has()` rule per index), marked `ponytail:` in the file. Under 960px the panel collapses into the checkbox sheet as a plain indented list — group column hidden, every pane shown, blurbs dropped.
 
 Its data comes from `service_nav()` (`public.py`), a template global over `db.tree("service")` — `menu('header')` carries labels and URLs only, and the panel needs each group's `excerpt` and children. It is a callable rather than a value because the context processor is app-wide and an `/admin` page has no use for a posts query.
@@ -308,6 +359,42 @@ Its data comes from `service_nav()` (`public.py`), a template global over `db.tr
 **Long words wrap.** `body` carries `overflow-wrap:break-word`, so an unbroken string (a pasted URL, a hash) breaks instead of running off the right of its section and giving the page a horizontal scrollbar — and it is inherited, so the editor canvas gets it too. `break-word` only wraps *inside* a box, and a grid track or a table column is sized from min-content, which a 300-character word still blows out; the boxes that size to their content (`.card`, `.column`, `.stats li`, table cells) get `overflow-wrap:anywhere`, which counts in that size. Not on `body`: `anywhere` would let the header nav break mid-word.
 
 No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS, and the public site ships no JavaScript at all.
+
+**A blog post reads down, not across.** Every other type puts its featured picture beside the words (`.page-head.has-media`, two columns); an article stacks — title, date, the picture **at its own size**, then the rule that divides the head from the writing. `.featured` is a banner crop (`width:100%`, a 440px ceiling, `object-fit:cover`), which is right for a card or a product shot and wrong inside an article: a small picture was blown up to 1200 wide and then cut off top and bottom. `.pt-post .page-media img` hands the sizing back to the browser and only shrinks a picture wider than the column. The rule is `.pt-post .page-head`'s own bottom border, the same way the hero and an archive head draw theirs, so it spans the page rather than the 1200px column. The article also drops the eyebrow, which only repeated the breadcrumb's last link.
+
+**An archive's grid is `auto-fill`, a page's deck is `auto-fit`.** An archive holds however many posts happen to be published, and `auto-fit` collapses its empty tracks — one blog post stretched into a full-width billboard. `auto-fill` keeps them, so a short list still reads as tiles. A deck inside a page keeps `auto-fit`, because there the editor chose the count. The measures are the design's: 300px for blog and case studies (three across at 1200), 280px for products, 220px for partners.
+
+**Four archive shapes**, each scoped to `.arch-body` so the same list inside a page stays the card deck the home page wants: `pl-product` (a taller picture area, the price and Buy in a footer row), `pl-service` (one full-width row per group, the words in column one and the child tiles in column two — the card's children are a flat list, so each names its own grid column rather than being wrapped in a div for it), `pl-event` (a row led by an 84px dark date tile) and `pl-datasheet` (a row with the outline PDF mark and its own Download button).
+
+**Shapes the design draws inside prose**, so they need no block of their own — the same trusted-staff HTML the ZFS dash list already uses: `.founders` (the pair on About), `dl.contact-dl` (the labelled contact list), `.map-ph` (the striped box standing in for the map until an `embed_html` replaces it) and `dl.zfs` (the ruled term/description rows on a service page). A `table.specs` pasted into prose is styled as a spec table rather than a prose table.
+
+**A toned section inside a column is a panel.** `.column>.section` normally has its padding neutralised; one carrying `t-grey`, `t-dark` or `t-blue` keeps it and takes the card radius, which is how the design's dark configuration card beside the ZFS list is built out of a `rich_text` with `tone: dark`.
+
+**`contact_form` has three skins**, one per `kind`: `quote` is the dark panel from the Contact screen, `career` the grey one from Careers, `contact` the plain white card. The heading is rendered **inside** the form, because in the design it belongs to the panel rather than sitting above it as a section title.
+
+**A numeric `cards` icon is a counter, not an icon.** `card-icon num` drops the tinted tile for the design's mono blue number, and the deck tightens around it (`.cards:has(.card-icon.num)`).
+
+**Favicons.** `static/favicon.svg` plus PNGs at 16/32/48/180/192/512, generated from the SVG with ImageMagick and linked from both `base.html` and `admin/base.html`.
+
+### The admin shell
+
+`templates/admin/base.html` is a 230px black sidebar and a grey page canvas, not the old top nav. Three things about it are load-bearing:
+
+- **It uses its own class names** (`.adm-shell`, `.adm-side`, `.adm-nav`, `#adm-toggle`), not `.site-header` / `.site-nav` / `.brand` / `#nav-toggle`. Those live in `site.css` and belong to the public header; restyling them here would repaint every public page, and two `#nav-toggle` checkboxes would fight over the same `:checked ~` rule.
+- **One `{% block content %}`, wrapped conditionally.** Jinja refuses the same block name twice in a template even in branches that cannot both run, so the shell opens before the block and closes after it rather than the block appearing in both arms of the `if`.
+- **`.admin-main:has(#post-form)` is `height:100vh`**, not `calc(100vh - 66px)`. The editor now owns a grid column rather than sitting under a top bar, so there is no header height to subtract.
+
+**The settings tabs are CSS, and that is load-bearing.** `settings()` saves `{k: request.form.get(k, "") for k in SETTING_KEYS}`, so **any key missing from the submitted form is blanked**. Rendering only the visible tab would wipe the other three on every save. So all four panes stay in the DOM and a radio + `:checked` sibling rule shows one. The pairing uses explicit ordinal classes (`.t1`/`.p1`), not `:nth-of-type` — the form's hidden CSRF field is an `<input>` too, so type counting put every radio one place out.
+
+The Payments tab shows the provider **read-only**. It comes from the `PAYMENT_PROVIDER` env var through `payments.GATEWAYS`; making it a setting would give the same switch two sources of truth. `currency` and `notify_email` are real settings keys.
+
+**`/admin/menus`** is the screen `NON-TECHNICAL.md` §9 has always promised. It posts flat rows — label, URL, and a level `<select>` — which `menu_items()` rebuilds into the nested `[{label, url, children}]` shape `get_menu()` returns. The level is a **`<select>`, not a checkbox**: an unchecked box posts nothing, so the three `getlist()`s would come back different lengths and every row after the first unticked one would shift a place. `db.set_menu()` is the write side, so every query still lives in `db.py`. SortableJS is loaded by that template alone rather than by `admin/base.html` — it is 45 KB and this is the only screen outside the canvas that drags anything.
+
+**Leads have three states** (`new`, `in_progress`, `handled`) from a whitelist, because `leads.status` is a plain varchar and a toggle would store whatever was posted. No migration.
+
+**Media alt text can be edited after upload** (`POST /admin/media/<id>/alt`). It used to be settable only at upload time, so a picture uploaded without it could never be described. Image dimensions and a "used on" list are **not** implemented: the first needs two new columns, the second a scan of every post's blocks.
+
+`nav_counts` (not `counts`) carries the sidebar's numbers, because the dashboard view passes its own `counts` and a view's context shadows a context processor's — the leads pill would have been empty on exactly that one page.
 
 `static/admin.js` is the single exception, loaded only by `templates/admin/base.html`. It is plain ES5-ish browser JavaScript — no framework, no bundler, and nothing fetched at runtime: the one third-party file, `static/vendor/sortable.min.js` (SortableJS 1.15.6, MIT, 45 KB), is **vendored, not CDN-loaded**, because the CMS runs on a LAN and an editor without internet must still be able to drag a section. It is **progressive enhancement only**: every part is a no-op when its hook is missing, and the plain form underneath still saves with JavaScript disabled. Four parts:
 
@@ -716,6 +803,8 @@ Marked in code with `# ponytail:` comments.
   has no npm toolchain. Its check is the manual "paste a Google Doc in" step.
 - `embed_html` shows a placeholder on the canvas instead of running. That is partly UX (you cannot click-edit a YouTube embed) and partly safety: the canvas is same-origin with a live admin session, so `|safe` block HTML would execute with the admin's cookie. The trust model is unchanged from the public site, but an `editor` authoring HTML that an `admin` later opens is a path worth knowing about.
 - Inline editing is opt-in per element. Anything without an `fe()` marker — `post_list`'s titles and excerpts, which belong to *other* posts — simply is not editable, which is the point.
+- The hero rotator has a keyframe set per picture count, and two are written (2 and 3). A fourth picture needs a fourth set.
+- A page whose **first** section is a `hero` or a `columns` writes its own opening, so `post.html` draws no page head for it. That is what lets the Contact screen put its H1 beside the form — and it means a page an editor starts with a Columns section shows no title until they type one into it.
 - `--w` is one measure per section, so a hero's headline and its paragraph (820px and 720px by default) take the same custom width. Per-element widths would need a key per element, which no editor has asked for.
 - A custom width is pixels only — no `%`, `rem` or `vw`. The three named steps cover the proportional cases, and `section_style()` stays a digits-only check rather than a unit parser.
 - `.cta` and table cells keep their own explicit `text-align`, so a centred section does not restyle a CTA band or a spec table's columns. `align_box` likewise only moves a section narrower than the page; a full-width one has nowhere to go.

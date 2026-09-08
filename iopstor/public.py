@@ -54,13 +54,38 @@ def crumbs_for(post):
     return crumbs + db.ancestors(post) + [(post["title"], post["path"])]
 
 
+def _kids(parent_id):
+    return db.with_paths(db.rows(db.live(db.select_posts()).eq("parent_id", parent_id)
+                                 .order("menu_order").order("published_at", desc=True)))
+
+
 def render_post(post):
     crumbs = crumbs_for(post)
-    children = db.with_paths(db.rows(db.live(db.select_posts()).eq("parent_id", post["id"]).order("menu_order").order("published_at", desc=True))) if post["post_type"]["hierarchical"] else []
-    return render_template("post.html", post=post, children=children, crumbs=crumbs, meta=seo.build_meta(post), jsonld=seo.jsonld(post, crumbs))
+    children, siblings = [], False
+    if post["post_type"]["hierarchical"]:
+        children = _kids(post["id"])
+        # A leaf shows the rest of its group instead, which is what the design ends a service on:
+        # "Other Storage services". Same query, same list, one page up.
+        if not children and post["parent_id"]:
+            children = [c for c in _kids(post["parent_id"]) if c["id"] != post["id"]]
+            siblings = bool(children)
+    return render_template("post.html", post=post, children=children, siblings=siblings, crumbs=crumbs,
+                           meta=seo.build_meta(post), jsonld=seo.jsonld(post, crumbs))
 
 
-def render_archive(q, title, path, crumbs, description=""):
+def _filters(pt):
+    """The chip row on a type archive: the terms of its first taxonomy, as name + archive URL.
+    # ponytail: the first taxonomy only. Case studies have two (industry, solution) and the design
+    # filters on industry. Add a second row here if anyone wants to filter on both at once."""
+    slugs = (pt or {}).get("taxonomies") or []
+    tax = db.one(db.table("taxonomies").select("*").eq("slug", slugs[0])) if slugs else None
+    if tax is None:
+        return []
+    terms = db.rows(db.table("terms").select("slug,name").eq("taxonomy_id", tax["id"]).order("name"))
+    return [{"name": t["name"], "url": f"/{tax['slug']}/{t['slug']}"} for t in terms]
+
+
+def render_archive(q, title, path, crumbs, description="", pt=None):
     """q: a live select_posts(count='exact') query, already filtered."""
     page = max(request.args.get("page", 1, type=int) or 1, 1)
     result = db.paginate(q.order("menu_order").order("published_at", desc=True), page, 20)
@@ -68,7 +93,18 @@ def render_archive(q, title, path, crumbs, description=""):
         abort(404)
     meta = seo.build_meta(title=title, description=description, path=path, robots="index,follow" if page == 1 else "noindex,follow")
     has_next = page * 20 < result["total"]
-    return render_template("archive.html", title=title, posts=db.with_paths(result["items"]), page=page, has_next=has_next, crumbs=crumbs,
+    # description was built into meta but never reached the template, so archive.html's lead
+    # paragraph could not render and every term archive's prose was invisible.
+    posts = db.with_paths(result["items"])
+    # The services archive is a row per group with its children as tiles beside it, the same shape
+    # the home page's list uses. db.tree() is memoised per request by the header's panel, so this is
+    # the lookup that has already happened.
+    if pt and pt["hierarchical"]:
+        kids = {t["id"]: t["children"] for t in db.tree(pt["slug"])}
+        for p in posts:
+            p["children"] = kids.get(p["id"], [])
+    return render_template("archive.html", title=title, posts=posts, page=page, has_next=has_next, crumbs=crumbs,
+                           description=description, pt=pt, filters=_filters(pt),
                            meta=meta, jsonld=seo.jsonld(crumbs=crumbs))
 
 
@@ -103,7 +139,18 @@ def resolve(path):
             q = db.live(db.select_posts(count="exact")).eq("post_type_id", pt["id"])
             if pt["hierarchical"]:
                 q = q.is_("parent_id", "null")
-            return render_archive(q, pt["name"], full, [("Home", "/"), (pt["name"], full)])
+            return render_archive(q, pt["name"], full, [("Home", "/"), (pt["name"], full)], pt=pt)
+        # Checkout is a page, not a modal: the public site ships no JavaScript. Handled here rather
+        # than as its own rule, which would have to out-rank the catch-all.
+        # ponytail: "checkout" is a reserved last segment, so a product slugged "checkout" would be
+        # unreachable. Nothing is.
+        if segs[-1] == "checkout" and len(segs) > 1:
+            product = _live_post(pt, segs[-2])
+            if product is None or product["path"] != full.rsplit("/", 1)[0] or (product["meta"] or {}).get("price") in (None, ""):
+                abort(404)
+            return render_template("checkout.html", post=product, crumbs=crumbs_for(product) + [("Checkout", full)],
+                                   meta=seo.build_meta(title=f"Checkout — {product['title']}", path=full, robots="noindex,nofollow"),
+                                   jsonld=[])
         post = _live_post(pt, segs[-1])
         if post is not None and post["path"] == full:
             return render_post(post)
@@ -301,7 +348,8 @@ def api_create_lead():
 
 @api.post("/payments/checkout")
 def api_checkout():
-    b = request.get_json(silent=True) or {}
+    b = request.get_json(silent=True) if request.is_json else request.form.to_dict()
+    b = b or {}
     product_type = db.post_type(slug="product") or abort(404, "product not found")
     product = db.one(db.live(db.table("posts").select("*")).eq("post_type_id", product_type["id"]).eq("id", int(b.get("product_id") or 0)))
     if product is None:
@@ -316,6 +364,8 @@ def api_checkout():
     payment = db.insert("payments", {"provider": gateway().name, "post_id": product["id"], "lead_id": lead["id"], "amount": meta["price"],
                                      "currency": str(meta.get("currency") or "INR")[:3]})
     result = gateway().create_checkout(payment)
+    if not request.is_json:  # a browser posting the checkout page's form follows the gateway
+        return redirect(result.get("redirect_url") or "/", 303)
     return jsonify({"payment_id": payment["id"], "status": payment["status"], **result}), 201
 
 

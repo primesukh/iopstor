@@ -226,6 +226,26 @@ def get_media(pk):
     return _cached(f"media_{pk}", lambda: one(table("media").select("*").eq("id", pk))) if pk else None
 
 
+def admin_counts():
+    """{post-type slug: n} for the admin sidebar, plus "_leads" = new leads. One query over posts,
+    counted in Python: PostgREST has no GROUP BY, and one exact-count call per type would be eight
+    round trips on every admin page.
+    # ponytail: reads every post's type id per admin page. Swap for a counts view past a few thousand."""
+    def load():
+        seen = {}
+        for r in rows(table("posts").select("post_type_id").limit(5000)):
+            seen[r["post_type_id"]] = seen.get(r["post_type_id"], 0) + 1
+        out = {pt["slug"]: seen.get(pt["id"], 0) for pt in post_types()}
+        out["_leads"] = table("leads").select("id", count="exact").eq("status", "new").limit(1).execute().count or 0
+        return out
+    return _cached("admin_counts", load)
+
+
 def get_menu(slug):
     m = one(table("menus").select("*").eq("slug", slug))
     return m["items"] if m else []
+
+
+def set_menu(slug, items):
+    """The write side of get_menu(), so /admin/menus keeps every query in this module."""
+    table("menus").upsert({"slug": slug, "name": slug.title(), "items": items}, on_conflict="slug").execute()

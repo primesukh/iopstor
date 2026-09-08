@@ -1,16 +1,32 @@
+{# kind decides the skin as well as the routing: a quote form is the dark panel from the Contact
+   page, a career form is the grey one from Careers, a contact form the plain white card. An equality test, so nothing typed reaches a
+   class. Anything posted that /api/v1/leads does not know by name lands in leads.data, which is how
+   "interested in" and "number of users" are stored without a migration. #}
 <section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
-  {% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}
   {% if request.args.get('sent') %}<div class="notice">Thank you — we have received your message and will get back to you shortly.</div>{% endif %}
-  <form class="lead-form" method="post" action="/api/v1/leads">
+  <form class="lead-form{{ ' cf-dark' if data.kind == 'quote' }}{{ ' cf-grey' if data.kind == 'career' }}" method="post" action="/api/v1/leads">
+    {% if data.heading or edit %}<h2 class="form-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}
     <input type="hidden" name="kind" value="{{ data.kind }}">
     <input type="hidden" name="back" value="{{ request.path }}">
     {% if request.args.get('product') %}<input type="hidden" name="product" value="{{ request.args.get('product') }}"><p class="post-meta">About: <strong>{{ request.args.get('product') }}</strong></p>{% endif %}
     <input type="text" name="website" tabindex="-1" autocomplete="off" style="display:none" aria-hidden="true">
-    <label>Name <input name="name" required></label>
-    <label>Email <input type="email" name="email" required></label>
-    <label>Phone <input name="phone"></label>
-    <label>Company <input name="company"></label>
+    <div class="field-grid">
+      <label>Name <input name="name" required></label>
+      <label>Company <input name="company"></label>
+      <label>Email <input type="email" name="email" required></label>
+      <label>Phone <input name="phone"></label>
+    </div>
+    {% if data.kind == 'quote' %}<label>I am interested in
+      <select name="interest">
+        <option value="">Please choose</option>
+        <option>Storage (NAS / DAS / SAS)</option>
+        <option>Hyper-converged (Proxmox / VMware)</option>
+        <option>Private cloud / Work from home</option>
+        <option>On-prem AI servers</option>
+        <option>Software (SQL Server / Tally / SAP)</option>
+      </select></label>
+    <label>Number of users <input type="number" name="users" min="1" inputmode="numeric"></label>{% endif %}
     <label>Message <textarea name="message"></textarea></label>
-    <button type="submit" class="btn">Send message</button>
+    <button type="submit" class="btn">{{ 'Send request' if data.kind == 'quote' else 'Send message' }}</button>
   </form>
 </div></section>

@@ -1,20 +1,46 @@
 {% extends "admin/base.html" %}{% block title %}Media{% endblock %}
 {% block content %}
-<h1>Media <small>{{ result.total }}</small></h1>
-<form method="post" enctype="multipart/form-data" class="card toolbar">
-  <input type="hidden" name="csrf" value="{{ csrf }}">
-  <div><label>File <small>(jpg, png, webp, gif, svg, pdf)</small> <input type="file" name="file" required></label></div>
-  <div style="flex:1"><label>Alt text <input type="text" name="alt"></label></div>
-  <div><button type="submit">Upload</button></div>
-</form>
-<div class="cards">
-{% for m in result['items'] %}
-  <div class="card">
-    {% if m.mime.startswith('image/') %}<a href="{{ m.url }}" target="_blank"><img src="{{ m.url }}" alt="{{ m.alt }}" style="max-width:100%;max-height:120px"></a>{% else %}<a href="{{ m.url }}" target="_blank">{{ m.mime }}</a>{% endif %}
-    <p><strong>#{{ m.id }}</strong> {{ m.filename }}<br><small>{{ (m.size/1024)|round(1) }} KB · {{ m.alt or 'no alt' }}</small></p>
-    <form method="post" action="{{ url_for('admin_ui.media_delete', pk=m.id) }}" onsubmit="return confirm('Delete this file?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="secondary">Delete</button></form>
+{% set sel = result['items'] | selectattr('id', 'equalto', request.args.get('pick', 0)|int) | first %}
+<div class="adm-head"><div><h1>Media <small>{{ result.total }}</small></h1>
+  <p class="page-sub">Pictures and PDFs you can use anywhere on the site.</p></div></div>
+<div class="media-grid">
+  <div>
+    <form method="post" enctype="multipart/form-data" class="drop-zone">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <p class="dz-title">Choose files to upload</p>
+      <p class="dz-hint">JPG, PNG, SVG, PDF &middot; up to 25 MB</p>
+      <p><input type="file" name="file" required></p>
+      <p><label>Alt text <input type="text" name="alt" placeholder="What is in the picture?"></label></p>
+      <p><button type="submit">Upload</button></p>
+    </form>
+    <div class="tiles-m">
+      {% for m in result['items'] %}
+      <a class="m-tile{{ ' on' if sel and sel.id == m.id }}" href="?page={{ page }}&amp;pick={{ m.id }}">
+        <span class="m-prev">{% if m.mime.startswith('image/') %}<img src="{{ m.url }}" alt="{{ m.alt }}" loading="lazy">{% else %}<span class="m-pdf">PDF</span>{% endif %}</span>
+        <span class="m-meta"><span class="m-name">{{ m.filename }}</span>
+          <span class="m-sub">{{ (m.size/1024)|round(1) }} KB
+            <span class="{{ 'ok' if m.alt else 'no' }}">{{ 'alt ✓' if m.alt else 'no alt' }}</span></span></span>
+      </a>
+      {% else %}<p class="empty-box">No uploads yet.</p>{% endfor %}
+    </div>
+    <p class="pager">{% if page > 1 %}<a class="btn secondary" href="?page={{ page-1 }}">Previous</a>{% endif %} {% if has_next %}<a class="btn secondary" href="?page={{ page+1 }}">Next</a>{% endif %}</p>
   </div>
-{% else %}<p class="muted">No uploads yet.</p>{% endfor %}
+  <aside class="m-panel">
+    {% if sel %}
+    <span class="m-big">{% if sel.mime.startswith('image/') %}<img src="{{ sel.url }}" alt="{{ sel.alt }}">{% else %}<span class="m-pdf">PDF</span>{% endif %}</span>
+    <p class="m-title">{{ sel.filename }}</p>
+    <p class="muted">{{ sel.mime }} &middot; {{ (sel.size/1024)|round(1) }} KB</p>
+    <form method="post" action="{{ url_for('admin_ui.media_alt', pk=sel.id, page=page, pick=sel.id) }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Alt text <textarea name="alt" rows="3">{{ sel.alt }}</textarea></label>
+      <small>What the picture shows, for screen readers and search engines. Leave blank for decoration.</small>
+      <p><button type="submit">Save alt text</button></p>
+    </form>
+    <label>Public address <input class="mono" value="{{ sel.url }}" readonly onclick="this.select()"></label>
+    <form method="post" action="{{ url_for('admin_ui.media_delete', pk=sel.id) }}" onsubmit="return confirm('Delete this file? Anything using it will lose it.')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><p><button type="submit" class="danger">Delete</button></p>
+    </form>
+    {% else %}<p class="muted">Pick a file to see its details and edit its alt text.</p>{% endif %}
+  </aside>
 </div>
-<p>{% if page > 1 %}<a class="btn secondary" href="?page={{ page-1 }}">Previous</a>{% endif %} {% if has_next %}<a class="btn secondary" href="?page={{ page+1 }}">Next</a>{% endif %}</p>
 {% endblock %}

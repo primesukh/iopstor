@@ -19,7 +19,15 @@ from .blocks import BLOCKS, EDITOR, LAYOUTS, at_path, render_blocks, warranty_ac
 from .storage import delete_media, save_upload
 
 ui = Blueprint("admin_ui", __name__, url_prefix="/admin", template_folder="templates")
-SETTING_KEYS = ("site_name", "tagline", "logo_url", "default_og_image", "social_links", "ga_id", "contact_email", "contact_phone", "address", "robots_extra")
+SETTING_KEYS = ("site_name", "tagline", "logo_url", "default_og_image", "social_links", "ga_id", "contact_email",
+                "contact_phone", "address", "robots_extra", "currency", "notify_email")
+# Which settings tab each key sits on. Every key is rendered on every load whatever tab is
+# showing -- the tabs are CSS -- because the save below blanks any key missing from the form.
+SETTING_TABS = (("Site identity", ("site_name", "tagline", "logo_url", "default_og_image")),
+                ("Contact details", ("contact_email", "contact_phone", "address", "social_links")),
+                ("SEO & analytics", ("ga_id", "robots_extra")),
+                ("Payments", ("currency", "notify_email")))
+LEAD_STATUSES = ("new", "in_progress", "handled")
 SEO_KEYS = ("title", "description", "canonical", "robots", "og_image")
 
 
@@ -46,7 +54,11 @@ def _globals():
         return {}
     if "csrf" not in session:
         session["csrf"] = secrets.token_urlsafe(16)
-    return {"csrf": session["csrf"], "admin_user": getattr(g, "user", None), "post_types": db.post_types() if getattr(g, "user", None) else []}
+    user = getattr(g, "user", None)
+    # nav_counts, not "counts": the dashboard view passes its own `counts` and a view's context
+    # shadows a processor's, which would leave the sidebar's leads pill empty on that one page.
+    return {"csrf": session["csrf"], "admin_user": user, "post_types": db.post_types() if user else [],
+            "nav_counts": db.admin_counts() if user else {}}
 
 
 @ui.errorhandler(APIError)
@@ -92,9 +104,13 @@ def logout():
 @ui.get("/")
 @ui_required()
 def dashboard():
-    counts = {t["slug"]: db.table("posts").select("id", count="exact").eq("post_type_id", t["id"]).limit(1).execute().count for t in db.post_types()}
-    new_leads = db.table("leads").select("id", count="exact").eq("status", "new").limit(1).execute().count
-    return render_template("admin/dashboard.html", counts=counts, new_leads=new_leads)
+    # the sidebar already counted everything for this request; reuse it instead of one
+    # exact-count round trip per post type
+    counts = db.admin_counts()
+    recent_leads = db.rows(db.table("leads").select("*").eq("status", "new").order("created_at", desc=True).limit(5))
+    recent_posts = db.rows(db.table("posts").select("id,title,status,updated_at").order("updated_at", desc=True).limit(5))
+    return render_template("admin/dashboard.html", counts=counts, new_leads=counts["_leads"],
+                           recent_leads=recent_leads, recent_posts=recent_posts)
 
 
 @ui.get("/posts")
@@ -339,6 +355,17 @@ def media():
     return render_template("admin/media.html", result=result, page=page, has_next=page * 60 < result["total"])
 
 
+@ui.post("/media/<int:pk>/alt")
+@ui_required()
+def media_alt(pk):
+    """Alt text used to be settable only at upload time, so a picture uploaded without it could
+    never be described. The media panel's Save button posts here."""
+    db.one(db.table("media").select("id").eq("id", pk)) or abort(404)
+    db.update("media", pk, {"alt": (request.form.get("alt") or "")[:300]})
+    flash("Alt text saved.")
+    return redirect(url_for("admin_ui.media", **{k: v for k, v in request.args.items()}))
+
+
 @ui.post("/media/<int:pk>/delete")
 @ui_required()
 def media_delete(pk):
@@ -376,7 +403,10 @@ def leads():
 @ui.post("/leads/<int:pk>/status")
 @ui_required()
 def lead_status(pk):
-    db.update("leads", pk, {"status": "handled" if request.form.get("status") == "handled" else "new"})
+    # a whitelist, not a toggle: the design has three tabs, and leads.status is a plain varchar
+    # so anything posted would otherwise be stored verbatim.
+    want = request.form.get("status")
+    db.update("leads", pk, {"status": want if want in LEAD_STATUSES else "new"})
     return redirect(url_for("admin_ui.leads", **{k: v for k, v in request.args.items()}))
 
 
@@ -429,6 +459,13 @@ def warranty():
     if s := request.args.get("q"):
         s = s.replace(",", " ").replace("(", " ").replace(")", " ")  # PostgREST's or_ is comma/paren-delimited
         q = q.or_(f"serial.ilike.%{s}%,customer_name.ilike.%{s}%,email.ilike.%{s}%")
+    # In warranty / Expired is the same comparison the public page and warranty_active() make:
+    # expiry_date against today. Nothing is stored, so the tabs cannot drift from the badge.
+    today = date.today().isoformat()
+    if request.args.get("state") == "in":
+        q = q.gte("expiry_date", today)
+    elif request.args.get("state") == "out":
+        q = q.lt("expiry_date", today)
     page = max(request.args.get("page", 1, type=int) or 1, 1)
     result = db.paginate(q.order("id", desc=True), page, 50)
     edit_id = request.args.get("edit", type=int)
@@ -447,6 +484,44 @@ def warranty_delete(pk):
     return redirect(url_for("admin_ui.warranty", q=request.args.get("q"), page=request.args.get("page")))
 
 
+def menu_items(labels, urls, levels):
+    """Flat form rows -> the nested [{label, url, children}] shape db.get_menu() returns.
+    A row marked level 1 joins the item above it; one at level 1 with nothing above it is promoted
+    rather than dropped, and a row with no label is skipped so an emptied row deletes itself."""
+    items = []
+    for label, url, level in zip(labels, urls, levels):
+        label, url = label.strip()[:100], url.strip()[:500]
+        if not label:
+            continue
+        if level == "1" and items:
+            items[-1].setdefault("children", []).append({"label": label, "url": url})
+        else:
+            items.append({"label": label, "url": url})
+    return items
+
+
+@ui.route("/menus", methods=["GET", "POST"])
+@ui_required("admin")
+def menus():
+    """Flat rows plus a level select, which is how the nested [{label, url, children}] shape
+    db.get_menu() returns is built back up. One level only -- that is all base.html renders.
+    The level is a <select>, not a checkbox: an unchecked box posts nothing, so getlist() would
+    come back short and every row after the first unticked one would shift up a place."""
+    slug = "footer" if request.args.get("slug") == "footer" else "header"
+    if request.method == "POST":
+        db.set_menu(slug, menu_items(request.form.getlist("label"), request.form.getlist("url"),
+                                     request.form.getlist("level")))
+        flash(f"{slug.title()} menu saved.")
+        return redirect(url_for("admin_ui.menus", slug=slug))
+    # flatten for the form: a parent, then each of its children marked one level in
+    flat = []
+    for i in db.get_menu(slug):
+        flat.append({"label": i.get("label", ""), "url": i.get("url", ""), "level": 0})
+        for c in i.get("children") or []:
+            flat.append({"label": c.get("label", ""), "url": c.get("url", ""), "level": 1})
+    return render_template("admin/menus.html", slug=slug, rows=flat)
+
+
 @ui.route("/settings", methods=["GET", "POST"])
 @ui_required("admin")
 def settings():
@@ -461,7 +536,9 @@ def settings():
         return redirect(url_for("admin_ui.settings"))
     s = db.settings()
     s = {**s, "social_links": "\n".join(s.get("social_links") or [])}
-    return render_template("admin/settings.html", s=s, keys=SETTING_KEYS)
+    from .payments import gateway
+    return render_template("admin/settings.html", s=s, keys=SETTING_KEYS, tabs=SETTING_TABS,
+                           provider=gateway().name)
 
 
 @ui.route("/users", methods=["GET", "POST"])

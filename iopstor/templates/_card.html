@@ -1,0 +1,34 @@
+{# One card, shared by the post_list block, the archives and a page's child list — the same snippet
+   used to be copied into all three. The parts a post type does not want are switched off in
+   site.css from the pl-<slug> on the section, so this stays one shape.
+   media_url is an app-level Jinja global, so the macro reaches it without `with context`.
+
+   actions=true is what an archive passes. Three types answer it with a button of their own — a
+   product's Buy, a datasheet's Download, a service's child tiles — and a card that holds a link
+   cannot itself be one, so those become a <div> with the title linked instead. Everywhere else,
+   and for every other type, the whole card stays the single <a> it has always been. #}
+{% set MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] %}
+{% macro card(p, n=0, actions=false) -%}
+{%- set m = p.meta or {} -%}
+{%- set act = actions and p.post_type.slug in ('product', 'datasheet', 'service') -%}
+{%- set mo = m.start_date[5:7]|int if m.start_date else 0 -%}
+{% if act %}<div class="card">{% else %}<a class="card" href="{{ p.path }}">{% endif %}
+  {%- if p.post_type.slug == 'partner' and m.logo_media_id %}<span class="card-img"><img src="{{ media_url(m.logo_media_id) }}" alt="{{ p.title }}" loading="lazy"></span>
+  {%- elif p.featured_media %}<span class="card-img"><img src="{{ p.featured_media.url }}" alt="{{ p.featured_media.alt or '' }}" loading="lazy"></span>
+  {%- else %}<span class="card-img card-img-empty"></span>{% endif %}
+  {%- if n %}<span class="card-n">{{ '%02d' % n }}</span>{% endif %}
+  {#- an event leads with the date as a tile, a datasheet with the PDF mark: both are inert markup
+      until the pl-<slug> rule switches them on. #}
+  {%- if p.post_type.slug == 'event' and mo %}<span class="card-date"><b>{{ m.start_date[:4] }}</b><i>{{ MONTHS[mo - 1] }}</i></span>{% endif %}
+  {%- if p.post_type.slug == 'datasheet' %}<span class="card-pdf" aria-hidden="true">PDF</span>{% endif %}
+  {%- if p.terms %}<span class="chips">{% for t in p.terms %}<span class="chip chip-{{ t.taxonomy.slug }}">{{ t.name }}</span>{% endfor %}</span>{% endif %}
+  {%- if p.post_type.slug == 'post' and p.published_at %}<span class="date">{{ p.published_at[:10] }}</span>{% endif %}
+  <h3>{% if act %}<a href="{{ p.path }}">{{ p.title }}</a>{% else %}{{ p.title }}{% endif %}</h3>
+  {%- if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}
+  {%- if p.post_type.slug == 'event' and m.location %}<p class="card-where">{{ m.location }}</p>{% endif %}
+  {%- if p.post_type.slug == 'datasheet' and m.product_family %}<p class="card-where">{{ m.product_family }}</p>{% endif %}
+  {%- if p.children %}<span class="chips chips-kids">{% for c in p.children %}{% if act %}<a class="chip" href="{{ c.path }}">{{ c.title }} &rarr;</a>{% else %}<span class="chip">{{ c.title }}</span>{% endif %}{% endfor %}</span>{% endif %}
+  {%- if act and p.post_type.slug == 'product' and m.get('price') not in (none, '') %}<span class="card-foot"><b>{{ m.get('currency') or 'INR' }} {{ '{:,.0f}'.format(m.price|float) if m.price is number else m.price }}</b><a class="btn" href="{{ p.path }}/checkout">Buy</a></span>{% endif %}
+  {%- if act and p.post_type.slug == 'datasheet' and m.file_media_id %}<span class="card-foot"><a class="btn ghost" href="{{ media_download(m.file_media_id) }}">Download</a></span>{% endif %}
+{% if act %}</div>{% else %}</a>{% endif %}
+{%- endmacro %}

@@ -1,17 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="wrap">
-  {% if crumbs|length > 1 %}<nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav>{% endif %}
-  <div class="page-head"><h1 class="page-title">{{ title or site.name }}</h1>{% if description %}<p class="lead">{{ description }}</p>{% endif %}</div>
-  <section class="section" style="padding-top:1.5rem">
-    <div class="cards">
-      {% for p in posts %}<a class="card" href="{{ p.path }}">{% if p.post_type.slug == 'post' and p.published_at %}<span class="date">{{ p.published_at[:10] }}</span>{% endif %}<h3>{{ p.title }}</h3>{% if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}</a>
-      {% else %}<p class="lead">Nothing published here yet.</p>{% endfor %}
-    </div>
-    {% if page > 1 or has_next %}<nav class="pagination" aria-label="Pages">
-      {% if page > 1 %}<a class="btn ghost" rel="prev" href="?page={{ page - 1 }}">Previous</a>{% endif %}
-      {% if has_next %}<a class="btn" rel="next" href="?page={{ page + 1 }}">Next</a>{% endif %}
-    </nav>{% endif %}
-  </section>
+{% set slug = pt.slug if pt else '' %}
+{# Two header treatments, alternating for rhythm: the catalogue types get the black band, the
+   reading types (blog, events, datasheets) get the white one. band-dark is the same class the
+   stats block uses, so the heading colours come for free. #}
+{% set dark = slug in ('service', 'case_study', 'partner', 'product') %}
+<div class="arch-head{{ ' band-dark' if dark }}">
+  <div class="wrap">
+    {% if crumbs|length > 1 %}<nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav>{% endif %}
+    <h1 class="page-title">{{ title or site.name }}</h1>
+    {% if description %}<p class="lead">{{ description }}</p>{% endif %}
+    {% if filters %}<nav class="filters" aria-label="Filter">{% for f in filters %}<a class="chip" href="{{ f.url }}">{{ f.name }}</a>{% endfor %}</nav>{% endif %}
+  </div>
 </div>
+<section class="section arch-body pl pl-{{ slug }}"><div class="wrap">
+  {% from "_card.html" import card %}
+  <div class="cards">
+    {% for p in posts %}{{ card(p, loop.index, actions=true) }}
+    {% else %}<p class="lead">Nothing published here yet.</p>{% endfor %}
+  </div>
+  {% if page > 1 or has_next %}<nav class="pagination" aria-label="Pages">
+    {% if page > 1 %}<a class="btn ghost" rel="prev" href="?page={{ page - 1 }}">Previous</a>{% endif %}
+    {% if has_next %}<a class="btn" rel="next" href="?page={{ page + 1 }}">Next</a>{% endif %}
+  </nav>{% endif %}
+</div></section>
 {% endblock %}

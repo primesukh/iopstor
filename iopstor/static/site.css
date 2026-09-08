@@ -31,8 +31,33 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 .wrap{max-width:var(--wrap);margin:0 auto;padding:0 20px}
 .skip{position:absolute;left:-999px}
 .skip:focus{left:20px;top:12px;background:var(--white);color:var(--ink);padding:10px 14px;border-radius:6px;z-index:100}
-.eyebrow{font:600 13px/1.4 var(--body);text-transform:uppercase;letter-spacing:.12em;color:var(--blue);margin:0 0 12px}
-@keyframes drop{from{opacity:0;transform:translateY(-8px)}}
+.eyebrow{font:600 13px/1 var(--body);text-transform:uppercase;letter-spacing:.12em;color:var(--blue);margin:0 0 18px}
+@keyframes drop{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slide{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+/* the hero's five, straight from the mock */
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes heroin{from{opacity:0;transform:translateX(40px) scale(.96)}to{opacity:1;transform:translateX(0) scale(1)}}
+@keyframes glow{0%,100%{opacity:.7;transform:scale(1)}50%{opacity:1;transform:scale(1.06)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+/* The dot for the slide showing now is wide and fills blue across its turn; the rest sit small
+   and empty. One loop each, offset by the same delay as the slide it belongs to. */
+@keyframes dot2{0%{width:36px;background-size:0 100%;background-color:var(--line-2)}
+  49.9%{width:36px;background-size:100% 100%;background-color:var(--line-2)}
+  50%,100%{width:14px;background-size:0 100%;background-color:var(--line)}}
+@keyframes dot3{0%{width:36px;background-size:0 100%;background-color:var(--line-2)}
+  33.2%{width:36px;background-size:100% 100%;background-color:var(--line-2)}
+  33.3%,100%{width:14px;background-size:0 100%;background-color:var(--line)}}
+/* One slide in, held, out again -- the mock's iopSlideIn + iopSlideOut folded into one loop so the
+   rotation needs no script. The percentages are the slide's share of the whole cycle, so a set is
+   needed per slide count.
+   ponytail: two counts styled, 2 and 3. A fourth picture needs a fourth @keyframes. */
+@keyframes slides2{0%{opacity:0;transform:translateX(60px) scale(.94)}
+  3.3%,45%{opacity:1;transform:translateX(0) scale(1)}
+  50%,100%{opacity:0;transform:translateX(-60px) scale(.94)}}
+@keyframes slides3{0%{opacity:0;transform:translateX(60px) scale(.94)}
+  2.2%,30%{opacity:1;transform:translateX(0) scale(1)}
+  33.3%,100%{opacity:0;transform:translateX(-60px) scale(.94)}}
 
 /* --- header ---------------------------------------------------------------------------------
    The mega panel is a child of the Services <li> and absolutely positioned against .site-header
@@ -41,23 +66,25 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
    the 1200px column, while the Company drop-down anchors to its own item. Opening is plain
    :hover/:focus-within; only the group/pane switch needs :has(), and without it the panel still
    opens showing the first group. */
-.site-header{background:var(--black);color:var(--white);position:sticky;top:0;z-index:50;border-bottom:1px solid var(--line-dark)}
+.site-header{background:var(--white);color:var(--ink);position:sticky;top:0;z-index:50;border-bottom:1px solid var(--line)}
 .site-header .wrap{display:flex;align-items:center;gap:24px;min-height:64px}
-.brand{display:flex;align-items:center;gap:8px;color:var(--white);text-decoration:none;font:800 20px/1 var(--head);letter-spacing:-.01em}
-.brand img{height:22px;width:auto;filter:brightness(0) invert(1)}
+.brand{display:flex;align-items:center;gap:8px;color:var(--ink);text-decoration:none;font:800 20px/1 var(--head);letter-spacing:-.01em}
+/* The header is white, so its logo stays the client's own artwork. Only the footer, which is
+   still the dark band, knocks the PNG out to white. */
+.brand img{height:22px;width:auto}
 .nav-toggle{display:none}
-.nav-toggle-label{display:none;margin-left:auto;width:44px;height:44px;align-items:center;justify-content:center;border:1px solid var(--line-dark-2);border-radius:6px;cursor:pointer;font-size:18px;line-height:1}
+.nav-toggle-label{display:none;margin-left:auto;width:44px;height:44px;align-items:center;justify-content:center;border:1px solid var(--line-2);border-radius:8px;cursor:pointer;color:var(--ink);font-size:18px;line-height:1}
 .site-nav{margin-left:auto}
 .site-nav>ul{list-style:none;margin:0;padding:0;display:flex;align-items:center}
 .site-nav>ul>li{position:relative}
 .site-nav>ul>li.nav-mega{position:static}
-.site-nav>ul>li>a{color:#e6e9ef;text-decoration:none;font:500 15px/1 var(--body);padding:22px 14px;display:block;transition:color .15s}
+.site-nav>ul>li>a{color:var(--ink);text-decoration:none;font:500 15px/1 var(--body);padding:22px 14px;display:block;transition:color .15s}
 .site-nav>ul>li>a:hover{color:var(--blue)}
 .site-nav .nav-cta{margin-left:10px}
 .site-nav .nav-cta>a{background:var(--blue);color:var(--white);font-weight:600;padding:10px 18px;border-radius:6px}
 .site-nav .nav-cta>a:hover{background:var(--blue-hover);color:var(--white)}
 /* the plain drop-down (Company) */
-.site-nav .sub{display:none;position:absolute;top:100%;left:0;list-style:none;margin:0;width:220px;background:var(--white);border:1px solid var(--line);border-radius:10px;padding:10px;box-shadow:0 30px 60px rgba(10,13,18,.25);animation:drop .2s cubic-bezier(.2,.7,.2,1)}
+.site-nav .sub{display:none;position:absolute;top:100%;right:0;list-style:none;margin:0;width:220px;background:var(--white);border:1px solid var(--line);border-radius:10px;padding:10px;box-shadow:0 30px 60px rgba(10,13,18,.25);animation:drop .2s cubic-bezier(.2,.7,.2,1)}
 .site-nav li:hover>.sub,.site-nav li:focus-within>.sub{display:block}
 .site-nav .sub a{display:block;color:var(--ink);text-decoration:none;font:400 15px/1.3 var(--body);padding:9px 12px;border-radius:6px}
 .site-nav .sub a:hover{background:var(--grey);color:var(--blue-hover)}
@@ -73,6 +100,7 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 .mega-g:hover{background:var(--grey);color:var(--black)}
 .mega-g:hover .arrow{opacity:1}
 .mega-panes{padding:28px 0 28px 36px}
+.mega-panes>.mega-pane{animation:fade .2s ease-out both}
 .mega-pane h3{font:800 22px/1.2 var(--head);margin:0 0 6px;color:var(--black)}
 .mega-pane .blurb{font:400 14.5px/1.5 var(--body);color:var(--muted);max-width:560px;margin:0 0 18px}
 .mega-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
@@ -104,13 +132,14 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 
 @media(max-width:960px){
   .nav-toggle-label{display:flex}
-  .site-nav{display:none;position:absolute;left:0;right:0;top:64px;background:var(--black-2);padding:10px 20px 20px;max-height:calc(100vh - 64px);overflow:auto}
+  .site-nav{display:none;position:absolute;left:0;right:0;top:64px;background:var(--white);border-bottom:1px solid var(--line);padding:10px 20px 20px;max-height:calc(100vh - 64px);overflow:auto}
+  .nav-toggle:checked~.site-nav{animation:slide .25s ease-out both}
   .nav-toggle:checked~.site-nav{display:block}
   .site-nav>ul{flex-direction:column;align-items:stretch}
-  .site-nav>ul>li>a{padding:14px 0;font:600 16px/1.3 var(--body);color:var(--white);border-bottom:1px solid var(--line-dark)}
-  .site-nav .sub{display:block;position:static;width:auto;background:transparent;border:0;box-shadow:none;padding:0 0 8px;animation:none}
-  .site-nav .sub a{color:var(--muted-dark);padding:10px 16px}
-  .site-nav .sub a:hover{background:transparent;color:var(--white)}
+  .site-nav>ul>li>a{padding:14px 0;font:600 16px/1.3 var(--body);color:var(--ink);border-bottom:1px solid var(--line)}
+  .site-nav .sub{display:block;position:static;right:auto;width:auto;background:transparent;border:0;box-shadow:none;padding:0 0 8px;animation:none}
+  .site-nav .sub a{color:var(--muted);padding:10px 16px}
+  .site-nav .sub a:hover{background:transparent;color:var(--blue)}
   .site-nav .nav-cta{margin:12px 0 0}
   .site-nav .nav-cta>a{text-align:center;padding:14px 18px}
   /* the panel collapses to a plain list: no group column, every pane shown, no blurbs */
@@ -119,13 +148,13 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
   .mega-groups{display:none}
   .mega-panes{padding:0 0 8px}
   .mega-panes>.mega-pane{display:block}
-  .mega-pane h3{font:600 15px/1.3 var(--body);color:var(--muted-dark-2);margin:12px 0 4px}
+  .mega-pane h3{font:600 15px/1.3 var(--body);color:var(--muted);margin:12px 0 4px}
   .mega-pane .blurb{display:none}
   .mega-tiles{grid-template-columns:1fr;gap:0}
-  .mega-tiles a{background:transparent;border:0;color:var(--muted-dark);padding:10px 16px}
-  .mega-tiles a:hover{background:transparent;color:var(--white)}
-  .mega-foot{display:flex;border-top:1px solid var(--line-dark);padding:12px 0 0}
-  .mega-foot a{color:var(--white)}
+  .mega-tiles a{background:transparent;border:0;color:var(--muted);padding:10px 16px}
+  .mega-tiles a:hover{background:transparent;color:var(--blue)}
+  .mega-foot{display:flex;border-top:1px solid var(--line);padding:12px 0 0}
+  .mega-foot a{color:var(--ink)}
 }
 
 /* --- footer ---------------------------------------------------------------------------------- */
@@ -134,39 +163,98 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 .site-footer h4{font:700 13px/1.3 var(--head);text-transform:uppercase;letter-spacing:.1em;color:var(--white);margin:0 0 14px}
 .site-footer p{margin:0 0 10px;font-size:14px;line-height:1.6}
 .site-footer .brand{margin-bottom:14px;font-size:18px}
+.site-footer .brand img{height:20px;filter:brightness(0) invert(1)}
 .site-footer a{color:var(--muted-dark);text-decoration:none;font-size:14px}
 .site-footer a:hover{color:var(--white)}
 .site-footer ul{list-style:none;padding:0;margin:0}
 .site-footer li{margin:0 0 10px}
 .site-footer .q{color:var(--blue)}.site-footer .q:hover{color:var(--blue-light)}
-.site-footer .legal{border-top:1px solid var(--line-dark);margin-top:36px;padding-top:20px;font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.site-footer .legal{border-top:1px solid var(--line-dark);margin-top:40px;padding-top:20px;font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
 
 /* page chrome */
 main{min-height:60vh}
-.breadcrumb{font-size:.9rem;color:var(--muted);padding:1rem 0 0}
-.breadcrumb ol{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:.35rem}
-.breadcrumb li+li::before{content:"›";margin-right:.35rem;color:#94a3b8}
-.breadcrumb a{color:var(--muted);text-decoration:none}.breadcrumb a:hover{color:var(--accent-2)}
-.page-head{padding:1.5rem 0 0}
-.page-title{margin:0 0 .5rem;font-size:2.4rem}
-.lead{font-size:1.15rem;color:var(--muted);margin:0 0 1rem;max-width:760px}
-.post-meta{color:var(--muted);font-size:.9rem;margin:0 0 1.5rem}
-.section{padding:3rem 0}
-.section-title{font-size:1.9rem;margin:0 0 1.5rem}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.5rem;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem}
+.breadcrumb{font-size:13px;color:var(--muted);padding:0}
+.breadcrumb ol{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap}
+.breadcrumb li+li::before{content:"/";margin:0 8px;color:var(--line-2)}
+.breadcrumb a{color:var(--muted);text-decoration:none}.breadcrumb a:hover{color:var(--blue)}
+.breadcrumb li:last-child{color:var(--black)}
+.page-head{padding:48px 0 56px}
+.page-title{margin:0 0 14px;font-size:clamp(34px,4.5vw,52px);line-height:1.05}
+.lead{font-size:18px;line-height:1.6;color:var(--muted);margin:0 0 20px;max-width:var(--w,640px)}
+.post-meta{color:var(--muted);font-size:14px;margin:0 0 20px}
+.btns{display:flex;gap:12px;flex-wrap:wrap;margin:0}
+
+/* A section is a full-width band. band-dark and band-blue are written by the block's own template
+   (stats, cta), never by an editor, so a row of figures is the black strip wherever it is used. */
+.section{padding:80px 0}
+.band-dark{background:var(--black);color:var(--muted-dark)}
+.band-dark h1,.band-dark h2,.band-dark h3{color:var(--white)}
+.band-blue{background:var(--blue);color:var(--white)}
+.band-blue h2{color:var(--white)}
+/* The band a section sits on, chosen per section under its own gear (blocks.py section_class).
+   After .band-* on purpose: both are one class on the same element, so a tone an editor picked
+   beats the block's own default on source order. The design alternates white and grey down a
+   page for rhythm, which is why this is a setting and not baked into each block. */
+.t-grey{background:var(--grey)}
+.t-blue{background:var(--blue);color:var(--white)}
+.t-blue h2,.t-blue h3{color:var(--white)}
+.t-dark{background:var(--black);color:var(--muted-dark)}
+.t-dark h1,.t-dark h2,.t-dark h3{color:var(--white)}
+.t-dark .card{background:var(--black-3);border-color:var(--line-dark)}
+.t-dark .card p{color:var(--muted-dark)}
+.t-dark .chip{border-color:var(--line-dark-2);color:var(--muted-dark)}
+.t-dark .chip-industry{background:rgba(0,140,247,.15);color:var(--blue-light)}
+.t-dark a.card:hover{border-color:var(--blue)}
+.section-title{font-size:clamp(28px,3.5vw,40px);margin:0 0 24px}
+/* the row above a grid: eyebrow and title left, "All services →" right */
+.sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin:0 0 28px}
+.sec-head>div{flex:1 1 320px;min-width:0}   /* or a long title's max-content basis wraps the link onto its own row */
+.sec-head .section-title{margin:0}
+.sec-head .eyebrow{margin:0 0 10px}
+.sec-link{font:600 15px/1 var(--body);color:var(--black);text-decoration:none;white-space:nowrap}
+.sec-link:hover{color:var(--blue)}
+.band-dark .sec-link{color:var(--white)}.band-dark .sec-link:hover{color:var(--blue)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+.card{background:var(--white);border:1px solid var(--line);border-radius:12px;padding:28px}
 /* columns block. The widths go in --cols (not straight into grid-template-columns) so the stacking
    media query below can win without !important beating an inline style. A nested block keeps its own
    <section class="section"><div class="wrap">, so both are neutralised inside a column. */
-.columns{display:grid;gap:1.75rem;grid-template-columns:var(--cols,repeat(auto-fit,minmax(240px,1fr)))}
+.columns{display:grid;gap:48px;grid-template-columns:var(--cols,repeat(auto-fit,minmax(240px,1fr)))}
+/* a picture beside words lines up on their centre; three text columns still top-align */
+.columns:has(figure){align-items:center}
 @media(max-width:800px){.columns{grid-template-columns:1fr}}
 .column>.section{padding:0}
-.column>.section+.section{padding-top:1.5rem}
+/* ...unless it carries a tone. A coloured box beside a column of words is a panel in the design
+   (the configuration card on a service page), so it keeps the padding and takes the card radius. */
+.column>.section.t-grey,.column>.section.t-dark,.column>.section.t-blue{padding:28px;border-radius:12px;align-self:start}
+.column>.section+.section{padding-top:24px}
 .column .wrap{max-width:none;padding:0}
-.card h3{margin:0 0 .5rem;font-size:1.15rem}.card p{margin:0;color:var(--muted)}
-.card .date{display:block;font-size:.85rem;color:var(--muted);margin-bottom:.4rem}
-a.card{text-decoration:none;color:inherit;transition:transform .15s,box-shadow .15s;display:block}
-a.card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(15,27,45,.12)}
+.card h3{margin:0 0 8px;font-size:20px}
+.card p{margin:0;color:var(--muted);font-size:15px;line-height:1.6}
+.card .date{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+.card-icon{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;background:rgba(0,140,247,.12);font-size:18px;margin:0 0 14px}
+/* "01", "02" ... is a counter in the design, not an icon: no tile, and the deck tightens around it. */
+.card-icon.num{display:block;width:auto;height:auto;border-radius:0;background:none;font:700 12px/1 var(--mono);color:var(--blue)}
+.cards:has(.card-icon.num){gap:16px}
+.cards:has(.card-icon.num) .card{padding:24px}
+.cards:has(.card-icon.num) .card h3{font-size:18px;line-height:1.25}
+.cards:has(.card-icon.num) .card p{font-size:14.5px;line-height:1.55}
+a.card{text-decoration:none;color:inherit;display:block;transition:border-color .15s,transform .15s}
+a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
+/* Everything that moves, stopped in one place. The blanket `animation-duration:.01ms` the mock
+   uses would leave every hero slide on its final frame, which is the hidden one -- so the slides
+   are stood down explicitly and the first picture is simply left showing. */
+@media(prefers-reduced-motion:reduce){
+  a.card:hover{transform:none}
+  .hero-text,.hero-media,.hero-media::before,.hero-media>img,.hero-slides,.site-nav .sub,.mega,.mega-panes>.mega-pane,.nav-toggle:checked~.site-nav{animation:none}
+  .hero-slide{animation:none;opacity:0}
+  .hero-slide:first-child{opacity:1}
+  .hero-dots{display:none}
+}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.chips-kids{margin:12px 0 0}
+.chip{font-size:12.5px;line-height:1.4;padding:4px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}
 /* Four buttons. Each variant names its own colour: .btn paints white on blue, so a variant that
    drops the fill is white-on-white until it says otherwise, and each needs its own :hover for the
    same reason — .btn:hover and .btn.ghost have equal specificity, so the fill would come back. */
@@ -174,16 +262,23 @@ a.card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(15,27,45,.12
 .btn:hover{background:var(--blue-hover);color:var(--white)}
 .btn.dark{background:var(--black)}
 .btn.dark:hover{background:var(--blue)}
+/* on the blue band the generic dark-button hover IS the background, so the button vanishes under
+   the pointer. There it goes the other way, which is what the design does. */
+.band-blue .btn.dark:hover,.t-blue .btn.dark:hover{background:var(--white);color:var(--black)}
 .btn.ghost{background:transparent;color:var(--black);border-color:var(--line-2)}
 .btn.ghost:hover{background:transparent;color:var(--black);border-color:var(--black)}
 .btn.ghost-dark{background:transparent;color:var(--white);border-color:var(--line-dark-2)}
 .btn.ghost-dark:hover{background:transparent;color:var(--white);border-color:var(--white)}
 @media(max-width:700px){.btn{min-height:44px;padding:15px 22px}}   /* the 44px touch target */
-.pagination{display:flex;gap:.75rem;margin:2rem 0}
-.featured{border-radius:var(--radius);margin:1rem 0 1.5rem;width:100%;max-height:440px;object-fit:cover}
-.terms a{display:inline-block;background:#e0f2fe;color:var(--accent-2);padding:.2rem .7rem;border-radius:999px;text-decoration:none;font-size:.85rem;margin:0 .35rem .35rem 0}
-.details{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin:1.5rem 0;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.25rem}
-.details dt{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}.details dd{margin:.1rem 0 0;font-weight:600}
+.pagination{display:flex;gap:12px;margin:40px 0 0}
+.featured{border-radius:12px;margin:0;width:100%;max-height:440px;object-fit:cover}
+.terms a{display:inline-block;background:var(--blue-tint);color:var(--blue-hover);padding:4px 10px;border-radius:999px;text-decoration:none;font-size:13px;margin:0 6px 6px 0}
+/* The meta strip: one tile per field. dl > div > dt + dd is valid HTML5 and is what lets each pair
+   be one grid cell — a flat dl scatters every dt and dd into a cell of its own. */
+.details{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:0;padding:0;background:none;border:0}
+.details>div{background:var(--white);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.details dt{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.details dd{margin:4px 0 0;font-weight:600}
 .error-page{background:var(--black);color:var(--muted-dark);min-height:60vh;display:flex;align-items:center;padding:80px 0}
 .error-page>.wrap{width:100%}   /* a flex item shrink-wraps, and margin:0 auto would then centre it */
 .error-page .code{margin:0;font:800 clamp(80px,16vw,160px)/1 var(--head);color:var(--blue);letter-spacing:-.04em}
@@ -206,65 +301,359 @@ a.card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(15,27,45,.12
    in the theme falls back from it, so an unset section looks exactly as it was designed. The two
    named steps set it here, an exact number of pixels arrives inline from blocks.py section_style(),
    and only w-full also lets the section out of the page's 1200px column. */
-.section>.wrap>*,.hero>.wrap>*{max-width:var(--w,none)}
+/* --w-def is each block's designed measure, declared on the block itself. The shared rule below
+   is (0,2,0) and every block rule is (0,1,0) or (0,1,1), so before this the fallback `none` simply
+   beat .rich-text's 760px, .testimonial's 900px and the rest: a section's measure was only ever
+   whatever --w said, and the designed defaults never applied. Reading --w-def inside the fallback
+   keeps --w the override it is documented to be, and gives the blocks their measure back. */
+.section>.wrap>*,.hero>.wrap>*{max-width:var(--w,var(--w-def,none))}
 .w-wide{--w:100%}
 .w-full{--w:100%}.w-full>.wrap{max-width:none}
 .column{--w:initial}   /* a section inside a column keeps its own measure, not the grid's */
 
-/* blocks */
-.hero{background:linear-gradient(120deg,var(--navy) 0%,#1e3a5f 55%,var(--accent) 160%);color:#fff;padding:5rem 0}
-.hero h1{font-size:2.9rem;margin:0 0 1rem;max-width:var(--w,820px);color:#fff}
-.hero p{font-size:1.25rem;max-width:var(--w,720px);color:#dbeafe;margin:0 0 1.75rem}
-.hero img{margin-top:2rem;border-radius:var(--radius)}
-@media(max-width:700px){.hero{padding:3rem 0}.hero h1{font-size:2.1rem}}
+/* --- blocks ---------------------------------------------------------------------------------
+   One rule-group per type, in the order they appear in BLOCKS. */
+
+/* hero: words left, picture right. .hero-dark is the full-bleed variant, where the picture is a
+   faded backdrop behind the words instead of the art beside them. */
+.hero{position:relative;background:var(--white);border-bottom:1px solid var(--line);padding:72px 0 56px}
+.hero>.wrap{display:grid;gap:40px;align-items:center}
+.hero-split>.wrap{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.hero-text{min-width:0}
+/* Only the hero with art beside it moves. That is the one hero the design animates -- every
+   other screen's opening band is still, and a headline that fades in on every page is a tic. */
+.hero-split .hero-text{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+.hero h1{margin:0 0 20px;font-size:clamp(36px,5vw,60px);line-height:1.05;max-width:var(--w,820px);text-wrap:pretty}
+.hero .lead{max-width:540px;margin-bottom:30px;text-wrap:pretty}
+.hero-media{position:relative;min-width:0;min-height:220px;display:flex;align-items:center;justify-content:center;animation:heroin .8s cubic-bezier(.2,.7,.2,1) both}
+.hero-media::before{content:"";position:absolute;inset:10% 0;border-radius:50%;background:radial-gradient(closest-side,rgba(0,140,247,.16),transparent);animation:glow 5s ease-in-out infinite}
+.hero-media>img{position:relative;display:block;width:100%;max-width:620px;margin-inline:auto;animation:float 6s ease-in-out infinite;filter:drop-shadow(0 30px 40px rgba(10,13,18,.25))}
+/* Several pictures take turns with no JavaScript: every slide runs the same loop over the whole
+   cycle, each one delayed by its own turn. --i and --n arrive inline from the block. */
+.hero-slides{position:relative;width:100%;max-width:620px;aspect-ratio:3/2;margin-inline:auto;animation:float 6s ease-in-out infinite}
+.hero-slide{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:6% 4%;opacity:0;
+  animation:slides3 calc(var(--n) * 4.5s) cubic-bezier(.2,.7,.2,1) calc(var(--i) * 4.5s) infinite both}
+.hero-slides[style*="--n:2"] .hero-slide{animation-name:slides2}
+.hero-slide img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 30px 40px rgba(10,13,18,.25))}
+/* no fill mode on the dot: `both` would hold the first frame through the delay and leave every dot
+   wide until its turn came round. Un-filled, a dot waits at its own 14px base. */
+.hero-dots{position:absolute;left:0;right:0;bottom:-6px;display:flex;align-items:center;justify-content:center;gap:8px}
+.hero-dots span{height:4px;width:14px;border-radius:999px;background-color:var(--line);background-image:linear-gradient(var(--blue),var(--blue));background-repeat:no-repeat;background-size:0 100%;
+  animation:dot3 calc(var(--n) * 4.5s) linear calc(var(--i) * 4.5s) infinite}
+.hero-dots[style*="--n:2"] span{animation-name:dot2}
+.hero-dark{background:var(--black);color:#d1d6de;border-bottom:0;padding:96px 0 80px;overflow:hidden}
+.hero-dark h1{color:var(--white)}
+.hero-dark .lead{color:#d1d6de;max-width:640px}
+.hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.18}
+.hero-dark>.wrap{position:relative}
+@media(max-width:700px){.hero{padding:48px 0 40px}.hero-dark{padding:64px 0 56px}}
+
 /* Prose typed in the admin's document editor. Everything an editor can produce with the
    toolbar needs a rule here, or it falls through to the browser default and looks unfinished. */
-.rich-text{max-width:var(--w,820px)}.rich-text p{margin:0 0 1rem}
-.rich-text h1{font-size:2.1rem;margin:2rem 0 1rem}.rich-text h2{font-size:1.6rem;margin-top:2rem}
-.rich-text h3{font-size:1.3rem;margin:1.6rem 0 .5rem}.rich-text h4{margin:1.3rem 0 .4rem;font-size:1.1rem}
-.rich-text h5{margin:1.2rem 0 .35rem;font-size:1rem}
-.rich-text h6{margin:1.1rem 0 .3rem;font-size:.95rem}
+.rich-text{--w-def:var(--reading);max-width:var(--w,var(--reading));font-size:17px;line-height:1.7;color:var(--ink-2)}
+.rich-text p{margin:0 0 1rem}
+.rich-text h1{font-size:34px;margin:2rem 0 1rem}.rich-text h2{font-size:28px;margin:2.2rem 0 .8rem}
+.rich-text h3{font-size:21px;margin:1.8rem 0 .6rem}.rich-text h4{margin:1.4rem 0 .4rem;font-size:18px}
+.rich-text h5{margin:1.2rem 0 .35rem;font-size:16px}
+.rich-text h6{margin:1.1rem 0 .3rem;font-size:15px}
 .rich-text ul,.rich-text ol{margin:0 0 1rem;padding-left:1.35rem}.rich-text li{margin-bottom:.4rem}
 .rich-text li>ul,.rich-text li>ol{margin:.4rem 0 0}
-.rich-text blockquote{border-left:4px solid var(--accent);margin:1.5rem 0;padding:.75rem 1.25rem;background:var(--card);border-radius:0 8px 8px 0;color:var(--muted)}
+.rich-text blockquote{border-left:3px solid var(--blue);margin:1.5rem 0;padding:.25rem 0 .25rem 1.25rem;font-style:italic;color:var(--muted)}
 .rich-text blockquote p:last-child{margin:0}
-.rich-text table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin:1.5rem 0}
+.rich-text table{width:100%;border-collapse:collapse;background:var(--white);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:1.5rem 0;font-size:15px}
 .rich-text th,.rich-text td{padding:.7rem 1rem;border-bottom:1px solid var(--line);text-align:left}
-.rich-text th{background:#f1f5f9;font-weight:600}.rich-text tr:last-child td{border-bottom:0}
+.rich-text th{background:var(--grey);font-weight:600;color:var(--ink)}.rich-text tr:last-child td{border-bottom:0}
 /* cells only carried a border-bottom, which reads as a list; a real grid needs the column lines too */
 .rich-text th+th,.rich-text td+td{border-left:1px solid var(--line)}
 /* only a table whose columns have been resized is pinned to those widths; the rest still auto-fit */
 .rich-text table:has(colgroup){table-layout:fixed}
-.rich-text img{display:block;margin:1.5rem 0;border-radius:var(--radius)}
+.rich-text img{display:block;margin:1.5rem 0;border-radius:12px}
 .rich-text hr{border:0;border-top:1px solid var(--line);margin:2.5rem 0}
-.rich-text code{background:#f1f5f9;padding:.1rem .35rem;border-radius:4px;font-size:.92em}
+.rich-text code{background:var(--grey);padding:.1rem .35rem;border-radius:4px;font:.92em var(--mono)}
+/* A spec table pasted into prose is a spec table, not a prose table: the element rules above are
+   (0,1,1) and would otherwise keep the white box and the grey header cells. */
+.rich-text table.specs{background:none;border:0;border-radius:0;margin:0 0 1rem;font-size:15px}
+.rich-text .specs th+th,.rich-text .specs td+td{border-left:0}
+/* prose on a dark panel -- the configuration card beside a service page's ZFS list */
+.t-dark .rich-text{color:var(--muted-dark)}
+.t-dark .rich-text .specs th{color:var(--muted-dark)}
+.t-dark .rich-text .foot{margin:14px 0 0;font-size:12px;color:var(--muted-dark-2)}
+.t-dark .rich-text dl.zfs>div{border-top-color:var(--line-dark)}
+.t-dark .rich-text dl.zfs dt{color:var(--white)}
+.t-dark .rich-text dl.zfs dd,.t-dark .rich-text .founders i{color:var(--muted-dark)}
+/* A rich_text block can carry a whole section: its eyebrow, its heading, its list and its button.
+   Each needs to out-specify the element rules above -- `.rich-text h2` is (0,1,1) and would beat a
+   bare `.section-title`. The dash list is the design's feature list: a blue em dash, not a bullet. */
+.rich-text .eyebrow{margin:0 0 10px}
+.rich-text .section-title{margin:0 0 18px;font-size:clamp(28px,3.5vw,40px)}
+.rich-text .page-title{margin:0 0 14px;font-size:clamp(34px,4.5vw,52px);line-height:1.05;color:var(--ink)}
+.rich-text .lead{margin:0 0 24px;max-width:none;font-size:17px;line-height:1.6}
+.rich-text ul.dash{margin:0 0 28px;padding:0;list-style:none;display:grid;gap:10px;color:var(--ink);font-size:15.5px}
+.rich-text ul.dash li{display:flex;gap:12px;margin:0}
+.rich-text ul.dash li::before{content:"\2014";flex:none;color:var(--blue);font-weight:700}
+/* Three more shapes the design draws inside prose, so they need no block of their own: the founder
+   pair on About, the labelled contact list, and the striped box standing in for the map until an
+   embed_html replaces it. Same trusted-staff HTML the dash list uses. */
+.rich-text .founders{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:24px 0 0}
+.rich-text .founders>div{background:var(--grey);border-radius:10px;padding:20px}
+.rich-text .founders .ava{display:block;width:56px;height:56px;border-radius:999px;margin-bottom:12px;background:repeating-linear-gradient(135deg,#dfe4ea 0 6px,#eef1f5 6px 12px)}
+.rich-text .founders b{display:block;font-weight:700;color:var(--black)}
+.rich-text .founders i{display:block;font-style:normal;font-size:14px;color:var(--muted)}
+/* the design's "ZFS features, in plain terms": term and description on one ruled row */
+.rich-text dl.zfs{margin:0;display:grid}
+.rich-text dl.zfs>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:16px;padding:16px 0;border-top:1px solid var(--line)}
+.rich-text dl.zfs dt{font:700 15px/1.4 var(--body);color:var(--black)}
+.rich-text dl.zfs dd{margin:0;font-size:14.5px;line-height:1.55;color:var(--muted)}
+.rich-text dl.contact-dl{display:grid;gap:18px;margin:0 0 32px;font-size:15.5px}
+.rich-text dl.contact-dl dt{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.rich-text dl.contact-dl dd{margin:4px 0 0;color:var(--ink-2);line-height:1.5}
+.rich-text .map-ph{aspect-ratio:16/9;border-radius:12px;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;font:12px/1.5 var(--mono);color:var(--muted);background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)}
 .rich-text>*:first-child{margin-top:0}
-.cta{background:var(--navy);color:#fff;text-align:center;padding:3.5rem 1.5rem;border-radius:var(--radius)}
-.cta h2{margin:0 0 .5rem;color:#fff}.cta p{color:#cbd5e1;margin:0 0 1.5rem}
-.stats{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1rem;text-align:center}
-.stats li{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.5rem}
-.stats strong{display:block;font-size:2.1rem;color:var(--accent-2)}.stats span{color:var(--muted)}
-.faq details{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.9rem 1.2rem;margin-bottom:.6rem}
-.faq summary{cursor:pointer;font-weight:600}.faq details>div{padding-top:.6rem;color:var(--muted)}
-.testimonial{border-left:4px solid var(--accent);margin:0;padding:1.25rem 1.5rem;background:var(--card);border-radius:0 var(--radius) var(--radius) 0;font-size:1.15rem}
-.testimonial p{margin:0}.testimonial footer{margin-top:.6rem;font-size:.95rem;color:var(--muted)}
-figure{margin:0}figure img{border-radius:var(--radius)}figcaption{color:var(--muted);font-size:.9rem;margin-top:.4rem}
-.pdf iframe{width:100%;height:min(80vh,900px);border:1px solid var(--line);border-radius:var(--radius);background:#fff}
-.pdf p{margin:.75rem 0 0}
-.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.75rem}.gallery img{border-radius:8px;width:100%;object-fit:cover;aspect-ratio:4/3}
-.specs{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin:1rem 0}
-.specs th,.specs td{padding:.7rem 1rem;border-bottom:1px solid var(--line);text-align:left}.specs th{width:35%;background:#f1f5f9;font-weight:600}
-.specs caption{caption-side:top;text-align:left;font-weight:700;font-size:1.2rem;margin-bottom:.75rem;color:var(--navy)}
-.lead-form{max-width:var(--w,640px);background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.5rem}
-.lead-form label{display:block;margin:.8rem 0 .25rem;font-weight:600}
-.lead-form input,.lead-form textarea{width:100%;padding:.65rem .75rem;border:1px solid #cbd5e1;border-radius:8px;font:inherit}
-.lead-form textarea{min-height:120px}.lead-form .btn{margin-top:1rem}
-.notice{background:#ecfdf5;border:1px solid #a7f3d0;padding:.8rem 1rem;border-radius:8px;margin-bottom:1rem}
+
+/* image / gallery */
+figure{margin:0}figure img{display:block;width:100%;border-radius:12px}
+figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.gallery img{width:100%;border-radius:8px;object-fit:cover;aspect-ratio:4/3}
+
+/* cta: the blue band, with the words and the button on one row until they will not fit */
+.band-blue.section{padding:64px 0}
+.cta{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.cta h2{margin:0 0 6px;font-size:clamp(26px,3vw,34px)}
+.cta p{margin:0;font-size:17px;color:rgba(255,255,255,.9);max-width:640px}
+
+/* faq */
+.faq details{--w-def:800px;max-width:var(--w,800px);border-top:1px solid var(--line);padding:18px 0}
+.faq summary{display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;font:600 17px/1.4 var(--body);list-style:none}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";flex:none;color:var(--blue);font:700 20px/1 var(--body)}
+.faq details[open] summary::after{content:"\2212"}
+.faq details>div{padding-top:12px;color:var(--muted);font-size:15.5px;line-height:1.7}
+
+/* stats: always inside .band-dark, so a figure is white on black */
+.stats{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px}
+.stats li{border-left:2px solid var(--blue);padding-left:18px}
+.stats strong{display:block;font:800 40px/1 var(--head);color:var(--white);letter-spacing:-.02em}
+.stats span{display:block;margin-top:8px;font-size:14px;line-height:1.5;color:var(--muted-dark)}
+.band-dark.section{padding:40px 0}
+
+/* testimonial */
+.testimonial{--w-def:900px;max-width:var(--w,900px);margin:0;background:var(--grey);border-radius:14px;padding:32px}
+.testimonial p{margin:0;font:500 clamp(20px,2.4vw,26px)/1.4 var(--head);color:var(--black)}
+.testimonial footer{display:flex;align-items:center;gap:12px;margin-top:20px;font-size:14px;color:var(--muted)}
+.testimonial .avatar{flex:none;width:44px;height:44px;border-radius:999px;background:var(--line)}
+/* Beside another column the quote is the design's flat 20px one, and the ring that stands in for a
+   portrait would only be two grey circles in a row. On its own the block keeps both. */
+.column .testimonial p{font:500 20px/1.45 var(--head)}
+.column .testimonial .avatar{display:none}
+.testimonial.t-dark{background:var(--black-3);padding:40px}
+.t-dark p{color:var(--white)}.t-dark footer{color:var(--muted-dark)}.t-dark .avatar{background:var(--line-dark-2)}
+
+/* pdf / embed_html */
+.pdf iframe{width:100%;height:min(80vh,900px);border:1px solid var(--line);border-radius:12px;background:var(--white)}
+.pdf p{margin:16px 0 0}
+.embed iframe,.embed video,.embed embed,.embed object{width:100%;border:1px solid var(--line);border-radius:12px;display:block}
+
+/* --- post_list, one card styled per post type ------------------------------------------------
+   One template; the parts a type does not want are switched off here rather than branched in
+   Jinja, which is what "reuse the card variants by post_type" means in practice. pl-<slug> is
+   written from the resolved post_types row, never from block data. */
+.pl .card-img,.pl .card-n,.pl .chips,.card-date,.card-pdf,.card-foot,.card-where{display:none}
+.pl .card-img img{display:block;width:100%}
+/* the design's empty state for a picture the CMS does not have yet */
+.card-img-empty{background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)}
+.pl-service .card-n{display:block;margin:0 0 14px;font:700 12px/1 var(--mono);color:var(--blue)}
+.pl-service .chips-kids{display:flex}
+.pl-product .card{padding:0;overflow:hidden}
+.pl-product .card-img{display:flex;align-items:center;justify-content:center;min-height:150px;padding:20px;background:var(--white);border-bottom:1px solid var(--line)}
+.pl-product .card-img img{width:auto;max-height:150px;object-fit:contain}
+.pl-product .card h3{margin:20px 24px 8px}
+.pl-product .card p{margin:0 24px 24px}
+.pl-case_study .card-img{display:block;min-height:150px;margin:0 0 16px;border-radius:10px}
+.pl-case_study .card-img img{height:150px;object-fit:cover;border-radius:10px}
+.pl-case_study .chips{display:flex}
+.pl-case_study .chip-industry{background:rgba(0,140,247,.1);border-color:transparent;color:var(--blue-hover)}
+.pl-partner .cards{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+/* On a page the partner list is a logo strip -- no card, no name, just the marks in a row, greyed
+   back until you point at one. The archive (.arch-body) keeps the cards, which is where the names
+   and roles belong. */
+.pl-partner:not(.arch-body){border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:56px 0}
+.pl-partner:not(.arch-body) .sec-head{justify-content:center;margin-bottom:28px}
+.pl-partner:not(.arch-body) .eyebrow{color:var(--muted);text-align:center;margin:0}
+.pl-partner:not(.arch-body) .cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;align-items:center}
+.pl-partner:not(.arch-body) .card{height:64px;display:flex;align-items:center;justify-content:center;padding:10px 16px;border:0;background:none;border-radius:0;filter:grayscale(1);opacity:.7;transition:filter .2s,opacity .2s}
+.pl-partner:not(.arch-body) a.card:hover{filter:none;opacity:1;transform:none;border:0}
+.pl-partner:not(.arch-body) .card h3,.pl-partner:not(.arch-body) .card p{display:none}
+.pl-partner:not(.arch-body) .card-img{height:100%;margin:0}
+.pl-partner:not(.arch-body) .card-img img{max-height:100%;max-width:100%;object-fit:contain}
+.pl-partner .card-img{display:flex;align-items:center;height:64px;margin:0 0 14px}
+.pl-partner .card-img img{width:auto;max-height:64px;object-fit:contain}
+.pl-partner .card h3{font-size:17px}.pl-partner .card p{font-size:13.5px}
+.pl-post .card{padding:0;overflow:hidden}
+.pl-post .card-img{display:block;aspect-ratio:16/9;background:var(--grey)}
+.pl-post .card-img img{height:100%;object-fit:cover}
+.pl-post .card .date{margin:20px 24px 6px}
+.pl-post .card h3{margin:0 24px 8px}
+.pl-post .card p{margin:0 24px 24px}
+
+/* An archive holds however many posts happen to be published, so its grid is auto-FILL: the empty
+   tracks stay, and one blog post keeps a tile's width instead of stretching into a billboard across
+   the page. A deck inside a page is auto-fit, because there the editor chose the count. 300px is the
+   design's measure for the blog and case-study grids -- three across at 1200. */
+.arch-body .cards{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.arch-body.pl-partner .cards{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+
+/* The four shapes an archive gives a type that a card deck cannot. Each keys off .arch-body, so the
+   same list inside a page (a post_list section) stays the deck the home page wants. */
+/* products: the archive card is taller, prices and sells */
+.arch-body.pl-product .cards{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.arch-body.pl-product .card{display:flex;flex-direction:column}
+.arch-body.pl-product .card-img{min-height:180px;padding:28px}
+.arch-body.pl-product .card-img img{max-height:160px}
+.arch-body.pl-product .card h3{margin:20px 24px 8px;font-size:22px}
+.arch-body.pl-product .card h3 a{color:inherit;text-decoration:none}
+.arch-body.pl-product .card h3 a:hover{color:var(--blue)}
+.arch-body.pl-product .card p{margin:0 24px 12px;font-size:14.5px}
+.arch-body.pl-product .card-foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin:auto 24px 24px}
+.arch-body.pl-product .card-foot b{font:800 17px/1 var(--head);color:var(--black)}
+.arch-body.pl-product .card-foot .btn{padding:12px 18px}
+/* services: one full-width row per group, its children as tiles you can click */
+.arch-body.pl-service .cards{grid-template-columns:1fr;gap:20px}
+/* the words in the first column, the child tiles in the second: the card's children are a flat list,
+   so each one names the column it belongs to rather than being wrapped in a div for it */
+.arch-body.pl-service .card{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));grid-template-rows:auto auto auto 1fr;column-gap:24px;padding:32px}
+.arch-body.pl-service .card-n,.arch-body.pl-service .card h3,.arch-body.pl-service .card p{grid-column:1}
+.arch-body.pl-service .card h3{margin:0 0 10px;font-size:26px}
+.arch-body.pl-service .card h3 a{color:inherit;text-decoration:none}
+.arch-body.pl-service .card h3 a:hover{color:var(--blue)}
+.arch-body.pl-service .card p{margin:0}
+.arch-body.pl-service .chips-kids{display:grid;grid-column:2;grid-row:1 / span 4;align-content:start;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin:0}
+.arch-body.pl-service .chips-kids .chip{display:flex;justify-content:space-between;gap:8px;padding:12px 14px;border-radius:8px;font:500 15px/1.3 var(--body);color:var(--ink);text-decoration:none;transition:border-color .15s,color .15s}
+.arch-body.pl-service .chips-kids .chip:hover{border-color:var(--blue);color:var(--blue)}
+/* events: a row led by the date, cut out of start_date */
+.arch-body.pl-event .cards{grid-template-columns:1fr;gap:16px}
+.arch-body.pl-event .card{display:grid;grid-template-columns:auto minmax(0,1fr);gap:24px;align-items:center;padding:24px}
+.arch-body.pl-event .card-date{display:block;width:84px;text-align:center;background:var(--black);border-radius:10px;padding:12px 8px;grid-row:span 3}
+.arch-body.pl-event .card-date b{display:block;font:800 26px/1 var(--head);color:var(--white)}
+.arch-body.pl-event .card-date i{display:block;margin-top:4px;font-style:normal;font-size:12px;color:var(--muted-dark)}
+.arch-body.pl-event .card h3{font-size:22px}
+.arch-body.pl-event .card-where{display:block;margin:0;font-size:15px;color:var(--muted)}
+/* datasheets: a row with the PDF mark and its own download button */
+.arch-body.pl-datasheet .cards{grid-template-columns:1fr;gap:12px}
+.arch-body.pl-datasheet .card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:16px;padding:20px 24px;border-radius:10px}
+.arch-body.pl-datasheet .card-pdf{display:flex;align-items:center;justify-content:center;width:44px;height:54px;border:2px solid var(--black);border-radius:4px;font:700 10px/1 var(--mono);grid-row:span 2}
+.arch-body.pl-datasheet .card h3{margin:0;font:700 16px/1.3 var(--body)}
+.arch-body.pl-datasheet .card h3 a{color:inherit;text-decoration:none}
+.arch-body.pl-datasheet .card h3 a:hover{color:var(--blue)}
+.arch-body.pl-datasheet .card p,.arch-body.pl-datasheet .card-where{display:block;margin:0;font-size:13.5px;color:var(--muted)}
+.arch-body.pl-datasheet .card-foot{display:block;grid-column:3;grid-row:1 / span 2}
+/* the sibling / child row a service page ends on */
+.siblings .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.siblings .tiles a{display:flex;justify-content:space-between;gap:8px;padding:20px;background:var(--white);border:1px solid var(--line);border-radius:10px;color:var(--ink);text-decoration:none;font-weight:600;transition:border-color .15s,color .15s}
+.siblings .tiles a:hover{border-color:var(--blue);color:var(--blue)}
+
+/* spec_table */
+.specs{--w-def:800px;width:100%;max-width:var(--w,800px);border-collapse:collapse;margin:0;background:none;border:0}
+.specs th,.specs td{padding:14px 0;border-bottom:1px solid var(--line);text-align:left;font-size:15px;vertical-align:top}
+.specs th{width:35%;background:none;font-weight:500;color:var(--muted)}
+.specs caption{caption-side:top;text-align:left;margin-bottom:16px;font:800 22px/1.2 var(--head);color:var(--ink)}
+/* the design's configuration panel is this table on a dark card: values right, rules in the dark line */
+.t-dark .specs th,.t-dark .specs td{border-bottom-color:var(--line-dark)}
+.t-dark .specs th{color:var(--muted-dark)}
+.t-dark .specs td{text-align:right;color:var(--white)}
+.t-dark .specs caption{color:var(--white)}
+.t-dark .specs tr:last-child th,.t-dark .specs tr:last-child td{border-bottom:0}
+
+/* contact_form: the light panel, and the dark one a quote form gets */
+.lead-form{--w-def:640px;max-width:var(--w,640px);background:var(--white);border:1px solid var(--line);border-radius:12px;padding:28px}
+.lead-form .form-title{margin:0;font-size:22px;line-height:1.15}
+.cf-dark .form-title{color:var(--white)}
+.lead-form label{display:block;margin:14px 0 0;font:500 14px/1.4 var(--body);color:var(--ink)}
+.lead-form input,.lead-form textarea,.lead-form select{width:100%;margin-top:6px;padding:12px 14px;border:1px solid var(--line-2);border-radius:6px;background:var(--white);color:var(--ink);font:inherit;font-size:15px}
+.lead-form textarea{min-height:120px}
+.lead-form .btn{margin-top:20px}
+.field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0 16px}
+.lead-form.cf-dark{background:var(--black);border-color:var(--line-dark);color:var(--white);padding:32px}
+.cf-dark label{color:var(--muted-dark)}
+.cf-dark input,.cf-dark textarea,.cf-dark select{background:var(--black-3);border-color:var(--line-dark-2);color:var(--white)}
+.lead-form.cf-grey{background:var(--grey);border-color:transparent}
+.notice{background:var(--green-bg);border:1px solid rgba(10,138,58,.25);color:var(--green);padding:14px 16px;border-radius:8px;margin-bottom:20px;font-size:15px}
+
+/* warranty_check: the box on the left, the answer on the right, nothing on the right until asked */
+.warranty{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:32px;align-items:start}
+.warranty-check{margin:0}
 .warranty-check label{margin-top:0}
-.warranty-result{max-width:var(--w,640px);background:var(--card);border:1px solid var(--line);border-left:4px solid var(--muted);border-radius:var(--radius);padding:1.25rem 1.5rem;margin-top:1rem}
-.warranty-result.in{border-left-color:#16a34a}.warranty-result.out{border-left-color:#dc2626}
-.warranty-state{margin:0 0 .75rem;font-weight:700;font-size:1.15rem}
-.warranty-result.in .warranty-state{color:#166534}.warranty-result.out .warranty-state{color:#991b1b}
-.warranty-result dl{display:grid;grid-template-columns:minmax(9rem,auto) 1fr;gap:.4rem 1rem;margin:0}
-.warranty-result dt{color:var(--muted);font-weight:600}.warranty-result dd{margin:0}
-.warranty-none{background:#fff7ed;border-color:#fed7aa;max-width:var(--w,640px);margin-top:1rem}
+.warranty-check input[name=sn]{padding:14px 16px;border-radius:8px;font:500 15px/1.2 var(--mono);text-transform:uppercase}
+.warranty .hint{margin:8px 0 0;font-size:13px;color:var(--muted)}
+.warranty-result{background:var(--white);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.warranty-banner{padding:24px 28px;color:var(--white)}
+.warranty-result.in .warranty-banner{background:var(--green)}
+.warranty-result.out .warranty-banner{background:var(--red)}
+.warranty-label{margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.08em;opacity:.85}
+.warranty-state{margin:4px 0 6px;font:800 26px/1.1 var(--head)}
+.warranty-note{margin:0;font-size:14px;opacity:.9}
+.warranty-result dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin:0;padding:24px 28px}
+.warranty-result dt{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.warranty-result dd{margin:4px 0 0;font-weight:600}
+.warranty-result dd.mono{font-family:var(--mono);font-weight:500}
+.warranty-remarks{margin:0 28px 24px;padding:14px 16px;background:var(--grey);border-radius:8px;font-size:14px}
+.warranty-foot{display:flex;gap:20px;flex-wrap:wrap;margin:0;padding:16px 28px;border-top:1px solid var(--line)}
+.warranty-foot a{font:600 14px/1 var(--body);color:var(--blue);text-decoration:none}
+.warranty-result.none{padding:28px}
+.warranty-result.none h3{margin:0 0 8px;font-size:20px}
+.warranty-result.none p{margin:0 0 16px;font-size:15px;color:var(--muted)}
+
+/* --- archives and detail pages ----------------------------------------------------------------
+   Two header treatments: the catalogue types get the black band (band-dark, the same class the
+   stats block uses), the reading types get the white one. archive.html picks which. */
+.arch-head{background:var(--white);border-bottom:1px solid var(--line);padding:56px 0 40px}
+.arch-head .page-title{margin-top:14px}
+.arch-head .lead{max-width:640px}
+.arch-head.band-dark{background:var(--black);border-bottom:0;padding:64px 0 56px}   /* names the background again: .arch-head is later in the file than .band-dark and ties on specificity */
+.band-dark .breadcrumb,.band-dark .breadcrumb a{color:var(--muted-dark)}
+.band-dark .breadcrumb li:last-child{color:var(--white)}
+.band-dark .breadcrumb li+li::before{color:var(--muted-dark-2)}
+.band-dark .lead{color:var(--muted-dark)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 0}
+.filters .chip{padding:6px 14px;font-size:14px;text-decoration:none;transition:border-color .15s,color .15s}
+.filters .chip:hover{border-color:var(--blue);color:var(--blue)}
+.band-dark .filters .chip{border-color:var(--line-dark-2);color:var(--muted-dark)}
+.band-dark .filters .chip:hover{border-color:var(--blue);color:var(--white)}
+.arch-body{background:var(--grey);padding:56px 0 48px}
+
+/* a detail page's head: words left, featured image right when there is one */
+.page-head>.wrap{display:grid;gap:48px;align-items:center}
+.page-head.has-media>.wrap{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.page-head-text{min-width:0}
+.page-head .breadcrumb{margin:0 0 16px}
+.page-head .chips{margin:0 0 20px}
+.page-media img{max-width:440px;margin-inline:auto}
+/* An article stacks: title, date, then the picture across the whole column, then the rule that
+   divides the head from the writing. The rule is the section's own bottom border, the same way the
+   hero and an archive head draw theirs, so it spans the page rather than the 1200px column. */
+.pt-post .page-head{padding-bottom:40px;border-bottom:1px solid var(--line)}
+/* and it keeps its own dimensions. .featured is a banner crop -- width:100% and a 440px ceiling
+   with object-fit:cover -- which is right for a card or a product shot and wrong for a picture
+   inside an article: a small one was blown up to 1200 wide and then had its top and bottom cut off.
+   Here the browser sizes it from the file, and only shrinks it if it is wider than the column. */
+.pt-post .page-media img{width:auto;height:auto;max-width:100%;max-height:none;object-fit:initial}
+a.chip{text-decoration:none}
+a.chip:hover{border-color:var(--blue);color:var(--blue)}
+.chip-industry{background:rgba(0,140,247,.1);border-color:transparent;color:var(--blue-hover)}
+.meta-strip{background:var(--grey);padding:32px 0}
+/* long fields read as the article; short ones are the tiles above. white-space:pre-line keeps the
+   editor's paragraph breaks without letting any markup through. */
+.meta-prose{max-width:var(--reading)}
+.meta-prose section+section{margin-top:32px}
+.meta-prose h2{margin:0 0 12px;font-size:24px}
+.meta-prose p{margin:0;font-size:17px;line-height:1.7;color:var(--ink-2);white-space:pre-line}
+
+/* checkout: the design's modal, as a page, because the public site ships no JavaScript */
+.checkout-card{max-width:460px;margin:32px 0 0;background:var(--white);border:1px solid var(--line);border-radius:14px;padding:28px}
+.checkout-card h1{margin:0 0 20px;font-size:22px}
+.checkout-card .total{display:flex;align-items:center;justify-content:space-between;margin:0;padding:16px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:15px;color:var(--muted)}
+.checkout-card .total strong{font:800 20px/1 var(--head);color:var(--ink)}
+.checkout-card label{display:block;margin:16px 0 0;font:500 14px/1.4 var(--body)}
+.checkout-card input{width:100%;margin-top:6px;padding:12px 14px;border:1px solid var(--line-2);border-radius:6px;font:inherit;font-size:15px}
+.checkout-card .btn{width:100%;margin-top:20px;text-align:center}
+.checkout-card .hint{margin:14px 0 0;font-size:12.5px;color:var(--muted)}

@@ -34,6 +34,10 @@ If you can log in but see "Forbidden", your login exists but has not been given 
 
 ---
 
+**Finding your way around.** Everything lives in the black bar down the left. *Content* lists every kind of page with how many of each there are; *Site* holds Media, Leads, Warranty and — if you are an administrator — Settings and Users. The page you are on is highlighted in blue, and a blue number next to **Leads** means new enquiries are waiting. On a narrow screen the bar collapses to a single line with a ☰ button.
+
+---
+
 ## 3. The kinds of content you can create
 
 Content is organised into **types**. Each type has its own list in the admin sidebar and its own address pattern on the website.
@@ -52,6 +56,17 @@ Content is organised into **types**. Each type has its own list in the admin sid
 The site ships pre-loaded with the real IOPSTOR service catalogue (Storage, Hyper Converged Media, Cloud, AI, Software Based), all seven case studies (LKS, SCM, FM, DCSL, SSC, ATPL, KLPL), and the two 2018 events.
 
 Some types ask for a few extra details. A Case Study asks for Client, Challenge, Solution and Results. An Event asks for start date, end date and location. A Datasheet asks you to attach the PDF. These extra boxes appear automatically on the form — just fill in what applies.
+
+**The listing page for each type now looks like the thing it is listing**, and you do not have to set any of it up:
+
+- **Products** (`/products`) shows the price and a **Buy** button on each card. The button only appears once you have filled in *Price* on that product — leave it blank and the card simply ends at the description, which is the right thing when a price is on request.
+- **Services** (`/services`) is one wide row per group, with every sub-service beside it as a button a visitor can click straight through to.
+- **Events** (`/events`) is a list with the year and month on a black tile at the left of each row.
+- **Datasheets** (`/datasheets`) is a list of rows with a PDF mark and a **Download** button.
+
+**A blog article reads top to bottom**: the title, the date under it, the picture, a line, then what you wrote. The picture is shown **at the size you uploaded it** — never stretched, never cropped — and is only made smaller if it is wider than the page. You do not arrange any of that: write the article, choose a *Featured image*, and it lays itself out. Every other kind of page still puts its picture beside the words.
+
+A service page with no sub-services of its own now ends with **"Other &lt;group&gt; services"** — the rest of its group, so a visitor reading about NAS can step sideways to DAS or SAS.
 
 ---
 
@@ -162,6 +177,14 @@ on the right included — so you can never fill in a picture or a table box and 
 **Press `/` on an empty line.** A short list appears under the cursor. Type a few letters to narrow it — “num” finds Numbers, “quo” finds Customer quote — and press Enter. The section drops in right there, already filled with stand-in wording, and the cursor lands on a fresh line underneath so you can carry on writing.
 
 You can also use **+ Section** on the toolbar, which opens the same list with a description of each one. The same menu has *“Start from a layout…”* if you would rather begin from a ready-made Product, Service or Landing page and replace the wording.
+
+A few sections gained settings worth knowing about, all under the section's own **⚙**:
+
+- **Hero** — the big opening band. *Small label above the heading* is the short blue line above the headline ("The Storage Specialist"). There is a **second button** now, which draws as an outline next to the main one. And **Dark background** turns the hero into the full-width black band used on About Us — in that mode the picture you choose becomes a faded backdrop *behind* the words instead of sitting beside them.
+  A hero can also hold **more than one picture**. Under *Pictures that take turns*, add a row per picture; from two rows up they fade from one to the next on their own, about four and a half seconds each, with small bars underneath showing which one is up. That is what the home page does with the three appliances. One picture, or none, behaves exactly as before — and a visitor whose device is set to reduce motion simply sees the first picture, still.
+- **Automatic list** — the section that lists your pages and keeps itself up to date. *Header link text* and *Header link* put a link like "All services →" on the right of the section's heading. The cards style themselves to suit what they are listing: services show a number and their sub-services, products show the product picture, case studies show their industry and solution, blog posts show the date. You do not choose that; it follows the content type.
+- **Customer quote** also has a **Dark background** tick, for a quote on a dark card.
+- **Contact form** — *Form type* also picks how the form looks. **quote** is the dark panel from the Contact page, and it asks two extra questions — what the visitor is interested in, and how many users — which arrive with the enquiry under **Leads**. **career** is the soft grey panel used on Careers. **contact** is the plain white card. Whatever you type in *Heading* sits inside the panel, at the top of the form.
 
 One section is worth calling out: **Warranty check**. Drop it on a page and visitors get a box where they type the serial number of their unit and see straight away whether it is still in warranty. What it shows comes from the **Warranty** screen — see section 8 below.
 
@@ -280,13 +303,21 @@ The **Media** section is the shared library for every image, logo and PDF.
 
 ---
 
-## 7. Enquiries from the website
-
-Every contact form, quote request and job application on the site lands in **Leads** in the admin panel — nothing is emailed into a black hole.
-
-Each enquiry can be marked **New**, **In progress** or **Done**, so sales can work through the list and see what has been handled. The form also carries a hidden anti-spam trap that catches most automated junk before it reaches you.
+**Adding a lot of files at once.** Uploading forty partner logos one at a time through this screen is nobody's idea of a good afternoon. Put the folder somewhere on the server and ask a developer to run `flask import-media <folder>` — everything lands in Media exactly as if you had uploaded it, with a first draft of the alt text taken from each filename. It skips anything already there, so it is safe to run twice.
 
 ---
+
+## 7. Enquiries from the website
+
+Everything sent through a form on the site arrives under **Leads**, with the person's name, company, email, phone and message — and, for a quote request, what they said they were interested in and how many users.
+
+Each enquiry has three states, and the tabs across the top follow them:
+
+- **New** — nobody has picked it up yet.
+- **In progress** — you are dealing with it.
+- **Done** — finished.
+
+Change the dropdown on the right of an enquiry and it moves to that tab. The blue number beside **Leads** in the sidebar counts the new ones.
 
 ## 8. Warranty records
 
@@ -322,11 +353,17 @@ A serial number already on file is the one thing the browser cannot know by itse
 
 **Settings** holds the things that appear everywhere: site name, tagline, logo, contact email and phone, address, social links, and the Google Analytics ID.
 
+**Menus** has its own screen now. Each row is one link: a label, where it goes, and whether it sits at the top level or drops down under the item above it. Drag the handle on the left to reorder, **+ Add item** for a new one, **✕** to remove one. Save writes the whole menu at once. One level of drop-down is all the site shows.
+
 **Menus** control the header and footer navigation. The header menu supports one level of drop-down, which is how *Company* expands.
 
 **The Services menu builds itself.** Hovering *Services* in the header opens a wide panel: your top-level services down the left, and whichever one you are pointing at expands on the right with its summary and its sub-services. You do not edit that panel anywhere — it is your Services pages. Change a service's **title** and the panel's wording changes; change its **Summary** (the box in the right-hand panel of the page editor) and the sentence under the name changes; add a sub-service under a service and it appears as a new tile. Publishing or unpublishing a service adds or removes it. The same list fills the *Services* column in the footer.
 
 Two things follow from that. A service with no Summary shows its name and its sub-services but no sentence, so it is worth writing one. And the panel has room for eight top-level services; a ninth would not get its own tab.
+
+**The contact details in Settings are used in three places** — the footer address block, the phone and email links, and the search-engine data. They are filled in from the company flyers: Prime ABGB, Simlim Square, and the +91 98219 09800 number.
+
+**Settings** is split into tabs — Site identity, Contact details, SEO & analytics and Payments. Moving between them changes nothing until you press **Save settings**, and saving stores every tab, not just the one you are looking at.
 
 **Redirects** send an old address to a new one. If a page moves — or you are bringing across links from the old website — add a redirect so the old link keeps working and nobody hits a "not found" page. This protects the search rankings you have already earned.
 
@@ -358,6 +395,12 @@ Products can carry a price and a checkout button. The payment step is currently 
 ## 12. Where the project stands
 
 **Done:** the content system, the public website with its theme, the admin panel, search-engine and AI output, enquiry capture, the warranty register and its public check, media library, users and roles, and the payment placeholder.
+
+**Two things changed across every page** and need nothing from you: the bar at the top of the site is
+now **white with black text**, with the IOPSTOR logo in its own blue-and-black rather than knocked out
+to white — the footer stays dark, and the logo is still white down there. And the little icon that
+shows in a browser tab (the "favicon") is now the IOPSTOR mark at every size a phone or a bookmark
+asks for.
 
 **Still to come:** a live payment provider.
 
