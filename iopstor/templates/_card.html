@@ -1,0 +1,17 @@
+{# One card, shared by the post_list block, the archives and a page's child list — the same snippet
+   used to be copied into all three. The parts a post type does not want are switched off in
+   site.css from the pl-<slug> on the section, so this stays one shape.
+   media_url is an app-level Jinja global, so the macro reaches it without `with context`. #}
+{% macro card(p, n=0) -%}
+<a class="card" href="{{ p.path }}">
+  {%- if p.post_type.slug == 'partner' and p.meta and p.meta.logo_media_id %}<span class="card-img"><img src="{{ media_url(p.meta.logo_media_id) }}" alt="{{ p.title }}" loading="lazy"></span>
+  {%- elif p.featured_media %}<span class="card-img"><img src="{{ p.featured_media.url }}" alt="{{ p.featured_media.alt or '' }}" loading="lazy"></span>
+  {%- else %}<span class="card-img card-img-empty"></span>{% endif %}
+  {%- if n %}<span class="card-n">{{ '%02d' % n }}</span>{% endif %}
+  {%- if p.terms %}<span class="chips">{% for t in p.terms %}<span class="chip chip-{{ t.taxonomy.slug }}">{{ t.name }}</span>{% endfor %}</span>{% endif %}
+  {%- if p.post_type.slug == 'post' and p.published_at %}<span class="date">{{ p.published_at[:10] }}</span>{% endif %}
+  <h3>{{ p.title }}</h3>
+  {%- if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}
+  {%- if p.children %}<span class="chips chips-kids">{% for c in p.children %}<span class="chip">{{ c.title }}</span>{% endfor %}</span>{% endif %}
+</a>
+{%- endmacro %}
