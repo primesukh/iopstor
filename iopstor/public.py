@@ -54,10 +54,23 @@ def crumbs_for(post):
     return crumbs + db.ancestors(post) + [(post["title"], post["path"])]
 
 
+def _kids(parent_id):
+    return db.with_paths(db.rows(db.live(db.select_posts()).eq("parent_id", parent_id)
+                                 .order("menu_order").order("published_at", desc=True)))
+
+
 def render_post(post):
     crumbs = crumbs_for(post)
-    children = db.with_paths(db.rows(db.live(db.select_posts()).eq("parent_id", post["id"]).order("menu_order").order("published_at", desc=True))) if post["post_type"]["hierarchical"] else []
-    return render_template("post.html", post=post, children=children, crumbs=crumbs, meta=seo.build_meta(post), jsonld=seo.jsonld(post, crumbs))
+    children, siblings = [], False
+    if post["post_type"]["hierarchical"]:
+        children = _kids(post["id"])
+        # A leaf shows the rest of its group instead, which is what the design ends a service on:
+        # "Other Storage services". Same query, same list, one page up.
+        if not children and post["parent_id"]:
+            children = [c for c in _kids(post["parent_id"]) if c["id"] != post["id"]]
+            siblings = bool(children)
+    return render_template("post.html", post=post, children=children, siblings=siblings, crumbs=crumbs,
+                           meta=seo.build_meta(post), jsonld=seo.jsonld(post, crumbs))
 
 
 def _filters(pt):
@@ -82,7 +95,15 @@ def render_archive(q, title, path, crumbs, description="", pt=None):
     has_next = page * 20 < result["total"]
     # description was built into meta but never reached the template, so archive.html's lead
     # paragraph could not render and every term archive's prose was invisible.
-    return render_template("archive.html", title=title, posts=db.with_paths(result["items"]), page=page, has_next=has_next, crumbs=crumbs,
+    posts = db.with_paths(result["items"])
+    # The services archive is a row per group with its children as tiles beside it, the same shape
+    # the home page's list uses. db.tree() is memoised per request by the header's panel, so this is
+    # the lookup that has already happened.
+    if pt and pt["hierarchical"]:
+        kids = {t["id"]: t["children"] for t in db.tree(pt["slug"])}
+        for p in posts:
+            p["children"] = kids.get(p["id"], [])
+    return render_template("archive.html", title=title, posts=posts, page=page, has_next=has_next, crumbs=crumbs,
                            description=description, pt=pt, filters=_filters(pt),
                            meta=meta, jsonld=seo.jsonld(crumbs=crumbs))
 

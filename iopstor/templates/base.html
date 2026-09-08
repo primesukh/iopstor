@@ -15,6 +15,9 @@
 {% if meta.image %}<meta property="og:image" content="{{ meta.image }}">
 {% endif %}<meta name="twitter:card" content="{{ 'summary_large_image' if meta.image else 'summary' }}">
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='favicon-180.png') }}">
 <link rel="alternate" type="application/rss+xml" title="{{ site.name }} blog" href="{{ site.url }}/feed.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -62,6 +65,7 @@
         {% if site.email %}<li><a href="mailto:{{ site.email }}">{{ site.email }}</a></li>{% endif %}
         {% for s in site.social %}<li><a href="{{ s }}" rel="me noopener">{{ s.split('/')[2] if '//' in s else s }}</a></li>{% endfor %}
         <li><a href="/datasheets">Datasheets</a></li>
+        <li><a href="/warranty-check">Warranty check</a></li>
         <li><a class="q" href="/contact-us">Request a quote &rarr;</a></li>
       </ul></div>
     </div>

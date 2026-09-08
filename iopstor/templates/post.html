@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 {% set pt = post.post_type %}{% set meta_ = post.meta or {} %}
-{% set has_hero = post.blocks and post.blocks[0].type == 'hero' %}
+{% set has_hero = post.blocks and post.blocks[0].type in ('hero', 'columns') %}
 {# The eyebrow above the title is where you already are: the parent for a nested page, the content
    type otherwise. crumbs already holds that chain, so nothing new is looked up. #}
 {% set eyebrow = crumbs[-2][0] if crumbs|length > 2 else (pt.name if pt.url_prefix else '') %}
@@ -40,10 +40,9 @@
   <div class="section"><div class="wrap"><table class="specs"><caption>{{ f.label }}</caption><tbody>{% for k, v in meta_[f.key].items() %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}</tbody></table></div></div>
   {% endfor %}
   {% if children %}
-  {% from "_card.html" import card %}
-  <section class="section arch-body pl pl-{{ pt.slug }}"><div class="wrap">
-    <h2 class="section-title">{{ post.title }} solutions</h2>
-    <div class="cards">{% for c in children %}{{ card(c, loop.index) }}{% endfor %}</div>
+  <section class="section t-grey siblings"><div class="wrap">
+    <h2 class="section-title">{% if siblings %}Other {{ crumbs[-2][0] }} services{% else %}{{ post.title }} solutions{% endif %}</h2>
+    <div class="tiles">{% for c in children %}<a href="{{ c.path }}">{{ c.title }} <i aria-hidden="true">&rarr;</i></a>{% endfor %}</div>
   </div></section>
   {% endif %}
 </article>

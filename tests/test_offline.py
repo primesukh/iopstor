@@ -114,10 +114,28 @@ def test_seeded_content_is_valid_blocks():
         blocks = home_blocks(media)
         assert len(blocks) == 9 and validate_blocks(blocks) == []   # the design's nine sections
     assert "image" not in home_blocks()[0]["data"]   # no null key left behind before an import
+    assert "images" not in home_blocks()[0]["data"]  # nor an empty rotator
+    assert len(home_blocks(lambda name: 1)[0]["data"]["images"]) == 3   # the design cycles all three
     cards = [{"type": "cards", "data": {"heading": h, "items": [
         {"title": t, "text": d, "icon": "", "url": ""} for t, d in rows]}}
         for h, rows in (("Why choose our NAS?", WHY_NAS), ("ZFS, feature by feature", ZFS_FEATURES))]
     assert validate_blocks(cards) == []
+
+
+def test_hero_takes_turns_only_with_two_pictures_or_more(app, monkeypatch):
+    """The rotator is CSS: each slide carries its turn as --i and the container the count as --n, and
+    one picture stays the single <img> it always was, dots and all switched off."""
+    monkeypatch.setattr("iopstor.blocks.media_url", lambda i: f"/m/{i}", raising=False)
+    one = [{"type": "hero", "data": {"heading": "Hi", "images": [{"media_id": 1, "alt": "a"}]}}]
+    three = [{"type": "hero", "data": {"heading": "Hi", "images": [
+        {"media_id": i, "alt": f"a{i}"} for i in (1, 2, 3)]}}]
+    assert validate_blocks(one) == [] and validate_blocks(three) == []
+    with app.test_request_context("/"):
+        assert "hero-slides" not in render_blocks(one)
+        html = render_blocks(three)
+    assert html.count("hero-slide\"") == 3 and '--n:3' in html
+    assert '--i:0' in html and '--i:2' in html
+    assert "hero-dots" in html
 
 
 def test_pdf_block_renders_the_browser_viewer(app, monkeypatch):

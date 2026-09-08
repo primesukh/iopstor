@@ -9,7 +9,10 @@ from markupsafe import Markup, escape
 BLOCKS = {  # type: (required fields, optional fields)
     # dark: the full-bleed variant, where "image" becomes the faded backdrop rather than the art
     # beside the words. A checkbox, not a free-text "tone": nothing typed reaches a class name.
-    "hero": (["heading"], ["eyebrow", "subheading", "image", "cta_label", "cta_url",
+    # image is the single picture; images (>= 2) turns it into the rotator that takes turns on its
+    # own, in CSS. Both are kept: images wins when it has two or more rows, so nothing already
+    # published changes shape.
+    "hero": (["heading"], ["eyebrow", "subheading", "image", "images", "cta_label", "cta_url",
                            "cta2_label", "cta2_url", "dark"]),
     "rich_text": (["html"], []),  # ponytail: raw HTML from trusted staff; add nh3 sanitising if untrusted authors appear
     "image": (["media_id"], ["alt", "caption"]),
@@ -46,13 +49,13 @@ EDITOR = {
                 "cta2_url": "url", "link_url": "url", "dark": "checkbox"},
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
     "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label"],
-              "spec_table": ["k", "v"], "gallery": ["media_id", "alt"],
+              "spec_table": ["k", "v"], "gallery": ["media_id", "alt"], "hero": ["media_id", "alt"],
               "columns": []},  # a column is a list of blocks, not a row of fields: the panel only adds/moves/removes it
     # friendlier labels; anything missing is the key with underscores as spaces
     "labels": {"q": "Question", "a": "Answer", "k": "Label", "v": "Value", "html": "Content", "kind": "Form type",
                "cols": "Columns", "widths": "Column widths, e.g. 50/25/25",
                "cta_url": "Button link", "cta_label": "Button text", "top_level": "Top-level only",
-               "media_id": "Image", "image": "Image", "file_media_id": "PDF file", "post_type": "Content type",
+               "media_id": "Image", "image": "Image", "images": "Pictures that take turns", "file_media_id": "PDF file", "post_type": "Content type",
                "term": "Term slug", "eyebrow": "Small label above the heading",
                "cta2_label": "Second button text", "cta2_url": "Second button link",
                "link_label": "Header link text", "link_url": "Header link",
