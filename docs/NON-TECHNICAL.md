@@ -293,11 +293,15 @@ The **Media** section is the shared library for every image, logo and PDF.
 
 ## 7. Enquiries from the website
 
-Every contact form, quote request and job application on the site lands in **Leads** in the admin panel — nothing is emailed into a black hole.
+Everything sent through a form on the site arrives under **Leads**, with the person's name, company, email, phone and message — and, for a quote request, what they said they were interested in and how many users.
 
-Each enquiry can be marked **New**, **In progress** or **Done**, so sales can work through the list and see what has been handled. The form also carries a hidden anti-spam trap that catches most automated junk before it reaches you.
+Each enquiry has three states, and the tabs across the top follow them:
 
----
+- **New** — nobody has picked it up yet.
+- **In progress** — you are dealing with it.
+- **Done** — finished.
+
+Change the dropdown on the right of an enquiry and it moves to that tab. The blue number beside **Leads** in the sidebar counts the new ones.
 
 ## 8. Warranty records
 
@@ -333,6 +337,8 @@ A serial number already on file is the one thing the browser cannot know by itse
 
 **Settings** holds the things that appear everywhere: site name, tagline, logo, contact email and phone, address, social links, and the Google Analytics ID.
 
+**Menus** has its own screen now. Each row is one link: a label, where it goes, and whether it sits at the top level or drops down under the item above it. Drag the handle on the left to reorder, **+ Add item** for a new one, **✕** to remove one. Save writes the whole menu at once. One level of drop-down is all the site shows.
+
 **Menus** control the header and footer navigation. The header menu supports one level of drop-down, which is how *Company* expands.
 
 **The Services menu builds itself.** Hovering *Services* in the header opens a wide panel: your top-level services down the left, and whichever one you are pointing at expands on the right with its summary and its sub-services. You do not edit that panel anywhere — it is your Services pages. Change a service's **title** and the panel's wording changes; change its **Summary** (the box in the right-hand panel of the page editor) and the sentence under the name changes; add a sub-service under a service and it appears as a new tile. Publishing or unpublishing a service adds or removes it. The same list fills the *Services* column in the footer.
@@ -340,6 +346,8 @@ A serial number already on file is the one thing the browser cannot know by itse
 Two things follow from that. A service with no Summary shows its name and its sub-services but no sentence, so it is worth writing one. And the panel has room for eight top-level services; a ninth would not get its own tab.
 
 **The contact details in Settings are used in three places** — the footer address block, the phone and email links, and the search-engine data. They are filled in from the company flyers: Prime ABGB, Simlim Square, and the +91 98219 09800 number.
+
+**Settings** is split into tabs — Site identity, Contact details, SEO & analytics and Payments. Moving between them changes nothing until you press **Save settings**, and saving stores every tab, not just the one you are looking at.
 
 **Redirects** send an old address to a new one. If a page moves — or you are bringing across links from the old website — add a redirect so the old link keeps working and nobody hits a "not found" page. This protects the search rankings you have already earned.
 

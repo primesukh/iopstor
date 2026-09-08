@@ -34,6 +34,7 @@
       <a href="{{ url_for('admin_ui.leads') }}"{% if request.endpoint == 'admin_ui.leads' %} class="on"{% endif %}>Leads{% if nav_counts.get('_leads') %}<span class="n pill-n">{{ nav_counts['_leads'] }}</span>{% endif %}</a>
       <a href="{{ url_for('admin_ui.warranty') }}"{% if request.endpoint == 'admin_ui.warranty' %} class="on"{% endif %}>Warranty</a>
       {% if admin_user.role == 'admin' %}
+      <a href="{{ url_for('admin_ui.menus') }}"{% if request.endpoint == 'admin_ui.menus' %} class="on"{% endif %}>Menus</a>
       <a href="{{ url_for('admin_ui.settings') }}"{% if request.endpoint == 'admin_ui.settings' %} class="on"{% endif %}>Settings</a>
       <a href="{{ url_for('admin_ui.users') }}"{% if request.endpoint == 'admin_ui.users' %} class="on"{% endif %}>Users</a>
       {% endif %}

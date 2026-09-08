@@ -1,18 +1,35 @@
 {% extends "admin/base.html" %}{% block title %}Users{% endblock %}
 {% block content %}
-<h1>Users</h1>
-<table>
-  <tr><th>Email</th><th>Name</th><th>Role</th><th></th></tr>
-  {% for u in users %}<tr><td>{{ u.email }}</td><td>{{ u.name }}</td><td>{{ u.role }}</td>
-    <td>{% if u.id != admin_user.id %}<form method="post" action="{{ url_for('admin_ui.user_delete', pk=u.id) }}" onsubmit="return confirm('Remove this user?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="secondary">Remove</button></form>{% endif %}</td></tr>{% endfor %}
-</table>
-<h2>Add a user</h2>
-<form method="post" class="card" style="max-width:520px">
-  <input type="hidden" name="csrf" value="{{ csrf }}">
-  <label>Email <input type="email" name="email" required></label>
-  <label>Name <input type="text" name="name"></label>
-  <label>Password <input type="password" name="password" required minlength="8"></label>
-  <label>Role <select name="role"><option value="editor">editor (create and edit content)</option><option value="admin">admin (everything, incl. delete, settings, users)</option></select></label>
-  <p><button type="submit">Create login</button></p>
-</form>
+<div class="adm-head"><div><h1>Users <small>{{ users|length }}</small></h1>
+  <p class="page-sub">Who can sign in, and what they are allowed to do.</p></div></div>
+<div class="media-grid">
+  <div class="table-card">
+    <table>
+      <tr><th>Person</th><th>Role</th><th></th></tr>
+      {% for u in users %}<tr>
+        <td><span class="who"><span class="avatar {{ u.role }}">{{ (u.name or u.email)[0]|upper }}</span>
+          <span><strong>{{ u.name or u.email.split('@')[0] }}</strong>{% if u.id == admin_user.id %} <span class="pill scheduled">you</span>{% endif %}
+          <span class="t-path">{{ u.email }}</span></span></span></td>
+        <td>{{ u.role }}</td>
+        <td>{% if u.id != admin_user.id %}<form method="post" action="{{ url_for('admin_ui.user_delete', pk=u.id) }}" onsubmit="return confirm('Remove this user? They lose access immediately.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="danger">Remove</button></form>{% endif %}</td>
+      </tr>{% endfor %}
+    </table>
+  </div>
+  <aside class="m-panel">
+    <h2>Invite a user</h2>
+    <form method="post">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Name <input type="text" name="name"></label>
+      <label>Email <input type="email" name="email" required></label>
+      <label>Temporary password <input type="password" name="password" required minlength="8"></label>
+      <p class="role-cards">
+        <label class="role-card"><input type="radio" name="role" value="editor" checked>
+          <span><strong>Editor</strong><small>Write and edit content, upload files, answer leads.</small></span></label>
+        <label class="role-card"><input type="radio" name="role" value="admin">
+          <span><strong>Admin</strong><small>Everything an editor can do, plus delete, settings, menus and users.</small></span></label>
+      </p>
+      <p><button type="submit">Create account</button></p>
+    </form>
+  </aside>
+</div>
 {% endblock %}

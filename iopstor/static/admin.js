@@ -1942,6 +1942,45 @@
      The dates are checked here so that mistake never costs a round trip; a serial already on file
      cannot be (it would mean shipping every serial to the page), so the server sends its refusal
      back in data-refused and this pops it. */
+  /* --- the menus screen: drag to reorder, and a button to add a row -------------------------- */
+  /* The level is a <select> in the markup, not a checkbox, so the three getlist()s on the server
+     stay the same length whatever is ticked. Everything here is enhancement: without JS you can
+     still edit and re-level the rows you have, just not reorder or add one. */
+  function initMenus() {
+    var form = document.getElementById("menus-form");
+    if (!form) return;
+    var rows = document.getElementById("menu-rows");
+    if (window.Sortable) Sortable.create(rows, {draggable: ".menu-row", handle: ".grip", ghostClass: "iop-ghost"});
+    rows.addEventListener("click", function (e) {
+      var del = e.target.closest(".row-del");
+      if (del) del.closest(".menu-row").remove();
+    });
+    rows.addEventListener("change", function (e) {
+      if (e.target.name === "level") e.target.closest(".menu-row").classList.toggle("is-child", e.target.value === "1");
+    });
+    var add = document.getElementById("menu-add");
+    if (add) add.addEventListener("click", function () {
+      var row = rows.firstElementChild;
+      var fresh;
+      if (row) {
+        fresh = row.cloneNode(true);
+        fresh.classList.remove("is-child");
+        fresh.querySelectorAll("input").forEach(function (i) { i.value = ""; });
+        fresh.querySelector("select").value = "0";
+      } else {
+        fresh = el("div", {class: "menu-row"}, [
+          el("span", {class: "grip", text: "\u2807"}),
+          el("input", {name: "label", placeholder: "Label"}),
+          el("input", {name: "url", placeholder: "/where-it-goes", class: "mono"}),
+          el("select", {name: "level"}, [el("option", {value: "0", text: "Top level"}),
+                                         el("option", {value: "1", text: "Under the one above"})]),
+          el("button", {type: "button", class: "secondary row-del", text: "\u2715"})]);
+      }
+      rows.appendChild(fresh);
+      fresh.querySelector("input").focus();
+    });
+  }
+
   function initWarranty() {
     var form = document.getElementById("warranty-form");
     if (!form) return;
@@ -1972,6 +2011,7 @@
     initSlug();
     initTerms();
     initWarranty();
+    initMenus();
     initBlocks();
   });
 })();
