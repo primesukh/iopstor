@@ -1,54 +1,145 @@
-:root{--navy:#0f1b2d;--navy-2:#1a2b44;--accent:#0ea5e9;--accent-2:#0369a1;--text:#1f2937;--muted:#64748b;--bg:#f8fafc;--card:#fff;--line:#e5e7eb;--radius:12px;--max:1200px}
+/* IOPSTOR theme. Design tokens, then global chrome, then one rule-group per block.
+   This file is shared three ways — the public site, body.admin (templates/admin/base.html) and the
+   editor canvas iframe (templates/admin/canvas.html loads it, then canvas.css). A change to .card,
+   .btn, .specs or .lead-form shows up in all three. */
+:root{
+  --black:#0a0d12;--black-2:#0f131a;--black-3:#12171f;
+  --line-dark:#1c2230;--line-dark-2:#2a3140;
+  --blue:#008cf7;--blue-hover:#0068c0;--blue-tint:#e8f3fe;--blue-light:#5fb4fb;
+  --white:#fff;--grey:#f4f6f9;--line:#e5e9ef;--line-2:#cfd6df;
+  --ink:#111827;--ink-2:#374151;--muted:#5b6675;--muted-dark:#aeb6c2;--muted-dark-2:#7d8794;
+  --green-bg:#e6f4ea;--green:#0a8a3a;--red-bg:#fdeaea;--red:#b42323;
+  --wrap:1200px;--reading:760px;
+  --head:Manrope,"Segoe UI",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  /* ponytail: the old token names, mapped onto the new palette, so admin.css and canvas.css keep
+     working until the admin is restyled in its own PR. Delete this line once nothing uses them. */
+  --navy:var(--black);--accent:var(--blue);--accent-2:var(--blue-hover);--text:var(--ink);--card:var(--white);--radius:12px
+}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{margin:0;font:16px/1.6 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--text);background:var(--bg);overflow-wrap:break-word}
+body{margin:0;font:400 16px/1.6 var(--body);color:var(--ink);background:var(--white);overflow-wrap:break-word;-webkit-font-smoothing:antialiased}
 /* break-word alone only wraps INSIDE a box; a grid track and a table column are sized from
    min-content, which a 300-character word still blows out. "anywhere" counts in that size, so
    these shrink instead. Not on body: the header nav would start breaking mid-word. */
 .card,.column,.stats li,.specs th,.specs td,.rich-text th,.rich-text td{overflow-wrap:anywhere}
-a{color:var(--accent-2)}
+a{color:var(--blue-hover)}
 img{max-width:100%;height:auto}
-h1,h2,h3,h4,h5,h6{line-height:1.2;color:var(--navy)}
-.wrap{max-width:var(--max);margin:0 auto;padding:0 1.25rem}
-.skip{position:absolute;left:-999px}.skip:focus{left:1rem;top:1rem;background:#fff;padding:.5rem;z-index:100}
+h1,h2,h3,h4,h5,h6{font-family:var(--head);font-weight:800;line-height:1.2;color:var(--ink);letter-spacing:-.01em}
+h1,h2{letter-spacing:-.02em;line-height:1.1}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 20px}
+.skip{position:absolute;left:-999px}
+.skip:focus{left:20px;top:12px;background:var(--white);color:var(--ink);padding:10px 14px;border-radius:6px;z-index:100}
+.eyebrow{font:600 13px/1.4 var(--body);text-transform:uppercase;letter-spacing:.12em;color:var(--blue);margin:0 0 12px}
+@keyframes drop{from{opacity:0;transform:translateY(-8px)}}
 
-/* header */
-.site-header{background:var(--navy);color:#fff;position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,.25)}
-.site-header .wrap{display:flex;align-items:center;gap:1.5rem;min-height:66px;position:relative}
-.brand{color:#fff;text-decoration:none;font-weight:800;font-size:1.4rem;letter-spacing:.06em;display:flex;align-items:center;gap:.5rem}
-.brand img{height:38px}
+/* --- header ---------------------------------------------------------------------------------
+   The mega panel is a child of the Services <li> and absolutely positioned against .site-header
+   (sticky is a positioned element, so it is the containing block). That is why the Services <li>
+   is position:static while every other one is relative: the panel has to span the viewport, not
+   the 1200px column, while the Company drop-down anchors to its own item. Opening is plain
+   :hover/:focus-within; only the group/pane switch needs :has(), and without it the panel still
+   opens showing the first group. */
+.site-header{background:var(--black);color:var(--white);position:sticky;top:0;z-index:50;border-bottom:1px solid var(--line-dark)}
+.site-header .wrap{display:flex;align-items:center;gap:24px;min-height:64px}
+.brand{display:flex;align-items:center;gap:8px;color:var(--white);text-decoration:none;font:800 20px/1 var(--head);letter-spacing:-.01em}
+.brand img{height:22px;width:auto;filter:brightness(0) invert(1)}
 .nav-toggle{display:none}
-.nav-toggle-label{display:none;margin-left:auto;font-size:1.7rem;cursor:pointer;line-height:1}
+.nav-toggle-label{display:none;margin-left:auto;width:44px;height:44px;align-items:center;justify-content:center;border:1px solid var(--line-dark-2);border-radius:6px;cursor:pointer;font-size:18px;line-height:1}
 .site-nav{margin-left:auto}
-.site-nav ul{list-style:none;margin:0;padding:0;display:flex;gap:.15rem;align-items:center}
-.site-nav li{position:relative}
-.site-nav a{color:#e2e8f0;text-decoration:none;padding:.6rem .85rem;display:block;border-radius:6px;font-weight:500}
-.site-nav a:hover{background:var(--navy-2);color:#fff}
-.site-nav li ul{display:none;position:absolute;top:100%;left:0;background:#fff;min-width:230px;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,.18);border-radius:10px;padding:.4rem;gap:0;align-items:stretch}
-.site-nav li:hover>ul,.site-nav li:focus-within>ul{display:flex}
-.site-nav li ul a{color:var(--text);font-weight:400}
-.site-nav li ul a:hover{background:#f1f5f9;color:var(--accent-2)}
-.site-nav .nav-cta a{background:var(--accent);color:#fff;font-weight:600;margin-left:.5rem}
-.site-nav .nav-cta a:hover{background:var(--accent-2)}
+.site-nav>ul{list-style:none;margin:0;padding:0;display:flex;align-items:center}
+.site-nav>ul>li{position:relative}
+.site-nav>ul>li.nav-mega{position:static}
+.site-nav>ul>li>a{color:#e6e9ef;text-decoration:none;font:500 15px/1 var(--body);padding:22px 14px;display:block;transition:color .15s}
+.site-nav>ul>li>a:hover{color:var(--blue)}
+.site-nav .nav-cta{margin-left:10px}
+.site-nav .nav-cta>a{background:var(--blue);color:var(--white);font-weight:600;padding:10px 18px;border-radius:6px}
+.site-nav .nav-cta>a:hover{background:var(--blue-hover);color:var(--white)}
+/* the plain drop-down (Company) */
+.site-nav .sub{display:none;position:absolute;top:100%;left:0;list-style:none;margin:0;width:220px;background:var(--white);border:1px solid var(--line);border-radius:10px;padding:10px;box-shadow:0 30px 60px rgba(10,13,18,.25);animation:drop .2s cubic-bezier(.2,.7,.2,1)}
+.site-nav li:hover>.sub,.site-nav li:focus-within>.sub{display:block}
+.site-nav .sub a{display:block;color:var(--ink);text-decoration:none;font:400 15px/1.3 var(--body);padding:9px 12px;border-radius:6px}
+.site-nav .sub a:hover{background:var(--grey);color:var(--blue-hover)}
+
+/* --- services mega menu --------------------------------------------------------------------- */
+.mega{display:none;position:absolute;top:100%;left:0;right:0;background:var(--white);color:var(--ink);border-bottom:1px solid var(--line);box-shadow:0 30px 60px rgba(10,13,18,.25);animation:drop .22s cubic-bezier(.2,.7,.2,1)}
+.nav-mega:hover>.mega,.nav-mega:focus-within>.mega{display:block}
+.mega>.wrap{display:grid;grid-template-columns:260px minmax(0,1fr)}
+.mega-groups{border-right:1px solid var(--line);padding:18px 18px 18px 0}
+.mega-g{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:8px;text-decoration:none;color:var(--muted);font:600 15px/1.3 var(--body)}
+.mega-g .n{flex:none;width:22px;font:700 11px/1 var(--mono);color:var(--blue)}
+.mega-g .arrow{margin-left:auto;color:var(--blue);opacity:0}
+.mega-g:hover{background:var(--grey);color:var(--black)}
+.mega-g:hover .arrow{opacity:1}
+.mega-panes{padding:28px 0 28px 36px}
+.mega-pane h3{font:800 22px/1.2 var(--head);margin:0 0 6px;color:var(--black)}
+.mega-pane .blurb{font:400 14.5px/1.5 var(--body);color:var(--muted);max-width:560px;margin:0 0 18px}
+.mega-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.mega-tiles a{display:flex;align-items:center;gap:8px;background:var(--grey);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font:400 14px/1.3 var(--body);color:var(--ink);text-decoration:none;transition:background .15s,border-color .15s,color .15s}
+.mega-tiles a:hover{background:var(--white);border-color:var(--blue);color:var(--blue)}
+.mega-tiles .arrow{margin-left:auto;color:var(--blue)}
+.mega-foot{grid-column:1/-1;display:flex;gap:24px;border-top:1px solid var(--line);padding:14px 0}
+.mega-foot a{font:600 14px/1 var(--body);color:var(--black);text-decoration:none}
+.mega-foot a.q{color:var(--blue)}
+/* Which group is showing. Nothing hovered = the first one, which is also the whole behaviour in a
+   browser without :has(). The "hide the default" rule is deliberately less specific than the
+   per-index rules below it, so the hovered pane wins. Eight groups is the ceiling.
+   ponytail: a ninth service would silently show pane one; add a line if that ever happens. */
+.mega-panes>.mega-pane{display:none}
+.mega-panes>.mega-pane:first-child{display:block}
+.mega-groups>.mega-g:first-child{background:var(--grey);color:var(--black)}
+.mega-groups>.mega-g:first-child .arrow{opacity:1}
+.mega:has(.mega-g:hover) .mega-panes>.mega-pane:first-child{display:none}
+.mega:has(.mega-g:hover) .mega-groups>.mega-g:first-child:not(:hover){background:transparent;color:var(--muted)}
+.mega:has(.mega-g:hover) .mega-groups>.mega-g:first-child:not(:hover) .arrow{opacity:0}
+.mega:has(.mega-g:nth-child(1):hover) .mega-panes>.mega-pane:nth-child(1),
+.mega:has(.mega-g:nth-child(2):hover) .mega-panes>.mega-pane:nth-child(2),
+.mega:has(.mega-g:nth-child(3):hover) .mega-panes>.mega-pane:nth-child(3),
+.mega:has(.mega-g:nth-child(4):hover) .mega-panes>.mega-pane:nth-child(4),
+.mega:has(.mega-g:nth-child(5):hover) .mega-panes>.mega-pane:nth-child(5),
+.mega:has(.mega-g:nth-child(6):hover) .mega-panes>.mega-pane:nth-child(6),
+.mega:has(.mega-g:nth-child(7):hover) .mega-panes>.mega-pane:nth-child(7),
+.mega:has(.mega-g:nth-child(8):hover) .mega-panes>.mega-pane:nth-child(8){display:block}
+
 @media(max-width:960px){
-  .nav-toggle-label{display:block}
-  .site-nav{display:none;position:absolute;left:0;right:0;top:66px;background:var(--navy);padding:.5rem 1.25rem 1rem;box-shadow:0 10px 20px rgba(0,0,0,.3)}
+  .nav-toggle-label{display:flex}
+  .site-nav{display:none;position:absolute;left:0;right:0;top:64px;background:var(--black-2);padding:10px 20px 20px;max-height:calc(100vh - 64px);overflow:auto}
   .nav-toggle:checked~.site-nav{display:block}
-  .site-nav ul{flex-direction:column;align-items:stretch}
-  .site-nav li ul{display:flex;position:static;background:transparent;box-shadow:none;padding:0 0 0 1rem}
-  .site-nav li ul a{color:#cbd5e1}
-  .site-nav .nav-cta a{margin:.5rem 0 0}
+  .site-nav>ul{flex-direction:column;align-items:stretch}
+  .site-nav>ul>li>a{padding:14px 0;font:600 16px/1.3 var(--body);color:var(--white);border-bottom:1px solid var(--line-dark)}
+  .site-nav .sub{display:block;position:static;width:auto;background:transparent;border:0;box-shadow:none;padding:0 0 8px;animation:none}
+  .site-nav .sub a{color:var(--muted-dark);padding:10px 16px}
+  .site-nav .sub a:hover{background:transparent;color:var(--white)}
+  .site-nav .nav-cta{margin:12px 0 0}
+  .site-nav .nav-cta>a{text-align:center;padding:14px 18px}
+  /* the panel collapses to a plain list: no group column, every pane shown, no blurbs */
+  .mega{display:block;position:static;background:transparent;color:inherit;border:0;box-shadow:none;animation:none}
+  .mega>.wrap{display:block;padding:0}
+  .mega-groups{display:none}
+  .mega-panes{padding:0 0 8px}
+  .mega-panes>.mega-pane{display:block}
+  .mega-pane h3{font:600 15px/1.3 var(--body);color:var(--muted-dark-2);margin:12px 0 4px}
+  .mega-pane .blurb{display:none}
+  .mega-tiles{grid-template-columns:1fr;gap:0}
+  .mega-tiles a{background:transparent;border:0;color:var(--muted-dark);padding:10px 16px}
+  .mega-tiles a:hover{background:transparent;color:var(--white)}
+  .mega-foot{display:flex;border-top:1px solid var(--line-dark);padding:12px 0 0}
+  .mega-foot a{color:var(--white)}
 }
 
-/* footer */
-.site-footer{background:var(--navy);color:#cbd5e1;margin-top:4rem;padding:3rem 0 1.5rem}
-.site-footer .cols{display:grid;grid-template-columns:2fr 1fr 1fr;gap:2rem}
-@media(max-width:800px){.site-footer .cols{grid-template-columns:1fr}}
-.site-footer h4{color:#fff;margin:0 0 .75rem;font-size:1rem;text-transform:uppercase;letter-spacing:.06em}
-.site-footer p{margin:0 0 .5rem}
-.site-footer a{color:#e2e8f0;text-decoration:none}.site-footer a:hover{color:var(--accent)}
-.site-footer ul{list-style:none;padding:0;margin:0}.site-footer li{margin:.35rem 0}
-.site-footer .legal{border-top:1px solid rgba(255,255,255,.12);margin-top:2rem;padding-top:1rem;font-size:.9rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem}
+/* --- footer ---------------------------------------------------------------------------------- */
+.site-footer{background:var(--black);color:var(--muted-dark);border-top:1px solid var(--line-dark);padding:56px 0 28px}
+.site-footer .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:32px}
+.site-footer h4{font:700 13px/1.3 var(--head);text-transform:uppercase;letter-spacing:.1em;color:var(--white);margin:0 0 14px}
+.site-footer p{margin:0 0 10px;font-size:14px;line-height:1.6}
+.site-footer .brand{margin-bottom:14px;font-size:18px}
+.site-footer a{color:var(--muted-dark);text-decoration:none;font-size:14px}
+.site-footer a:hover{color:var(--white)}
+.site-footer ul{list-style:none;padding:0;margin:0}
+.site-footer li{margin:0 0 10px}
+.site-footer .q{color:var(--blue)}.site-footer .q:hover{color:var(--blue-light)}
+.site-footer .legal{border-top:1px solid var(--line-dark);margin-top:36px;padding-top:20px;font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
 
 /* page chrome */
 main{min-height:60vh}
@@ -76,19 +167,29 @@ main{min-height:60vh}
 .card .date{display:block;font-size:.85rem;color:var(--muted);margin-bottom:.4rem}
 a.card{text-decoration:none;color:inherit;transition:transform .15s,box-shadow .15s;display:block}
 a.card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(15,27,45,.12)}
-.btn{display:inline-block;background:var(--accent);color:#fff;padding:.75rem 1.5rem;border-radius:8px;text-decoration:none;font-weight:600;border:0;cursor:pointer;font:inherit}
-.btn:hover{background:var(--accent-2);color:#fff}
-/* .btn paints white on the accent; ghost drops the fill, so it has to name its own colour or it is
-   white-on-white. The :hover rule is not optional: .btn:hover and .btn.ghost have equal specificity,
-   so ghost's transparent background wins on source order while :hover's white text still applies. */
-.btn.ghost{background:transparent;color:var(--accent-2);border:2px solid currentColor}
-.btn.ghost:hover{background:var(--accent-2);color:#fff}
+/* Four buttons. Each variant names its own colour: .btn paints white on blue, so a variant that
+   drops the fill is white-on-white until it says otherwise, and each needs its own :hover for the
+   same reason — .btn:hover and .btn.ghost have equal specificity, so the fill would come back. */
+.btn{display:inline-block;background:var(--blue);color:var(--white);border:1px solid transparent;padding:14px 24px;border-radius:6px;text-decoration:none;font:600 15px/1 var(--body);cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.btn:hover{background:var(--blue-hover);color:var(--white)}
+.btn.dark{background:var(--black)}
+.btn.dark:hover{background:var(--blue)}
+.btn.ghost{background:transparent;color:var(--black);border-color:var(--line-2)}
+.btn.ghost:hover{background:transparent;color:var(--black);border-color:var(--black)}
+.btn.ghost-dark{background:transparent;color:var(--white);border-color:var(--line-dark-2)}
+.btn.ghost-dark:hover{background:transparent;color:var(--white);border-color:var(--white)}
+@media(max-width:700px){.btn{min-height:44px;padding:15px 22px}}   /* the 44px touch target */
 .pagination{display:flex;gap:.75rem;margin:2rem 0}
 .featured{border-radius:var(--radius);margin:1rem 0 1.5rem;width:100%;max-height:440px;object-fit:cover}
 .terms a{display:inline-block;background:#e0f2fe;color:var(--accent-2);padding:.2rem .7rem;border-radius:999px;text-decoration:none;font-size:.85rem;margin:0 .35rem .35rem 0}
 .details{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin:1.5rem 0;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.25rem}
 .details dt{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}.details dd{margin:.1rem 0 0;font-weight:600}
-.error-page{text-align:center;padding:5rem 0}.error-page h1{font-size:3rem}
+.error-page{background:var(--black);color:var(--muted-dark);min-height:60vh;display:flex;align-items:center;padding:80px 0}
+.error-page>.wrap{width:100%}   /* a flex item shrink-wraps, and margin:0 auto would then centre it */
+.error-page .code{margin:0;font:800 clamp(80px,16vw,160px)/1 var(--head);color:var(--blue);letter-spacing:-.04em}
+.error-page h1{margin:8px 0 12px;font-size:clamp(28px,3.5vw,40px);color:var(--white)}
+.error-page p{margin:0 0 28px;font-size:17px;max-width:520px}
+.error-page .btns{display:flex;gap:12px;flex-wrap:wrap}
 
 /* Section alignment, set per section under the section's own ⚙ in /admin (blocks.py align_class()).
    al-* lines up what is inside the section — text, buttons, an image, a caption. alb-* moves the

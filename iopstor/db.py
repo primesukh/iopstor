@@ -164,6 +164,28 @@ def hydrate(post):
     return with_paths([post])[0] if post else None
 
 
+def tree(type_slug):
+    """Top-level live posts of one type, each with p["children"] (live, ordered, with paths).
+    One query, not two: the whole type comes back and the parent/child split happens here, which is
+    also why a draft parent's children drop out — they are grouped under an id that is not a top.
+    The header mega panel, the services archive and post_list(top_level) all want this same shape."""
+    def load():
+        pt = post_type(slug=type_slug)
+        if pt is None:
+            return []
+        posts = with_paths(rows(live(select_posts()).eq("post_type_id", pt["id"])
+                                .order("menu_order").order("published_at", desc=True)))
+        kids = {}
+        for p in posts:
+            if p["parent_id"] is not None:
+                kids.setdefault(p["parent_id"], []).append(p)
+        tops = [p for p in posts if p["parent_id"] is None]
+        for t in tops:
+            t["children"] = kids.get(t["id"], [])
+        return tops
+    return _cached(f"tree_{type_slug}", load)
+
+
 def unique_slug(post_type_id, base, exclude_id=None):
     """base if it is free, else base-xyz. Three random letters rather than -2: a second "Testing" is a
     different page, not the second part of one, and the suffix does not leak how many there are."""

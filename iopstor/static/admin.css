@@ -171,3 +171,6 @@
 .share-body{padding:.6rem .8rem;background:#f8fafc}
 .share-site{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 .share-body strong{display:block;margin:.15rem 0;color:var(--navy)}
+
+/* the page canvas: site.css now paints body white for the public theme */
+.admin{background:var(--grey)}

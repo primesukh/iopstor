@@ -19,9 +19,25 @@ api.register_error_handler(APIError, _pg_error)
 PUBLIC_SETTINGS = ("site_name", "tagline", "logo_url", "social_links", "contact_email", "contact_phone", "address")
 
 
+def _service_nav():
+    """The Services menu: the archive URL, and the live top-level services with their children.
+    Drives the header's mega panel and the footer's Services column. None when there are none.
+    menu('header') carries labels and URLs only, and the panel needs each group's excerpt.
+    # ponytail: services is the only menu that gets a mega panel, which is what the design asks
+    # for. Give post_types a flag if a second one ever wants one."""
+    pt = db.post_type(slug="service")
+    if pt is None:
+        return None
+    groups = db.tree("service")
+    return {"url": "/" + pt["url_prefix"], "groups": groups} if groups else None
+
+
 @pub.app_context_processor
 def _template_globals():
-    return {"site": seo.site(), "menu": db.get_menu, "render_blocks": render_blocks, "year": date.today().year}
+    # service_nav stays a callable, not a value: this processor is app-wide, and an /admin page has
+    # no use for a posts query.
+    return {"site": seo.site(), "menu": db.get_menu, "render_blocks": render_blocks,
+            "year": date.today().year, "service_nav": _service_nav}
 
 
 def _live_post(pt, slug):
