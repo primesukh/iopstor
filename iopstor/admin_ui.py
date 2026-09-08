@@ -46,7 +46,11 @@ def _globals():
         return {}
     if "csrf" not in session:
         session["csrf"] = secrets.token_urlsafe(16)
-    return {"csrf": session["csrf"], "admin_user": getattr(g, "user", None), "post_types": db.post_types() if getattr(g, "user", None) else []}
+    user = getattr(g, "user", None)
+    # nav_counts, not "counts": the dashboard view passes its own `counts` and a view's context
+    # shadows a processor's, which would leave the sidebar's leads pill empty on that one page.
+    return {"csrf": session["csrf"], "admin_user": user, "post_types": db.post_types() if user else [],
+            "nav_counts": db.admin_counts() if user else {}}
 
 
 @ui.errorhandler(APIError)
@@ -92,9 +96,13 @@ def logout():
 @ui.get("/")
 @ui_required()
 def dashboard():
-    counts = {t["slug"]: db.table("posts").select("id", count="exact").eq("post_type_id", t["id"]).limit(1).execute().count for t in db.post_types()}
-    new_leads = db.table("leads").select("id", count="exact").eq("status", "new").limit(1).execute().count
-    return render_template("admin/dashboard.html", counts=counts, new_leads=new_leads)
+    # the sidebar already counted everything for this request; reuse it instead of one
+    # exact-count round trip per post type
+    counts = db.admin_counts()
+    recent_leads = db.rows(db.table("leads").select("*").eq("status", "new").order("created_at", desc=True).limit(5))
+    recent_posts = db.rows(db.table("posts").select("id,title,status,updated_at").order("updated_at", desc=True).limit(5))
+    return render_template("admin/dashboard.html", counts=counts, new_leads=counts["_leads"],
+                           recent_leads=recent_leads, recent_posts=recent_posts)
 
 
 @ui.get("/posts")

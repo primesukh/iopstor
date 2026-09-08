@@ -6,11 +6,11 @@
 /* --- one block ----------------------------------------------------------- */
 [data-b]{position:relative;transition:outline-color .12s}
 [data-b]:hover{outline:2px dashed #bae6fd;outline-offset:-2px}
-[data-b].iop-sel{outline:2px solid var(--accent);outline-offset:-2px}
+[data-b].iop-sel{outline:2px solid var(--blue);outline-offset:-2px}
 .iop-empty{padding:4rem 0;text-align:center;color:var(--muted)}
 
 /* the toolbar that appears on the selected/hovered block */
-.iop-bar{position:absolute;top:.4rem;right:.4rem;z-index:20;display:none;gap:.15rem;background:var(--navy);
+.iop-bar{position:absolute;top:.4rem;right:.4rem;z-index:20;display:none;gap:.15rem;background:var(--black);
          border-radius:8px;padding:.2rem;box-shadow:0 4px 14px rgba(15,27,45,.28)}
 [data-b]:hover>.iop-bar,[data-b].iop-sel>.iop-bar{display:flex}
 .iop-bar button{background:transparent;border:0;color:#fff;font:inherit;font-size:.8rem;line-height:1;
@@ -29,13 +29,13 @@
 
 /* --- editable fields ------------------------------------------------------ */
 [data-f]{cursor:text}
-[data-f]:focus{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+[data-f]:focus{outline:2px solid var(--blue);outline-offset:3px;border-radius:3px}
 [data-f]:empty::before{content:attr(data-ph);color:#94a3b8;font-style:italic;font-weight:400}
 [data-r]:hover{outline:1px dashed #cbd5e1;outline-offset:3px}
 
 /* placeholders for the blocks that cannot be edited on the page itself */
-.iop-ph{border:2px dashed var(--line);border-radius:var(--radius);padding:1.6rem;text-align:center;color:var(--muted);background:#f8fafc}
-.iop-err{border:2px dashed #fecaca;border-radius:var(--radius);padding:1.2rem;text-align:center;color:#b91c1c;background:#fef2f2}
+.iop-ph{border:2px dashed var(--line);border-radius:12px;padding:1.6rem;text-align:center;color:var(--muted);background:#f8fafc}
+.iop-err{border:2px dashed #fecaca;border-radius:12px;padding:1.2rem;text-align:center;color:#b91c1c;background:#fef2f2}
 
 /* A live PDF viewer would swallow every click: show it, but let the click reach the section.
    Safe to render for real (unlike embed_html) because it is the public Storage bucket, cross-origin. */
@@ -43,7 +43,7 @@
 
 /* --- dragging ------------------------------------------------------------- */
 .iop-ghost{opacity:.35}
-.iop-drag{outline:2px solid var(--accent)!important}
+.iop-drag{outline:2px solid var(--blue)!important}
 
 
 /* --- the click-to-type gap between sections ------------------------------- */
@@ -55,7 +55,7 @@
    Show it, and make it read as somewhere to drop a section. */
 .column>.iop-add:only-child{padding:1.1rem 0}
 .column>.iop-add:only-child button{opacity:1;text-align:center;background:#f8fafc;border:1px dashed #cbd5e1;cursor:pointer}
-.column>.iop-add:only-child button:hover{background:#f1f5f9;color:var(--accent-2);border-color:var(--accent)}
+.column>.iop-add:only-child button:hover{background:#f1f5f9;color:var(--blue-hover);border-color:var(--blue)}
 
 /* --- table columns: drag an edge to resize ------------------------------- */
 [data-rich] th,[data-rich] td{position:relative}

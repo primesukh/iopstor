@@ -34,6 +34,10 @@ If you can log in but see "Forbidden", your login exists but has not been given 
 
 ---
 
+**Finding your way around.** Everything lives in the black bar down the left. *Content* lists every kind of page with how many of each there are; *Site* holds Media, Leads, Warranty and — if you are an administrator — Settings and Users. The page you are on is highlighted in blue, and a blue number next to **Leads** means new enquiries are waiting. On a narrow screen the bar collapses to a single line with a ☰ button.
+
+---
+
 ## 3. The kinds of content you can create
 
 Content is organised into **types**. Each type has its own list in the admin sidebar and its own address pattern on the website.

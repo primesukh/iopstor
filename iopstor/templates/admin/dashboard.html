@@ -1,9 +1,26 @@
 {% extends "admin/base.html" %}{% block title %}Dashboard{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
-<div class="cards">
-  {% for t in post_types %}<div class="card"><h3>{{ t.name }}</h3><p><strong>{{ counts[t.slug] }}</strong> items</p>
-    <p><a class="btn" href="{{ url_for('admin_ui.new_post', type=t.slug) }}">+ New</a> <a class="btn secondary" href="{{ url_for('admin_ui.posts', type=t.slug) }}">List</a></p></div>{% endfor %}
-  <div class="card"><h3>Leads</h3><p><strong>{{ new_leads }}</strong> new</p><p><a class="btn secondary" href="{{ url_for('admin_ui.leads', status='new') }}">Open</a></p></div>
+<p class="page-sub">Everything on the site, and what has come in.</p>
+<div class="tiles">
+  {% for t in post_types %}<a class="tile" href="{{ url_for('admin_ui.posts', type=t.slug) }}">
+    <span class="t">{{ t.name }}</span><span class="n">{{ counts[t.slug] }}</span>
+    <span class="d">{{ 'item' if counts[t.slug] == 1 else 'items' }}</span></a>{% endfor %}
+</div>
+<div class="panels">
+  <div class="panel">
+    <div class="panel-head"><h2>New leads</h2><a href="{{ url_for('admin_ui.leads', status='new') }}">All leads</a></div>
+    {% for l in recent_leads %}<a class="panel-row" href="{{ url_for('admin_ui.leads', status='new') }}">
+      <span>{{ l.name }}<span class="sub">{{ l.company or l.email }}</span></span>
+      <span class="pill draft">{{ l.kind }}</span></a>
+    {% else %}<p class="panel-empty">Nothing new.</p>{% endfor %}
+  </div>
+  <div class="panel">
+    <div class="panel-head"><h2>Recently edited</h2><a href="{{ url_for('admin_ui.posts') }}">All content</a></div>
+    {% for p in recent_posts %}<a class="panel-row" href="{{ url_for('admin_ui.edit_post', pk=p.id) }}">
+      <span>{{ p.title }}<span class="sub">{{ p.updated_at[:10] }}</span></span>
+      <span class="pill {{ p.status }}">{{ p.status }}</span></a>
+    {% else %}<p class="panel-empty">Nothing yet.</p>{% endfor %}
+  </div>
 </div>
 {% endblock %}
