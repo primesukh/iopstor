@@ -232,6 +232,7 @@ Decisions that are easy to undo by accident:
 | 2026-09-09 | Rupees only; `specs` is `kv` rows | A currency choice should not exist; `jsonb` sorts object keys |
 | 2026-09-09 | `.md` twin of every page, rendered on request | AI crawlers read Markdown, not the theme; nothing to keep in sync |
 | 2026-09-09 | `.claude/` refreshed with every PR merge; hard rules enforced in `settings.json` | The map had drifted six days behind the territory |
+| 2026-09-09 | `/after-merge` owns the whole graph refresh; the git hooks are not relied on after a pull | A fast-forward pull fires no hook, so the graph sat three commits behind `main` on the first run |
 
 ---
 
@@ -246,7 +247,7 @@ Marked `# ponytail:` in source (28 at last count; `/ponytail-debt` harvests them
 | Path | Role |
 |---|---|
 | `settings.json` | Permission **deny** list that enforces the hard rules mechanically (no `flask migrate/seed/create-admin/import-media`, no `pip install`, no `git merge`/push to main/`gh pr merge`, no hand edits to generated `requirements*.txt` / `Pipfile.lock` / `.env`); allow list for the read-only commands used every session; `includeCoAuthoredBy: false`; the session-start hook |
-| `hooks/session-start.sh` | Prints branch, dirty files, the last 12 commits and how far behind `HEAD` the graph is (non-zero means a git-hook rebuild failed — see `~/.cache/graphify-rebuild.log`) — rule 0 and the graph-freshness check, for free, every session |
+| `hooks/session-start.sh` | Prints branch, dirty files, the last 12 commits and how far behind `HEAD` the graph is (non-zero is normal right after a pull, until `/after-merge`; otherwise a git-hook rebuild failed — see `~/.cache/graphify-rebuild.log`) — rule 0 and the graph-freshness check, for free, every session |
 | `skills/pr` | branch → checks → push → PR body → **stop** |
 | `skills/docs` | which of the three docs a change touches, and in what voice |
 | `skills/new-block` | the eleven places a block type lives |
