@@ -388,6 +388,22 @@ The site publishes automatically, with no work from you:
 - `/robots.txt` — the rules for crawlers
 - `/feed.xml` — an RSS feed of the blog
 - `/llms.txt` and `/llms-full.txt` — a clean, plain-text version of the whole site, written for AI assistants to read
+- **a plain-text version of every single page** — add `.md` to any address and you get that page's words with no design around them. `/about-us` becomes `/about-us.md`, `/services/storage/nas` becomes `/services/storage/nas.md`, and the home page is `/index.md`. Section headings, lists, tables and specification rows all survive; only the styling is dropped
+
+### Why the `.md` versions matter
+
+Assistants like ChatGPT, Claude, Perplexity and Google's AI answers read pages before they answer a
+question. Handing them the words directly, instead of a page they have to pick apart, makes it far
+more likely they quote IOPSTOR correctly — and cite us — when someone asks about NAS, ZFS or
+hyper-converged storage. It is the same idea as a sitemap, but for AI rather than for Google.
+
+You do not have to do anything. Every page you publish gets its version the moment it goes live, and
+it updates itself the moment you edit the page — there is no separate file to keep in step, and
+nothing to remember. Listing pages get one too: `/blog.md` and `/services.md` are the lists of what
+is in them.
+
+The one exception is deliberate: a page you have switched **"hide from search engines"** on, or a
+draft, has no plain-text version either. Hidden means hidden from AI as well.
 
 Each page also carries its title, description, social-sharing preview and machine-readable labelling (a Case Study is labelled an Article, a Service a Service, an Event an Event) so that search results and shared links look right.
 

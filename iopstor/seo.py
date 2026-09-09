@@ -18,6 +18,12 @@ def _abs(url, base):
     return url if not url or url.startswith("http") else base + url
 
 
+def md_url(path):
+    """The Markdown twin of a site path: /services/nas -> /services/nas.md, / -> /index.md.
+    Every page has one, served by public.resolve(); this is the one place that spells the rule."""
+    return "/index.md" if path in ("", "/") else path.rstrip("/") + ".md"
+
+
 def _image(post):
     return (post.get("featured_media") or {}).get("url", "")
 
@@ -31,11 +37,15 @@ def build_meta(post=None, *, title=None, description="", path="/", robots="index
     else:
         page_title = f"{title} | {s['name']}" if title else (f"{s['name']} — {s['tagline']}" if s["tagline"] else s["name"])
     image = seo.get("og_image") or (_image(post) if post else "") or s["og_image"]
+    robots = seo.get("robots") or robots
     return {
         "title": seo.get("title") or page_title,
         "description": seo.get("description") or (post["excerpt"] if post else description) or s["tagline"],
         "canonical": seo.get("canonical") or s["url"] + path,
-        "robots": seo.get("robots") or robots,
+        "robots": robots,
+        # <link rel="alternate" type="text/markdown"> in base.html. A noindex page has no
+        # scrapeable twin to advertise.
+        "markdown": "" if robots.startswith("noindex") else s["url"] + md_url(path),
         "image": _abs(image, s["url"]),
         "type": "article" if post and post["post_type"]["slug"] == "post" else "website",
         "site_name": s["name"],

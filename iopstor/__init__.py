@@ -13,6 +13,21 @@ class JSONProvider(DefaultJSONProvider):
     sort_keys = False  # keep block/meta field order as authored
 
 
+def rupees(n):
+    """A price the way an Indian customer reads one: the last three digits, then twos.
+    `{:,}` groups in threes all the way up, which would print 12,50,000 as 1,250,000. Anything
+    that is not a number comes back untouched, so a price typed as "on request" still prints.
+    Module scope, not a create_app() closure: public.py prints prices into Markdown too."""
+    try:
+        paise = round(float(n))
+    except (TypeError, ValueError):
+        return str(n or "")
+    digits = str(abs(paise))
+    if len(digits) > 3:
+        digits = re.sub(r"(?<=\d)(?=(\d\d)+$)", ",", digits[:-3]) + "," + digits[-3:]
+    return ("-" if paise < 0 else "") + "\u20b9 " + digits
+
+
 def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_object(config)
@@ -33,19 +48,6 @@ def create_app(test_config=None):
         # saved file, so the reader gets "datasheet.pdf" and not the uuid the bucket key is made of.
         m = db.get_media(int(i)) if i else None
         return f"{m['url']}?download={quote(m.get('filename') or '')}" if m else ""
-
-    def rupees(n):
-        """A price the way an Indian customer reads one: the last three digits, then twos.
-        `{:,}` groups in threes all the way up, which would print 12,50,000 as 1,250,000. Anything
-        that is not a number comes back untouched, so a price typed as "on request" still prints."""
-        try:
-            paise = round(float(n))
-        except (TypeError, ValueError):
-            return str(n or "")
-        digits = str(abs(paise))
-        if len(digits) > 3:
-            digits = re.sub(r"(?<=\d)(?=(\d\d)+$)", ",", digits[:-3]) + "," + digits[-3:]
-        return ("-" if paise < 0 else "") + "\u20b9 " + digits
 
     app.jinja_env.globals.update(
         rupees=rupees,

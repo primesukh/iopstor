@@ -7,6 +7,8 @@
 <meta name="description" content="{{ meta.description }}">
 <meta name="robots" content="{{ meta.robots }}">
 <link rel="canonical" href="{{ meta.canonical }}">
+{% if meta.markdown %}<link rel="alternate" type="text/markdown" href="{{ meta.markdown }}">
+{% endif %}
 <meta property="og:type" content="{{ meta.type }}">
 <meta property="og:site_name" content="{{ meta.site_name }}">
 <meta property="og:title" content="{{ meta.title }}">
