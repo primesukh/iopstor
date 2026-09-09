@@ -421,6 +421,11 @@ asks for.
 fit now breaks and carries on on the next line, in the editor and on the live site, instead of
 pushing the page sideways.
 
+**The Services list ran off the side of my phone.** It no longer does. On a narrow screen each service
+group now reads down the page — the number, the group name, its description, then its services as
+full-width buttons you can tap. On a laptop it is unchanged: the words on the left, the services in a
+column on the right.
+
 
 **I changed something and the website looks the same.** Check the status is *Published* and the publish date is not in the future. Then refresh with Ctrl+F5.
 
