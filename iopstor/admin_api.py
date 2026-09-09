@@ -114,7 +114,7 @@ def me():
 
 # ---- post types ------------------------------------------------------------
 
-PT_FIELDS = ("name", "hierarchical", "field_schema", "taxonomies", "jsonld_type", "in_sitemap")
+PT_FIELDS = ("name", "hierarchical", "field_schema", "taxonomies", "jsonld_type", "in_sitemap", "has_pages")
 
 
 def _post_type_or_404(slug):

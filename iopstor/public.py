@@ -174,7 +174,8 @@ def resolve(path):
 # ---- crawler endpoints -----------------------------------------------------
 
 def _indexable(post):
-    return not (post.get("seo") or {}).get("robots", "").startswith("noindex")
+    # No URL, nothing to point a crawler at. This one test gates both the sitemap and llms.txt.
+    return bool(post.get("path")) and not (post.get("seo") or {}).get("robots", "").startswith("noindex")
 
 
 def _live_term_ids():
@@ -265,7 +266,7 @@ def feed():
 def public_post(post):
     d = dict(post)
     d.pop("author_id", None)
-    d["url"] = seo.site()["url"] + post["path"]
+    d["url"] = (seo.site()["url"] + post["path"]) if post["path"] else None
     d["text"] = blocks_text(post.get("blocks") or [])
     return d
 

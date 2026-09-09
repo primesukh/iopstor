@@ -152,7 +152,14 @@ def ancestors(post):
 def with_paths(posts):
     for p in posts:
         pt = p["post_type"]
-        if not pt["url_prefix"] and p["parent_id"] is None and p["slug"] == "home":
+        # A type with has_pages=false has no URLs at all, and that one fact does the whole job:
+        # resolve() matches a detail page by `post["path"] == full`, which None can never satisfy, so
+        # it 404s without a rule of its own; _indexable() keeps it out of the sitemap and llms.txt;
+        # and _card.html renders the card without a link. .get() so the app still runs against a
+        # database where migration 0005 has not been applied yet.
+        if not pt.get("has_pages", True):
+            p["path"] = None
+        elif not pt["url_prefix"] and p["parent_id"] is None and p["slug"] == "home":
             p["path"] = "/"  # the page with slug "home" is the site root
         else:
             parts = ([pt["url_prefix"]] if pt["url_prefix"] else []) + [r["slug"] for r in _chain(p)] + [p["slug"]]

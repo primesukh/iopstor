@@ -49,7 +49,7 @@ Content is organised into **types**. Each type has its own list in the admin sid
 | **Services** | The service catalogue. Nests two levels deep: *Storage* → *NAS* | `/services/storage/nas` |
 | **Case Studies** | Customer stories | `/case-studies/lks` |
 | **Events** | Trade shows, launches, collaborations | `/events/broadcast-2018` |
-| **Technology Partners** | Partner companies and their logos | `/partners/seagate` |
+| **Technology Partners** | Partner companies and their logos | *(no page of its own — see below)* |
 | **Datasheets** | Downloadable PDFs | `/datasheets/flash-array` |
 | **Products** | Items that can be paid for online | `/products/starter-array` |
 
@@ -63,6 +63,12 @@ Some types ask for a few extra details. A Case Study asks for Client, Challenge,
 - **Services** (`/services`) is one wide row per group, with every sub-service beside it as a button a visitor can click straight through to.
 - **Events** (`/events`) is a list with the year and month on a black tile at the left of each row.
 - **Datasheets** (`/datasheets`) is a list of rows with a PDF mark and a **Download** button.
+
+**Technology Partners have no pages.** A partner is a logo shown on other pages, so there is nothing
+to read on a page of its own: the logos in the strip are not clickable, and there is no
+`/partners/micron` address. You still add, edit and remove partners exactly as before — upload the
+logo, give it a name — and the admin list shows *"no page of its own"* where the web address usually
+goes. They appear wherever an Automatic list of Technology Partners is placed.
 
 **A blog article reads top to bottom**: the title, the date under it, the picture, a line, then what you wrote. The picture is shown **at the size you uploaded it** — never stretched, never cropped — and is only made smaller if it is wider than the page. You do not arrange any of that: write the article, choose a *Featured image*, and it lays itself out. Every other kind of page still puts its picture beside the words.
 

@@ -44,33 +44,35 @@ def migrate():
 
 # ---- seed ------------------------------------------------------------------
 
-POST_TYPES = [  # slug, name, url_prefix, hierarchical, jsonld_type, taxonomies, field_schema
-    ("page", "Pages", "", False, None, [], []),
-    ("post", "Blog", "blog", False, "BlogPosting", ["category", "tag"], []),
+# has_pages=False means the type has no URLs of its own: its entries are data shown on other pages,
+# never destinations. Migration 0005 does the same to a database that already exists.
+POST_TYPES = [  # slug, name, url_prefix, hierarchical, jsonld_type, taxonomies, field_schema, has_pages
+    ("page", "Pages", "", False, None, [], [], True),
+    ("post", "Blog", "blog", False, "BlogPosting", ["category", "tag"], [], True),
     ("service", "Services", "services", True, "Service", [], [
         {"key": "icon", "label": "Icon", "type": "text", "required": False},
-        {"key": "summary", "label": "One-line summary", "type": "text", "required": False}]),
+        {"key": "summary", "label": "One-line summary", "type": "text", "required": False}], True),
     ("case_study", "Case Studies", "case-studies", False, "Article", ["industry", "solution"], [
         {"key": "client", "label": "Client", "type": "text", "required": True},
         {"key": "challenge", "label": "Challenge", "type": "textarea", "required": False},
         {"key": "solution_text", "label": "Solution", "type": "textarea", "required": False},
-        {"key": "results", "label": "Results", "type": "textarea", "required": False}]),
+        {"key": "results", "label": "Results", "type": "textarea", "required": False}], True),
     ("event", "Events", "events", False, "Event", [], [
         {"key": "start_date", "label": "Start date", "type": "date", "required": True},
         {"key": "end_date", "label": "End date", "type": "date", "required": False},
-        {"key": "location", "label": "Location", "type": "text", "required": False}]),
+        {"key": "location", "label": "Location", "type": "text", "required": False}], True),
     ("partner", "Technology Partners", "partners", False, "Organization", [], [
         {"key": "logo_media_id", "label": "Logo", "type": "media", "required": False},
-        {"key": "website", "label": "Website", "type": "url", "required": False}]),
+        {"key": "website", "label": "Website", "type": "url", "required": False}], False),
     ("datasheet", "Datasheets", "datasheets", False, None, [], [
         {"key": "file_media_id", "label": "PDF", "type": "media", "required": True},
-        {"key": "product_family", "label": "Product family", "type": "text", "required": False}]),
+        {"key": "product_family", "label": "Product family", "type": "text", "required": False}], True),
     ("product", "Products", "products", False, "Product", ["category"], [
         {"key": "price", "label": "Price", "type": "number", "required": False},
         {"key": "currency", "label": "Currency", "type": "text", "required": False},
         {"key": "sku", "label": "SKU", "type": "text", "required": False},
         {"key": "specs", "label": "Specifications", "type": "json", "required": False},
-        {"key": "datasheet_media_id", "label": "Datasheet PDF", "type": "media", "required": False}]),
+        {"key": "datasheet_media_id", "label": "Datasheet PDF", "type": "media", "required": False}], True),
 ]
 TAXONOMIES = {
     "industry": ("Industry", ["Finance", "Education", "Post Production", "Services", "Distribution", "Travel", "Logistics"]),
@@ -303,8 +305,9 @@ def _post(pt, title, *, slug=None, parent=None, blocks=None, meta=None, terms=()
 
 def run_seed():
     types = {}
-    for slug, name, prefix, hier, ld, taxes, schema in POST_TYPES:
-        types[slug] = _get_or_create("post_types", {"slug": slug}, dict(name=name, url_prefix=prefix, hierarchical=hier, jsonld_type=ld, taxonomies=taxes, field_schema=schema))
+    for slug, name, prefix, hier, ld, taxes, schema, pages in POST_TYPES:
+        types[slug] = _get_or_create("post_types", {"slug": slug}, dict(name=name, url_prefix=prefix, hierarchical=hier, jsonld_type=ld,
+                                                                       taxonomies=taxes, field_schema=schema, has_pages=pages))
     db.uncache("post_types")
     terms = {}
     for slug, (name, names) in TAXONOMIES.items():
