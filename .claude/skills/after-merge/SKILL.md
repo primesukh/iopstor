@@ -39,7 +39,7 @@ Merging is the user's act. Everything after it is yours, on `main`, without a si
    Also read the merged PR body's **Decisions worth reviewing** — those rows belong in §14.
 
 4. **Nothing drifted?** Say so, with the graph commit line, and stop.
-   **Something drifted?** `git checkout -b chore/claude-sync-<date>`, make the edits, `/pr`. Never commit to `main`.
+   **Something drifted?** Say what drifted and where it belongs, and carry it in the next PR that touches that area. Do not open a PR of your own for it, and never commit to `main`. Rows the merged PR should have carried are a rule-3 miss on the last PR — name it as that.
 
 5. **Per-machine facts** learned on the way (a CLI that appeared, a tool that stopped working) go to Claude's memory directory, not to the repo.
 
