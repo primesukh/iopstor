@@ -61,11 +61,7 @@
       "Edit(requirements.txt)",
       "Edit(requirements-dev.txt)",
       "Edit(Pipfile.lock)",
-      "Edit(.env)",
-      "Write(requirements.txt)",
-      "Write(requirements-dev.txt)",
-      "Write(Pipfile.lock)",
-      "Write(.env)"
+      "Edit(.env)"
     ]
   },
   "hooks": {

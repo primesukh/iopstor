@@ -42,7 +42,7 @@ tests/                   pytest: test_offline.py always; the rest are marked liv
 docs/                    TECHNICAL.md + NON-TECHNICAL.md — the two docs every change keeps current
 .claude/                 docs/ (design.md, requirements.md), skills/ (the procedures below), hooks/session-start.sh, settings.json (enforced rules)
 website_assets/          the client's mock (mock-website.html), pictures, partner logos — untracked; loaded with `flask import-media`
-graphify-out/            the knowledge graph — gitignored, rebuilt only on main
+graphify-out/            the knowledge graph — gitignored; code nodes rebuilt by git hooks per commit, prose + labels only on main via /after-merge
 ```
 
 ## Commands
@@ -70,7 +70,7 @@ The procedures this repo repeats, as slash commands. Load the one that fits befo
 | `/new-block` | adding or reshaping a section type — the eleven places a block lives |
 | `/migration` | the schema or a seeded row must change — write the `.sql`, never run it |
 | `/theme-check` | anything in `site.css`, a block template, `_card.html`, `admin.js` — screenshots at three widths |
-| `/after-merge` | the user says a PR is merged — pull, rebuild the graph, audit `.claude/` |
+| `/after-merge` | the user says a PR is merged — pull, refresh the graph's prose and labels, audit `.claude/` |
 
 ## Workflow (non-negotiable)
 
@@ -106,7 +106,7 @@ Open the PR and **stop there**. Do not merge, do not squash, do not push to `mai
 `docs/TECHNICAL.md` for developers (modules, schema, endpoints, contracts, ceilings), `docs/NON-TECHNICAL.md` for editors (what it does, in plain English, no jargon), and `.claude/docs/design.md` for the next agent (what exists and why, compressed; a dated row in its decision log for anything surprising). `/docs` says which sections. A feature is not finished until all three reflect it. If a change genuinely affects only some audiences, say so in the PR body rather than silently skipping the rest.
 
 **4. `.claude/` is refreshed with every PR merge.**
-The PR itself carries the `design.md` change (rule 3). After the user merges, `/after-merge` on `main`: pull, `graphify update .`, then audit `.claude/` against the merged diff — layout in this file, `design.md` sections, `requirements.md` decisions, the skill whose procedure turned out incomplete, `settings.json` allow/deny for commands that prompted or must never run. Drift goes into a `chore/claude-sync` branch and its own PR, never straight to `main`. Per-machine facts (which CLI is installed, how screenshots work) belong in Claude's memory, not in the repo.
+The PR itself carries the `design.md` change (rule 3). After the user merges, `/after-merge` on `main`: pull, `/graphify . --update`, then audit `.claude/` against the merged diff — layout in this file, `design.md` sections, `requirements.md` decisions, the skill whose procedure turned out incomplete, `settings.json` allow/deny for commands that prompted or must never run. Drift goes into a `chore/claude-sync` branch and its own PR, never straight to `main`. Per-machine facts (which CLI is installed, how screenshots work) belong in Claude's memory, not in the repo.
 
 So the full order is: branch → work → three docs → `/pr` → **stop** → (user merges) → `/after-merge`.
 
