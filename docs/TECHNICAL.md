@@ -35,8 +35,8 @@ iopstor/config.py     env → Flask config. A plain module, not a class.
 iopstor/db.py         supabase-py clients + every query helper. The single data-access seam.
 iopstor/auth.py       GoTrue login/refresh/logout, verify_jwt(), require_role(), create_auth_user()
 iopstor/storage.py    save_upload() / delete_media() → Supabase Storage bucket + media table
-iopstor/blocks.py     BLOCKS registry, validate_blocks(), render_blocks(), blocks_text()
-iopstor/seo.py        site(), build_meta(), jsonld()
+iopstor/blocks.py     BLOCKS registry, validate_blocks(), render_blocks(), blocks_text(), blocks_md()
+iopstor/seo.py        site(), build_meta(), jsonld(), md_url()
 iopstor/payments.py   PaymentGateway ABC, DummyGateway, GATEWAYS
 iopstor/admin_api.py  /api/admin/v1 — JWT-protected REST. apply_post() is the single validation path.
 iopstor/admin_ui.py   /admin — session-based browser admin, reusing admin_api's validation
@@ -239,7 +239,11 @@ REPEATERS = ("items", "images", "rows", "cols")
 
 `EDITOR` is metadata only — nothing on the render or validation path reads it, and an unknown widget just degrades to a text input. `tests/test_offline.py::test_editor_metadata_covers_every_block` fails if a new block's fields have no widget, or if a repeater field has no `EDITOR["items"]` entry (`[]` counts — `columns` has one).
 
-`blocks_text()` flattens all block content to plain text for `llms-full.txt` and admin search. Because JSONB does not preserve key order, it walks fields in a fixed reading order (`_TEXT_ORDER`), with unknown keys appended alphabetically, so output is deterministic. It already recurses through dicts and lists, so a column's blocks are picked up for free — `"type"` and `"widths"` are in `_NON_TEXT_KEYS` so the literal string `"rich_text"` and a width spec do not leak into the output.
+`blocks_text()` flattens all block content to plain text for admin search and the public API's `text` field. Because JSONB does not preserve key order, it walks fields in a fixed reading order (`_TEXT_ORDER`), with unknown keys appended alphabetically, so output is deterministic. It already recurses through dicts and lists, so a column's blocks are picked up for free — `"type"` and `"widths"` are in `_NON_TEXT_KEYS` so the literal string `"rich_text"` and a width spec do not leak into the output.
+
+`blocks_md()` is its structured sibling: the same content as **Markdown**, keeping the headings, lists, tables, quotes and links that `blocks_text()` throws away. It is the body of every page's `.md` twin (§8) and of `llms-full.txt`. Unlike `blocks_text()`'s generic walk it is one branch per block type, so a **new entry in `BLOCKS` needs a branch here too** — `test_blocks_md_covers_every_block` fails until it has one, or until the type is listed in `MD_SKIP` (only `embed_html`: an iframe is a video or a map, not words). `blocks_md(blocks, h1=False)` demotes a hero's `#` to `###` for callers that have already opened a heading above it; `llms-full.txt` does, since it files every page under a `##`.
+
+Rich text and FAQ answers are HTML, converted by `_html_md()` — a regex pass over the tags the admin's contenteditable emits (`h1`–`h6`, `p`, `br`, `ul`/`ol`/`li`, `strong`/`b`, `em`/`i`, `a`, `code`, `blockquote`), everything else stripped and entities unescaped. It is deliberately not a parser: a nested list or a pasted table comes out flat. `markdownify` is the upgrade path if editors start pasting complicated HTML.
 
 ---
 
@@ -301,6 +305,50 @@ It is post-redirect-get only when the write **succeeds**. A refused save falls t
 
 `/sitemap.xml`, `/robots.txt`, `/feed.xml`, `/llms.txt`, `/llms-full.txt`, plus `/healthz`.
 
+### Markdown twins (`/<path>.md`)
+
+Every URL the resolver can resolve also answers with `.md` on the end, serving `text/markdown` built
+from the same rows — so an AI crawler reads the content instead of the theme. Nothing is written to
+disk and there is no build step: the twin is rendered per request, so it cannot go stale.
+
+| URL | twin |
+|---|---|
+| `/` | `/index.md` |
+| `/about-us` | `/about-us.md` |
+| `/services/storage/nas` | `/services/storage/nas.md` |
+| `/blog` (type archive) | `/blog.md` |
+| `/industry/finance` (term archive) | `/industry/finance.md` |
+
+`resolve()` strips the suffix before it does anything else and then resolves exactly as it would for
+the HTML page, so redirects, hierarchical paths, both kinds of archive and the 404 all come along
+without a rule of their own. The flag is `_wants_md()` — read off `request.path` on each call rather
+than stashed in `g`, because `g` lives on the app context, which a CLI run or a test client holds
+open across several requests; a stale flag there would serve Markdown to a browser.
+
+- **A post** (`_md_post()`) → YAML front matter (`title`, `url`, `type`, `published`, `updated`,
+  `description`), then the body. The `#` comes from the hero when the page starts with one and from
+  the post title otherwise, mirroring `post.html`, so the twin has the same single h1 as the page.
+  The type's own `field_schema` values follow (`_md_fields()`, split by shape the way `post.html`
+  splits them, with `price` through `rupees()` and a `media` field as the file's URL), then
+  `blocks_md()`, then the child/sibling links.
+- **An archive** (`_md_page()`) → front matter, `# {title}`, the page's posts as a link list, and a
+  `[Next page]` line while `has_next`.
+- **Front matter** is written by `_front()`, which quotes every value with `json.dumps()` — a valid
+  YAML double-quoted scalar, so a title containing a colon cannot break the block.
+
+Not every URL gets one. `_indexable()` gates the twin exactly as it gates `sitemap.xml` and
+`llms.txt`, so a draft or a `noindex` post 404s as Markdown too, and `/…/checkout.md` 404s because a
+form is not content. `sitemap.xml` deliberately does **not** list the twins — duplicate URLs there
+would read as duplicate content to Google.
+
+Discovery is three-way: `<link rel="alternate" type="text/markdown">` in `base.html` (from
+`meta.markdown`, empty on a `noindex` page), every entry in `/llms.txt` linking the `.md` rather than
+the page, and a line in that file's Machine-readable section. `seo.md_url()` is the only place the
+rule `/ → /index.md`, anything else `→ path + ".md"` is spelled.
+
+> `"index"` is a reserved page slug: `/index.md` is the home page's twin, so a page slugged `index`
+> would be shadowed. Same shape as the reserved `checkout` last segment (§8).
+
 ---
 
 ## 9. SEO
@@ -309,7 +357,8 @@ Everything is server-rendered from `seo.py` + `public.py`; keep it there.
 
 - `build_meta()` — title, description, canonical, Open Graph, robots
 - `jsonld()` — structured data driven by `post_types.jsonld_type` plus BreadcrumbList from the resolver's crumbs
-- `_indexable()` — a post whose `seo.robots` starts with `noindex` is kept out of the sitemap
+- `md_url()` — the one place the `.md` twin's address is spelled (§8)
+- `_indexable()` — a post whose `seo.robots` starts with `noindex` is kept out of the sitemap, `llms.txt` and its `.md` twin
 
 `base.html`'s `<head>` also carries the favicon (`static/favicon.svg`, the black square with the blue bar and white ring) and the two web fonts. The fonts come from Google Fonts on a `<link>`, which is the one external request the public site makes; `admin/canvas.html` repeats that link because it is a standalone document, and without it the editor canvas would preview the page in a different typeface from the page itself.
 
@@ -382,7 +431,7 @@ that would have pointed at it falls away by itself —
 
 - `resolve()` matches a detail page with `post["path"] == full`, which `None` can never satisfy, so
   `/partners/micron` 404s without a rule of its own;
-- `_indexable()` requires a path, which drops the post from `sitemap.xml` and `llms.txt`;
+- `_indexable()` requires a path, which drops the post from `sitemap.xml`, `llms.txt` and the `.md` twins;
 - `_card.html` renders a `<div class="card">` instead of an `<a>`;
 - `public_post()` reports `url: null`, and `seo.jsonld()` returns crumbs only.
 

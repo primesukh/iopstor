@@ -2,9 +2,12 @@
 import re
 from copy import deepcopy
 from datetime import date
+from html import unescape
 
 from flask import render_template
 from markupsafe import Markup, escape
+
+from .seo import md_url
 
 BLOCKS = {  # type: (required fields, optional fields)
     # dark: the full-bleed variant, where "image" becomes the faded backdrop rather than the art
@@ -300,6 +303,105 @@ def blocks_text(blocks):
     for b in blocks:
         walk(b.get("data", {}))
     return " ".join(" ".join(out).split())
+
+
+MD_SKIP = ("embed_html",)   # an iframe is a video or a map, not words: nothing to write down
+
+
+def _html_md(html):
+    """The admin's rich text (a contenteditable) as Markdown. h1 is demoted to ## because the page
+    title owns the only #.
+    # ponytail: regex, not a parser — a nested list or a pasted table comes out flat, and a bold
+    # word inside a blockquote loses its stars. Swap for markdownify if editors start pasting
+    # complicated HTML."""
+    if not html:
+        return ""
+    s = re.sub(r"(?is)<(script|style)\b.*?</\1>", "", str(html))
+    s = re.sub(r"(?is)<blockquote[^>]*>(.*?)</blockquote>",
+               lambda m: "\n\n> " + " ".join(re.sub(r"<[^>]+>", " ", m.group(1)).split()) + "\n\n", s)
+    s = re.sub(r"(?is)<h([1-6])[^>]*>(.*?)</h\1>",
+               lambda m: f"\n\n{'#' * max(2, int(m.group(1)))} {' '.join(m.group(2).split())}\n\n", s)
+    s = re.sub(r"""(?is)<a[^>]*?href=["']([^"']*)["'][^>]*>(.*?)</a>""", r"[\2](\1)", s)
+    s = re.sub(r"(?is)<(strong|b)\b[^>]*>(.*?)</\1>", r"**\2**", s)
+    s = re.sub(r"(?is)<(em|i)\b[^>]*>(.*?)</\1>", r"*\2*", s)
+    s = re.sub(r"(?is)<code\b[^>]*>(.*?)</code>", r"`\1`", s)
+    s = re.sub(r"(?is)<li[^>]*>(.*?)</li>", lambda m: "\n- " + " ".join(m.group(1).split()), s)
+    s = re.sub(r"(?i)<br\s*/?>", "\n", s)
+    s = re.sub(r"(?i)</(p|div|ul|ol|table|tr)>", "\n\n", s)
+    s = unescape(re.sub(r"<[^>]+>", "", s))
+    return re.sub(r"\n{3,}", "\n\n", s).strip()
+
+
+def _md_link(label, url):
+    return f"[{label}]({url})" if label and url else ""
+
+
+def _media(media_id):
+    """(url, alt) for a media id, or ("", "") — the same row media_url()/media_alt() read."""
+    from . import db
+
+    m = (db.get_media(int(media_id)) if str(media_id or "").isdigit() else None) or {}
+    return m.get("url") or "", m.get("alt") or ""
+
+
+def _md_img(media_id, alt=""):
+    url, media_alt = _media(media_id)
+    return f"![{alt or media_alt}]({url})" if url else ""
+
+
+def blocks_md(blocks, h1=True):
+    """Markdown of all block content — the body of every page's .md twin and of llms-full.txt.
+    h1=False when the caller already opened a heading above this content (llms-full.txt puts every
+    page under a ## of its own), so the hero's heading does not out-rank its own container.
+    blocks_text() flattens the same content to one line for admin search; this keeps the shape a
+    reader (human or machine) needs: headings, lists, tables, links.
+    # ponytail: a new entry in BLOCKS needs a branch here too, or its words never reach the .md.
+    # test_blocks_md_covers_every_block() fails until it has one."""
+    out = []
+    for b in blocks:
+        t, d = b.get("type"), b.get("data") or {}
+        head = f"## {d['heading']}" if d.get("heading") else ""
+        if t == "hero":
+            out += [d.get("eyebrow") or "", f"{'#' if h1 else '###'} {d.get('heading', '')}", d.get("subheading") or "",
+                    _md_link(d.get("cta_label"), d.get("cta_url")), _md_link(d.get("cta2_label"), d.get("cta2_url"))]
+        elif t == "rich_text":
+            out.append(_html_md(d.get("html")))
+        elif t == "image":
+            out += [_md_img(d.get("media_id"), d.get("alt")), f"*{d['caption']}*" if d.get("caption") else ""]
+        elif t == "gallery":
+            out.append("\n\n".join(x for x in (_md_img(i.get("media_id"), i.get("alt")) for i in d.get("images") or []) if x))
+        elif t == "cards":
+            out.append(head)
+            for i in d.get("items") or []:
+                out += [f"### {i.get('title', '')}", i.get("text") or "", _md_link(i.get("title"), i.get("url"))]
+        elif t == "columns":
+            out += [head] + [blocks_md(c, h1) for c in d.get("cols") or [] if isinstance(c, list)]
+        elif t == "cta":
+            out += [head, d.get("text") or "", _md_link(d.get("button_label"), d.get("button_url"))]
+        elif t == "faq":
+            out.append(head)
+            for i in d.get("items") or []:
+                out += [f"### {i.get('q', '')}", _html_md(i.get("a"))]
+        elif t == "stats":
+            out.append("\n".join(f"- **{i.get('value', '')}** — {i.get('label', '')}" for i in d.get("items") or []))
+        elif t == "testimonial":
+            who = ", ".join(x for x in (d.get("author"), d.get("role"), d.get("company")) if x)
+            out.append(f"> {d.get('quote', '')}" + (f"\n>\n> — {who}" if who else ""))
+        elif t == "spec_table":
+            rows = [r for r in d.get("rows") or [] if isinstance(r, dict)]
+            table = "\n".join(f"| {r.get('k', '')} | {r.get('v', '')} |" for r in rows)
+            out += [head, f"| Label | Value |\n| --- | --- |\n{table}" if rows else ""]
+        elif t == "post_list":
+            out.append(head)
+            out.append("\n".join(f"- [{p['title']}]({md_url(p['path'])})" + (f": {p['excerpt']}" if p.get("excerpt") else "")
+                                 for p in _post_list(d)[0] if p.get("path")))
+        elif t == "pdf":
+            out += [head, _md_link("Download the PDF", _media(d.get("file_media_id"))[0])]
+        elif t == "contact_form":
+            out += [head, "*(a form on the page — name, email and a message)*"]
+        elif t == "warranty_check":
+            out += [head, "*(a box on the page where a customer types their serial number)*"]
+    return "\n\n".join(x for x in out if x and x.strip())
 
 
 def _post_list(data):

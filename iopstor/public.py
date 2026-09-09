@@ -1,4 +1,5 @@
 """Public site: catch-all page resolver, SEO endpoints (sitemap/robots/llms/feed), and the read-only JSON API."""
+import json
 from datetime import date
 
 from flask import Blueprint, Response, abort, jsonify, redirect, render_template, request
@@ -8,8 +9,9 @@ from werkzeug.exceptions import HTTPException
 
 from . import db, seo
 from .admin_api import _http_error, _pg_error, page_args
-from .blocks import blocks_text, render_blocks
+from .blocks import blocks_md, blocks_text, render_blocks
 from .payments import GATEWAYS, gateway
+from .seo import md_url
 
 pub = Blueprint("public", __name__)
 api = Blueprint("public_api", __name__, url_prefix="/api/v1")
@@ -59,6 +61,86 @@ def _kids(parent_id):
                                  .order("menu_order").order("published_at", desc=True)))
 
 
+# ---- Markdown twins --------------------------------------------------------
+# Every page also answers at its own path with ".md" on the end, so an AI crawler reads the
+# content instead of the theme. resolve() strips the suffix and resolves as usual; these build the
+# document. Discovery is the <link rel="alternate"> in base.html (from seo.build_meta()) and the
+# links in /llms.txt.
+
+def _wants_md():
+    """This request asked for the Markdown twin. Read off the URL every time rather than stashed in
+    g on the way past: g lives on the app context, which a CLI or a test client holds open across
+    several requests, and a stale flag there would serve Markdown to a browser."""
+    return request.path.endswith(".md")
+
+
+def _md(text):
+    return Response(text, mimetype="text/markdown")
+
+
+def _front(**kv):
+    """YAML front matter. json.dumps() doubles as a YAML double-quoted scalar, so a title with a
+    colon or a quote in it cannot break the block."""
+    return "---\n" + "".join(f"{k}: {json.dumps(str(v))}\n" for k, v in kv.items() if v not in (None, "")) + "---\n"
+
+
+def _md_doc(front, parts):
+    return _md(front + "\n" + "\n\n".join(x for x in parts if x and str(x).strip()) + "\n")
+
+
+def _md_list(posts):
+    """Live posts as one Markdown list, each line pointing at its own .md twin."""
+    return "\n".join(f"- [{p['title']}]({md_url(p['path'])})" + (f": {p['excerpt']}" if p.get("excerpt") else "")
+                     for p in posts if p.get("path"))
+
+
+def _md_page(title, path, parts):
+    """An index — a type archive or a term archive — as Markdown."""
+    return _md_doc(_front(title=title, url=seo.site()["url"] + path, type="Index"), [f"# {title}"] + parts)
+
+
+def _md_fields(pt, meta):
+    """The type's own fields (post_types.field_schema), split by shape the way post.html splits
+    them: short ones a bullet list, long ones their own section, kv/json ones a table."""
+    from . import rupees                 # module scope in __init__.py, imported here to dodge the cycle
+    from .blocks import _media
+
+    tiles, out = [], []
+    for f in pt.get("field_schema") or []:
+        v = meta.get(f.get("key"))
+        if v in (None, "", [], {}):
+            continue
+        if f.get("type") == "media":       # the id is not the content: the file's address is
+            v = _media(v)[0]
+        elif f.get("key") == "price":
+            v = rupees(v)
+        if v in (None, ""):
+            continue
+        if f.get("type") == "textarea":
+            out += [f"## {f['label']}", str(v)]
+        elif f.get("type") in ("kv", "json"):
+            rows = list(v.items()) if isinstance(v, dict) else [(r.get("k"), r.get("v")) for r in v if isinstance(r, dict)] if isinstance(v, list) else []
+            if rows:
+                out.append(f"## {f['label']}\n\n| Label | Value |\n| --- | --- |\n"
+                           + "\n".join(f"| {k} | {x} |" for k, x in rows))
+        else:
+            tiles.append(f"- **{f['label']}:** {v}")
+    return (["\n".join(tiles)] if tiles else []) + out
+
+
+def _md_post(post, children):
+    """One post as a Markdown document. The h1 comes from the hero when the page starts with one,
+    exactly as post.html does it, so the twin has the same single h1 as the page it mirrors."""
+    pt, blocks = post["post_type"], post.get("blocks") or []
+    parts = [] if blocks and blocks[0].get("type") == "hero" else [f"# {post['title']}", post.get("excerpt") or ""]
+    parts += _md_fields(pt, post.get("meta") or {}) + [blocks_md(blocks)]
+    if children:
+        parts += ["## Related pages", _md_list(children)]
+    return _md_doc(_front(title=post["title"], url=seo.site()["url"] + post["path"], type=pt["name"],
+                          published=(post.get("published_at") or "")[:10], updated=(post.get("updated_at") or "")[:10],
+                          description=post.get("excerpt") or ""), parts)
+
+
 def render_post(post):
     crumbs = crumbs_for(post)
     children, siblings = [], False
@@ -69,6 +151,10 @@ def render_post(post):
         if not children and post["parent_id"]:
             children = [c for c in _kids(post["parent_id"]) if c["id"] != post["id"]]
             siblings = bool(children)
+    if _wants_md():
+        if not _indexable(post):
+            abort(404)      # the one test that keeps a page out of sitemap.xml and llms.txt keeps
+        return _md_post(post, children)     # it out of the Markdown too
     return render_template("post.html", post=post, children=children, siblings=siblings, crumbs=crumbs,
                            meta=seo.build_meta(post), jsonld=seo.jsonld(post, crumbs))
 
@@ -96,6 +182,9 @@ def render_archive(q, title, path, crumbs, description="", pt=None):
     # description was built into meta but never reached the template, so archive.html's lead
     # paragraph could not render and every term archive's prose was invisible.
     posts = db.with_paths(result["items"])
+    if _wants_md():
+        nxt = f"- [Next page]({md_url(path)}?page={page + 1})" if has_next else ""
+        return _md_page(title or seo.site()["name"], path, [description, _md_list(posts), nxt])
     # The services archive is a row per group with its children as tiles beside it, the same shape
     # the home page's list uses. db.tree() is memoised per request by the header's panel, so this is
     # the lookup that has already happened.
@@ -112,6 +201,8 @@ def render_archive(q, title, path, crumbs, description="", pt=None):
 def _not_found(e):
     if request.path.startswith("/api/"):  # unknown API path caught by the site catch-all
         return jsonify(error="not found"), 404
+    if _wants_md():
+        return _md("# Page not found\n"), 404
     crumbs = [("Home", "/"), ("Not found", request.path)]
     return render_template("404.html", meta=seo.build_meta(title="Page not found", path=request.path, robots="noindex,follow"), jsonld=seo.jsonld(crumbs=crumbs)), 404
 
@@ -121,6 +212,11 @@ def _not_found(e):
 def resolve(path):
     if path.endswith("/"):
         return redirect("/" + path.rstrip("/"), 301)
+    # The Markdown twin is the same page, resolved the same way: strip the suffix and every branch
+    # below — pages, posts, both kinds of archive, redirects, 404 — comes along.
+    # ponytail: "index" is a reserved slug (the home page's twin), like "checkout" further down.
+    if path.endswith(".md"):
+        path = "" if path == "index.md" else path[:-3]
     full = "/" + path
     r = db.one(db.table("redirects").select("*").eq("from_path", full))
     if r:
@@ -145,6 +241,8 @@ def resolve(path):
         # ponytail: "checkout" is a reserved last segment, so a product slugged "checkout" would be
         # unreachable. Nothing is.
         if segs[-1] == "checkout" and len(segs) > 1:
+            if _wants_md():
+                abort(404)          # a form is not content: noindex in HTML, absent in Markdown
             product = _live_post(pt, segs[-2])
             if product is None or product["path"] != full.rsplit("/", 1)[0] or (product["meta"] or {}).get("price") in (None, ""):
                 abort(404)
@@ -231,10 +329,13 @@ def llms():
         lines += [f"Contact: {' · '.join(x for x in (s['email'], s['phone']) if x)}", ""]
     for t, posts in _sections():
         lines.append(f"## {t['name']}")
-        lines += [f"- [{p['title']}]({s['url']}{p['path']}){': ' + p['excerpt'] if p['excerpt'] else ''}" for p in posts]
+        # The .md twin, not the page: llms.txt is read by machines, and this saves them a hop
+        # through the theme's HTML. The canonical URL is inside each twin's front matter.
+        lines += [f"- [{p['title']}]({s['url']}{md_url(p['path'])}){': ' + p['excerpt'] if p['excerpt'] else ''}" for p in posts]
         lines.append("")
-    lines += ["## Machine-readable", f"- Full text: {s['url']}/llms-full.txt", f"- JSON API: {s['url']}/api/v1/posts", f"- Sitemap: {s['url']}/sitemap.xml"]
-    return Response("\n".join(lines) + "\n", mimetype="text/plain; charset=utf-8")
+    lines += ["## Machine-readable", "- Any page as Markdown: add .md to its URL (the home page is /index.md)",
+              f"- Full text: {s['url']}/llms-full.txt", f"- JSON API: {s['url']}/api/v1/posts", f"- Sitemap: {s['url']}/sitemap.xml"]
+    return Response("\n".join(lines) + "\n", mimetype="text/plain")
 
 
 @pub.get("/llms-full.txt")
@@ -243,8 +344,8 @@ def llms_full():
     parts = [f"# {s['name']}\n{s['tagline']}\n"]
     for t, posts in _sections():
         for p in posts:
-            parts.append(f"## {p['title']}\nType: {t['name']}\nURL: {s['url']}{p['path']}\n\n{p['excerpt']}\n\n{blocks_text(p['blocks'] or [])}\n")
-    return Response("\n---\n\n".join(parts), mimetype="text/plain; charset=utf-8")
+            parts.append(f"## {p['title']}\nType: {t['name']}\nURL: {s['url']}{p['path']}\n\n{p['excerpt']}\n\n{blocks_md(p['blocks'] or [], h1=False)}\n")
+    return Response("\n---\n\n".join(parts), mimetype="text/plain")
 
 
 @pub.get("/feed.xml")

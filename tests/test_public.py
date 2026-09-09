@@ -55,7 +55,7 @@ def test_sitemap_feed_llms_and_public_api(client, editor_headers):
                                                                           "blocks": [{"type": "faq", "data": {"items": [{"q": "Why?", "a": "Because."}]}}]})
     assert ok.status_code == 201, ok.json
     client.post("/api/admin/v1/posts", headers=editor_headers, json={"post_type": "post", "title": "zz-test Secret Draft"})
-    for path in ("/sitemap.xml", "/feed.xml", "/llms.txt", "/llms-full.txt", "/robots.txt"):
+    for path in ("/sitemap.xml", "/feed.xml", "/llms.txt", "/llms-full.txt", "/robots.txt", "/index.md"):
         r = client.get(path)
         assert r.status_code == 200, path
         assert b"zz-test-secret-draft" not in r.data and b"Secret Draft" not in r.data, path
@@ -65,6 +65,16 @@ def test_sitemap_feed_llms_and_public_api(client, editor_headers):
     full = client.get("/llms-full.txt").data
     assert b"## zz-test Public Post" in full and b"Because." in full
     assert b"Sitemap: http://test/sitemap.xml" in client.get("/robots.txt").data
+    # every page also answers as Markdown, and llms.txt points at those twins
+    assert b"http://test/blog/zz-test-public-post.md" in client.get("/llms.txt").data
+    md = client.get("/blog/zz-test-public-post.md")
+    assert md.status_code == 200 and md.mimetype == "text/markdown"
+    assert b"# zz-test Public Post" in md.data and b"### Why?" in md.data and b"Because." in md.data
+    assert b'url: "http://test/blog/zz-test-public-post"' in md.data      # front matter names the canonical page
+    assert client.get("/blog.md").status_code == 200                     # archives have twins too
+    assert client.get("/industry/finance.md").status_code == 200         # so do term archives
+    assert client.get("/blog/zz-test-secret-draft.md").status_code == 404
+    assert b'type="text/markdown" href="http://test/blog/zz-test-public-post.md"' in client.get("/blog/zz-test-public-post").data
     assert b'"FAQPage"' in client.get("/blog/zz-test-public-post").data
     api = client.get("/api/v1/posts/post/zz-test-public-post")
     assert api.status_code == 200 and api.json["title"] == "zz-test Public Post" and api.json["text"] == "Why? Because." and "author_id" not in api.json

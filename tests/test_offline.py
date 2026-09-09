@@ -1,5 +1,5 @@
 """Pure logic — no Supabase needed."""
-from iopstor.blocks import at_path, blocks_text, col_widths, render_blocks, validate_blocks
+from iopstor.blocks import at_path, blocks_md, blocks_text, col_widths, render_blocks, validate_blocks
 from iopstor.db import slugify
 
 
@@ -27,6 +27,55 @@ def test_render_blocks_uses_template(app, monkeypatch):
 def test_blocks_text_flattens():
     txt = blocks_text([{"type": "rich_text", "data": {"html": "<p>Hello <b>world</b></p>"}}, {"type": "cta", "data": {"heading": "Go", "button_label": "Now", "button_url": "/x"}}])
     assert txt == "Hello world Go Now"
+
+
+def test_blocks_md_keeps_the_shape_blocks_text_throws_away():
+    """The .md twin of a page (and llms-full.txt) is only worth serving if it keeps headings,
+    lists, tables and quotes — blocks_text() flattens all of that to one line."""
+    md = blocks_md([
+        {"type": "hero", "data": {"heading": "Fast NAS", "subheading": "Scale-out file storage.",
+                                  "cta_label": "Talk to us", "cta_url": "/contact-us"}},
+        {"type": "rich_text", "data": {"html": "<h2>Why</h2><p>It is <b>fast</b> and <a href='/x'>cheap</a>.</p><ul><li>One</li><li>Two</li></ul>"}},
+        {"type": "faq", "data": {"heading": "Questions", "items": [{"q": "Why?", "a": "<p>Because.</p>"}]}},
+        {"type": "spec_table", "data": {"rows": [{"k": "Capacity", "v": "5 PB"}]}},
+        {"type": "testimonial", "data": {"quote": "It works.", "author": "Ada", "company": "Acme"}},
+        {"type": "stats", "data": {"items": [{"value": "99.999%", "label": "uptime"}]}},
+        {"type": "embed_html", "data": {"html": "<iframe src='https://youtube.com/x'></iframe>"}},
+        _cols([{"type": "rich_text", "data": {"html": "<p>Inside a column</p>"}}],
+              [{"type": "cta", "data": {"heading": "Ready?", "button_label": "Contact", "button_url": "/c"}}]),
+    ])
+    assert "# Fast NAS" in md and "\n## " not in md.split("# Fast NAS")[0]   # the hero owns the only h1
+    assert "[Talk to us](/contact-us)" in md
+    assert "## Why" in md and "It is **fast** and [cheap](/x)." in md and "- One\n- Two" in md
+    assert "## Questions" in md and "### Why?" in md and "Because." in md
+    assert "| Label | Value |" in md and "| Capacity | 5 PB |" in md
+    assert "> It works." in md and "> — Ada, Acme" in md
+    assert "- **99.999%** — uptime" in md
+    assert "youtube" not in md                      # an iframe is not words
+    assert "Inside a column" in md and "[Contact](/c)" in md   # a column's blocks come along
+    assert "<" not in md and "&amp;" not in md      # no HTML survives into the Markdown
+
+
+def test_blocks_md_covers_every_block(app, monkeypatch):
+    """A new entry in BLOCKS needs a branch in blocks_md(), or its words never reach the .md twin."""
+    from iopstor import db
+    from iopstor.blocks import BLOCKS, EDITOR, MD_SKIP
+
+    monkeypatch.setattr(db, "post_type", lambda **k: None)   # post_list resolves its type offline
+    for name in BLOCKS:
+        block = {"type": name, "data": EDITOR["seed"].get(name) or {}}
+        # the picture blocks seed to nothing until a file is chosen, which is what validate_blocks
+        # already says about them: an unsaveable seed has no words to write down either
+        if name in MD_SKIP or validate_blocks([block]):
+            continue
+        assert blocks_md([block]).strip(), name
+
+
+def test_md_url_is_the_only_place_the_suffix_is_spelled():
+    from iopstor.seo import md_url
+
+    assert md_url("/") == "/index.md" and md_url("") == "/index.md"
+    assert md_url("/services/nas") == "/services/nas.md"
 
 
 def test_jwt_matrix_without_db(client):
