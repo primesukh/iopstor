@@ -30,17 +30,23 @@
      long ones read as the article. That is what gives a case study its Challenge / Solution /
      Results sections without post.html knowing what a case study is. #}
   {% set fields = (pt.field_schema or [])|selectattr('key', 'in', meta_)|list %}
-  {% set tiles = fields|rejectattr('type', 'in', ['json', 'textarea'])|list %}
+  {% set tiles = fields|rejectattr('type', 'in', ['json', 'kv', 'textarea'])|list %}
   {% set prose = fields|selectattr('type', 'equalto', 'textarea')|list %}
   {% if tiles %}<div class="meta-strip"><div class="wrap"><dl class="details">{% for f in tiles if meta_[f.key] not in (none, '', [], {}) %}
-    <div><dt>{{ f.label }}</dt><dd>{% if f.type == 'media' %}<a href="{{ media_url(meta_[f.key]) }}" target="_blank" rel="noopener">Download</a>{% elif f.type == 'url' %}<a href="{{ meta_[f.key] }}" rel="noopener">{{ meta_[f.key] }}</a>{% elif f.key == 'price' %}{{ meta_.get('currency', 'INR') }} {{ '{:,.0f}'.format(meta_[f.key]|float) if meta_[f.key] is number else meta_[f.key] }}{% else %}{{ meta_[f.key] }}{% endif %}</dd></div>
+    <div><dt>{{ f.label }}</dt><dd>{% if f.type == 'media' %}<a href="{{ media_url(meta_[f.key]) }}" target="_blank" rel="noopener">Download</a>{% elif f.type == 'url' %}<a href="{{ meta_[f.key] }}" rel="noopener">{{ meta_[f.key] }}</a>{% elif f.key == 'price' %}{{ rupees(meta_[f.key]) }}{% else %}{{ meta_[f.key] }}{% endif %}</dd></div>
   {% endfor %}</dl></div></div>{% endif %}
   {% if prose %}<div class="section"><div class="wrap"><div class="meta-prose">{% for f in prose if meta_[f.key] %}
     <section><h2>{{ f.label }}</h2><p>{{ meta_[f.key] }}</p></section>
   {% endfor %}</div></div></div>{% endif %}
   {{ render_blocks(post.blocks or []) }}
-  {% for f in fields if f.type == 'json' and meta_[f.key] is mapping and meta_[f.key] %}
-  <div class="section"><div class="wrap"><table class="specs"><caption>{{ f.label }}</caption><tbody>{% for k, v in meta_[f.key].items() %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}</tbody></table></div></div>
+  {# A kv field is a list of rows and keeps the order it was typed in; a json one is an object, whose
+     key order jsonb does not keep. Both draw the same table. A json field holding the raw text of a
+     mistyped value is neither, and draws nothing, as it did before. #}
+  {% for f in fields if f.type in ('kv', 'json') and meta_[f.key] %}
+  <div class="section"><div class="wrap"><table class="specs"><caption>{{ f.label }}</caption><tbody>
+    {%- if meta_[f.key] is mapping %}{% for k, v in meta_[f.key].items() %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}
+    {%- elif meta_[f.key] is not string %}{% for r in meta_[f.key] %}<tr><th>{{ r.k }}</th><td>{{ r.v }}</td></tr>{% endfor %}{% endif %}
+  </tbody></table></div></div>
   {% endfor %}
   {% if children %}
   <section class="section t-grey siblings"><div class="wrap">

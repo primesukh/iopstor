@@ -9,7 +9,7 @@
   <div class="checkout-card">
     <p class="eyebrow">Checkout</p>
     <h1>{{ post.title }}</h1>
-    <p class="total"><span>Total</span><strong>{{ meta_.get('currency', 'INR') }} {{ '{:,.0f}'.format(meta_.price|float) if meta_.price is number else meta_.price }}</strong></p>
+    <p class="total"><span>Total</span><strong>{{ rupees(meta_.price) }}</strong></p>
     <form method="post" action="/api/v1/payments/checkout">
       <input type="hidden" name="product_id" value="{{ post.id }}">
       <label>Name <input name="name" autocomplete="name"></label>

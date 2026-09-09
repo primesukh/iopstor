@@ -36,7 +36,7 @@
     {%- for c in kids %}{% if act %}<a class="chip" href="{{ c.path }}">{{ c.title }} &rarr;</a>{% else %}<span class="chip">{{ c.title }}</span>{% endif %}{% endfor %}
     {%- if not act and p.children|length > CHIP_CAP %}<span class="chip chip-more">+{{ p.children|length - CHIP_CAP }} more</span>{% endif %}
   </span>{% endif %}
-  {%- if act and p.post_type.slug == 'product' and m.get('price') not in (none, '') %}<span class="card-foot"><b>{{ m.get('currency') or 'INR' }} {{ '{:,.0f}'.format(m.price|float) if m.price is number else m.price }}</b><a class="btn" href="{{ p.path }}/checkout">Buy</a></span>{% endif %}
+  {%- if act and p.post_type.slug == 'product' and m.get('price') not in (none, '') %}<span class="card-foot"><b>{{ rupees(m.price) }}</b><a class="btn" href="{{ p.path }}/checkout">Buy</a></span>{% endif %}
   {%- if act and p.post_type.slug == 'datasheet' and m.file_media_id %}<span class="card-foot"><a class="btn ghost" href="{{ media_download(m.file_media_id) }}">Download</a></span>{% endif %}
 {% if act %}</div>{% else %}</a>{% endif %}
 {%- endmacro %}

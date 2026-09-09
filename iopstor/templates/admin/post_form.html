@@ -65,8 +65,16 @@
     {% if pt.field_schema %}
     <h3>Details</h3>
     {% for f in pt.field_schema %}
-      <label>{{ f.label }}{% if f.required %} *{% endif %}
       {% set v = meta.get(f.key) %}
+      {#- a kv field is a list of rows, so it is a group of controls rather than one: a <label> around
+          it would say "Specifications" and then focus whichever row input happened to be first. #}
+      {%- if f.type == 'kv' %}
+      <div class="kv-field"><strong>{{ f.label }}{% if f.required %} *{% endif %}</strong>
+        <div data-kv="meta_{{ f.key }}"></div>
+        <input type="hidden" name="meta_{{ f.key }}" value="{{ v|tojson if v else '[]' }}">
+      </div>
+      {%- else %}
+      <label>{{ f.label }}{% if f.required %} *{% endif %}
       {% if f.type == 'textarea' %}<textarea name="meta_{{ f.key }}">{{ v or '' }}</textarea>
       {% elif f.type == 'json' %}<textarea name="meta_{{ f.key }}" class="code" style="min-height:6rem">{{ v|tojson(indent=2) if v is not none and v is not string else (v or '') }}</textarea>
       {% elif f.type == 'media' %}<select name="meta_{{ f.key }}" data-media><option value="">— none —</option>{% for m in media %}<option value="{{ m.id }}" {{ 'selected' if v|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select>
@@ -75,6 +83,7 @@
       {% elif f.type == 'url' %}<input type="url" name="meta_{{ f.key }}" value="{{ v or '' }}">
       {% else %}<input type="text" name="meta_{{ f.key }}" value="{{ v or '' }}">{% endif %}
       </label>
+      {%- endif %}
     {% endfor %}
     {% endif %}
 

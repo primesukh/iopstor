@@ -56,10 +56,9 @@ POST_TYPES = [  # slug, name, url_prefix, hierarchical, jsonld_type, taxonomies,
         {"key": "file_media_id", "label": "PDF", "type": "media", "required": True},
         {"key": "product_family", "label": "Product family", "type": "text", "required": False}]),
     ("product", "Products", "products", False, "Product", ["category"], [
-        {"key": "price", "label": "Price", "type": "number", "required": False},
-        {"key": "currency", "label": "Currency", "type": "text", "required": False},
+        {"key": "price", "label": "Price", "type": "number", "required": False},   # rupees, always
         {"key": "sku", "label": "SKU", "type": "text", "required": False},
-        {"key": "specs", "label": "Specifications", "type": "json", "required": False},
+        {"key": "specs", "label": "Specifications", "type": "kv", "required": False},
         {"key": "datasheet_media_id", "label": "Datasheet PDF", "type": "media", "required": False}]),
 ]
 TAXONOMIES = {
@@ -157,11 +156,14 @@ NAS_CONFIG = [
     ("SSD capacity", "720 / 1440 / 2880 GB (3 \u00d7 240 / 480 / 960 GB)"),
     ("Workload", "5 \u2013 10 users*"),
 ]
+# Rows, not a dict: a spec table reads in the order it was written, and jsonb sorts an object's keys.
 PRODUCTS = [  # title, users, specs — the appliance details from the flyers
-    ("IOPStor Classic", "5 - 10 users", {"CPU": "Xeon 4 core", "Memory": "32GB DDR4 2400", "Storage": "480GB Enterprise SSD",
-                                         "Network": "10G x 2, 1G x 2", "Appliance workload": "5 - 10 users"}),
-    ("IOPStor Edge", "10 - 20 users", {"CPU": "Xeon 6 core", "Memory": "64GB DDR4 2400", "Storage": "960GB Enterprise SSD",
-                                       "Network": "10G x 2, 1G x 2", "Appliance workload": "10 - 20 users"}),
+    ("IOPStor Classic", "5 - 10 users", [("CPU", "Xeon 4 core"), ("Memory", "32GB DDR4 2400"),
+                                         ("Storage", "480GB Enterprise SSD"), ("Network", "10G x 2, 1G x 2"),
+                                         ("Appliance workload", "5 - 10 users")]),
+    ("IOPStor Edge", "10 - 20 users", [("CPU", "Xeon 6 core"), ("Memory", "64GB DDR4 2400"),
+                                       ("Storage", "960GB Enterprise SSD"), ("Network", "10G x 2, 1G x 2"),
+                                       ("Appliance workload", "10 - 20 users")]),
 ]
 
 
@@ -333,12 +335,15 @@ def run_seed():
     for title, start in EVENTS:
         _post(types["event"], title, meta={"start_date": start})
     for i, (title, users, specs) in enumerate(PRODUCTS):
-        _post(types["product"], title, menu_order=i, meta={"specs": specs},
+        # No hero: post.html's own page head is the design's detail header -- eyebrow, title, lead,
+        # Request a quote / Buy, and the featured picture beside them. A hero replaces all of that
+        # and carries its own picture, which is why the appliance photo never appeared.
+        _post(types["product"], title, menu_order=i, meta={"specs": [{"k": k, "v": v} for k, v in specs]},
               featured=media_id(TOWER_IMAGE if "Classic" in title else RACK_IMAGE),
-              excerpt=f"Appliance workload {users}. Zero touch setup and management through a web GUI, and one source for support.",
-              blocks=[{"type": "hero", "data": {"heading": title, "eyebrow": "Appliance",
-                                                "subheading": f"Sized for {users}. Xeon, enterprise SSD and 10G networking, on ZFS.",
-                                                "cta_label": "Request a quote", "cta_url": "/contact-us"}}])
+              excerpt=f"Sized for {users}. Xeon, enterprise SSD and 10G networking, on ZFS.",
+              blocks=[{"type": "cta", "data": {"heading": f"Is {title} the right size for you?",
+                                               "text": "Tell us the workload and the user count and we will come back with a configuration and a one-time price.",
+                                               "button_label": "Request a quote", "button_url": "/contact-us"}}])
     for i, (name, logo) in enumerate(PARTNERS):
         _post(types["partner"], name, menu_order=i, meta={"logo_media_id": media_id(logo)},
               excerpt=f"{name} hardware and software, supported in every IOPStor build.",
