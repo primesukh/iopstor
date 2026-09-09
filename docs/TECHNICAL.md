@@ -396,6 +396,19 @@ exactly as before against a database where `0005` has not been applied yet.
 
 **Four archive shapes**, each scoped to `.arch-body` so the same list inside a page stays the card deck the home page wants: `pl-product` (a taller picture area, the price and Buy in a footer row), `pl-service` (one full-width row per group, the words in column one and the child tiles in column two — the card's children are a flat list, so each names its own grid column rather than being wrapped in a div for it), `pl-event` (a row led by an 84px dark date tile) and `pl-datasheet` (a row with the outline PDF mark and its own Download button).
 
+**A pinned grid column has to be unpinned to stack.** `pl-service` is the one archive shape that had to
+grow a breakpoint. Its card is `repeat(auto-fit,minmax(260px,1fr))` and its child tiles name
+`grid-column:2` — so under ~570px `auto-fit` collapses the explicit tracks to one and column 2 becomes
+an *implicit* track, sized `grid-auto-columns:auto` and floored at 180px by the tiles' own `auto-fill`.
+The card came out ~200px wider than a phone, which is what pushed `/services` sideways (the archive
+head's black band then stopped at the viewport rather than the scroll width — a symptom of the same
+overflow, not a second bug). Under 700px, the stylesheet's existing breakpoint, the card goes to one
+column and `.chips-kids` resets **`grid-column` and `grid-row`**, not just the template: leave the
+pin in place and the implicit track comes back whatever the columns say. The result is the shape a
+service page already ends on — the words, then the children as full-width tiles (`.siblings .tiles`).
+The other three shapes size from `auto` tracks that stay inside a 390px card (datasheet floors at
+~194px, event at ~108px), so they need no query.
+
 **Shapes the design draws inside prose**, so they need no block of their own — the same trusted-staff HTML the ZFS dash list already uses: `.founders` (the pair on About), `dl.contact-dl` (the labelled contact list), `.map-ph` (the striped box standing in for the map until an `embed_html` replaces it) and `dl.zfs` (the ruled term/description rows on a service page). A `table.specs` pasted into prose is styled as a spec table rather than a prose table.
 
 **A toned section inside a column is a panel.** `.column>.section` normally has its padding neutralised; one carrying `t-grey`, `t-dark` or `t-blue` keeps it and takes the card radius, which is how the design's dark configuration card beside the ZFS list is built out of a `rich_text` with `tone: dark`.

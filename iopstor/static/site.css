@@ -537,6 +537,15 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .arch-body.pl-service .chips-kids{display:grid;grid-column:2;grid-row:1 / span 4;align-content:start;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin:0}
 .arch-body.pl-service .chips-kids .chip{display:flex;justify-content:space-between;gap:8px;padding:12px 14px;border-radius:8px;font:500 15px/1.3 var(--body);color:var(--ink);text-decoration:none;transition:border-color .15s,color .15s}
 .arch-body.pl-service .chips-kids .chip:hover{border-color:var(--blue);color:var(--blue)}
+/* Under 700px auto-fit drops the card to one track, but .chips-kids is still pinned to column 2 --
+   that makes an implicit auto-sized track with a 180px floor, and the card runs off the side of the
+   phone. Unpinning it is the whole fix: the template columns can say what they like, a stale
+   grid-column recreates the implicit track anyway. Stacked, it is the shape a service page already
+   ends on (.siblings .tiles). */
+@media(max-width:700px){
+  .arch-body.pl-service .card{grid-template-columns:1fr;grid-template-rows:none;padding:24px}
+  .arch-body.pl-service .chips-kids{grid-column:1;grid-row:auto;margin:18px 0 0}
+}
 /* events: a row led by the date, cut out of start_date */
 .arch-body.pl-event .cards{grid-template-columns:1fr;gap:16px}
 .arch-body.pl-event .card{display:grid;grid-template-columns:auto minmax(0,1fr);gap:24px;align-items:center;padding:24px}
