@@ -255,6 +255,8 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
 .chips-kids{margin:12px 0 0}
 .chip{font-size:12.5px;line-height:1.4;padding:4px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}
+/* the tail of a capped chip list: a count, not a thing you can go to, so it is drawn as an outline */
+.chip-more{border-style:dashed;color:var(--muted-dark-2)}
 /* Four buttons. Each variant names its own colour: .btn paints white on blue, so a variant that
    drops the fill is white-on-white until it says otherwise, and each needs its own :hover for the
    same reason — .btn:hover and .btn.ghost have equal specificity, so the fill would come back. */

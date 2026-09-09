@@ -8,6 +8,7 @@
    cannot itself be one, so those become a <div> with the title linked instead. Everywhere else,
    and for every other type, the whole card stays the single <a> it has always been. #}
 {% set MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] %}
+{% set CHIP_CAP = 4 %}   {# how many child chips a card in a deck shows before it says "+N more" #}
 {% macro card(p, n=0, actions=false) -%}
 {%- set m = p.meta or {} -%}
 {%- set act = actions and p.post_type.slug in ('product', 'datasheet', 'service') -%}
@@ -27,7 +28,14 @@
   {%- if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}
   {%- if p.post_type.slug == 'event' and m.location %}<p class="card-where">{{ m.location }}</p>{% endif %}
   {%- if p.post_type.slug == 'datasheet' and m.product_family %}<p class="card-where">{{ m.product_family }}</p>{% endif %}
-  {%- if p.children %}<span class="chips chips-kids">{% for c in p.children %}{% if act %}<a class="chip" href="{{ c.path }}">{{ c.title }} &rarr;</a>{% else %}<span class="chip">{{ c.title }}</span>{% endif %}{% endfor %}</span>{% endif %}
+  {#- On the archive every child is a tile you can click, because that page IS the full list. In a
+      deck the chips are a taste of what is inside, and every card in a row is as tall as the
+      tallest: Cloud's seven sub-services padded four cards out with empty space. Four, then a
+      count of the rest. #}
+  {%- if p.children %}{% set kids = p.children if act else p.children[:CHIP_CAP] %}<span class="chips chips-kids">
+    {%- for c in kids %}{% if act %}<a class="chip" href="{{ c.path }}">{{ c.title }} &rarr;</a>{% else %}<span class="chip">{{ c.title }}</span>{% endif %}{% endfor %}
+    {%- if not act and p.children|length > CHIP_CAP %}<span class="chip chip-more">+{{ p.children|length - CHIP_CAP }} more</span>{% endif %}
+  </span>{% endif %}
   {%- if act and p.post_type.slug == 'product' and m.get('price') not in (none, '') %}<span class="card-foot"><b>{{ m.get('currency') or 'INR' }} {{ '{:,.0f}'.format(m.price|float) if m.price is number else m.price }}</b><a class="btn" href="{{ p.path }}/checkout">Buy</a></span>{% endif %}
   {%- if act and p.post_type.slug == 'datasheet' and m.file_media_id %}<span class="card-foot"><a class="btn ghost" href="{{ media_download(m.file_media_id) }}">Download</a></span>{% endif %}
 {% if act %}</div>{% else %}</a>{% endif %}

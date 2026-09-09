@@ -138,6 +138,23 @@ def test_hero_takes_turns_only_with_two_pictures_or_more(app, monkeypatch):
     assert "hero-dots" in html
 
 
+def test_a_deck_caps_its_child_chips_and_an_archive_does_not(app):
+    """Every card in a row is as tall as the tallest, so one long child list padded four cards out
+    with empty space. A deck shows four and counts the rest; the archive, which IS the full list,
+    still shows every child as a tile you can click."""
+    kids = [{"title": f"Child {i}", "path": f"/services/g/c{i}"} for i in range(7)]
+    parent = {"title": "Cloud", "path": "/services/g", "excerpt": "", "meta": {}, "terms": [],
+              "children": kids, "featured_media": None, "post_type": {"slug": "service"}}
+    src = "{% from '_card.html' import card %}{{ card(p, 1, actions=a) }}"
+    with app.test_request_context("/"):
+        deck = app.jinja_env.from_string(src).render(p=parent, a=False)
+        arch = app.jinja_env.from_string(src).render(p=parent, a=True)
+    assert deck.count('class="chip"') == 4 and "+3 more" in deck
+    assert "Child 4" not in deck                      # the ones the count stands for
+    assert arch.count('class="chip"') == 7 and "+3 more" not in arch
+    assert '/services/g/c6' in arch                   # and every one of them is a link
+
+
 def test_pdf_block_renders_the_browser_viewer(app, monkeypatch):
     """The PDF section is an iframe at the file plus a download button — no viewer library, and a way
     in for the mobile browsers that will not render a framed PDF. The button saves the file under the
