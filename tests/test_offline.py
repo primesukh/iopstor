@@ -155,6 +155,37 @@ def test_a_deck_caps_its_child_chips_and_an_archive_does_not(app):
     assert '/services/g/c6' in arch                   # and every one of them is a link
 
 
+def test_rupees_groups_the_way_an_indian_price_is_read(app):
+    """`{:,}` groups in threes all the way up and would print 12,50,000 as 1,250,000."""
+    rupees = app.jinja_env.globals["rupees"]
+    assert rupees(999) == "\u20b9 999"
+    assert rupees(5000) == "\u20b9 5,000"
+    assert rupees(125000) == "\u20b9 1,25,000"
+    assert rupees(1250000) == "\u20b9 12,50,000"
+    assert rupees(12500000) == "\u20b9 1,25,00,000"       # one crore twenty-five lakh
+    assert rupees("1250000") == "\u20b9 12,50,000"        # meta holds whatever the form sent
+    assert rupees("on request") == "on request"           # not a number: left exactly as written
+    assert rupees(None) == ""
+
+
+def test_kv_field_saves_rows_in_order_and_never_a_broken_string(app, monkeypatch):
+    """The json type stored raw text when it would not parse, and the spec table then silently
+    vanished from the live page. Rows cannot do that: what will not parse is no rows."""
+    from iopstor import admin_ui
+
+    pt = {"slug": "product", "field_schema": [{"key": "specs", "label": "Specifications", "type": "kv"}]}
+
+    def body(raw):
+        with app.test_request_context("/admin/x", method="POST", data={"title": "T", "meta_specs": raw, "blocks": "[]"}):
+            return admin_ui._form_body(pt, None)["meta"]
+
+    rows = '[{"k": "CPU", "v": "Xeon"}, {"k": "RAM", "v": "32GB"}]'
+    assert body(rows)["specs"] == [{"k": "CPU", "v": "Xeon"}, {"k": "RAM", "v": "32GB"}]   # order kept
+    assert body('[{"k": "CPU", "v": "Xeon"}, {"k": "  ", "v": "x"}]')["specs"] == [{"k": "CPU", "v": "Xeon"}]
+    assert "specs" not in body("{not json")      # no rows, rather than a string nothing can render
+    assert "specs" not in body("[]")
+
+
 def test_a_type_without_pages_has_no_url_and_no_link(app):
     """One flag, one mechanism: has_pages=false means with_paths() hands the post no path, and
     everything that would have pointed at it falls away on its own — the resolver cannot match it,

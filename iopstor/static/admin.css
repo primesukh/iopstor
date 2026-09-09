@@ -86,6 +86,11 @@
 .media-thumb img{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block}
 .media-thumb span{font-size:.8rem;color:var(--muted)}
 .media-note{flex-basis:100%}
+/* A kv meta field already has its own label above it, so the repeater's heading would just say
+   "Rows" underneath it. The + Add row button and the row controls are the parts that matter. */
+.kv-field{display:block;margin:14px 0 0}
+.kv-field>strong{display:block;font:500 14px/1.4 var(--body);color:var(--ink);margin-bottom:6px}
+.kv-field [data-kv] strong{display:none}   /* the repeater's own heading, one level down */
 .rep-row{display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap;border-left:3px solid var(--line);padding:0 0 .4rem .6rem;margin:.4rem 0}
 .rep-row>label{flex:1;min-width:8rem;margin-top:.3rem}
 .rep-row>span{flex:1;min-width:8rem;color:var(--muted);font-size:.9rem}  /* a column row: a summary, not a field */

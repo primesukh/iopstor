@@ -314,6 +314,23 @@
     });
   }
 
+  /* A per-type field of type "kv" -- a list of {k, v} rows. The rows ARE the repeater the
+     spec_table block already uses: SPEC.ui.items["spec_table"] is ["k", "v"] and the labels are
+     already Label and Value, so passing that type in gets the whole widget for nothing. The value
+     reaches the server the same way a media field's does -- through the hidden input that was
+     already in the form, written on submit. */
+  function initMetaRows(form) {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-kv]"), function (box) {
+      var hidden = form.elements[box.getAttribute("data-kv")], model = { rows: [] };
+      try { model.rows = JSON.parse(hidden.value || "[]"); } catch (e) { model.rows = []; }
+      if (!Array.isArray(model.rows)) model.rows = [];
+      box.appendChild(repeater("spec_table", "rows", model));
+      form.addEventListener("submit", function () {
+        hidden.value = JSON.stringify(model.rows.filter(function (r) { return (r.k || "").trim(); }));
+      });
+    });
+  }
+
   // ---- rich text ------------------------------------------------------------
   // ponytail: document.execCommand rich text — deprecated but universally implemented, and 40 lines
   // against a bundled editor. Swap for a real editor if a browser drops it.
@@ -1900,6 +1917,7 @@
     MEDIA = SPEC.media || [];
     FRAME = document.getElementById("canvas");
     initMediaSelects();
+    initMetaRows(form);
     buildToolbar();
     initPreview();
 

@@ -57,9 +57,12 @@ The site ships pre-loaded with the real IOPSTOR service catalogue (Storage, Hype
 
 Some types ask for a few extra details. A Case Study asks for Client, Challenge, Solution and Results. An Event asks for start date, end date and location. A Datasheet asks you to attach the PDF. These extra boxes appear automatically on the form — just fill in what applies.
 
+**Specifications, on a Product, is a list of rows.** A *Label* box and a *Value* box for each line — "CPU", "Xeon 4 core" — with **+ Add row** underneath, and ✕ to remove one. The ↑ and ↓ arrows put them in the order you want them read, and that is the order the table shows on the website. It used to be a box of computer code, where one wrong bracket made the whole table disappear from the live page without telling you. That cannot happen now.
+
 **The listing page for each type now looks like the thing it is listing**, and you do not have to set any of it up:
 
-- **Products** (`/products`) shows the price and a **Buy** button on each card. The button only appears once you have filled in *Price* on that product — leave it blank and the card simply ends at the description, which is the right thing when a price is on request.
+- **Products** (`/products`) shows the price and a **Buy** button on each card. The button only appears once you have filled in *Price* on that product — leave it blank and the card simply ends at the description, which is the right thing when a price is on request. **Prices are always in rupees** and print the way you would read one — `₹ 12,50,000`, not `₹ 1,250,000`. There is no currency box to fill in any more. Type the number only; the ₹ and the commas are added for you.
+- **A product's own page** leads with its title, its summary, the *Request a quote* and *Buy* buttons, and the **Featured image beside them** — so choose one, and it appears. Under that come the details you filled in, then the specifications table.
 - **Services** (`/services`) is one wide row per group, with every sub-service beside it as a button a visitor can click straight through to.
 - **Events** (`/events`) is a list with the year and month on a black tile at the left of each row.
 - **Datasheets** (`/datasheets`) is a list of rows with a PDF mark and a **Download** button.

@@ -74,7 +74,7 @@ def jsonld(post=None, crumbs=()):
                 node["sku"] = m["sku"]
             node["brand"] = {"@type": "Brand", "name": s["name"]}
             if m.get("price") not in (None, ""):
-                node["offers"] = {"@type": "Offer", "price": m["price"], "priceCurrency": m.get("currency") or "INR", "url": url,
+                node["offers"] = {"@type": "Offer", "price": m["price"], "priceCurrency": "INR", "url": url,
                                   "availability": "https://schema.org/InStock"}
         elif t == "Service":
             node.update(provider=org, serviceType=post["title"])

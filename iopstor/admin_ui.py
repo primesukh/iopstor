@@ -20,13 +20,13 @@ from .storage import delete_media, save_upload
 
 ui = Blueprint("admin_ui", __name__, url_prefix="/admin", template_folder="templates")
 SETTING_KEYS = ("site_name", "tagline", "logo_url", "default_og_image", "social_links", "ga_id", "contact_email",
-                "contact_phone", "address", "robots_extra", "currency", "notify_email")
+                "contact_phone", "address", "robots_extra", "notify_email")
 # Which settings tab each key sits on. Every key is rendered on every load whatever tab is
 # showing -- the tabs are CSS -- because the save below blanks any key missing from the form.
 SETTING_TABS = (("Site identity", ("site_name", "tagline", "logo_url", "default_og_image")),
                 ("Contact details", ("contact_email", "contact_phone", "address", "social_links")),
                 ("SEO & analytics", ("ga_id", "robots_extra")),
-                ("Payments", ("currency", "notify_email")))
+                ("Payments", ("notify_email",)))   # prices are rupees, always: rupees() in __init__.py
 LEAD_STATUSES = ("new", "in_progress", "handled")
 SEO_KEYS = ("title", "description", "canonical", "robots", "og_image")
 
@@ -141,7 +141,16 @@ def _form_body(pt, existing):
     meta = dict(existing.get("meta") or {}) if existing else {}
     for field in pt.get("field_schema") or []:
         raw = f.get(f"meta_{field['key']}", "")
-        if field.get("type") == "json":
+        if field.get("type") == "kv":
+            # A list of {k, v}, not an object: jsonb sorts an object's keys, which would throw away
+            # the order the editor dragged the rows into. A row with no label is a row not filled in.
+            try:
+                rows = json.loads(raw) if raw.strip() else []
+            except ValueError:
+                rows = []
+            meta[field["key"]] = [{"k": str(r.get("k", "")), "v": str(r.get("v", ""))}
+                                  for r in rows if isinstance(r, dict) and str(r.get("k", "")).strip()] or None
+        elif field.get("type") == "json":
             try:
                 meta[field["key"]] = json.loads(raw) if raw.strip() else None
             except ValueError:

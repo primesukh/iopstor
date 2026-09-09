@@ -363,7 +363,7 @@ def api_checkout():
         abort(400, "email required")
     lead = db.insert("leads", {"kind": "quote", "name": str(b.get("name") or email)[:200], "email": email[:300], "post_id": product["id"], "data": {"source": "checkout"}})
     payment = db.insert("payments", {"provider": gateway().name, "post_id": product["id"], "lead_id": lead["id"], "amount": meta["price"],
-                                     "currency": str(meta.get("currency") or "INR")[:3]})
+                                     "currency": "INR"})
     result = gateway().create_checkout(payment)
     if not request.is_json:  # a browser posting the checkout page's form follows the gateway
         return redirect(result.get("redirect_url") or "/", 303)

@@ -1,3 +1,4 @@
+import re
 from urllib.parse import quote
 
 from flask import Flask
@@ -33,7 +34,21 @@ def create_app(test_config=None):
         m = db.get_media(int(i)) if i else None
         return f"{m['url']}?download={quote(m.get('filename') or '')}" if m else ""
 
+    def rupees(n):
+        """A price the way an Indian customer reads one: the last three digits, then twos.
+        `{:,}` groups in threes all the way up, which would print 12,50,000 as 1,250,000. Anything
+        that is not a number comes back untouched, so a price typed as "on request" still prints."""
+        try:
+            paise = round(float(n))
+        except (TypeError, ValueError):
+            return str(n or "")
+        digits = str(abs(paise))
+        if len(digits) > 3:
+            digits = re.sub(r"(?<=\d)(?=(\d\d)+$)", ",", digits[:-3]) + "," + digits[-3:]
+        return ("-" if paise < 0 else "") + "\u20b9 " + digits
+
     app.jinja_env.globals.update(
+        rupees=rupees,
         media_url=lambda i: (db.get_media(int(i)) or {}).get("url", "") if i else "",
         media_alt=lambda i: (db.get_media(int(i)) or {}).get("alt", "") if i else "",
         media_download=media_download,
