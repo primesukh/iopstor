@@ -487,7 +487,9 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pl-partner:not(.arch-body) .eyebrow{color:var(--muted);text-align:center;margin:0}
 .pl-partner:not(.arch-body) .cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;align-items:center}
 .pl-partner:not(.arch-body) .card{height:64px;display:flex;align-items:center;justify-content:center;padding:10px 16px;border:0;background:none;border-radius:0;filter:grayscale(1);opacity:.7;transition:filter .2s,opacity .2s}
-.pl-partner:not(.arch-body) a.card:hover{filter:none;opacity:1;transform:none;border:0}
+/* .card, not a.card: a partner has no page, so the strip is a row of <div>s. The colour coming
+   back on hover is decoration, not an affordance -- it should survive that. */
+.pl-partner:not(.arch-body) .card:hover{filter:none;opacity:1;transform:none;border:0}
 .pl-partner:not(.arch-body) .card h3,.pl-partner:not(.arch-body) .card p{display:none}
 .pl-partner:not(.arch-body) .card-img{height:100%;margin:0}
 .pl-partner:not(.arch-body) .card-img img{max-height:100%;max-width:100%;object-fit:contain}

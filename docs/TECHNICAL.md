@@ -60,7 +60,7 @@ Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_w
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `post_types` | Content types **as data** | `slug`, `url_prefix`, `hierarchical`, `field_schema` (JSONB), `taxonomies` (JSONB), `jsonld_type`, `in_sitemap` |
+| `post_types` | Content types **as data** | `slug`, `url_prefix`, `hierarchical`, `field_schema` (JSONB), `taxonomies` (JSONB), `jsonld_type`, `in_sitemap`, `has_pages` |
 | `posts` | Every piece of content | `post_type_id`, `parent_id`, `slug`, `title`, `excerpt`, `blocks` (JSONB), `meta` (JSONB), `seo` (JSONB), `status`, `published_at`, `featured_media_id`, `author_id`, `menu_order` |
 | `taxonomies` / `terms` / `post_terms` | Classification, many-to-many | `terms` unique on `(taxonomy_id, slug)` |
 | `media` | Uploads | `key`, `url`, `mime`, `size`, `alt`, `uploaded_by` |
@@ -363,6 +363,24 @@ No CSS framework, no build step, no JavaScript framework. Mobile navigation is a
 **A blog post reads down, not across.** Every other type puts its featured picture beside the words (`.page-head.has-media`, two columns); an article stacks — title, date, the picture **at its own size**, then the rule that divides the head from the writing. `.featured` is a banner crop (`width:100%`, a 440px ceiling, `object-fit:cover`), which is right for a card or a product shot and wrong inside an article: a small picture was blown up to 1200 wide and then cut off top and bottom. `.pt-post .page-media img` hands the sizing back to the browser and only shrinks a picture wider than the column. The rule is `.pt-post .page-head`'s own bottom border, the same way the hero and an archive head draw theirs, so it spans the page rather than the 1200px column. The article also drops the eyebrow, which only repeated the breadcrumb's last link.
 
 **An archive's grid is `auto-fill`, a page's deck is `auto-fit`.** An archive holds however many posts happen to be published, and `auto-fit` collapses its empty tracks — one blog post stretched into a full-width billboard. `auto-fill` keeps them, so a short list still reads as tiles. A deck inside a page keeps `auto-fit`, because there the editor chose the count. The measures are the design's: 300px for blog and case studies (three across at 1200), 280px for products, 220px for partners.
+
+**`has_pages=false` is a type whose entries are data, not destinations** (migration `0005`, set on
+`partner`). A technology partner is a logo on somebody else's page; there is nothing to read on a page
+of its own. The flag is a column rather than a slug test in the code, because a content type is a row
+here and this is a property of the row like every other.
+
+It works through **one** mechanism: `db.with_paths()` gives such a post `path = None`, and everything
+that would have pointed at it falls away by itself —
+
+- `resolve()` matches a detail page with `post["path"] == full`, which `None` can never satisfy, so
+  `/partners/micron` 404s without a rule of its own;
+- `_indexable()` requires a path, which drops the post from `sitemap.xml` and `llms.txt`;
+- `_card.html` renders a `<div class="card">` instead of an `<a>`;
+- `public_post()` reports `url: null`, and `seo.jsonld()` returns crumbs only.
+
+The type's **archive** (`/partners`) and every `post_list` block are unaffected — neither ever needed
+a per-post URL. `with_paths()` reads the flag with `.get("has_pages", True)`, so the app behaves
+exactly as before against a database where `0005` has not been applied yet.
 
 **A quote beside another column is not a panel.** `.testimonial` on its own is the design's card (grey, radius 14, 32px, a 44px portrait ring). Inside a `.column` the background, the radius, the padding and the ring all drop and the quote goes flat 20px italic on the page's own ground — two grey boxes in a row read as chrome, not as somebody talking. The pair's heading is the `columns` block's own `heading`, so it needs no new field.
 

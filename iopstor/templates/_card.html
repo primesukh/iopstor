@@ -12,8 +12,11 @@
 {% macro card(p, n=0, actions=false) -%}
 {%- set m = p.meta or {} -%}
 {%- set act = actions and p.post_type.slug in ('product', 'datasheet', 'service') -%}
+{#- box: the card is not itself a link. Either it holds one of its own (act), or the post has no page
+    to link to at all -- a technology partner is a logo on somebody else's page, nothing more. -#}
+{%- set box = act or not p.path -%}
 {%- set mo = m.start_date[5:7]|int if m.start_date else 0 -%}
-{% if act %}<div class="card">{% else %}<a class="card" href="{{ p.path }}">{% endif %}
+{% if box %}<div class="card">{% else %}<a class="card" href="{{ p.path }}">{% endif %}
   {%- if p.post_type.slug == 'partner' and m.logo_media_id %}<span class="card-img"><img src="{{ media_url(m.logo_media_id) }}" alt="{{ p.title }}" loading="lazy"></span>
   {%- elif p.featured_media %}<span class="card-img"><img src="{{ p.featured_media.url }}" alt="{{ p.featured_media.alt or '' }}" loading="lazy"></span>
   {%- else %}<span class="card-img card-img-empty"></span>{% endif %}
@@ -38,5 +41,5 @@
   </span>{% endif %}
   {%- if act and p.post_type.slug == 'product' and m.get('price') not in (none, '') %}<span class="card-foot"><b>{{ m.get('currency') or 'INR' }} {{ '{:,.0f}'.format(m.price|float) if m.price is number else m.price }}</b><a class="btn" href="{{ p.path }}/checkout">Buy</a></span>{% endif %}
   {%- if act and p.post_type.slug == 'datasheet' and m.file_media_id %}<span class="card-foot"><a class="btn ghost" href="{{ media_download(m.file_media_id) }}">Download</a></span>{% endif %}
-{% if act %}</div>{% else %}</a>{% endif %}
+{% if box %}</div>{% else %}</a>{% endif %}
 {%- endmacro %}
