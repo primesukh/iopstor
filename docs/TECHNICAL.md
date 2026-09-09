@@ -315,7 +315,7 @@ Everything is server-rendered from `seo.py` + `public.py`; keep it there.
 
 ## 10. Migrations
 
-Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in name order and tracked in `schema_migrations`.
+Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in name order and tracked in `schema_migrations`. **Only a four-digit-prefixed name is a step** (`MIGRATION_GLOB` in `cli.py`); anything else in the folder is a script run by hand and is never executed as part of a run.
 
 `0000_bootstrap.sql` is pasted **once** into Supabase Studio's SQL editor. It creates `apply_migration(name, sql)` — `SECURITY DEFINER`, executable by `service_role` only — which `flask migrate` calls per file over Kong. Each file runs in one transaction.
 
@@ -325,6 +325,8 @@ Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in nam
 2. `pipenv run flask migrate`
 3. Update the code that reads/writes those columns
 4. Commit both together
+
+**When the ledger and the database disagree.** A schema built by pasting the files into Studio leaves every table in place and `schema_migrations` empty, so `flask migrate` starts again at the beginning and stops on `0001_initial.sql: relation "menus" already exists`. Nothing is broken — the ledger simply never recorded what was done by hand. `migrations/repair_schema_migrations.sql` fixes it: pasted into Studio, it records each file **only if the thing that file makes is actually present** — the `posts` table for `0001`, `pg_class.relrowsecurity` for `0002` (the table can exist with RLS still off, which is the very state `0002` fixes), `warranties` for `0003`, the `warranties_expiry_after_purchase` constraint for `0004`. A file that was genuinely never applied stays unrecorded and `flask migrate` then applies it normally. Safe to run twice, and safe on a database in any state. `migrate()` names that script in its own error when the failure text contains "already exists".
 
 `0002_enable_rls.sql` enables RLS on every app table, so the anon key cannot read drafts or leads. The app's service-role key bypasses RLS by design. A new table repeats that one line for itself — `0003_warranty.sql` ends with `ALTER TABLE warranties ENABLE ROW LEVEL SECURITY;`, and defines no policies.
 
