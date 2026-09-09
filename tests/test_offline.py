@@ -155,6 +155,19 @@ def test_a_deck_caps_its_child_chips_and_an_archive_does_not(app):
     assert '/services/g/c6' in arch                   # and every one of them is a link
 
 
+def test_only_numbered_files_are_migrations():
+    """migrations/ holds two kinds of file: numbered steps `flask migrate` runs in order, and scripts
+    run by hand in Studio. Executing one of the second kind as a step would be a bad afternoon."""
+    from iopstor.cli import MIGRATION_GLOB, MIGRATIONS
+
+    steps = {p.name for p in MIGRATIONS.glob(MIGRATION_GLOB)}
+    assert "0001_initial.sql" in steps
+    assert "0000_bootstrap.sql" in steps          # matched here, skipped by name in migrate()
+    for p in MIGRATIONS.glob("*.sql"):
+        assert p.name in steps or not p.name[:4].isdigit(), p.name
+    assert "repair_schema_migrations.sql" not in steps
+
+
 def test_pdf_block_renders_the_browser_viewer(app, monkeypatch):
     """The PDF section is an iframe at the file plus a download button — no viewer library, and a way
     in for the mobile browsers that will not render a framed PDF. The button saves the file under the
