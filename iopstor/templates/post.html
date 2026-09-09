@@ -20,7 +20,7 @@
       {% if post.terms %}<p class="chips">{% for t in post.terms %}<a class="chip chip-{{ t.taxonomy.slug }}" href="/{{ t.taxonomy.slug }}/{{ t.slug }}">{{ t.name }}</a>{% endfor %}</p>{% endif %}
       {% if pt.slug in ('service', 'product') %}<p class="btns">
         <a class="btn" href="/contact-us?product={{ post.slug }}">Request a quote</a>
-        {% if meta_.get('price') not in (none, '') %}<a class="btn ghost" href="{{ post.path }}/checkout">Buy</a>{% endif %}
+        {% if meta_.get('price') not in (none, '') %}<a class="btn ghost" href="{{ post.path }}/checkout">Buy &middot; {{ rupees(meta_.price) }}</a>{% endif %}
       </p>{% endif %}
     </div>
     {% if post.featured_media %}<div class="page-media"><img class="featured" src="{{ post.featured_media.url }}" alt="{{ post.featured_media.alt or post.title }}"></div>{% endif %}
@@ -30,7 +30,9 @@
      long ones read as the article. That is what gives a case study its Challenge / Solution /
      Results sections without post.html knowing what a case study is. #}
   {% set fields = (pt.field_schema or [])|selectattr('key', 'in', meta_)|list %}
-  {% set tiles = fields|rejectattr('type', 'in', ['json', 'kv', 'textarea'])|list %}
+  {# price is not a fact about the product like SKU is, it is the ask: it rides on the Buy button
+     above, the way _card.html pairs the two on an archive tile. #}
+  {% set tiles = fields|rejectattr('type', 'in', ['json', 'kv', 'textarea'])|rejectattr('key', 'equalto', 'price')|list %}
   {% set prose = fields|selectattr('type', 'equalto', 'textarea')|list %}
   {% if tiles %}<div class="meta-strip"><div class="wrap"><dl class="details">{% for f in tiles if meta_[f.key] not in (none, '', [], {}) %}
     <div><dt>{{ f.label }}</dt><dd>{% if f.type == 'media' %}<a href="{{ media_url(meta_[f.key]) }}" target="_blank" rel="noopener">Download</a>{% elif f.type == 'url' %}<a href="{{ meta_[f.key] }}" rel="noopener">{{ meta_[f.key] }}</a>{% elif f.key == 'price' %}{{ rupees(meta_[f.key]) }}{% else %}{{ meta_[f.key] }}{% endif %}</dd></div>

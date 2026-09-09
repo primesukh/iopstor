@@ -110,7 +110,11 @@ def test_upload_checkout_seed(client, editor_headers):
     prod = client.post("/api/admin/v1/posts", headers=editor_headers, json={"post_type": "product", "title": "zz-test Flash 24", "status": "published",
                                                                             "meta": {"price": 199999, "currency": "INR", "sku": "IOF-24"}})
     assert prod.status_code == 201, prod.json
-    assert b'"sku": "IOF-24"' in client.get("/products/zz-test-flash-24").data
+    page = client.get("/products/zz-test-flash-24").data
+    assert b'"sku": "IOF-24"' in page
+    # the price is the ask, not a spec: it rides on the Buy button, not in a card of its own
+    assert "Buy &middot; \u20b9 1,99,999".encode() in page
+    assert b"<dt>Price</dt>" not in page and b"<dt>SKU</dt>" in page
     r = client.post("/api/v1/payments/checkout", json={"product_id": prod.json["id"], "email": "buyer@zz-test.local", "name": "Buyer"})
     assert r.status_code == 201, r.json
     pid = r.json["payment_id"]
