@@ -98,7 +98,7 @@ git checkout -b <type>/<short-name>    # feat/, fix/, docs/, chore/
 /pr                                    # pre-flight, push, open the PR — then stop
 ```
 
-Open the PR and **stop there**. Do not merge, do not squash, do not push to `main` — even when tests pass and the work is obviously finished (`git merge`, `git push origin main`, `gh pr merge` are denied). Merging happens only when the user explicitly says so, on that specific PR. `gh` is installed and authenticated; `/pr` has the commands, including the REST call that replaces the silently-failing `gh pr edit`.
+Open the PR and **stop there**. Do not merge, do not squash, do not push to `main` — even when tests pass and the work is obviously finished (`git merge` and `git push origin main` are denied). Merging happens only when the user explicitly says so, on that specific PR — then `gh pr merge N --merge` (a merge commit, the remote branch kept, as every PR so far), and `/after-merge`. `gh` is installed and authenticated; `/pr` has the commands, including the REST call that replaces the silently-failing `gh pr edit`.
 
 **Never mention Claude or Anthropic anywhere in git authorship** — no `Co-Authored-By: Claude ...` trailer, no `noreply@anthropic.com`, no "Generated with Claude Code" line, in commit messages or PR bodies/authors. Commits and PRs are authored as the user only (`includeCoAuthoredBy: false` in `settings.json` handles the trailer; the PR body is on you).
 
