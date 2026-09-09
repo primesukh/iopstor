@@ -16,6 +16,7 @@
       "Bash(graphify query*)",
       "Bash(graphify path*)",
       "Bash(graphify explain*)",
+      "Bash(graphify update*)",
       "Bash(git status*)",
       "Bash(git log*)",
       "Bash(git show*)",
