@@ -15,11 +15,11 @@ Merging is the user's act. Everything after it is yours, on `main`, without a si
    git fetch -p && git branch -d <merged-branch>     # or /clean_gone for every [gone] branch
    ```
 
-2. **Refresh the graph's prose half** — the only moment the LLM pass ever runs. The code half already rebuilt itself: the `post-checkout` hook fired on step 1 (`~/.cache/graphify-rebuild.log`), and `grep 'Built from commit' graphify-out/GRAPH_REPORT.md` should already name `HEAD`. Now, on `main` only (`git branch --show-current` must print `main`), invoke the skill so the docs that changed in the merged PRs and the community labels are re-extracted:
+2. **Refresh the graph** — the only moment the LLM pass ever runs. Do not expect the git hooks to have done it: `post-checkout` fired when you switched to `main`, but a fast-forward `git pull` fires no hook, so after step 1 the graph is still the *old* `main`. On `main` only (`git branch --show-current` must print `main`), invoke the skill; it re-extracts every file changed since the last manifest — code with the AST (free) and prose with subagents — and re-labels the communities:
    ```
    /graphify . --update
    ```
-   If the report says the community set changed since labelling, that pass also refreshes the names. Confirm the report's commit line equals `git rev-parse --short HEAD` afterwards.
+   Two things to expect. Community labelling is a manual step in the skill (a 2–5 word name per community). And the first `--update` after a graphify upgrade re-extracts **every** prose file, because the cache is keyed on the extraction prompt — 54 files and ~400k subagent tokens the first time; run it anyway, on `main`, it is what the rule is for. Confirm afterwards that the report's `Built from commit` line equals `git rev-parse --short HEAD`.
 
 3. **Audit `.claude/` against what landed**: `git diff --stat "$PREV"..HEAD` and `git log --oneline "$PREV"..HEAD`, then for each kind of change:
 

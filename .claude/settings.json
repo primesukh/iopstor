@@ -57,7 +57,6 @@
       "Bash(git push origin main*)",
       "Bash(git push --force*)",
       "Bash(git push -f*)",
-      "Bash(gh pr merge*)",
       "Edit(requirements.txt)",
       "Edit(requirements-dev.txt)",
       "Edit(Pipfile.lock)",

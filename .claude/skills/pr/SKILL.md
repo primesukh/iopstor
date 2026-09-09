@@ -63,7 +63,7 @@ Which sections of TECHNICAL.md, NON-TECHNICAL.md and .claude/docs/design.md chan
 
 ## Then stop
 
-Report the PR URL, the test line, and anything that needs applying. Do not merge, do not `git merge`, do not push `main`, do not rebase onto `main` unasked. When the user says it is merged, `/after-merge`.
+Report the PR URL, the test line, and anything that needs applying. Do not merge, do not `git merge`, do not push `main`, do not rebase onto `main` unasked. When the user says "merge it" on this PR: `gh pr merge N --merge` (merge commit, remote branch kept), then `/after-merge`. When the user says they merged it themselves: `/after-merge`.
 
 ## Common mistakes
 

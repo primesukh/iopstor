@@ -10,7 +10,7 @@ git log --oneline -12 2>/dev/null
 built=$(sed -n 's/^- Built from commit: `\([0-9a-f]*\)`.*/\1/p' graphify-out/GRAPH_REPORT.md 2>/dev/null)
 if [ -n "$built" ]; then
   behind=$(git rev-list --count "$built..HEAD" 2>/dev/null || echo '?')
-  echo "graphify graph: built from $built, $behind commit(s) behind HEAD (git hooks rebuild code per commit; if this is not 0 see ~/.cache/graphify-rebuild.log; prose + labels refresh on main via /after-merge)"
+  echo "graphify graph: built from $built, $behind commit(s) behind HEAD (git hooks rebuild code per commit and branch switch, not per pull; non-zero right after a pull is normal until /after-merge; otherwise see ~/.cache/graphify-rebuild.log)"
 else
   echo "graphify graph: not built (graphify-out/GRAPH_REPORT.md missing)"
 fi
