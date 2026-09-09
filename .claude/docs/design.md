@@ -170,6 +170,7 @@ Shared three ways: public pages, `body.admin` (via `admin/base.html`), and the e
 Decisions that are easy to undo by accident:
 
 - **Header is white** with the logo in its own colours (client, 2026-09-08); the footer stays dark and knocks the logo out.
+- **`--grey` (`#edf1f6`) is the only light-band fill**, and `body.admin` shares it. It has to stay clear of `--line` (`#e5e9ef`): close the gap and the white cards on a grey band lose their edge. Darkened from `#f4f6f9` on 2026-09-09.
 - **Mega panel is CSS only** (`:hover`/`:focus-within`, `:has()` to switch groups, 8-group ceiling), fed by `service_nav()` over `db.tree("service")`.
 - **Hero rotator is CSS** (`--n`/`--i`, one keyframe set per picture count: 2 and 3 exist).
 - **Archive grid is `auto-fill`, page deck is `auto-fit`**; four archive shapes scoped to `.arch-body` (`pl-product`, `pl-service`, `pl-event`, `pl-datasheet`); `pl-service` unpins `grid-column` under 700px.
@@ -234,6 +235,7 @@ Decisions that are easy to undo by accident:
 | 2026-09-09 | `.claude/` refreshed with every PR merge; hard rules enforced in `settings.json` | The map had drifted six days behind the territory |
 | 2026-09-09 | `/after-merge` owns the whole graph refresh; the git hooks are not relied on after a pull | A fast-forward pull fires no hook, so the graph sat three commits behind `main` on the first run |
 | 2026-09-09 | `gh pr merge` taken off the deny list; the agent merges only when told, on that PR | A deny cannot see consent, and the user wants to say "merge it" and have it done |
+| 2026-09-09 | `--grey` darkened to `#edf1f6`; one token still covers the site and the admin | The bands read as near-white on a bright screen. A public-only grey would add a second token and a per-rule choice for no gain |
 
 ---
 
