@@ -10,6 +10,9 @@ from . import db
 from .db import slugify
 
 MIGRATIONS = pathlib.Path(__file__).resolve().parent.parent / "migrations"
+# A migration is a numbered file, and only a numbered file. Anything else in the folder is a tool to
+# be run by hand -- repair_schema_migrations.sql -- and must never be executed as a step.
+MIGRATION_GLOB = "[0-9][0-9][0-9][0-9]_*.sql"
 
 
 @click.command("migrate")
@@ -21,13 +24,20 @@ def migrate():
         applied = {r["filename"] for r in sb.table("schema_migrations").select("filename").execute().data}
     except APIError:
         raise click.ClickException("schema_migrations not found: run migrations/0000_bootstrap.sql once in Supabase Studio's SQL editor first")
-    for path in sorted(MIGRATIONS.glob("*.sql")):
+    for path in sorted(MIGRATIONS.glob(MIGRATION_GLOB)):
         if path.name.startswith("0000_") or path.name in applied:
             continue
         try:
             ok = sb.rpc("apply_migration", {"name": path.name, "sql": path.read_text()}).execute().data
         except APIError as e:
-            raise click.ClickException(f"{path.name}: {getattr(e, 'message', e)}")
+            msg = str(getattr(e, "message", e))
+            # The one failure that is not a broken migration: a schema built by hand, so the ledger
+            # is empty and every file looks unapplied. Say what to do rather than just what broke.
+            hint = ("\n\nThis database already has what that file creates. If the schema was built by "
+                    "running the files by hand, record what is already there: paste "
+                    "migrations/repair_schema_migrations.sql into Supabase Studio's SQL editor, then "
+                    "run this again." if "already exists" in msg else "")
+            raise click.ClickException(f"{path.name}: {msg}{hint}")
         click.echo(f"applied {path.name}" if ok else f"skipped {path.name} (already applied)")
     click.echo("migrations up to date")
 
