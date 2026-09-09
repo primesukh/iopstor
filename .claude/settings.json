@@ -2,17 +2,83 @@
   "enabledPlugins": {
     "ponytail@ponytail": true
   },
+  "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
       "Bash(pipenv install*)",
       "Bash(pipenv run pytest*)",
-      "Bash(pipenv run flask*)",
-      "Bash(pipenv run dev*)",
       "Bash(pipenv run test*)",
+      "Bash(pipenv run dev*)",
+      "Bash(pipenv run flask run*)",
+      "Bash(pipenv run flask routes*)",
+      "Bash(pipenv run flask --help*)",
       "Bash(pipenv requirements*)",
       "Bash(graphify query*)",
       "Bash(graphify path*)",
-      "Bash(graphify explain*)"
+      "Bash(graphify explain*)",
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git diff*)",
+      "Bash(git branch*)",
+      "Bash(git blame*)",
+      "Bash(git stash list*)",
+      "Bash(git rev-parse*)",
+      "Bash(git rev-list*)",
+      "Bash(git fetch*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr list*)",
+      "Bash(gh pr checks*)",
+      "Bash(gh auth status*)",
+      "Bash(curl -s http://localhost:5001*)",
+      "Bash(firefox --headless*)",
+      "Bash(convert *)",
+      "Bash(mkdir -p /tmp/claude-1000*)",
+      "Bash(grep *)",
+      "Bash(ls *)",
+      "Bash(wc *)",
+      "Bash(head *)",
+      "Bash(tail *)"
+    ],
+    "deny": [
+      "Bash(pipenv run flask migrate*)",
+      "Bash(pipenv run flask seed*)",
+      "Bash(pipenv run flask create-admin*)",
+      "Bash(pipenv run flask import-media*)",
+      "Bash(flask migrate*)",
+      "Bash(flask seed*)",
+      "Bash(flask create-admin*)",
+      "Bash(flask import-media*)",
+      "Bash(python -m flask*)",
+      "Bash(pipenv run python -m flask*)",
+      "Bash(pip install*)",
+      "Bash(pip3 install*)",
+      "Bash(git merge*)",
+      "Bash(git push origin main*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(gh pr merge*)",
+      "Edit(requirements.txt)",
+      "Edit(requirements-dev.txt)",
+      "Edit(Pipfile.lock)",
+      "Edit(.env)",
+      "Write(requirements.txt)",
+      "Write(requirements-dev.txt)",
+      "Write(Pipfile.lock)",
+      "Write(.env)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/session-start.sh"
+          }
+        ]
+      }
     ]
   }
 }

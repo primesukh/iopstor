@@ -48,6 +48,7 @@ iopstor/static/       site.css (the whole public theme) + admin.css (admin extra
 migrations/           0000_bootstrap.sql (run once by hand) + NNNN_name.sql applied by `flask migrate`
 tests/                test_offline.py always runs; the rest need a live Supabase and skip without it
 docs/                 this file + NON-TECHNICAL.md
+.claude/              the agent's workspace: docs/design.md (architecture map) + requirements.md, skills/, hooks/, settings.json — §18
 ```
 
 Dependency direction: `public.py` and `admin_ui.py` both import from `admin_api.py` (for `apply_post`, error handlers and pagination helpers); everything imports `db.py`; `db.py` imports nothing from the app.
@@ -233,11 +234,14 @@ EDITOR = {
                         # [] means the rows are not rows of fields: "columns" rows are lists of blocks
     "labels":  {...},   # friendlier field labels; missing keys fall back to the key itself
     "kinds":   [...],   # contact_form.kind options
+    "order":   [...],   # the order the / picker offers types in (a type missing here is appended last)
+    "names":   {...},   # block type -> (icon, plain-English name, one line ending in a full stop) for the picker
+    "seed":    {...},   # block type -> starting content; must pass validate_blocks() except image/gallery/pdf
 }
 REPEATERS = ("items", "images", "rows", "cols")
 ```
 
-`EDITOR` is metadata only — nothing on the render or validation path reads it, and an unknown widget just degrades to a text input. `tests/test_offline.py::test_editor_metadata_covers_every_block` fails if a new block's fields have no widget, or if a repeater field has no `EDITOR["items"]` entry (`[]` counts — `columns` has one).
+`EDITOR` is metadata only — nothing on the render or validation path reads it, and an unknown widget just degrades to a text input. `tests/test_offline.py::test_editor_metadata_covers_every_block` fails if a new block's fields have no widget, or if a repeater field has no `EDITOR["items"]` entry (`[]` counts — `columns` has one); `test_inserter_metadata_and_seeds` fails if `names` or `seed` is missing, or the seed does not save as-is. Nothing tests that `templates/blocks/<type>.html` exists — render the seeded block once.
 
 `blocks_text()` flattens all block content to plain text for admin search and the public API's `text` field. Because JSONB does not preserve key order, it walks fields in a fixed reading order (`_TEXT_ORDER`), with unknown keys appended alphabetically, so output is deterministic. It already recurses through dicts and lists, so a column's blocks are picked up for free — `"type"` and `"widths"` are in `_NON_TEXT_KEYS` so the literal string `"rich_text"` and a width spec do not leak into the output.
 
@@ -549,7 +553,7 @@ Blocks live in **containers**: `#main`, or one `[data-col]` of a columns block (
 
 The `⚙` panel for a Columns block manages the column *list* — `repeater()` gained two optional hooks (a row factory, a cell renderer) because a column row is an array of blocks rather than a row of fields, which is cheaper than a second ↑ ↓ ✕ splice loop. Removing a column that holds sections asks first. The sections themselves are edited on the page, like everything else.
 
-**A page is a document, not a stack.** Prose lives in `rich_text` blocks; the other twelve types
+**A page is a document, not a stack.** Prose lives in `rich_text` blocks; the other fifteen types
 are the designed bands. Nothing about the storage changed — `posts.blocks` is the same JSONB —
 but the editing surface leads with writing:
 
@@ -869,9 +873,9 @@ pipenv requirements --dev-only > requirements-dev.txt
 |---|---|
 | New content type | A `post_types` row — seed entry or admin API call. No table, no model |
 | New per-type field | Add to that type's `field_schema`; the admin form and detail list follow |
-| New block | One `BLOCKS` entry + `templates/blocks/<type>.html` |
+| New block | `BLOCKS` entry + `EDITOR` names/seed/order (+ widgets/items/labels for new keys) + `templates/blocks/<type>.html` + a `blocks_md()` branch + a `site.css` rule group; `/new-block` in `.claude/skills/` is the checklist |
 | New taxonomy | A `taxonomies` row + the type's `taxonomies` array |
-| Schema change | A new `migrations/NNNN_*.sql`, then `flask migrate`, then the code |
+| Schema change | A new `migrations/NNNN_*.sql`, then `flask migrate`, then the code. A seeded `post_types` or `settings` row that already exists needs the migration to `UPDATE` it — the seed only inserts |
 | New payment provider | A `PaymentGateway` subclass in `payments.py` + `PAYMENT_PROVIDER` |
 | Theme change | `static/site.css` (admin extras in `static/admin.css`) |
 
@@ -905,3 +909,19 @@ Marked in code with `# ponytail:` comments.
 - FAQPage JSON-LD is not wired up (§9).
 
 Run `/ponytail-debt` to harvest the current ledger from source.
+
+---
+
+## 18. Working on it with an agent (`.claude/`)
+
+`CLAUDE.md` at the repo root is the rulebook Claude Code loads every session; `.claude/` is what makes the rules cheap to follow.
+
+| Path | What it does |
+|---|---|
+| `.claude/docs/design.md` | The architecture map — what exists, where, and the dated decision log. Updated in every PR that changes the shape of the system (the third doc, beside this one and NON-TECHNICAL.md) |
+| `.claude/docs/requirements.md` | The client brief verbatim, the dated client decisions, and the status of each brief item |
+| `.claude/skills/*/SKILL.md` | Slash-command procedures: `/pr`, `/docs`, `/new-block`, `/migration`, `/theme-check`, `/after-merge`. Each is a checklist of a thing that has gone wrong before |
+| `.claude/settings.json` | Permission rules. The **deny** list is the hard rules made mechanical: no `flask migrate`/`seed`/`import-media`/`create-admin`, no `pip install`, no `git merge`, no push to `main`, no `gh pr merge`, no hand edits to the generated `requirements*.txt`, `Pipfile.lock` or `.env`. `includeCoAuthoredBy: false` keeps the agent out of git authorship |
+| `.claude/hooks/session-start.sh` | Runs at session start: branch, dirty files, last 12 commits, and how many commits behind `HEAD` the knowledge graph is |
+
+The knowledge graph (`graphify-out/`, gitignored) has two halves. Its code nodes are re-extracted by git hooks (`graphify hook install`: `post-commit`, `post-checkout`) after every commit and branch switch, with no LLM. Its prose nodes and community labels come from the LLM pass, which runs only on `main`, after a merge, from `/after-merge` — which also audits `.claude/` against the merged diff so the map never drifts more than one PR behind the code. Anything that drifted goes into its own `chore/claude-sync` PR.
