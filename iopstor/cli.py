@@ -251,7 +251,7 @@ def home_blocks(media=lambda name: None):
         {"type": "post_list", "data": {"tone": "dark", "post_type": "case_study", "limit": 4, "eyebrow": "Case studies",
                                        "heading": "Proven across finance, education, media and logistics",
                                        "link_label": "All case studies", "link_url": "/case-studies"}},
-        {"type": "columns", "data": {"cols": [
+        {"type": "columns", "data": {"heading": "What our clients say", "cols": [
             [{"type": "testimonial", "data": {"quote": TESTIMONIALS[0][0], "author": TESTIMONIALS[0][1], "role": TESTIMONIALS[0][2]}}],
             [{"type": "testimonial", "data": {"quote": TESTIMONIALS[1][0], "author": TESTIMONIALS[1][1], "role": TESTIMONIALS[1][2]}}]]}},
         {"type": "post_list", "data": {"post_type": "partner", "limit": 24, "eyebrow": "Technology partners"}},

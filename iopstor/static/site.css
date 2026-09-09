@@ -255,6 +255,8 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
 .chips-kids{margin:12px 0 0}
 .chip{font-size:12.5px;line-height:1.4;padding:4px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}
+/* the tail of a capped chip list: a count, not a thing you can go to, so it is drawn as an outline */
+.chip-more{border-style:dashed;color:var(--muted-dark-2)}
 /* Four buttons. Each variant names its own colour: .btn paints white on blue, so a variant that
    drops the fill is white-on-white until it says otherwise, and each needs its own :hover for the
    same reason — .btn:hover and .btn.ghost have equal specificity, so the fill would come back. */
@@ -442,9 +444,12 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .testimonial p{margin:0;font:500 clamp(20px,2.4vw,26px)/1.4 var(--head);color:var(--black)}
 .testimonial footer{display:flex;align-items:center;gap:12px;margin-top:20px;font-size:14px;color:var(--muted)}
 .testimonial .avatar{flex:none;width:44px;height:44px;border-radius:999px;background:var(--line)}
-/* Beside another column the quote is the design's flat 20px one, and the ring that stands in for a
-   portrait would only be two grey circles in a row. On its own the block keeps both. */
-.column .testimonial p{font:500 20px/1.45 var(--head)}
+/* Two quotes beside each other are not two panels: the grey box, the padding and the portrait ring
+   all drop away, and the words carry it on their own -- flat 20px, italic, on the page's background.
+   A testimonial on its own keeps the card, which is what the design draws it as. */
+.column .testimonial{background:none;border-radius:0;padding:0}
+.column .testimonial p{font:500 italic 20px/1.5 var(--head);color:var(--ink)}
+.column .testimonial footer{margin-top:14px}
 .column .testimonial .avatar{display:none}
 .testimonial.t-dark{background:var(--black-3);padding:40px}
 .t-dark p{color:var(--white)}.t-dark footer{color:var(--muted-dark)}.t-dark .avatar{background:var(--line-dark-2)}
