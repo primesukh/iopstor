@@ -26,7 +26,7 @@ def build_meta(post=None, *, title=None, description="", path="/", robots="index
     s = site()
     seo = (post.get("seo") or {}) if post else {}
     if post:
-        path = post["path"]
+        path = post["path"] or path      # a type with no pages: keep the caller's default
         page_title = f"{post['title']} | {s['name']}"
     else:
         page_title = f"{title} | {s['name']}" if title else (f"{s['name']} — {s['tagline']}" if s["tagline"] else s["name"])
@@ -57,8 +57,8 @@ def jsonld(post=None, crumbs=()):
     else:
         out.append({"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
             {"@type": "ListItem", "position": i + 1, "name": name, "item": s["url"] + path} for i, (name, path) in enumerate(crumbs)]})
-    if post is None:
-        return out
+    if post is None or not post["path"]:
+        return out          # no page, no canonical URL to describe: crumbs only
     url = s["url"] + post["path"]
     m = post.get("meta") or {}
     t = post["post_type"].get("jsonld_type")

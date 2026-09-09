@@ -16,7 +16,8 @@
     <tr><th>Title</th>{% if not current_type %}<th>Type</th>{% endif %}<th>Status</th><th>Updated</th></tr>
     {% for p in result['items'] %}
     <tr><td><a class="t-title" href="{{ url_for('admin_ui.edit_post', pk=p.id) }}">{{ p.title }}</a>
-            <a class="t-path" href="{{ p.path }}" target="_blank" rel="noopener">{{ p.path }}</a></td>
+            {% if p.path %}<a class="t-path" href="{{ p.path }}" target="_blank" rel="noopener">{{ p.path }}</a>
+            {%- else %}<span class="t-path">no page of its own</span>{% endif %}</td>
         {% if not current_type %}<td>{{ p.post_type.name }}</td>{% endif %}
         <td><span class="pill {{ p.status }}">{{ p.status }}</span></td>
         <td class="muted">{{ p.updated_at[:16].replace('T',' ') }}</td></tr>

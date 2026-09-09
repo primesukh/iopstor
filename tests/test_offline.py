@@ -186,6 +186,48 @@ def test_kv_field_saves_rows_in_order_and_never_a_broken_string(app, monkeypatch
     assert "specs" not in body("[]")
 
 
+def test_a_type_without_pages_has_no_url_and_no_link(app):
+    """One flag, one mechanism: has_pages=false means with_paths() hands the post no path, and
+    everything that would have pointed at it falls away on its own — the resolver cannot match it,
+    the crawler files skip it, and the card that shows it is not a link."""
+    from iopstor.db import with_paths
+    from iopstor.public import _indexable
+
+    def row(has_pages):
+        return {"slug": "micron", "parent_id": None, "title": "Micron", "excerpt": "", "meta": {}, "terms": [],
+                "children": [], "featured_media": None,
+                "post_type": {"slug": "partner", "url_prefix": "partners", "hierarchical": False,
+                              "has_pages": has_pages}}
+
+    linked, bare = with_paths([row(True)])[0], with_paths([row(False)])[0]
+    assert linked["path"] == "/partners/micron" and bare["path"] is None
+    assert _indexable(linked) and not _indexable(bare)          # out of sitemap.xml and llms.txt
+    # and a database where migration 0005 has not run yet still routes exactly as it did
+    older = {**row(False), "post_type": {"slug": "partner", "url_prefix": "partners", "hierarchical": False}}
+    assert with_paths([older])[0]["path"] == "/partners/micron"
+
+    src = "{% from '_card.html' import card %}{{ card(p) }}"
+    with app.test_request_context("/"):
+        html = app.jinja_env.from_string(src).render(p=bare)
+        live = app.jinja_env.from_string(src).render(p=linked)
+    assert "<a class=\"card\"" not in html and '<div class="card">' in html
+    assert "Micron" in html                                     # still shown, just not clickable
+    assert '<a class="card" href="/partners/micron">' in live
+
+
+def test_only_numbered_files_are_migrations():
+    """migrations/ holds two kinds of file: numbered steps `flask migrate` runs in order, and scripts
+    run by hand in Studio. Executing one of the second kind as a step would be a bad afternoon."""
+    from iopstor.cli import MIGRATION_GLOB, MIGRATIONS
+
+    steps = {p.name for p in MIGRATIONS.glob(MIGRATION_GLOB)}
+    assert "0001_initial.sql" in steps
+    assert "0000_bootstrap.sql" in steps          # matched here, skipped by name in migrate()
+    for p in MIGRATIONS.glob("*.sql"):
+        assert p.name in steps or not p.name[:4].isdigit(), p.name
+    assert "repair_schema_migrations.sql" not in steps
+
+
 def test_pdf_block_renders_the_browser_viewer(app, monkeypatch):
     """The PDF section is an iframe at the file plus a download button — no viewer library, and a way
     in for the mobile browsers that will not render a framed PDF. The button saves the file under the

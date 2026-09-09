@@ -10,6 +10,9 @@ from . import db
 from .db import slugify
 
 MIGRATIONS = pathlib.Path(__file__).resolve().parent.parent / "migrations"
+# A migration is a numbered file, and only a numbered file. Anything else in the folder is a tool to
+# be run by hand -- repair_schema_migrations.sql -- and must never be executed as a step.
+MIGRATION_GLOB = "[0-9][0-9][0-9][0-9]_*.sql"
 
 
 @click.command("migrate")
@@ -21,45 +24,54 @@ def migrate():
         applied = {r["filename"] for r in sb.table("schema_migrations").select("filename").execute().data}
     except APIError:
         raise click.ClickException("schema_migrations not found: run migrations/0000_bootstrap.sql once in Supabase Studio's SQL editor first")
-    for path in sorted(MIGRATIONS.glob("*.sql")):
+    for path in sorted(MIGRATIONS.glob(MIGRATION_GLOB)):
         if path.name.startswith("0000_") or path.name in applied:
             continue
         try:
             ok = sb.rpc("apply_migration", {"name": path.name, "sql": path.read_text()}).execute().data
         except APIError as e:
-            raise click.ClickException(f"{path.name}: {getattr(e, 'message', e)}")
+            msg = str(getattr(e, "message", e))
+            # The one failure that is not a broken migration: a schema built by hand, so the ledger
+            # is empty and every file looks unapplied. Say what to do rather than just what broke.
+            hint = ("\n\nThis database already has what that file creates. If the schema was built by "
+                    "running the files by hand, record what is already there: paste "
+                    "migrations/repair_schema_migrations.sql into Supabase Studio's SQL editor, then "
+                    "run this again." if "already exists" in msg else "")
+            raise click.ClickException(f"{path.name}: {msg}{hint}")
         click.echo(f"applied {path.name}" if ok else f"skipped {path.name} (already applied)")
     click.echo("migrations up to date")
 
 
 # ---- seed ------------------------------------------------------------------
 
-POST_TYPES = [  # slug, name, url_prefix, hierarchical, jsonld_type, taxonomies, field_schema
-    ("page", "Pages", "", False, None, [], []),
-    ("post", "Blog", "blog", False, "BlogPosting", ["category", "tag"], []),
+# has_pages=False means the type has no URLs of its own: its entries are data shown on other pages,
+# never destinations. Migration 0005 does the same to a database that already exists.
+POST_TYPES = [  # slug, name, url_prefix, hierarchical, jsonld_type, taxonomies, field_schema, has_pages
+    ("page", "Pages", "", False, None, [], [], True),
+    ("post", "Blog", "blog", False, "BlogPosting", ["category", "tag"], [], True),
     ("service", "Services", "services", True, "Service", [], [
         {"key": "icon", "label": "Icon", "type": "text", "required": False},
-        {"key": "summary", "label": "One-line summary", "type": "text", "required": False}]),
+        {"key": "summary", "label": "One-line summary", "type": "text", "required": False}], True),
     ("case_study", "Case Studies", "case-studies", False, "Article", ["industry", "solution"], [
         {"key": "client", "label": "Client", "type": "text", "required": True},
         {"key": "challenge", "label": "Challenge", "type": "textarea", "required": False},
         {"key": "solution_text", "label": "Solution", "type": "textarea", "required": False},
-        {"key": "results", "label": "Results", "type": "textarea", "required": False}]),
+        {"key": "results", "label": "Results", "type": "textarea", "required": False}], True),
     ("event", "Events", "events", False, "Event", [], [
         {"key": "start_date", "label": "Start date", "type": "date", "required": True},
         {"key": "end_date", "label": "End date", "type": "date", "required": False},
-        {"key": "location", "label": "Location", "type": "text", "required": False}]),
+        {"key": "location", "label": "Location", "type": "text", "required": False}], True),
     ("partner", "Technology Partners", "partners", False, "Organization", [], [
         {"key": "logo_media_id", "label": "Logo", "type": "media", "required": False},
-        {"key": "website", "label": "Website", "type": "url", "required": False}]),
+        {"key": "website", "label": "Website", "type": "url", "required": False}], False),
     ("datasheet", "Datasheets", "datasheets", False, None, [], [
         {"key": "file_media_id", "label": "PDF", "type": "media", "required": True},
-        {"key": "product_family", "label": "Product family", "type": "text", "required": False}]),
+        {"key": "product_family", "label": "Product family", "type": "text", "required": False}], True),
     ("product", "Products", "products", False, "Product", ["category"], [
         {"key": "price", "label": "Price", "type": "number", "required": False},   # rupees, always
         {"key": "sku", "label": "SKU", "type": "text", "required": False},
         {"key": "specs", "label": "Specifications", "type": "kv", "required": False},
-        {"key": "datasheet_media_id", "label": "Datasheet PDF", "type": "media", "required": False}]),
+        {"key": "datasheet_media_id", "label": "Datasheet PDF", "type": "media", "required": False}], True),
 ]
 TAXONOMIES = {
     "industry": ("Industry", ["Finance", "Education", "Post Production", "Services", "Distribution", "Travel", "Logistics"]),
@@ -295,8 +307,9 @@ def _post(pt, title, *, slug=None, parent=None, blocks=None, meta=None, terms=()
 
 def run_seed():
     types = {}
-    for slug, name, prefix, hier, ld, taxes, schema in POST_TYPES:
-        types[slug] = _get_or_create("post_types", {"slug": slug}, dict(name=name, url_prefix=prefix, hierarchical=hier, jsonld_type=ld, taxonomies=taxes, field_schema=schema))
+    for slug, name, prefix, hier, ld, taxes, schema, pages in POST_TYPES:
+        types[slug] = _get_or_create("post_types", {"slug": slug}, dict(name=name, url_prefix=prefix, hierarchical=hier, jsonld_type=ld,
+                                                                       taxonomies=taxes, field_schema=schema, has_pages=pages))
     db.uncache("post_types")
     terms = {}
     for slug, (name, names) in TAXONOMIES.items():

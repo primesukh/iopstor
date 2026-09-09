@@ -60,7 +60,7 @@ Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_w
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `post_types` | Content types **as data** | `slug`, `url_prefix`, `hierarchical`, `field_schema` (JSONB), `taxonomies` (JSONB), `jsonld_type`, `in_sitemap` |
+| `post_types` | Content types **as data** | `slug`, `url_prefix`, `hierarchical`, `field_schema` (JSONB), `taxonomies` (JSONB), `jsonld_type`, `in_sitemap`, `has_pages` |
 | `posts` | Every piece of content | `post_type_id`, `parent_id`, `slug`, `title`, `excerpt`, `blocks` (JSONB), `meta` (JSONB), `seo` (JSONB), `status`, `published_at`, `featured_media_id`, `author_id`, `menu_order` |
 | `taxonomies` / `terms` / `post_terms` | Classification, many-to-many | `terms` unique on `(taxonomy_id, slug)` |
 | `media` | Uploads | `key`, `url`, `mime`, `size`, `alt`, `uploaded_by` |
@@ -319,7 +319,7 @@ Everything is server-rendered from `seo.py` + `public.py`; keep it there.
 
 ## 10. Migrations
 
-Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in name order and tracked in `schema_migrations`.
+Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in name order and tracked in `schema_migrations`. **Only a four-digit-prefixed name is a step** (`MIGRATION_GLOB` in `cli.py`); anything else in the folder is a script run by hand and is never executed as part of a run.
 
 `0000_bootstrap.sql` is pasted **once** into Supabase Studio's SQL editor. It creates `apply_migration(name, sql)` — `SECURITY DEFINER`, executable by `service_role` only — which `flask migrate` calls per file over Kong. Each file runs in one transaction.
 
@@ -329,6 +329,8 @@ Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in nam
 2. `pipenv run flask migrate`
 3. Update the code that reads/writes those columns
 4. Commit both together
+
+**When the ledger and the database disagree.** A schema built by pasting the files into Studio leaves every table in place and `schema_migrations` empty, so `flask migrate` starts again at the beginning and stops on `0001_initial.sql: relation "menus" already exists`. Nothing is broken — the ledger simply never recorded what was done by hand. `migrations/repair_schema_migrations.sql` fixes it: pasted into Studio, it records each file **only if the thing that file makes is actually present** — the `posts` table for `0001`, `pg_class.relrowsecurity` for `0002` (the table can exist with RLS still off, which is the very state `0002` fixes), `warranties` for `0003`, the `warranties_expiry_after_purchase` constraint for `0004`. A file that was genuinely never applied stays unrecorded and `flask migrate` then applies it normally. Safe to run twice, and safe on a database in any state. `migrate()` names that script in its own error when the failure text contains "already exists".
 
 `0002_enable_rls.sql` enables RLS on every app table, so the anon key cannot read drafts or leads. The app's service-role key bypasses RLS by design. A new table repeats that one line for itself — `0003_warranty.sql` ends with `ALTER TABLE warranties ENABLE ROW LEVEL SECURITY;`, and defines no policies.
 
@@ -369,6 +371,24 @@ No CSS framework, no build step, no JavaScript framework. Mobile navigation is a
 **An archive's grid is `auto-fill`, a page's deck is `auto-fit`.** An archive holds however many posts happen to be published, and `auto-fit` collapses its empty tracks — one blog post stretched into a full-width billboard. `auto-fill` keeps them, so a short list still reads as tiles. A deck inside a page keeps `auto-fit`, because there the editor chose the count. The measures are the design's: 300px for blog and case studies (three across at 1200), 280px for products, 220px for partners.
 
 **A product page has no hero.** `post.html:12` gates the whole page head — including `.page-media` — behind `{% if not has_hero %}`, and a hero draws its own `data.image`, so a product's *Featured image* had nowhere to appear. Without one, the page head **is** the design's detail header: eyebrow, `h1.page-title`, the `.lead` from `excerpt`, the *Request a quote* / *Buy* pair, and the featured picture at 440px on the right. The knock-on is that the eyebrow now reads "Products", from the breadcrumb, where the hero said "Appliance".
+
+**`has_pages=false` is a type whose entries are data, not destinations** (migration `0005`, set on
+`partner`). A technology partner is a logo on somebody else's page; there is nothing to read on a page
+of its own. The flag is a column rather than a slug test in the code, because a content type is a row
+here and this is a property of the row like every other.
+
+It works through **one** mechanism: `db.with_paths()` gives such a post `path = None`, and everything
+that would have pointed at it falls away by itself —
+
+- `resolve()` matches a detail page with `post["path"] == full`, which `None` can never satisfy, so
+  `/partners/micron` 404s without a rule of its own;
+- `_indexable()` requires a path, which drops the post from `sitemap.xml` and `llms.txt`;
+- `_card.html` renders a `<div class="card">` instead of an `<a>`;
+- `public_post()` reports `url: null`, and `seo.jsonld()` returns crumbs only.
+
+The type's **archive** (`/partners`) and every `post_list` block are unaffected — neither ever needed
+a per-post URL. `with_paths()` reads the flag with `.get("has_pages", True)`, so the app behaves
+exactly as before against a database where `0005` has not been applied yet.
 
 **A quote beside another column is not a panel.** `.testimonial` on its own is the design's card (grey, radius 14, 32px, a 44px portrait ring). Inside a `.column` the background, the radius, the padding and the ring all drop and the quote goes flat 20px italic on the page's own ground — two grey boxes in a row read as chrome, not as somebody talking. The pair's heading is the `columns` block's own `heading`, so it needs no new field.
 
