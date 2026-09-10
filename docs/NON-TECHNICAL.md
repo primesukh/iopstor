@@ -38,6 +38,10 @@ If you can log in but see "Forbidden", your login exists but has not been given 
 
 At the bottom of that bar it says who is signed in — your name, and your email address underneath it. A long email address is shortened with a "…"; hover over it to see the whole thing. The name comes from the **Name** box that was filled in when the account was created, on the Users screen. If it was left empty — which it is for the very first administrator, created from the command line — the system makes a sensible one out of the email address instead, so `sukhpreet.saluja@…` shows as *Sukhpreet Saluja*. There is no screen for changing it afterwards; ask whoever runs the database if a name needs correcting.
 
+**Changing your password.** Click **Password** at the bottom of the black bar. You need your current password, then the new one twice — at least 8 characters. Everyone can do this, editors included. You stay signed in afterwards.
+
+**If someone forgets their password**, an administrator can hand them a new one: **Users**, then *Set a password* under that person's name. Type one, press *Set*, and tell them what it is so they can change it themselves. There is no "forgot my password" email — this website's Supabase does not send mail. Your own row has no *Set a password*; use the **Password** screen for yourself, which is the one that checks you know the old one.
+
 ---
 
 ## 3. The kinds of content you can create

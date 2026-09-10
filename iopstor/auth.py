@@ -90,6 +90,15 @@ def create_auth_user(email, password, role="editor", name=""):
     return db.insert("users", {"id": res.user.id, "email": email, "role": role, "name": name})
 
 
+def set_password(user, new_password):
+    """Set a user's password through the GoTrue admin API, and nothing else. Proving the *old*
+    password, and getting a fresh session afterwards, are the caller's business — an admin resetting
+    somebody else needs neither.
+    # ponytail: does not end that user's other sessions. GoTrue's admin API has no
+    # sign-out-everywhere; add one if a leaked-password story ever needs it."""
+    db.sb().auth.admin.update_user_by_id(user["id"], {"password": new_password})
+
+
 def delete_auth_user(user):
     try:
         db.sb().auth.admin.delete_user(user["id"])

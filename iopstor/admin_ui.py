@@ -14,7 +14,7 @@ from werkzeug.exceptions import HTTPException
 
 from . import db, seo
 from .admin_api import apply_post
-from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login
+from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login, set_password
 from .blocks import BLOCKS, EDITOR, LAYOUTS, at_path, render_blocks, warranty_active
 from .storage import delete_media, save_upload
 
@@ -91,6 +91,52 @@ def login_page():
         session["access_token"], session["refresh_token"] = s["access_token"], s["refresh_token"]
         return redirect(_safe_next())
     return render_template("admin/login.html")
+
+
+def _password_errors(new, confirm=None):
+    """What is wrong with a proposed password, as plain sentences. Eight matches the invite form's
+    `minlength`; GoTrue's own floor is six, so this is the stricter of the two. `confirm=None` is the
+    admin's one-field reset, which has nothing to compare against."""
+    if len(new) < 8:
+        return ["The new password must be at least 8 characters."]
+    if confirm is not None and new != confirm:
+        return ["The two new passwords do not match."]
+    return []
+
+
+@ui.route("/account", methods=["GET", "POST"])
+@ui_required()
+def account():
+    """Change your own password. Every role reaches it, which is why it hangs off the sidebar footer
+    rather than the nav: Users and Settings are admin-only, and an editor has to be able to do this.
+
+    The current password is proved by signing in with it, not by trusting the session cookie — a
+    session says who logged in once, not who is at the keyboard now. login() already is that check,
+    so this calls it instead of copying it.
+
+    The second login() is not optional either: GoTrue can revoke the refresh token minted under the
+    old password, and without fresh tokens in the session the user is signed out on the next
+    _session_token() refresh — one click after changing their password."""
+    errors = []
+    if request.method == "POST":
+        f = request.form
+        errors = _password_errors(f.get("new_password", ""), f.get("confirm", ""))
+        if not errors:
+            try:
+                login(g.user["email"], f.get("current_password", ""))
+            except AuthError:
+                errors = ["That is not your current password."]
+        if not errors:
+            try:
+                set_password(g.user, f["new_password"])
+                s = login(g.user["email"], f["new_password"])
+            except AuthError as e:
+                errors = [f"Supabase refused the new password: {getattr(e, 'message', e)}"]
+            else:
+                session["access_token"], session["refresh_token"] = s["access_token"], s["refresh_token"]
+                flash("Password changed.")
+                return redirect(url_for("admin_ui.account"))
+    return render_template("admin/account.html", errors=errors), (400 if errors else 200)
 
 
 @ui.get("/logout")
@@ -567,6 +613,27 @@ def users():
                 flash(f"Supabase refused: {getattr(e, 'message', e)}")
         return redirect(url_for("admin_ui.users"))
     return render_template("admin/users.html", users=db.rows(db.table("users").select("*").order("email")))
+
+
+@ui.post("/users/<uuid:pk>/password")
+@ui_required("admin")
+def user_password(pk):
+    """Hand a locked-out user a new password. Your own row is refused on purpose: /admin/account is
+    the way you change yours, and it asks for the current one — a self-reset here would walk around
+    that check for the one account whose session is already open."""
+    user = db.one(db.table("users").select("*").eq("id", str(pk))) or abort(404)
+    errors = _password_errors(request.form.get("password", ""))
+    if user["id"] == g.user["id"]:
+        flash("Use the Password screen to change your own.")
+    elif errors:
+        flash(errors[0])
+    else:
+        try:
+            set_password(user, request.form["password"])
+            flash(f"New password set for {user['email']}. Tell them, and ask them to change it.")
+        except AuthError as e:
+            flash(f"Supabase refused: {getattr(e, 'message', e)}")
+    return redirect(url_for("admin_ui.users"))
 
 
 @ui.post("/users/<uuid:pk>/delete")

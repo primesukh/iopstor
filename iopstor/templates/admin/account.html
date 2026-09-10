@@ -1,0 +1,18 @@
+{% extends "admin/base.html" %}{% block title %}Password{% endblock %}
+{% block content %}
+<div class="adm-head"><div><h1>Your password</h1>
+  <p class="page-sub">Signed in as {{ admin_user.email }}.</p></div></div>
+<div class="m-panel acct">
+  {% if errors %}<div class="error"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  {# the opposite of the invite form's blanket autocomplete="off", and deliberately so: on a real
+     change-password form a manager SHOULD fill the current password and SHOULD offer to save the new
+     one. The invite form's was a false positive — an email beside a password read as a login. #}
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Current password <input type="password" name="current_password" required autofocus autocomplete="current-password"></label>
+    <label>New password <small>(at least 8 characters)</small> <input type="password" name="new_password" required minlength="8" autocomplete="new-password"></label>
+    <label>New password again <input type="password" name="confirm" required minlength="8" autocomplete="new-password"></label>
+    <p style="margin-top:1.25rem"><button type="submit">Change password</button></p>
+  </form>
+</div>
+{% endblock %}
