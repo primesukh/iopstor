@@ -54,7 +54,6 @@
       "Bash(pipenv run python -m flask*)",
       "Bash(pip install*)",
       "Bash(pip3 install*)",
-      "Bash(git merge*)",
       "Bash(git push origin main*)",
       "Bash(git push --force*)",
       "Bash(git push -f*)",
@@ -62,6 +61,9 @@
       "Edit(requirements-dev.txt)",
       "Edit(Pipfile.lock)",
       "Edit(.env)"
+    ],
+    "ask": [
+      "Bash(git merge*)"
     ]
   },
   "hooks": {

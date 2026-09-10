@@ -1,0 +1,3 @@
+# Vendored third-party bundles. Minified source AST-extracts into hundreds of
+# single-letter nodes that describe the library, not this codebase.
+iopstor/static/vendor/

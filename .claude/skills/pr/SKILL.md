@@ -15,7 +15,7 @@ The PR is the hand-off. It is opened by you and merged by the user, never by you
 - A new `migrations/NNNN_*.sql` exists → it was **not** applied by you, and the body has a **Needs applying** section naming it.
 - `Pipfile` changed → `requirements.txt` and `requirements-dev.txt` were regenerated from the lock.
 - Theme or admin change → `/theme-check` screenshots were looked at.
-- Nothing staged from `.env`, `website_assets/`, `graphify-out/`: `git status --short`.
+- Nothing staged from `.env` or `graphify-out/`: `git status --short`. (`website_assets/` is tracked since 2026-09-10 — staging it is normal now.)
 - No Claude or Anthropic authorship anywhere: `git log origin/main..HEAD --format=%B | grep -iE 'claude|anthropic'` prints nothing. (`settings.json` sets `includeCoAuthoredBy: false`; check anyway.)
 
 ## Commit style
@@ -32,6 +32,11 @@ gh pr create --title "<the commit's sentence>" --body-file /tmp/claude-1000/pr-b
 Never `--web`. Write the body to a file first (heredoc), then pass it — a body with backticks and tables does not survive `--body "..."`.
 
 `git push` and both `gh` calls prompt for permission; that is deliberate — they are the only outward-facing commands in the repo.
+
+**A PR stacked on another PR.** When the work builds on a branch that is still open (its entry point is markup the parent rewrites, say), cut from that branch and open with `--base <parent-branch>` so the diff shows only your commits. Two things then follow, and both have bitten:
+
+- **`gh pr merge` does not retarget the children.** `--merge` keeps the head branch, and GitHub only auto-retargets when the base branch is *deleted* — so after the parent merges, the child's base still points at a branch that is now in `main`, and merging it lands the work **on that branch, not on `main`**. Retarget first: `gh api -X PATCH repos/primesukh/iopstor/pulls/N -f base=main`, then confirm the diff shrank to the child's own commits before merging.
+- Merge bottom-up, one at a time, and re-read `mergeable` after each: a parent landing can turn a clean child `CONFLICTING/DIRTY`.
 
 Updating a body later: `gh pr edit N --body-file` does not work on this machine — it prints a Projects-classic GraphQL error and leaves the body unchanged. Use the REST call:
 
