@@ -19,7 +19,12 @@ Merging is the user's act. Everything after it is yours, on `main`, without a si
    ```
    /graphify . --update
    ```
-   Two things to expect. Community labelling is a manual step in the skill (a 2–5 word name per community). And the first `--update` after a graphify upgrade re-extracts **every** prose file, because the cache is keyed on the extraction prompt — 54 files and ~400k subagent tokens the first time; run it anyway, on `main`, it is what the rule is for. Confirm afterwards that the report's `Built from commit` line equals `git rev-parse --short HEAD`.
+   Two things to expect. Community labelling is a manual step in the skill (a 2–5 word name per community). And the first `--update` after a graphify upgrade re-extracts **every** prose file, because the cache is keyed on the extraction prompt — 54 files and ~400k subagent tokens the first time; run it anyway, on `main`, it is what the rule is for. The skill's report has **no** `Built from commit` line — only graphify's code-only rebuild writes that stamp, and the session hook reads it — so finish with
+   ```bash
+   PYTHONHASHSEED=0 graphify update .
+   ```
+   which re-stamps the report at `HEAD` and keeps every prose node (1390 before and after on 2026-09-09). Then confirm the stamp equals `git rev-parse --short HEAD`.
+   When you write the extraction subagents' prompts, tell each one to mint nodes **only under its own file's ID stem** and to refer to other files' entities by edge, never by node — a chunk that re-emits another file's IDs creates stubs with the wrong source file, and the next re-extraction of the real file loses to them.
 
 3. **Audit `.claude/` against what landed**: `git diff --stat "$PREV"..HEAD` and `git log --oneline "$PREV"..HEAD`, then for each kind of change:
 
