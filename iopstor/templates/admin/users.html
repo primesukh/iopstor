@@ -17,17 +17,17 @@
   </div>
   <aside class="m-panel">
     <h2>Your name</h2>
-    <form method="post" action="{{ url_for('admin_ui.user_name') }}">
+    <form method="post" action="{{ url_for('admin_ui.user_name') }}" autocomplete="off">
       <input type="hidden" name="csrf" value="{{ csrf }}">
-      <label>Shown in the sidebar <input type="text" name="name" maxlength="200" value="{{ admin_user.name }}" placeholder="{{ display_name(admin_user) }}"></label>
+      <label>Shown in the sidebar <small>(empty = guessed from your email)</small> <input type="text" name="name" maxlength="200" value="{{ admin_user.name }}" autocomplete="off"></label>
       <p><button type="submit">Save name</button></p>
     </form>
     <h2>Invite a user</h2>
-    <form method="post">
+    <form method="post" autocomplete="off">
       <input type="hidden" name="csrf" value="{{ csrf }}">
-      <label>Name <input type="text" name="name"></label>
-      <label>Email <input type="email" name="email" required></label>
-      <label>Temporary password <input type="password" name="password" required minlength="8"></label>
+      <label>Name <input type="text" name="name" autocomplete="off"></label>
+      <label>Email <input type="email" name="email" required autocomplete="off"></label>
+      <label>Temporary password <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
       <p class="role-cards">
         <label class="role-card"><input type="radio" name="role" value="editor" checked>
           <span><strong>Editor</strong><small>Write and edit content, upload files, answer leads.</small></span></label>
