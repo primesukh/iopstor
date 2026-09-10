@@ -310,6 +310,8 @@ Both verify **locally** with `SUPABASE_JWT_SECRET` (HS256) — no network round 
 
 Login goes through a throwaway anon client (`auth.anon()`); the service-role client is never used for password sign-in.
 
+**A refresh that loses does not sign anyone out.** The access token lives an hour; the first request after that trades the single-use refresh token for a new pair (`_session_token()`, `auth.py`). The editor sends its preview requests in pairs without waiting for each other (`askPreview("")` and `askPreview("card")`), so two requests routinely carry the same expired pair to two different gunicorn workers and both call GoTrue. GoTrue answers a reused token with the same new pair for ten seconds (`SECURITY_REFRESH_TOKEN_REUSE_INTERVAL`), so both usually win; when one loses, it returns `None` and **leaves the session alone**. It used to `session.clear()`, and Flask sends a `Set-Cookie` only for a modified session, so the loser's empty cookie could land after the winner's fresh pair and sign the editor out mid-edit. Untouched, the loser sends no cookie at all, the next request carries the winner's tokens, and a token that is truly dead still ends on the login page, because `ui_required` redirects on `None`. Guarded by `test_a_losing_token_refresh_keeps_the_winners_cookie`.
+
 ---
 
 ## 8. HTTP surface
@@ -981,6 +983,8 @@ Everything except `test_offline.py` is marked `live` and skips when `.env` has n
 
 `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are the same values as `JWT_SECRET`, `ANON_KEY` and `SERVICE_ROLE_KEY` in the Supabase compose environment.
 
+`GUNICORN_CMD_ARGS` is read by gunicorn itself, not by the app: the Dockerfile sets `-w 2 --threads 8 --preload` and Dokploy's environment raises the worker count (§15).
+
 Dev gateway: `http://developmentserver-supabase-9f7088-111-125-233-170.sslip.io` — LAN, self-signed cert on https, so use http until a real certificate exists.
 
 `SUPABASE_URL` needs to be reachable **from the app only**. Nothing a visitor's browser loads points at it
@@ -1005,6 +1009,17 @@ pipenv run pytest
 1. Studio → SQL editor: run `migrations/0000_bootstrap.sql`
 2. Studio → Storage: create a bucket named `media`. Public or private no longer matters to the app — it uploads and reads with the service-role key (§8), and nothing a visitor loads points at the bucket. The instances built so far use a public one
 3. `flask migrate` → `flask seed` → `flask create-admin`
+
+**Workers.** The container runs `flask migrate && exec gunicorn -b 0.0.0.0:8000 'iopstor:create_app()'`, and gunicorn takes its worker and thread count from `GUNICORN_CMD_ARGS` — `-w 2 --threads 8 --preload` from the Dockerfile, overridden in Dokploy's environment (production runs `-w 30`). The number is deploy config rather than code because the app is stateless across processes by construction, and it pays to know exactly what that rests on:
+
+- *Per request:* every cache — `post_types()`, `settings()`, `admin_counts()`, `tree()`, `get_media()` — is `db._cached()` on `flask.g`, gone at teardown. Nothing survives a request, so nothing can go stale between workers; the price is one PostgREST round trip each for `post_types` and `settings` per request (§17).
+- *Per process:* one object, the service-role Supabase client in `app.extensions`, built lazily on the first request. It is HTTP plumbing — a thread-safe `httpx` pool — holds no data, and `.table()` builds a fresh query each call.
+- *Per container:* the login throttle's sqlite file on `/dev/shm` (§8). Two replicas would be two counters.
+- Sessions and the CSRF token are the signed cookie; `/admin/canvas` and `/admin/preview` carry everything in the POST body; uploads go to Storage under a `uuid4` key; there are no local files, threads, locks or module-level mutable state. The read-then-write spots — `unique_slug()`, `ensure_term()`, the warranty serial — sit behind `UNIQUE` constraints, so a race costs the loser a 502, never a duplicate row.
+
+`--preload` imports the app once in the master and forks it: a broken import fails once instead of thirty crash-looping workers, and the imported code is shared copy-on-write. It is safe here because the Supabase client is created after the fork, the throttle opens its connection per call, and Python reseeds `random` in every child (`unique_slug()`'s suffix).
+
+Sizing: `create_app()` makes no network call and costs about 0.9 s and 63 MB per worker on its own; a thread costs almost nothing, and every request is a wait on Kong. Measured on the dev box, `-w 30 --threads 8 --preload` boots in a few seconds and holds 472 MB of real memory (PSS, shared pages counted once — the summed RSS reads 1.7 GB, which is the number a per-process view shows). `-w 8 --threads 30` is the same 240 slots at a quarter of that. The ceiling behind either is PostgREST's connection pool — `PGRST_DB_POOL`, 10 by default, with a 10 s acquisition timeout — so check it on the Supabase host (`docker exec supabase-rest env | grep PGRST_DB_POOL`) before going wide. Two **replicas** are a different case from thirty workers: the throttle splits, and two containers running `flask migrate` on a cold database at the same instant leave the loser with `relation already exists` and no gunicorn (`cli.py`); once the ledger is full, migrate is one `SELECT` and any number of containers can start together.
 
 After any `Pipfile` change, regenerate both lockfile exports:
 
@@ -1058,7 +1073,9 @@ Marked in code with `# ponytail:` comments.
 - `public.media_file()` reads the whole file into memory before answering — `MAX_CONTENT_LENGTH` caps an upload at 20 MB, so the worst case is bounded. Stream it through httpx if big PDFs ever land.
 - No server-side cache in front of Storage: a cold client costs one LAN round trip per file. The immutable year plus the ETag mean repeat views cost nothing, and `gunicorn --threads 8` keeps a page's images off each other's way; put a CDN or a disk cache in front if that stops being enough.
 - `DummyGateway` moves no money.
-- `post_types` and `settings` are cached per process, not per cluster. A multi-worker deployment sees an update after `uncache()` runs in *that* worker.
+- `post_types` and `settings` are cached per **request** (`db._cached()` on `flask.g`), so every request pays one PostgREST round trip for each. A per-process cache with a short TTL is the upgrade if PostgREST load ever matters; until then nothing can go stale between workers (§15).
+- PostgREST calls wait up to 120 s — the library default, nothing is configured. A stalled Supabase parks that many gthread threads for two minutes. A shared `httpx.Client(timeout=…)` passed as `ClientOptions(httpx_client=…)` in `db._client()` is the non-deprecated way to shorten it.
+- A redirect's `hits` is a read-then-write, so parallel visits lose counts. Nothing reads the column; a `bump_redirect(id)` SQL function called via `.rpc()` makes it exact if it is ever reported on.
 - FAQPage JSON-LD is not wired up (§9).
 
 Run `/ponytail-debt` to harvest the current ledger from source.

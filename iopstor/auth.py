@@ -47,7 +47,10 @@ def _session_token():
         try:
             s = refresh(session.get("refresh_token", ""))
         except AuthError:
-            session.clear()
+            # Not session.clear(): two overlapping requests refresh the same single-use token, and the
+            # loser's cleared cookie would land after the winner's fresh pair and sign the editor out.
+            # Left alone, Flask sends no cookie, the next request carries the winner's tokens, and a
+            # token that is truly dead still ends on the login page, because None is what it returns.
             return None
         session["access_token"], session["refresh_token"] = s["access_token"], s["refresh_token"]
         return s["access_token"]
