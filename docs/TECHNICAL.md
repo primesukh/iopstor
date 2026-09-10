@@ -165,7 +165,7 @@ BLOCKS = {  # type: (required fields, optional fields)
 }
 ```
 
-Sixteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`, `warranty_check`.
+Eighteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`, `warranty_check`, `spacer`, `divider`.
 
 `hero` takes either one picture or several. `image` is the single one; `images` is a repeater of
 `{media_id, alt}` and, from two rows up, becomes the design's rotator — the pictures take turns on
@@ -173,6 +173,30 @@ their own, in CSS (§12). Both keys stay, `images` wins when it holds two or mor
 saved before this exists is untouched.
 
 Three types carry a variant switch, and all three are **checkboxes**, never free text: `hero.dark` (the full-bleed band, where `image` becomes a faded backdrop instead of the art beside the words), `testimonial.dark`, and `contact_form`'s existing `kind`. The template tests them for equality (`{{ ' hero-dark' if data.dark }}`), so nothing an editor types can reach a class attribute — which is the same reason `section_class()` is a whitelist.
+
+`spacer` and `divider` are the two types that are not content, and both are shaped by what they do
+*not* carry. `spacer` declares one field, `height`, a **whitelist** (`HEIGHTS = ("small", "medium",
+"large", "huge")`) emitted by `section_class()` as `sp-*` — a number of pixels was the obvious
+alternative and is the one thing the project forbids, because the value lands in a class attribute.
+`divider` declares nothing at all: the universal `width` and `align_box` keys already shorten the
+line and move it, since its `<hr>` is a direct child of `.wrap` and so is picked up by the shared
+`.section>.wrap>*{max-width:var(--w,…)}` rule. Both are in the `.md` twins' two extremes —
+`divider` is the one block whose Markdown branch is punctuation (`---`, safe as a thematic break
+because `blocks_md()` joins with `\n\n` and can never make a setext heading), and `spacer` is in
+`MD_SKIP` beside `embed_html`. `height` is in `_NON_TEXT_KEYS`, or `"medium"` would show up in
+`llms-full.txt`, the feed and admin search, the way `tone` did.
+
+Their CSS is the trap. `.section{padding:80px 0}` means a section that declares nothing at all is
+already 160px tall, so both rule groups zero it first. Inside a Columns section the stacking gap is
+`padding-top` on the section that *follows* (`.column>.section+.section`, (0,3,0)), which a bare
+`.spacer` (0,1,0) loses to — a Small spacer came out 40px instead of 16px, and the gap doubled under
+it. `.column>.section.spacer` ties that specificity and wins on source order, and
+`.column>.spacer+.section` stands the following gap down so the height an editor picked is the whole
+gap. The four heights are written `.spacer.sp-small` rather than bare `.sp-small` like `.fx-*`,
+because `height` is a plausible future field on another block (there is a `# ponytail:` note
+proposing exactly that on `pdf`) and `sp-*` is emitted for whoever declares it. `canvas.css` gives
+`.iop-canvas .spacer` a faint dashed outline: on the page a blank section is the point, in the
+editor it is a section nobody can see to hover, drag or delete.
 
 `post_list` gained `eyebrow`, `link_label` and `link_url` (the "All services →" link in a section header), and `render_blocks()` hands its template a **`pt_slug`** extra alongside `posts`. That becomes `pl-<slug>` on the section, and `site.css` styles one card per post type from it — the number for services, the logo for partners, the 16:9 picture and date for blog posts, the industry/solution chips for case studies. One template, the variants in CSS. `pt_slug` comes from the resolved `post_types` row, never from the block's own data, so it is safe in a class name.
 
@@ -205,6 +229,7 @@ The seed's pictures are looked up **by filename** through `cli.media_id()`, whic
 | `align_box` | `left` \| `center` \| `right` | where the section's own box sits — only visible once the box is narrower than the page |
 | `width` | `wide` \| `full` \| a number of px | the section's content measure; `full` also breaks it out of the page column |
 | `fx` | `rise` \| `gradient` \| `sweep` | the section's motion, `FX` in the same file — see *Section effects* below |
+| `height` | `small` \| `medium` \| `large` \| `huge` | how tall a `spacer` stands, `HEIGHTS` in the same file; the pixels are in `site.css` |
 
 Two functions carry them onto the root `<section>`, both **whitelists** rather than passthroughs, because the values land in attributes — the same reason `col_widths()` is strict:
 
@@ -217,7 +242,7 @@ Two functions carry them onto the root `<section>`, both **whitelists** rather t
 
 `--w-def` is what makes that sentence true.** The shared rule is `.section>.wrap>*{max-width:var(--w,var(--w-def,none))}`, and it is (0,2,0); every block's own rule (`.rich-text`, `.testimonial`, `.specs`, `.faq details`, `.lead-form`) is (0,1,0) or (0,1,1) and loses to it. So the fallback `none` used to win outright and the designed measures never applied at all — a section was only ever as wide as `--w` said, and unset meant full width. Each of those blocks now declares its measure as `--w-def` on itself, which the shared rule reads *inside* the fallback. `--w` stays the override it is documented to be, and `--w:initial` in a column still falls through to the block's own measure.
 
-All of them are in `_NON_TEXT_KEYS`, so "center", "950" and "rise" never reach `llms-full.txt`, the feed or admin search — `tone` joined them at the same time, having leaked its "grey" into all three since it was added. `align`, `align_box`, `width` and `tone` are deliberately **not** fields in `BLOCKS`: layout belongs to every section, so `admin.js` renders one set of controls for all types (§12.1) and `validate_blocks()` simply tolerates the extra keys. `fx` is the exception — `section_class()` emits it for any block, but only `stats` and `rich_text` *declare* it, which is what puts the dropdown in those two panels and nowhere else. Widening it to another block is one word in that block's optional list. `.cta` and table cells keep their own `text-align`, so a centred section does not restyle a CTA band or a spec table.
+All of them are in `_NON_TEXT_KEYS`, so "center", "950" and "rise" never reach `llms-full.txt`, the feed or admin search — `tone` joined them at the same time, having leaked its "grey" into all three since it was added. `align`, `align_box`, `width` and `tone` are deliberately **not** fields in `BLOCKS`: layout belongs to every section, so `admin.js` renders one set of controls for all types (§12.1) and `validate_blocks()` simply tolerates the extra keys. `fx` and `height` are the exceptions — `section_class()` emits both for any block, but only the blocks that *declare* them get the dropdown: `fx` on `stats` and `rich_text`, `height` on `spacer`. Widening either to another block is one word in that block's optional list. `.cta` and table cells keep their own `text-align`, so a centred section does not restyle a CTA band or a spec table.
 
 **Section effects.** `fx` picks one of three, and `stats` carries a fourth as its own checkbox, `count_up`. They **compose** — a Numbers band can count up *and* be swept — so each is its own class rather than one mutually-exclusive value, and `count_up` is a checkbox for the same reason `hero.dark` is: a bool cannot spell anything into a class attribute.
 
@@ -625,7 +650,7 @@ Blocks live in **containers**: `#main`, or one `[data-col]` of a columns block (
 
 The `⚙` panel for a Columns block manages the column *list* — `repeater()` gained two optional hooks (a row factory, a cell renderer) because a column row is an array of blocks rather than a row of fields, which is cheaper than a second ↑ ↓ ✕ splice loop. Removing a column that holds sections asks first. The sections themselves are edited on the page, like everything else.
 
-**A page is a document, not a stack.** Prose lives in `rich_text` blocks; the other fifteen types
+**A page is a document, not a stack.** Prose lives in `rich_text` blocks; the other seventeen types
 are the designed bands. Nothing about the storage changed — `posts.blocks` is the same JSONB —
 but the editing surface leads with writing:
 
@@ -949,7 +974,7 @@ pipenv requirements --dev-only > requirements-dev.txt
 |---|---|
 | New content type | A `post_types` row — seed entry or admin API call. No table, no model |
 | New per-type field | Add to that type's `field_schema`; the admin form and detail list follow |
-| New block | `BLOCKS` entry + `EDITOR` names/seed/order (+ widgets/items/labels for new keys) + `templates/blocks/<type>.html` + a `blocks_md()` branch + a `site.css` rule group; `/new-block` in `.claude/skills/` is the checklist |
+| New block | `BLOCKS` entry + `EDITOR` names/seed/order (+ widgets/items/labels/choices for new keys) + `templates/blocks/<type>.html` + a `blocks_md()` branch (or `MD_SKIP`) + a `site.css` rule group; `/new-block` in `.claude/skills/` is the checklist |
 | New taxonomy | A `taxonomies` row + the type's `taxonomies` array |
 | Schema change | A new `migrations/NNNN_*.sql`, then `flask migrate`, then the code. A seeded `post_types` or `settings` row that already exists needs the migration to `UPDATE` it — the seed only inserts |
 | New payment provider | A `PaymentGateway` subclass in `payments.py` + `PAYMENT_PROVIDER` |

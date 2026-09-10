@@ -34,7 +34,7 @@ iopstor/admin_api.py     /api/admin/v1 (JWT-protected REST; apply_post() is the 
 iopstor/admin_ui.py      browser admin at /admin: session login, post form + POST /admin/canvas + /admin/preview, media, leads, warranty, menus, settings, users
 iopstor/public.py        catch-all resolver (+ .md twins, /checkout), archives, /media/<key> file proxy, sitemap/robots/llms/feed, /api/v1 public read API, leads, checkout
 iopstor/cli.py           flask migrate | seed | import-media | create-admin
-iopstor/templates/       base.html post.html archive.html 404.html checkout.html _card.html (the one card macro), blocks/<type>.html (16, each a full-width <section>), admin/*.html
+iopstor/templates/       base.html post.html archive.html 404.html checkout.html _card.html (the one card macro), blocks/<type>.html (18, each a full-width <section>), admin/*.html
 iopstor/static/site.css  the whole public theme: tokens at the top, header + mega panel + footer, .cards/.card/.btn/.section, layout group (.al-* .w-* .t-*), one rule-group per block
 iopstor/static/admin.css admin-only rules layered on site.css; canvas.css = editor chrome inside the iframe; admin.js = the editor (plain JS, no build); vendor/sortable.min.js
 migrations/              0000_bootstrap.sql (run once by hand in Studio) + NNNN_name.sql applied by `flask migrate`; repair_schema_migrations.sql is a hand-run repair, not a step

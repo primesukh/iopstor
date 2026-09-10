@@ -33,6 +33,11 @@
 [data-f]:empty::before{content:attr(data-ph);color:#94a3b8;font-style:italic;font-weight:400}
 [data-r]:hover{outline:1px dashed #cbd5e1;outline-offset:3px}
 
+/* A spacer is blank by definition: on the page that is the point, on the canvas it is a section an
+   editor cannot see to hover, drag or delete. A faint hairline round it is enough -- [data-b]:hover
+   above still gives it the blue ring and the toolbar. */
+.iop-canvas .spacer{outline:1px dashed #e2e8f0;outline-offset:-1px}
+
 /* placeholders for the blocks that cannot be edited on the page itself */
 .iop-ph{border:2px dashed var(--line);border-radius:12px;padding:1.6rem;text-align:center;color:var(--muted);background:#f8fafc}
 .iop-err{border:2px dashed #fecaca;border-radius:12px;padding:1.2rem;text-align:center;color:#b91c1c;background:#fef2f2}
