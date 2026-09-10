@@ -482,10 +482,6 @@ column on the right.
 instead of by the file store behind it, which is a change nobody sees: the same pictures, at the same
 places, a little faster on a repeat visit.
 
-**The little bar under the home page's rotating picture looks different.** It does. The bar marking
-which picture is showing is now solid blue for that picture's whole turn, instead of filling up
-from left to right — the filling version looked like a countdown to something.
-
 **I ticked Count up from zero and my figure is not counting.** It needs a number in it to count —
 *Always on* has nothing to climb to, so it just sits there. A figure written with a comma, like
 *1,200 TB*, also stays still: the counter cannot draw the comma, and a figure that ended up reading
