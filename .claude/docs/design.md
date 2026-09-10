@@ -45,7 +45,8 @@ iopstor/__init__.py           create_app(): refuses to start without SUPABASE_*;
 iopstor/config.py             os.environ → constants (a module, not a class)
 iopstor/db.py                 the single data-access seam: table()/one()/rows()/insert()/update(), live(), select_posts(), with_paths()/ancestors()/hydrate(),
                               tree(), unique_slug(), ensure_term(), set_post_terms(), paginate(), admin_counts(), get_menu()/set_menu(), post_types()/settings() caches
-iopstor/auth.py               GoTrue login/refresh/logout, verify_jwt(), current_user(), require_role(), create/delete auth user; ROLES editor<admin
+iopstor/auth.py               GoTrue login/refresh/logout, verify_jwt(), current_user(), require_role(), create/delete auth user, set_password(); ROLES editor<admin
+iopstor/throttle.py           failed-password counter (sqlite on /dev/shm, shared by every worker); client_ip() reads CF-Connecting-IP; fails open
 iopstor/storage.py            save_upload()/delete_media() → Storage bucket + media table; ALLOWED mime → extension,
                               EXT the reverse; public_path() = /media/<key> (what media.url holds), fetch() = the bytes
 iopstor/blocks.py             BLOCKS, EDITOR, LAYOUTS, NEVER_NESTED, validate_blocks(), section_class()/section_style()/col_widths(),
@@ -58,13 +59,13 @@ iopstor/public.py             catch-all resolve() (+ .md twins, checkout), archi
 iopstor/cli.py                flask migrate | seed [--reset-content] | import-media DIR [--dry-run] | create-admin
 iopstor/templates/            base.html post.html archive.html 404.html checkout.html _card.html (the one card macro)
 iopstor/templates/blocks/     one <section> template per block type (16)
-iopstor/templates/admin/      base.html (sidebar shell) login dashboard posts post_form canvas seo_card media leads warranty menus settings users error
+iopstor/templates/admin/      base.html (sidebar shell) login dashboard posts post_form canvas seo_card media leads warranty menus settings users account error
 iopstor/static/               site.css (the whole theme) admin.css (admin extras) canvas.css (editor chrome) admin.js favicon.svg + PNGs vendor/sortable.min.js
 migrations/                   0000_bootstrap.sql (hand-run once) 0001_initial 0002_enable_rls 0003_warranty 0004_warranty_date_check
                               0005_post_types_without_pages 0006_product_fields; repair_schema_migrations.sql (hand-run, not a step)
 tests/                        conftest.py test_offline.py test_auth.py test_admin_api.py test_admin_ui.py test_public.py
 docs/                         TECHNICAL.md (developers) NON-TECHNICAL.md (editors)
-website_assets/               the client's mock (mock-website.html), pictures and partner logos — untracked, imported with `flask import-media`
+website_assets/               the client's mock (mock-website.html), pictures and partner logos — tracked, imported into Supabase with `flask import-media`
 graphify-out/                 the knowledge graph (gitignored); code nodes rebuilt by git hooks per commit, prose + labels only on main via /after-merge
 ```
 
@@ -155,7 +156,7 @@ RLS is on for every table (`0002`; a new table repeats the one `ENABLE ROW LEVEL
 | media | `/media/<bucket key>` → `public.media_file()`: Flask fetches the object with the service-role key and serves it (`?download=<name>` = attachment; an SVG also gets a `sandbox` CSP, because same-origin now means the admin's cookie). `media` is a **reserved first segment** |
 | crawler files | `/sitemap.xml /robots.txt /llms.txt /llms-full.txt /feed.xml`, `/healthz` |
 | public JSON | `/api/v1/post-types`, `/posts?type=&term=&page=`, `/posts/<type>/<slug>` (with `text`), `/taxonomies/<slug>/terms`, `/menus/<slug>`, `/settings`; `POST /leads`, `POST /payments/checkout`, `POST /payments/webhook/<provider>` |
-| admin | `/admin/{login,logout,,posts,posts/new,posts/<id>,posts/<id>/delete,media,media/upload,media/<id>/alt,media/<id>/delete,leads,leads/<id>/status,warranty,warranty/<id>/delete,menus,settings,users,users/<uuid>/delete,canvas,preview}` |
+| admin | `/admin/{login,logout,,posts,posts/new,posts/<id>,posts/<id>/delete,media,media/upload,media/<id>/alt,media/<id>/delete,leads,leads/<id>/status,warranty,warranty/<id>/delete,menus,settings,users,users/<uuid>/delete,users/<uuid>/password,account,canvas,preview}` |
 
 Resolver order: trailing slash → 301; `.md` suffix stripped (flag read from `request.path`, never `g`); `redirects` table; post type by first segment (hierarchical matched on the full path); page slug; taxonomy/term; 404 (HTML, JSON under `/api/`). A form POST to `/api/v1/leads` redirects back with `?sent=1`; `website` is a honeypot.
 
@@ -205,7 +206,7 @@ Decisions that are easy to undo by accident:
 
 `flask seed` is idempotent through `_get_or_create()` — **which only ever inserts**: a change to `POST_TYPES` (field_schema, has_pages) or `SETTINGS` does *not* reach an existing row; that needs a migration that `UPDATE`s it (`0005`, `0006` are the pattern). `--reset-content` overwrites blocks/excerpt/meta of the seed-defined posts only. Seeds: 8 post types, taxonomies (industry, solution, category, tag), the services tree (5 groups / 17 services, with the ZFS columns section on the NAS page), 7 case studies, 2 events, 14 partners, pages (home with rotator hero / services / stats / case studies / CTA, about, careers, contact, technology partners), settings, header/footer menus.
 
-`flask import-media DIR [--dry-run]` uploads every image/PDF under a folder with the same key scheme as `/admin/media`, idempotent on filename, alt text drafted from the name. The seed looks pictures up **by filename** (`cli.media_id()`), so it is valid before any import and wires them in after one: `Untitled-4.png` → home hero, `banner-homepage-96tb.png` → ZFS section / IOPStor Edge, `DSC_0305n.png` → IOPStor Classic, `background1.jpg` → About backdrop, `iopstor_logo-png1.png` → `logo_url`, `partners/*` → partner logos. Those files live in `website_assets/` (untracked; the client's).
+`flask import-media DIR [--dry-run]` uploads every image/PDF under a folder with the same key scheme as `/admin/media`, idempotent on filename, alt text drafted from the name. The seed looks pictures up **by filename** (`cli.media_id()`), so it is valid before any import and wires them in after one: `Untitled-4.png` → home hero, `banner-homepage-96tb.png` → ZFS section / IOPStor Edge, `DSC_0305n.png` → IOPStor Classic, `background1.jpg` → About backdrop, `iopstor_logo-png1.png` → `logo_url`, `partners/*` → partner logos. Those files live in `website_assets/` (tracked since 2026-09-10, so a fresh clone can seed without hunting for the client's originals).
 
 ---
 

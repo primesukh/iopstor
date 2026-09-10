@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff;color:#111827;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-wrap:break-word}
+a{color:#008cf7;text-decoration:none}a:hover{color:#0068c0}
+input,textarea,select,button{font:inherit}
+*{box-sizing:border-box}
+summary::-webkit-details-marker{display:none}
+@keyframes iopDrop{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes iopFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes iopSlide{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</helmet>
+
+<div style="position:sticky;top:0;z-index:50;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 16px;background:#fff7e6;border-bottom:1px dashed #d9a441;font:12px/1.4 ui-monospace,Menlo,monospace;color:#6b4d0f">
+  <span style="font-weight:700">DESIGN PREVIEW</span>
+  <span>Screen:</span>
+  <select value="{{ page }}" onChange="{{ onPick }}" style="padding:4px 8px;border:1px solid #d9a441;border-radius:4px;background:#fff;color:#6b4d0f;font:12px ui-monospace,Menlo,monospace">
+    <option value="home">Home</option><option value="services">Services (archive)</option><option value="service">Service detail — Storage → NAS</option><option value="cases">Case studies</option><option value="case">Case study — LKS</option><option value="blog">Blog</option><option value="partners">Technology partners</option><option value="about">About Us</option><option value="events">Events</option><option value="careers">Careers</option><option value="contact">Contact Us</option><option value="datasheets">Datasheets</option><option value="products">Products + checkout</option><option value="warranty">Warranty check</option><option value="notfound">404</option><option value="blocks">Block library (all CMS sections)</option>
+  </select>
+  <span style="opacity:.75">Resize the preview to test phone / tablet / desktop. This bar is not part of the site.</span>
+</div>
+
+<header onMouseLeave="{{ closeMenu }}" style="position:sticky;top:33px;z-index:40;background:#0a0d12;color:#fff;border-bottom:1px solid #1c2230">
+  <div style="max-width:1200px;margin:0 auto;padding:0 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:64px">
+    <a href="#" onClick="{{ go.home }}" style="display:flex;align-items:center;gap:10px;color:#fff"><img src="assets/logo.png" alt="IOPStor" style="height:22px;width:auto;filter:brightness(0) invert(1)"></a>
+    <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
+    <nav aria-label="Main" style="display:flex;align-items:center;gap:4px;font-size:15px;font-weight:500">
+      <div onMouseEnter="{{ openServices }}">
+        <a href="#" onClick="{{ go.services }}" style="{{ servicesTriggerStyle }}">Services ▾</a>
+      </div>
+      <a href="#" onClick="{{ go.products }}" style="padding:22px 14px;color:#e6e9ef;transition:color .15s" style-hover="color:#008cf7">Products</a>
+      <a href="#" onClick="{{ go.cases }}" style="padding:22px 14px;color:#e6e9ef;transition:color .15s" style-hover="color:#008cf7">Case Studies</a>
+      <a href="#" onClick="{{ go.blog }}" style="padding:22px 14px;color:#e6e9ef;transition:color .15s" style-hover="color:#008cf7">Blog</a>
+      <div style="position:relative" onMouseEnter="{{ openCompany }}" onMouseLeave="{{ closeMenu }}">
+        <a href="#" onClick="{{ go.about }}" style="display:block;padding:22px 14px;color:#e6e9ef" style-hover="color:#008cf7">Company ▾</a>
+        <sc-if value="{{ companyOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;top:100%;right:0;background:#fff;color:#111827;border:1px solid #e5e9ef;border-radius:10px;box-shadow:0 20px 50px rgba(10,13,18,.25);padding:10px;display:grid;width:220px;z-index:60;animation:iopDrop .2s cubic-bezier(.2,.7,.2,1) both">
+          <a href="#" onClick="{{ go.about }}" style="padding:9px 12px;border-radius:6px;color:#111827" style-hover="background:#f4f6f9;color:#008cf7">About Us</a>
+          <a href="#" onClick="{{ go.partners }}" style="padding:9px 12px;border-radius:6px;color:#111827" style-hover="background:#f4f6f9;color:#008cf7">Technology Partners</a>
+          <a href="#" onClick="{{ go.events }}" style="padding:9px 12px;border-radius:6px;color:#111827" style-hover="background:#f4f6f9;color:#008cf7">Events</a>
+          <a href="#" onClick="{{ go.datasheets }}" style="padding:9px 12px;border-radius:6px;color:#111827" style-hover="background:#f4f6f9;color:#008cf7">Datasheets</a>
+          <a href="#" onClick="{{ go.careers }}" style="padding:9px 12px;border-radius:6px;color:#111827" style-hover="background:#f4f6f9;color:#008cf7">Careers</a>
+        </div>
+        </sc-if>
+      </div>
+      <a href="#" onClick="{{ go.contact }}" style="margin-left:10px;padding:10px 18px;background:#008cf7;color:#fff;border-radius:6px;font-weight:600" style-hover="background:#0068c0">Contact us</a>
+    </nav>
+    </sc-if>
+    <sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}">
+      <button type="button" aria-label="Menu" onClick="{{ toggleMenu }}" style="width:44px;height:44px;border:1px solid #2a3140;border-radius:8px;background:transparent;color:#fff;font-size:20px;cursor:pointer">{{ menuGlyph }}</button>
+    </sc-if>
+  </div>
+  <sc-if value="{{ servicesOpen }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;top:100%;left:0;right:0;background:#fff;color:#111827;border-bottom:1px solid #e5e9ef;box-shadow:0 30px 60px rgba(10,13,18,.25);z-index:60;animation:iopDrop .22s cubic-bezier(.2,.7,.2,1) both;transform-origin:top">
+    <div style="max-width:1200px;margin:0 auto;padding:0 20px;display:grid;grid-template-columns:260px minmax(0,1fr)">
+      <div style="padding:20px 20px 20px 0;border-right:1px solid #e5e9ef;display:grid;gap:2px;align-content:start">
+        <sc-for list="{{ serviceTabs }}" as="g" hint-placeholder-count="5">
+          <a href="#" onClick="{{ go.services }}" onMouseEnter="{{ g.hover }}" style="{{ g.style }}"><span style="font:700 11px/1 ui-monospace,Menlo,monospace;color:#008cf7;width:22px;flex:none">{{ g.num }}</span><span style="flex:1;font-weight:600;font-size:15px">{{ g.name }}</span><span style="{{ g.arrow }}">→</span></a>
+        </sc-for>
+      </div>
+      <div key="{{ activeGroup.name }}" style="padding:28px 0 28px 36px;display:grid;gap:22px;align-content:start;animation:iopFade .2s ease-out both">
+        <div><div style="font:800 22px/1.2 Manrope,sans-serif;color:#0a0d12">{{ activeGroup.name }}</div><p style="margin:8px 0 0;max-width:560px;font-size:14.5px;line-height:1.55;color:#5b6675">{{ activeGroup.blurb }}</p></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+          <sc-for list="{{ activeGroup.children }}" as="c" hint-placeholder-count="4"><a href="#" onClick="{{ go.service }}" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;border:1px solid #e5e9ef;border-radius:8px;color:#111827;font-size:14px;background:#f4f6f9" style-hover="border-color:#008cf7;color:#008cf7;background:#fff">{{ c }}<span style="color:#008cf7">→</span></a></sc-for>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:18px;font-size:13.5px;padding-top:14px;border-top:1px solid #e5e9ef"><a href="#" onClick="{{ go.services }}" style="color:#0a0d12;font-weight:600" style-hover="color:#008cf7">All services →</a><a href="#" onClick="{{ go.contact }}" style="color:#008cf7;font-weight:600">Request a quote →</a></div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+  <sc-if value="{{ mobileMenu }}" hint-placeholder-val="{{ false }}">
+  <nav aria-label="Main" style="background:#0f131a;border-top:1px solid #1c2230;padding:10px 20px 20px;display:grid;gap:2px;font-size:16px;animation:iopSlide .25s ease-out both">
+    <a href="#" onClick="{{ go.services }}" style="padding:12px 4px;color:#fff;font-weight:600;border-bottom:1px solid #1c2230">Services</a>
+    <sc-for list="{{ services }}" as="g" hint-placeholder-count="5"><a href="#" onClick="{{ go.service }}" style="padding:10px 16px;color:#aeb6c2">{{ g.name }}</a></sc-for>
+    <a href="#" onClick="{{ go.products }}" style="padding:12px 4px;color:#fff;font-weight:600;border-bottom:1px solid #1c2230">Products</a>
+    <a href="#" onClick="{{ go.cases }}" style="padding:12px 4px;color:#fff;font-weight:600;border-bottom:1px solid #1c2230">Case Studies</a>
+    <a href="#" onClick="{{ go.blog }}" style="padding:12px 4px;color:#fff;font-weight:600;border-bottom:1px solid #1c2230">Blog</a>
+    <a href="#" onClick="{{ go.about }}" style="padding:12px 4px;color:#fff;font-weight:600;border-bottom:1px solid #1c2230">Company</a>
+    <a href="#" onClick="{{ go.partners }}" style="padding:10px 16px;color:#aeb6c2">Technology Partners</a>
+    <a href="#" onClick="{{ go.events }}" style="padding:10px 16px;color:#aeb6c2">Events</a>
+    <a href="#" onClick="{{ go.datasheets }}" style="padding:10px 16px;color:#aeb6c2">Datasheets</a>
+    <a href="#" onClick="{{ go.careers }}" style="padding:10px 16px;color:#aeb6c2">Careers</a>
+    <a href="#" onClick="{{ go.contact }}" style="margin-top:12px;padding:14px;background:#008cf7;color:#fff;border-radius:6px;font-weight:600;text-align:center">Contact us</a>
+  </nav>
+  </sc-if>
+</header>
+
+<main id="main">
+
+<!-- ================= HOME ================= -->
+<sc-if value="{{ is.home }}" hint-placeholder-val="{{ true }}">
+<section data-screen-label="Home hero" style="background:#fff;border-bottom:1px solid #e5e9ef">
+  <div style="max-width:1200px;margin:0 auto;padding:72px 20px 56px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:40px;align-items:center">
+    <div>
+      <p style="margin:0 0 18px;font:600 13px/1 'IBM Plex Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#008cf7">The Storage Specialist</p>
+      <h1 style="margin:0 0 20px;font:800 clamp(36px,5vw,60px)/1.05 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12;text-wrap:pretty">Your data. Safer. Smarter. Forever.</h1>
+      <p style="margin:0 0 30px;font-size:18px;line-height:1.6;color:#5b6675;max-width:540px;text-wrap:pretty">Software-defined NAS, hyper-converged appliances and private cloud, all built on ZFS. Meet business needs now and tomorrow with converged infrastructure.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:12px">
+        <a href="#" onClick="{{ go.contact }}" style="padding:14px 24px;background:#008cf7;color:#fff;border-radius:6px;font-weight:600" style-hover="background:#0068c0">Talk to an engineer</a>
+        <a href="#" onClick="{{ go.products }}" style="padding:14px 24px;border:1px solid #cfd6df;color:#0a0d12;border-radius:6px;font-weight:600" style-hover="border-color:#0a0d12">See the appliances</a>
+      </div>
+    </div>
+    <div style="position:relative;min-height:220px;display:flex;align-items:center;justify-content:center">
+      <div style="position:absolute;inset:10% 0;background:radial-gradient(closest-side,rgba(0,140,247,.16),transparent);border-radius:50%"></div>
+      <img src="assets/introducing-rack.png" alt="IOPStor 24-bay 2U all-flash array" style="position:relative;width:100%;max-width:620px;height:auto">
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Home stats" style="background:#0a0d12;color:#fff">
+  <div style="max-width:1200px;margin:0 auto;padding:40px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px">
+    <div style="border-left:2px solid #008cf7;padding-left:18px"><div style="font:800 40px/1 Manrope,sans-serif">300+</div><div style="margin-top:8px;color:#aeb6c2;font-size:14px">satisfied customers across the country</div></div>
+    <div style="border-left:2px solid #008cf7;padding-left:18px"><div style="font:800 40px/1 Manrope,sans-serif">25+ yrs</div><div style="margin-top:8px;color:#aeb6c2;font-size:14px">of productivity and innovative solutions</div></div>
+    <div style="border-left:2px solid #008cf7;padding-left:18px"><div style="font:800 40px/1 Manrope,sans-serif">3 yr</div><div style="margin-top:8px;color:#aeb6c2;font-size:14px">hardware warranty, unlimited support in year one</div></div>
+    <div style="border-left:2px solid #008cf7;padding-left:18px"><div style="font:800 40px/1 Manrope,sans-serif">Zero</div><div style="margin-top:8px;color:#aeb6c2;font-size:14px">hidden or repetitive licence costs</div></div>
+  </div>
+</section>
+
+<section data-screen-label="Home services" style="background:#f4f6f9">
+  <div style="max-width:1200px;margin:0 auto;padding:80px 20px">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:16px;margin-bottom:36px">
+      <div><p style="margin:0 0 10px;font:600 13px/1 'IBM Plex Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#008cf7">What we do</p><h2 style="margin:0;font:800 clamp(28px,3.5vw,40px)/1.1 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">Storage, virtualisation and cloud, delivered as one stack</h2></div>
+      <a href="#" onClick="{{ go.services }}" style="font-weight:600">All services →</a>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px">
+      <sc-for list="{{ services }}" as="g" hint-placeholder-count="5">
+        <a href="#" onClick="{{ go.service }}" style="display:block;background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:28px;color:#111827;transition:border-color .15s,transform .15s" style-hover="border-color:#008cf7;transform:translateY(-2px)">
+          <div style="font:700 12px/1 ui-monospace,Menlo,monospace;color:#008cf7;margin-bottom:18px">{{ g.num }}</div>
+          <h3 style="margin:0 0 10px;font:800 22px/1.2 Manrope,sans-serif;color:#0a0d12">{{ g.name }}</h3>
+          <p style="margin:0 0 16px;color:#5b6675;font-size:15px;line-height:1.55">{{ g.blurb }}</p>
+          <div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ g.children }}" as="c" hint-placeholder-count="3"><span style="font-size:12.5px;padding:4px 9px;border:1px solid #e5e9ef;border-radius:999px;color:#5b6675">{{ c }}</span></sc-for></div>
+        </a>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Home ZFS" style="background:#fff">
+  <div style="max-width:1200px;margin:0 auto;padding:80px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:48px;align-items:center">
+    <img src="assets/rack-96tb.png" alt="IOPStor 2U rackmount" style="width:100%;height:auto">
+    <div>
+      <p style="margin:0 0 10px;font:600 13px/1 'IBM Plex Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#008cf7">Built on ZFS</p>
+      <h2 style="margin:0 0 18px;font:800 clamp(28px,3.5vw,40px)/1.1 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">The file system trusted by Fortune 500 companies, universities and data centres</h2>
+      <p style="margin:0 0 24px;color:#5b6675;font-size:17px;line-height:1.6">ZFS never compromises on data safety. Every IOPStor appliance inherits it: end-to-end checksums, self-healing pools, and snapshots that recover deleted or corrupt data and protect against ransomware.</p>
+      <ul style="margin:0 0 28px;padding:0;list-style:none;display:grid;gap:10px;color:#111827;font-size:15.5px">
+        <li style="display:flex;gap:12px"><span style="color:#008cf7;font-weight:700">—</span>Unlimited snapshots and clones: go back to yesterday, last week or last month</li>
+        <li style="display:flex;gap:12px"><span style="color:#008cf7;font-weight:700">—</span>RAID-Z: instantaneous build, no write hole, multiple-disk failure tolerance</li>
+        <li style="display:flex;gap:12px"><span style="color:#008cf7;font-weight:700">—</span>RAM / SSD / NVMe read-write cache, compression and de-duplication</li>
+        <li style="display:flex;gap:12px"><span style="color:#008cf7;font-weight:700">—</span>Hardware agnostic: replace any component from any vendor</li>
+      </ul>
+      <a href="#" onClick="{{ go.service }}" style="display:inline-block;padding:14px 24px;background:#0a0d12;color:#fff;border-radius:6px;font-weight:600" style-hover="background:#008cf7">All ZFS features</a>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Home appliances" style="background:#f4f6f9">
+  <div style="max-width:1200px;margin:0 auto;padding:80px 20px">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:16px;margin-bottom:36px">
+      <div><p style="margin:0 0 10px;font:600 13px/1 'IBM Plex Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#008cf7">Appliances</p><h2 style="margin:0;font:800 clamp(28px,3.5vw,40px)/1.1 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">Sized from 5 users upward</h2></div>
+      <a href="#" onClick="{{ go.products }}" style="font-weight:600">All products →</a>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px">
+      <sc-for list="{{ products }}" as="p" hint-placeholder-count="3">
+        <a href="#" onClick="{{ go.products }}" style="display:flex;flex-direction:column;background:#fff;border:1px solid #e5e9ef;border-radius:12px;overflow:hidden;color:#111827" style-hover="border-color:#008cf7">
+          <div style="padding:24px;display:flex;align-items:center;justify-content:center;min-height:150px"><img src="{{ p.img }}" alt="{{ p.name }}" style="max-width:100%;max-height:130px;object-fit:contain"></div>
+          <div style="padding:20px 24px 24px;border-top:1px solid #e5e9ef"><div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#008cf7;font-weight:600">{{ p.form }}</div><h3 style="margin:6px 0 6px;font:800 20px/1.2 Manrope,sans-serif;color:#0a0d12">{{ p.name }}</h3><p style="margin:0;color:#5b6675;font-size:14px">{{ p.users }}</p></div>
+        </a>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Home case studies" style="background:#0a0d12;color:#fff">
+  <div style="max-width:1200px;margin:0 auto;padding:80px 20px">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:16px;margin-bottom:36px">
+      <div><p style="margin:0 0 10px;font:600 13px/1 'IBM Plex Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#008cf7">Case studies</p><h2 style="margin:0;font:800 clamp(28px,3.5vw,40px)/1.1 Manrope,sans-serif;letter-spacing:-.02em">Proven across finance, education, media and logistics</h2></div>
+      <a href="#" onClick="{{ go.cases }}" style="font-weight:600;color:#fff" style-hover="color:#008cf7">All case studies →</a>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
+      <sc-for list="{{ casesHome }}" as="c" hint-placeholder-count="4">
+        <a href="#" onClick="{{ go.case }}" style="display:block;padding:24px;background:#12171f;border:1px solid #1c2230;border-radius:12px;color:#fff" style-hover="border-color:#008cf7">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"><span style="font-size:12px;padding:4px 9px;border-radius:999px;background:rgba(0,140,247,.15);color:#5fb4fb">{{ c.industry }}</span><span style="font-size:12px;padding:4px 9px;border-radius:999px;border:1px solid #2a3140;color:#aeb6c2">{{ c.solution }}</span></div>
+          <h3 style="margin:0 0 8px;font:800 20px/1.2 Manrope,sans-serif">{{ c.client }}</h3>
+          <p style="margin:0;color:#aeb6c2;font-size:14.5px;line-height:1.5">{{ c.summary }}</p>
+        </a>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Home testimonials" style="background:#fff">
+  <div style="max-width:1200px;margin:0 auto;padding:72px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
+    <blockquote style="margin:0;background:#f4f6f9;border-radius:14px;padding:32px"><p style="margin:0 0 18px;font:500 20px/1.45 Manrope,sans-serif;color:#0a0d12">“I sleep better knowing my family photos and business files are in a ZFS NAS.”</p><footer style="font-size:14px;color:#5b6675">Sarah M. · Photographer</footer></blockquote>
+    <blockquote style="margin:0;background:#f4f6f9;border-radius:14px;padding:32px"><p style="margin:0 0 18px;font:500 20px/1.45 Manrope,sans-serif;color:#0a0d12">“Set it up once. Haven’t had to touch it in 2 years.”</p><footer style="font-size:14px;color:#5b6675">Mark D. · Small Business Owner</footer></blockquote>
+  </div>
+</section>
+
+<section data-screen-label="Home partners" style="background:#fff;border-top:1px solid #e5e9ef;border-bottom:1px solid #e5e9ef">
+  <div style="max-width:1200px;margin:0 auto;padding:56px 20px">
+    <p style="margin:0 0 28px;text-align:center;font:600 13px/1 'IBM Plex Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#5b6675">Technology partners</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;align-items:center">
+      <sc-for list="{{ partners }}" as="p" hint-placeholder-count="7">
+        <div style="height:64px;display:flex;align-items:center;justify-content:center;padding:10px 16px;filter:grayscale(1);opacity:.7;transition:.2s" style-hover="filter:none;opacity:1"><img src="{{ p.src }}" alt="{{ p.name }}" style="max-height:100%;max-width:100%;object-fit:contain"></div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Home CTA" style="background:#008cf7;color:#fff">
+  <div style="max-width:1200px;margin:0 auto;padding:64px 20px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:24px">
+    <div><h2 style="margin:0 0 8px;font:800 clamp(26px,3vw,34px)/1.15 Manrope,sans-serif;letter-spacing:-.02em">Don’t just store data. Protect it.</h2><p style="margin:0;font-size:17px;opacity:.9">Tell us the workload and user count. We come back with a configuration and a one-time price, with no hidden or repetitive costs.</p></div>
+    <a href="#" onClick="{{ go.contact }}" style="padding:16px 28px;background:#0a0d12;color:#fff;border-radius:6px;font-weight:600;white-space:nowrap" style-hover="background:#fff;color:#0a0d12">Request a quote</a>
+  </div>
+</section>
+</sc-if>
+<!-- ================= SERVICES ARCHIVE ================= -->
+<sc-if value="{{ is.services }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Services archive" style="background:#0a0d12;color:#fff"><div style="max-width:1200px;margin:0 auto;padding:64px 20px 56px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:#aeb6c2;margin-bottom:20px"><a href="#" onClick="{{ go.home }}" style="color:#aeb6c2">Home</a><span style="margin:0 8px">/</span><span style="color:#fff">Services</span></nav>
+  <h1 style="margin:0 0 14px;font:800 clamp(34px,4.5vw,52px)/1.05 Manrope,sans-serif;letter-spacing:-.02em">Services</h1>
+  <p style="margin:0;max-width:640px;font-size:18px;line-height:1.6;color:#aeb6c2">Five practice areas, one team. Every engagement starts with the workload and ends with a configuration you own outright.</p>
+</div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:56px 20px;display:grid;gap:20px">
+  <sc-for list="{{ services }}" as="g" hint-placeholder-count="5">
+    <div style="background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;align-items:start">
+      <div><div style="font:700 12px/1 ui-monospace,Menlo,monospace;color:#008cf7;margin-bottom:14px">{{ g.num }}</div><h2 style="margin:0 0 10px;font:800 26px/1.15 Manrope,sans-serif;color:#0a0d12">{{ g.name }}</h2><p style="margin:0;color:#5b6675;line-height:1.55">{{ g.blurb }}</p></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px"><sc-for list="{{ g.children }}" as="c" hint-placeholder-count="3"><a href="#" onClick="{{ go.service }}" style="display:block;padding:12px 14px;border:1px solid #e5e9ef;border-radius:8px;color:#111827;font-weight:500;font-size:15px" style-hover="border-color:#008cf7;color:#008cf7">{{ c }} →</a></sc-for></div>
+    </div>
+  </sc-for>
+</div></section>
+</sc-if>
+
+<!-- ================= SERVICE DETAIL (Storage → NAS) ================= -->
+<sc-if value="{{ is.service }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Service detail" style="background:#fff;border-bottom:1px solid #e5e9ef"><div style="max-width:1200px;margin:0 auto;padding:48px 20px 56px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:#5b6675;margin-bottom:20px"><a href="#" onClick="{{ go.home }}" style="color:#5b6675">Home</a><span style="margin:0 8px">/</span><a href="#" onClick="{{ go.services }}" style="color:#5b6675">Services</a><span style="margin:0 8px">/</span><a href="#" onClick="{{ go.services }}" style="color:#5b6675">Storage</a><span style="margin:0 8px">/</span><span style="color:#0a0d12">NAS</span></nav>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:40px;align-items:center">
+    <div>
+      <p style="margin:0 0 14px;font:600 13px/1 'IBM Plex Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#008cf7">Storage · Software-defined NAS</p>
+      <h1 style="margin:0 0 16px;font:800 clamp(34px,4.5vw,52px)/1.05 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">Network Attached Storage</h1>
+      <p style="margin:0 0 28px;font-size:18px;line-height:1.6;color:#5b6675">Smart. Simple. Secure. File sharing over SMB/CIFS, AFP, NFS and FTP, block storage over iSCSI and FC, all on ZFS. Because your data is priceless and we treat it that way.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:12px"><a href="#" onClick="{{ go.contact }}" style="padding:14px 24px;background:#008cf7;color:#fff;border-radius:6px;font-weight:600" style-hover="background:#0068c0">Request a quote</a><a href="#" onClick="{{ go.datasheets }}" style="padding:14px 24px;border:1px solid #cfd6df;color:#0a0d12;border-radius:6px;font-weight:600">Datasheet</a></div>
+    </div>
+    <img src="assets/tower.png" alt="IOPStor Classic NAS tower" style="width:100%;max-width:440px;height:auto;justify-self:center">
+  </div>
+</div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:64px 20px">
+  <h2 style="margin:0 0 28px;font:800 clamp(26px,3vw,34px)/1.15 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">Why choose our NAS?</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+    <sc-for list="{{ nasWhy }}" as="w" hint-placeholder-count="8"><div style="background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:24px"><div style="font:700 12px/1 ui-monospace,Menlo,monospace;color:#008cf7;margin-bottom:14px">{{ w.n }}</div><h3 style="margin:0 0 8px;font:800 18px/1.25 Manrope,sans-serif;color:#0a0d12">{{ w.t }}</h3><p style="margin:0;color:#5b6675;font-size:14.5px;line-height:1.55">{{ w.d }}</p></div></sc-for>
+  </div>
+</div></section>
+<section style="background:#fff"><div style="max-width:1200px;margin:0 auto;padding:64px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:48px">
+  <div>
+    <h2 style="margin:0 0 20px;font:800 28px/1.15 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">ZFS features, in plain terms</h2>
+    <dl style="margin:0;display:grid;gap:0">
+      <sc-for list="{{ zfs }}" as="z" hint-placeholder-count="8"><div style="padding:16px 0;border-top:1px solid #e5e9ef;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:16px"><dt style="font-weight:700;color:#0a0d12;font-size:15px">{{ z.t }}</dt><dd style="margin:0;color:#5b6675;font-size:14.5px;line-height:1.55">{{ z.d }}</dd></div></sc-for>
+    </dl>
+  </div>
+  <aside style="align-self:start;background:#0a0d12;color:#fff;border-radius:12px;padding:28px">
+    <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#008cf7;font-weight:600">Configuration · IOPStor Classic</div>
+    <h3 style="margin:8px 0 18px;font:800 22px/1.2 Manrope,sans-serif">Model IOP4MB</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:14.5px"><tbody>
+      <tr><th style="text-align:left;padding:10px 0;border-bottom:1px solid #1c2230;color:#aeb6c2;font-weight:500">CPU</th><td style="padding:10px 0;border-bottom:1px solid #1c2230;text-align:right">Intel Celeron J1900, 10 W, 4 core</td></tr>
+      <tr><th style="text-align:left;padding:10px 0;border-bottom:1px solid #1c2230;color:#aeb6c2;font-weight:500">RAM</th><td style="padding:10px 0;border-bottom:1px solid #1c2230;text-align:right">8 GB DDR3 1600</td></tr>
+      <tr><th style="text-align:left;padding:10px 0;border-bottom:1px solid #1c2230;color:#aeb6c2;font-weight:500">Boot</th><td style="padding:10px 0;border-bottom:1px solid #1c2230;text-align:right">120 GB SATA SSD</td></tr>
+      <tr><th style="text-align:left;padding:10px 0;border-bottom:1px solid #1c2230;color:#aeb6c2;font-weight:500">HDD capacity</th><td style="padding:10px 0;border-bottom:1px solid #1c2230;text-align:right">4 / 8 / 16 TB (4 × 1 / 2 / 4 TB)</td></tr>
+      <tr><th style="text-align:left;padding:10px 0;border-bottom:1px solid #1c2230;color:#aeb6c2;font-weight:500">SSD capacity</th><td style="padding:10px 0;border-bottom:1px solid #1c2230;text-align:right">720 / 1440 / 2880 GB (3 × 240 / 480 / 960 GB)</td></tr>
+      <tr><th style="text-align:left;padding:10px 0;color:#aeb6c2;font-weight:500">Workload</th><td style="padding:10px 0;text-align:right">5 – 10 users*</td></tr>
+    </tbody></table>
+    <p style="margin:14px 0 0;font-size:12px;color:#5b6675">* Minimum and maximum users based on application usage.</p>
+    <a href="#" onClick="{{ go.products }}" style="display:block;margin-top:18px;padding:13px;text-align:center;background:#008cf7;color:#fff;border-radius:6px;font-weight:600" style-hover="background:#0068c0">See the appliance</a>
+  </aside>
+</div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:56px 20px">
+  <h2 style="margin:0 0 24px;font:800 26px/1.15 Manrope,sans-serif;color:#0a0d12">Other Storage services</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+    <a href="#" onClick="{{ go.service }}" style="padding:20px;background:#fff;border:1px solid #e5e9ef;border-radius:10px;color:#111827;font-weight:600" style-hover="border-color:#008cf7">DAS →</a>
+    <a href="#" onClick="{{ go.service }}" style="padding:20px;background:#fff;border:1px solid #e5e9ef;border-radius:10px;color:#111827;font-weight:600" style-hover="border-color:#008cf7">SAS →</a>
+    <a href="#" onClick="{{ go.service }}" style="padding:20px;background:#fff;border:1px solid #e5e9ef;border-radius:10px;color:#111827;font-weight:600" style-hover="border-color:#008cf7">AWS Integration (DR) →</a>
+  </div>
+</div></section>
+</sc-if>
+
+<!-- ================= CASE STUDIES LIST ================= -->
+<sc-if value="{{ is.cases }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Case studies" style="background:#0a0d12;color:#fff"><div style="max-width:1200px;margin:0 auto;padding:64px 20px 56px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:#aeb6c2;margin-bottom:20px"><a href="#" onClick="{{ go.home }}" style="color:#aeb6c2">Home</a><span style="margin:0 8px">/</span><span style="color:#fff">Case Studies</span></nav>
+  <h1 style="margin:0 0 14px;font:800 clamp(34px,4.5vw,52px)/1.05 Manrope,sans-serif;letter-spacing:-.02em">Case Studies</h1>
+  <p style="margin:0 0 28px;max-width:640px;font-size:18px;line-height:1.6;color:#aeb6c2">Seven deployments across seven industries. Each one names the challenge, the configuration and what changed.</p>
+  <div style="display:flex;flex-wrap:wrap;gap:8px"><span style="padding:8px 14px;border-radius:999px;background:#008cf7;color:#fff;font-size:13.5px;font-weight:600">All</span><sc-for list="{{ industries }}" as="i" hint-placeholder-count="7"><a href="#" style="padding:8px 14px;border-radius:999px;border:1px solid #2a3140;color:#aeb6c2;font-size:13.5px" style-hover="border-color:#008cf7;color:#fff">{{ i }}</a></sc-for></div>
+</div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:56px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
+  <sc-for list="{{ cases }}" as="c" hint-placeholder-count="7">
+    <a href="#" onClick="{{ go.case }}" style="display:flex;flex-direction:column;background:#fff;border:1px solid #e5e9ef;border-radius:12px;overflow:hidden;color:#111827" style-hover="border-color:#008cf7">
+      <div style="height:150px;background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px);display:flex;align-items:center;justify-content:center;font:12px ui-monospace,Menlo,monospace;color:#5b6675">client logo / site photo</div>
+      <div style="padding:22px 24px 24px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><span style="font-size:12px;padding:4px 9px;border-radius:999px;background:rgba(0,140,247,.1);color:#0068c0">{{ c.industry }}</span><span style="font-size:12px;padding:4px 9px;border-radius:999px;border:1px solid #e5e9ef;color:#5b6675">{{ c.solution }}</span></div>
+        <h3 style="margin:0 0 8px;font:800 20px/1.2 Manrope,sans-serif;color:#0a0d12">{{ c.client }}</h3>
+        <p style="margin:0;color:#5b6675;font-size:14.5px;line-height:1.5">{{ c.summary }}</p>
+      </div>
+    </a>
+  </sc-for>
+</div></section>
+</sc-if>
+
+<!-- ================= CASE STUDY DETAIL ================= -->
+<sc-if value="{{ is.case }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Case study detail" style="background:#fff;border-bottom:1px solid #e5e9ef"><div style="max-width:1200px;margin:0 auto;padding:48px 20px 56px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:#5b6675;margin-bottom:20px"><a href="#" onClick="{{ go.home }}" style="color:#5b6675">Home</a><span style="margin:0 8px">/</span><a href="#" onClick="{{ go.cases }}" style="color:#5b6675">Case Studies</a><span style="margin:0 8px">/</span><span style="color:#0a0d12">LKS</span></nav>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"><span style="font-size:12.5px;padding:5px 10px;border-radius:999px;background:rgba(0,140,247,.1);color:#0068c0">Finance</span><span style="font-size:12.5px;padding:5px 10px;border-radius:999px;border:1px solid #e5e9ef;color:#5b6675">Virtualisation</span></div>
+  <h1 style="margin:0 0 16px;max-width:820px;font:800 clamp(32px,4.5vw,50px)/1.08 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12;text-wrap:pretty">LKS consolidates its finance workloads on one IOPStor virtualisation platform</h1>
+  <p style="margin:0;max-width:720px;font-size:18px;line-height:1.6;color:#5b6675">Summary line from the editor: one sentence on who the client is and what changed.</p>
+</div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:40px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
+  <div style="background:#fff;border:1px solid #e5e9ef;border-radius:10px;padding:18px 20px"><div style="font-size:12px;color:#5b6675;letter-spacing:.08em;text-transform:uppercase">Client</div><div style="margin-top:6px;font-weight:600">LKS</div></div>
+  <div style="background:#fff;border:1px solid #e5e9ef;border-radius:10px;padding:18px 20px"><div style="font-size:12px;color:#5b6675;letter-spacing:.08em;text-transform:uppercase">Industry</div><div style="margin-top:6px;font-weight:600">Finance</div></div>
+  <div style="background:#fff;border:1px solid #e5e9ef;border-radius:10px;padding:18px 20px"><div style="font-size:12px;color:#5b6675;letter-spacing:.08em;text-transform:uppercase">Solution</div><div style="margin-top:6px;font-weight:600">Virtualisation</div></div>
+  <div style="background:#fff;border:1px solid #e5e9ef;border-radius:10px;padding:18px 20px"><div style="font-size:12px;color:#5b6675;letter-spacing:.08em;text-transform:uppercase">Appliance</div><div style="margin-top:6px;font-weight:600">IOPStor Edge HCI</div></div>
+</div></section>
+<section style="background:#fff"><div style="max-width:1200px;margin:0 auto;padding:64px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:48px">
+  <article style="font-size:17px;line-height:1.7;color:#374151;max-width:720px">
+    <h2 style="margin:0 0 12px;font:800 24px/1.2 Manrope,sans-serif;color:#0a0d12">Challenge</h2><p style="margin:0 0 32px">[Case Study “Challenge” field: the situation before IOPStor, what was slow, what was at risk.]</p>
+    <h2 style="margin:0 0 12px;font:800 24px/1.2 Manrope,sans-serif;color:#0a0d12">Solution</h2><p style="margin:0 0 32px">[“Solution” field: the configuration deployed, how migration was handled, timeline.]</p>
+    <h2 style="margin:0 0 12px;font:800 24px/1.2 Manrope,sans-serif;color:#0a0d12">Results</h2><p style="margin:0">[“Results” field: measurable outcomes.]</p>
+  </article>
+  <aside style="align-self:start;display:grid;gap:16px">
+    <blockquote style="margin:0;background:#0a0d12;color:#fff;border-radius:12px;padding:28px"><p style="margin:0 0 16px;font:500 20px/1.4 Manrope,sans-serif">“[Customer quote, one or two sentences.]”</p><footer style="font-size:14px;color:#aeb6c2">Name, Role · LKS</footer></blockquote>
+    <a href="#" onClick="{{ go.contact }}" style="display:block;padding:20px;background:#008cf7;color:#fff;border-radius:12px;font-weight:600" style-hover="background:#0068c0">Have a similar workload? Talk to us →</a>
+  </aside>
+</div></section>
+</sc-if>
+
+<!-- ================= BLOG ================= -->
+<sc-if value="{{ is.blog }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Blog" style="background:#fff;border-bottom:1px solid #e5e9ef"><div style="max-width:1200px;margin:0 auto;padding:56px 20px 40px">
+  <h1 style="margin:0 0 12px;font:800 clamp(34px,4.5vw,52px)/1.05 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">Blog</h1>
+  <p style="margin:0;max-width:640px;font-size:18px;line-height:1.6;color:#5b6675">Notes on ZFS, virtualisation and running infrastructure without repetitive costs.</p>
+</div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:48px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
+  <sc-for list="{{ posts }}" as="p" hint-placeholder-count="3">
+    <a href="#" style="display:flex;flex-direction:column;background:#fff;border:1px solid #e5e9ef;border-radius:12px;overflow:hidden;color:#111827" style-hover="border-color:#008cf7">
+      <div style="aspect-ratio:16/9;background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px);display:flex;align-items:center;justify-content:center;font:12px ui-monospace,Menlo,monospace;color:#5b6675">featured image</div>
+      <div style="padding:22px 24px 24px"><time style="font-size:13px;color:#5b6675">{{ p.date }}</time><h3 style="margin:8px 0;font:800 20px/1.25 Manrope,sans-serif;color:#0a0d12">{{ p.title }}</h3><p style="margin:0;color:#5b6675;font-size:14.5px;line-height:1.5">{{ p.excerpt }}</p></div>
+    </a>
+  </sc-for>
+</div></section>
+</sc-if>
+
+<!-- ================= PARTNERS ================= -->
+<sc-if value="{{ is.partners }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Technology partners" style="background:#0a0d12;color:#fff"><div style="max-width:1200px;margin:0 auto;padding:64px 20px 56px">
+  <h1 style="margin:0 0 14px;font:800 clamp(34px,4.5vw,52px)/1.05 Manrope,sans-serif;letter-spacing:-.02em">Technology Partners</h1>
+  <p style="margin:0;max-width:640px;font-size:18px;line-height:1.6;color:#aeb6c2">The drives, platforms, operating systems and hypervisors inside every IOPStor build. VMware, Citrix and Windows Server certified.</p>
+</div></section>
+<section style="background:#fff"><div style="max-width:1200px;margin:0 auto;padding:56px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px">
+  <sc-for list="{{ partners }}" as="p" hint-placeholder-count="14"><a href="#" style="display:flex;flex-direction:column;gap:14px;padding:24px;border:1px solid #e5e9ef;border-radius:12px;color:#111827" style-hover="border-color:#008cf7"><div style="height:64px;display:flex;align-items:center"><img src="{{ p.src }}" alt="{{ p.name }}" style="max-height:100%;max-width:160px;object-fit:contain"></div><div><div style="font-weight:600">{{ p.name }}</div><div style="font-size:13.5px;color:#5b6675">{{ p.role }}</div></div></a></sc-for>
+</div></section>
+</sc-if>
+<!-- ================= ABOUT ================= -->
+<sc-if value="{{ is.about }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="About Us" style="position:relative;background:#0a0d12;color:#fff;overflow:hidden">
+  <img src="assets/datacenter.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.18">
+  <div style="position:relative;max-width:1200px;margin:0 auto;padding:96px 20px 80px">
+    <p style="margin:0 0 14px;font:600 13px/1 'IBM Plex Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#008cf7">About Us</p>
+    <h1 style="margin:0 0 18px;max-width:820px;font:800 clamp(34px,4.5vw,54px)/1.05 Manrope,sans-serif;letter-spacing:-.02em;text-wrap:pretty">Customised storage for a market nobody else was serving</h1>
+    <p style="margin:0;max-width:700px;font-size:18px;line-height:1.6;color:#d1d6de">IOPStor specialises in software-defined storage and solves the productivity problems SMBs and large enterprises face every day.</p>
+  </div>
+</section>
+<section style="background:#fff"><div style="max-width:1200px;margin:0 auto;padding:72px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:48px">
+  <div style="font-size:17px;line-height:1.7;color:#374151">
+    <h2 style="margin:0 0 16px;font:800 28px/1.15 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">What we build</h2>
+    <p style="margin:0 0 16px">With our convergence of hardware, software and storage expertise, we bring you IOPStor flash and hybrid arrays, hyper-converged appliances and private cloud, offering enterprise reliability and performance at a value unheard of in storage.</p>
+    <p style="margin:0">Every appliance is built on ZFS, is hardware agnostic, and is priced once: no software licence renewals, no repetitive costs. Three years of hardware warranty, with unlimited telephone and web support in the first year.</p>
+  </div>
+  <div style="font-size:17px;line-height:1.7;color:#374151">
+    <h2 style="margin:0 0 16px;font:800 28px/1.15 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">Who we are</h2>
+    <p style="margin:0 0 24px">With the need for storage growing, and an opportunity to serve an under-served market for customised storage, IOPStor was founded by Gulbirr Bhatia (Prime ABGB) and Noshir Dalal, who together bring more than 50 years of experience in the IT space. IOPStor is marketed by Prime ABGB Pvt. Ltd., Mumbai, an organisation with 25+ years of providing productivity solutions to 300+ customers across the country.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+      <div style="padding:20px;background:#f4f6f9;border-radius:10px"><div style="width:56px;height:56px;border-radius:50%;background:repeating-linear-gradient(135deg,#dfe4ea 0 6px,#eef1f5 6px 12px);margin-bottom:12px"></div><div style="font-weight:700;color:#0a0d12">Gulbirr Bhatia</div><div style="font-size:14px;color:#5b6675">Co-founder · Prime ABGB</div></div>
+      <div style="padding:20px;background:#f4f6f9;border-radius:10px"><div style="width:56px;height:56px;border-radius:50%;background:repeating-linear-gradient(135deg,#dfe4ea 0 6px,#eef1f5 6px 12px);margin-bottom:12px"></div><div style="font-weight:700;color:#0a0d12">Noshir Dalal</div><div style="font-size:14px;color:#5b6675">Co-founder</div></div>
+    </div>
+  </div>
+</div></section>
+</sc-if>
+
+<!-- ================= EVENTS ================= -->
+<sc-if value="{{ is.events }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Events" style="background:#fff;border-bottom:1px solid #e5e9ef"><div style="max-width:1200px;margin:0 auto;padding:56px 20px 40px">
+  <h1 style="margin:0 0 12px;font:800 clamp(34px,4.5vw,52px)/1.05 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">Events</h1>
+  <p style="margin:0;max-width:640px;font-size:18px;line-height:1.6;color:#5b6675">Where to meet the team, and what we showed.</p>
+</div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:48px 20px;display:grid;gap:16px">
+  <sc-for list="{{ events }}" as="e" hint-placeholder-count="2">
+    <a href="#" style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:24px;align-items:center;background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:24px;color:#111827" style-hover="border-color:#008cf7">
+      <div style="width:84px;text-align:center;background:#0a0d12;color:#fff;border-radius:10px;padding:12px 8px"><div style="font:800 26px/1 Manrope,sans-serif">{{ e.year }}</div><div style="font-size:12px;color:#aeb6c2;margin-top:4px">{{ e.month }}</div></div>
+      <div><h3 style="margin:0 0 6px;font:800 22px/1.2 Manrope,sans-serif;color:#0a0d12">{{ e.title }}</h3><p style="margin:0;color:#5b6675;font-size:15px">{{ e.where }}</p></div>
+    </a>
+  </sc-for>
+</div></section>
+</sc-if>
+
+<!-- ================= CAREERS ================= -->
+<sc-if value="{{ is.careers }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Careers" style="background:#0a0d12;color:#fff"><div style="max-width:1200px;margin:0 auto;padding:64px 20px 56px">
+  <h1 style="margin:0 0 14px;font:800 clamp(34px,4.5vw,52px)/1.05 Manrope,sans-serif;letter-spacing:-.02em">Careers</h1>
+  <p style="margin:0;max-width:640px;font-size:18px;line-height:1.6;color:#aeb6c2">Small team, real hardware, customers who call you by name. Open roles are listed below; if none fit, send us a note anyway.</p>
+</div></section>
+<section style="background:#fff"><div style="max-width:1200px;margin:0 auto;padding:56px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:48px">
+  <div style="display:grid;gap:12px;align-self:start">
+    <h2 style="margin:0 0 8px;font:800 26px/1.15 Manrope,sans-serif;color:#0a0d12">Open roles</h2>
+    <div style="padding:20px 22px;border:1px solid #e5e9ef;border-radius:10px"><div style="font-weight:700;color:#0a0d12">[Role title]</div><div style="font-size:14px;color:#5b6675;margin-top:4px">Full time · Mumbai</div></div>
+    <div style="padding:20px 22px;border:1px solid #e5e9ef;border-radius:10px"><div style="font-weight:700;color:#0a0d12">[Role title]</div><div style="font-size:14px;color:#5b6675;margin-top:4px">Full time · Mumbai</div></div>
+    <p style="margin:8px 0 0;font-size:13px;color:#5b6675">Editors add real openings as posts; this list fills itself.</p>
+  </div>
+  <form style="background:#f4f6f9;border-radius:12px;padding:28px;display:grid;gap:14px">
+    <h2 style="margin:0 0 4px;font:800 22px/1.15 Manrope,sans-serif;color:#0a0d12">Apply</h2>
+    <label style="display:grid;gap:6px;font-size:14px;font-weight:500">Name<input type="text" style="padding:12px 14px;border:1px solid #cfd6df;border-radius:6px;background:#fff"></label>
+    <label style="display:grid;gap:6px;font-size:14px;font-weight:500">Email<input type="email" style="padding:12px 14px;border:1px solid #cfd6df;border-radius:6px;background:#fff"></label>
+    <label style="display:grid;gap:6px;font-size:14px;font-weight:500">Message / CV link<textarea rows="4" style="padding:12px 14px;border:1px solid #cfd6df;border-radius:6px;background:#fff;resize:vertical"></textarea></label>
+    <button type="button" style="padding:14px;background:#008cf7;color:#fff;border:0;border-radius:6px;font-weight:600;cursor:pointer">Send application</button>
+  </form>
+</div></section>
+</sc-if>
+
+<!-- ================= CONTACT ================= -->
+<sc-if value="{{ is.contact }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Contact Us" style="background:#fff"><div style="max-width:1200px;margin:0 auto;padding:56px 20px 72px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:48px">
+  <div>
+    <h1 style="margin:0 0 14px;font:800 clamp(34px,4.5vw,52px)/1.05 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">Contact Us</h1>
+    <p style="margin:0 0 32px;font-size:18px;line-height:1.6;color:#5b6675">Describe the workload, the number of users and the timeline. A real person replies, not a bot or a ticket queue.</p>
+    <dl style="margin:0;display:grid;gap:18px;font-size:15.5px">
+      <div><dt style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5b6675">Phone</dt><dd style="margin:4px 0 0"><a href="tel:+919821909800">+91 98219 09800</a></dd></div>
+      <div><dt style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5b6675">Email</dt><dd style="margin:4px 0 0"><a href="mailto:sales@primeabgb.com">sales@primeabgb.com</a></dd></div>
+      <div><dt style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5b6675">Office</dt><dd style="margin:4px 0 0;color:#374151;line-height:1.5">Prime ABGB Pvt. Ltd.<br>106–109, Simlim Square, D. B. Marg,<br>Grant Road, Mumbai 400007</dd></div>
+    </dl>
+    <div style="margin-top:32px;aspect-ratio:16/9;border-radius:12px;background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px);display:flex;align-items:center;justify-content:center;font:12px ui-monospace,Menlo,monospace;color:#5b6675">Google Maps embed (Embed HTML section)</div>
+  </div>
+  <form style="background:#0a0d12;color:#fff;border-radius:12px;padding:32px;display:grid;gap:14px;align-self:start">
+    <h2 style="margin:0 0 4px;font:800 22px/1.15 Manrope,sans-serif">Request a quote</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
+      <label style="display:grid;gap:6px;font-size:14px;color:#aeb6c2">Name<input type="text" style="padding:12px 14px;border:1px solid #2a3140;border-radius:6px;background:#12171f;color:#fff"></label>
+      <label style="display:grid;gap:6px;font-size:14px;color:#aeb6c2">Company<input type="text" style="padding:12px 14px;border:1px solid #2a3140;border-radius:6px;background:#12171f;color:#fff"></label>
+      <label style="display:grid;gap:6px;font-size:14px;color:#aeb6c2">Email<input type="email" style="padding:12px 14px;border:1px solid #2a3140;border-radius:6px;background:#12171f;color:#fff"></label>
+      <label style="display:grid;gap:6px;font-size:14px;color:#aeb6c2">Phone<input type="tel" style="padding:12px 14px;border:1px solid #2a3140;border-radius:6px;background:#12171f;color:#fff"></label>
+    </div>
+    <label style="display:grid;gap:6px;font-size:14px;color:#aeb6c2">I am interested in<select style="padding:12px 14px;border:1px solid #2a3140;border-radius:6px;background:#12171f;color:#fff"><option>Storage (NAS / DAS / SAS)</option><option>Hyper-converged (Proxmox / VMware)</option><option>Private cloud / Work from home</option><option>On-prem AI servers</option><option>Software (SQL Server / Tally / SAP)</option></select></label>
+    <label style="display:grid;gap:6px;font-size:14px;color:#aeb6c2">Number of users<input type="number" placeholder="e.g. 10" style="padding:12px 14px;border:1px solid #2a3140;border-radius:6px;background:#12171f;color:#fff"></label>
+    <label style="display:grid;gap:6px;font-size:14px;color:#aeb6c2">Message<textarea rows="4" style="padding:12px 14px;border:1px solid #2a3140;border-radius:6px;background:#12171f;color:#fff;resize:vertical"></textarea></label>
+    <button type="button" style="padding:14px;background:#008cf7;color:#fff;border:0;border-radius:6px;font-weight:600;cursor:pointer">Send request</button>
+  </form>
+</div></section>
+</sc-if>
+
+<!-- ================= DATASHEETS ================= -->
+<sc-if value="{{ is.datasheets }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Datasheets" style="background:#fff;border-bottom:1px solid #e5e9ef"><div style="max-width:1200px;margin:0 auto;padding:56px 20px 40px">
+  <h1 style="margin:0 0 12px;font:800 clamp(34px,4.5vw,52px)/1.05 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">Datasheets</h1>
+  <p style="margin:0;max-width:640px;font-size:18px;line-height:1.6;color:#5b6675">Configuration details and feature lists for every IOPStor appliance, as PDF.</p>
+</div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:48px 20px;display:grid;gap:12px">
+  <sc-for list="{{ datasheets }}" as="d" hint-placeholder-count="4">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;background:#fff;border:1px solid #e5e9ef;border-radius:10px;padding:20px 24px">
+      <div style="display:flex;align-items:center;gap:16px"><div style="width:44px;height:54px;border:2px solid #0a0d12;border-radius:4px;display:flex;align-items:center;justify-content:center;font:700 10px ui-monospace,Menlo,monospace;flex:none">PDF</div><div><div style="font-weight:700;color:#0a0d12">{{ d.title }}</div><div style="font-size:13.5px;color:#5b6675">{{ d.meta }}</div></div></div>
+      <a href="#" style="padding:10px 18px;border:1px solid #cfd6df;border-radius:6px;color:#0a0d12;font-weight:600" style-hover="border-color:#008cf7;color:#008cf7">Download</a>
+    </div>
+  </sc-for>
+</div></section>
+</sc-if>
+
+<!-- ================= PRODUCTS ================= -->
+<sc-if value="{{ is.products }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Products" style="background:#0a0d12;color:#fff"><div style="max-width:1200px;margin:0 auto;padding:64px 20px 56px">
+  <h1 style="margin:0 0 14px;font:800 clamp(34px,4.5vw,52px)/1.05 Manrope,sans-serif;letter-spacing:-.02em">Products</h1>
+  <p style="margin:0;max-width:640px;font-size:18px;line-height:1.6;color:#aeb6c2">Three appliances, one ZFS software stack. Every unit ships configured and ready to run, with three years of hardware warranty.</p>
+</div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:56px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
+  <sc-for list="{{ products }}" as="p" hint-placeholder-count="3">
+    <div style="display:flex;flex-direction:column;background:#fff;border:1px solid #e5e9ef;border-radius:12px;overflow:hidden">
+      <div style="padding:28px;display:flex;align-items:center;justify-content:center;min-height:180px"><img src="{{ p.img }}" alt="{{ p.name }}" style="max-width:100%;max-height:160px;object-fit:contain"></div>
+      <div style="padding:24px;border-top:1px solid #e5e9ef;display:grid;gap:12px;flex:1">
+        <div><div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#008cf7;font-weight:600">{{ p.form }}</div><h3 style="margin:6px 0 0;font:800 22px/1.2 Manrope,sans-serif;color:#0a0d12">{{ p.name }}</h3></div>
+        <p style="margin:0;color:#5b6675;font-size:14.5px;line-height:1.5">{{ p.blurb }}</p>
+        <div style="font-size:13.5px;color:#0a0d12;font-weight:600">{{ p.users }}</div>
+        <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="font:800 17px/1 Manrope,sans-serif;color:#0a0d12">{{ p.price }}</div><button type="button" onClick="{{ openCheckout }}" style="padding:12px 18px;background:#008cf7;color:#fff;border:0;border-radius:6px;font-weight:600;cursor:pointer">Buy</button></div>
+      </div>
+    </div>
+  </sc-for>
+</div></section>
+<sc-if value="{{ checkout }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeCheckout }}" style="position:fixed;inset:0;z-index:100;background:rgba(10,13,18,.6);display:flex;align-items:center;justify-content:center;padding:20px">
+  <div onClick="{{ stop }}" style="width:100%;max-width:460px;background:#fff;border-radius:14px;padding:28px;display:grid;gap:14px;box-shadow:0 30px 80px rgba(0,0,0,.4)">
+    <div style="display:flex;justify-content:space-between;align-items:start"><div><div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5b6675">Checkout</div><h3 style="margin:4px 0 0;font:800 22px/1.2 Manrope,sans-serif;color:#0a0d12">IOPStor Classic NAS · IOP4MB</h3></div><button type="button" onClick="{{ closeCheckout }}" aria-label="Close" style="width:36px;height:36px;border:0;background:#f4f6f9;border-radius:8px;cursor:pointer;font-size:18px">×</button></div>
+    <div style="display:flex;justify-content:space-between;padding:14px 0;border-top:1px solid #e5e9ef;border-bottom:1px solid #e5e9ef;font-size:15px"><span style="color:#5b6675">Total</span><strong>₹ [price from product meta]</strong></div>
+    <label style="display:grid;gap:6px;font-size:14px;font-weight:500">Name<input type="text" style="padding:12px 14px;border:1px solid #cfd6df;border-radius:6px"></label>
+    <label style="display:grid;gap:6px;font-size:14px;font-weight:500">Email<input type="email" style="padding:12px 14px;border:1px solid #cfd6df;border-radius:6px"></label>
+    <button type="button" style="padding:14px;background:#0a0d12;color:#fff;border:0;border-radius:6px;font-weight:600;cursor:pointer">Continue to payment</button>
+    <p style="margin:0;font-size:12.5px;color:#5b6675;text-align:center">Payment provider is a placeholder for now.</p>
+  </div>
+</div>
+</sc-if>
+</sc-if>
+
+<!-- ================= WARRANTY CHECK ================= -->
+<sc-if value="{{ is.warranty }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Warranty check" style="background:#0a0d12;color:#fff"><div style="max-width:1200px;margin:0 auto;padding:64px 20px 56px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:#aeb6c2;margin-bottom:20px"><a href="#" onClick="{{ go.home }}" style="color:#aeb6c2">Home</a><span style="margin:0 8px">/</span><span style="color:#fff">Warranty check</span></nav>
+  <h1 style="margin:0 0 14px;font:800 clamp(34px,4.5vw,52px)/1.05 Manrope,sans-serif;letter-spacing:-.02em">Check your warranty</h1>
+  <p style="margin:0;max-width:640px;font-size:18px;line-height:1.6;color:#aeb6c2">Every IOPStor appliance ships with three years of hardware warranty and unlimited telephonic and web support in the first year. Type the serial number printed on your unit to see where it stands.</p>
+</div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:56px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:32px;align-items:start">
+  <form onSubmit="{{ wCheck }}" style="background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:28px;display:grid;gap:14px">
+    <label style="display:grid;gap:8px;font-size:14px;font-weight:500;color:#0a0d12">Serial number<input type="text" value="{{ wQuery }}" onChange="{{ wType }}" placeholder="e.g. IO01X7CDFIRD10X12-LN/2512291" style="padding:14px 16px;border:1px solid #cfd6df;border-radius:8px;font:15px ui-monospace,Menlo,monospace;text-transform:uppercase"></label>
+    <p style="margin:0;font-size:13px;color:#5b6675">Found on the label at the back of the unit. Capitals and spaces do not matter.</p>
+    <button type="submit" style="padding:14px;background:#008cf7;color:#fff;border:0;border-radius:8px;font-weight:600;cursor:pointer" style-hover="background:#0068c0">Check warranty</button>
+    <sc-if value="{{ wDemo }}" hint-placeholder-val="{{ true }}"><p style="margin:0;font-size:12px;color:#aeb6c2;font-family:ui-monospace,Menlo,monospace">Demo serials: IO01X7CDFIRD10X12-LN/2512291 (in warranty) · IO01X7CDFIRD10X12-LN/2512292 (expired)</p></sc-if>
+  </form>
+  <div>
+    <sc-if value="{{ wMiss }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:28px;background:#fff;border:1px solid #e5e9ef;border-radius:12px"><div style="font:800 20px/1.2 Manrope,sans-serif;color:#0a0d12">No record found for “{{ wQueryShown }}”</div><p style="margin:10px 0 18px;color:#5b6675;line-height:1.6;font-size:15px">Check the serial for a mistyped character. If it is correct, the unit may not be registered yet; send it to us and we will add it.</p><a href="#" onClick="{{ go.contact }}" style="display:inline-block;padding:12px 18px;background:#0a0d12;color:#fff;border-radius:6px;font-weight:600">Contact support</a></div>
+    </sc-if>
+    <sc-if value="{{ wHit }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#fff;border:1px solid #e5e9ef;border-radius:12px;overflow:hidden">
+        <div style="{{ wBanner }}"><div style="font:600 12px/1 'IBM Plex Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;opacity:.85">Status</div><div style="margin-top:6px;font:800 26px/1.1 Manrope,sans-serif">{{ wResult.status }}</div><div style="margin-top:6px;font-size:14px;opacity:.9">{{ wResult.note }}</div></div>
+        <dl style="margin:0;padding:8px 28px 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0 24px;font-size:15px">
+          <div style="padding:14px 0;border-bottom:1px solid #f0f2f5"><dt style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5b6675">Serial</dt><dd style="margin:6px 0 0;font:600 14px ui-monospace,Menlo,monospace;color:#0a0d12">{{ wResult.serial }}</dd></div>
+          <div style="padding:14px 0;border-bottom:1px solid #f0f2f5"><dt style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5b6675">Registered to</dt><dd style="margin:6px 0 0;font-weight:600;color:#0a0d12">{{ wResult.customer }}</dd></div>
+          <div style="padding:14px 0;border-bottom:1px solid #f0f2f5"><dt style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5b6675">Purchased</dt><dd style="margin:6px 0 0;color:#374151">{{ wResult.purchase }}</dd></div>
+          <div style="padding:14px 0;border-bottom:1px solid #f0f2f5"><dt style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5b6675">Warranty expires</dt><dd style="margin:6px 0 0;color:#374151">{{ wResult.expiry }}</dd></div>
+          <div style="padding:14px 0"><dt style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5b6675">AMC</dt><dd style="margin:6px 0 0;color:#374151">{{ wResult.amc }}</dd></div>
+          <div style="padding:14px 0"><dt style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5b6675">Registered email</dt><dd style="margin:6px 0 0;color:#374151">{{ wResult.email }}</dd></div>
+        </dl>
+        <sc-if value="{{ wResult.hasRemarks }}" hint-placeholder-val="{{ false }}"><div style="margin:0 28px 24px;padding:14px 16px;background:#f4f6f9;border-radius:8px;font-size:14px;color:#374151"><strong style="color:#0a0d12">Note from IOPStor:</strong> {{ wResult.remarks }}</div></sc-if>
+        <div style="padding:16px 28px;border-top:1px solid #e5e9ef;display:flex;flex-wrap:wrap;gap:14px;font-size:14px"><a href="#" onClick="{{ go.contact }}" style="font-weight:600">{{ wResult.cta }} →</a><a href="tel:+919821909800" style="color:#5b6675">Call +91 98219 09800</a></div>
+      </div>
+    </sc-if>
+  </div>
+</div></section>
+</sc-if>
+
+<!-- ================= 404 ================= -->
+<sc-if value="{{ is.notfound }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="404" style="background:#0a0d12;color:#fff;min-height:60vh;display:flex;align-items:center"><div style="max-width:1200px;margin:0 auto;padding:96px 20px;width:100%">
+  <div style="font:800 clamp(80px,16vw,160px)/1 Manrope,sans-serif;letter-spacing:-.04em;color:#008cf7">404</div>
+  <h1 style="margin:16px 0 12px;font:800 clamp(26px,3.5vw,38px)/1.1 Manrope,sans-serif">That page is not here.</h1>
+  <p style="margin:0 0 28px;max-width:520px;font-size:17px;color:#aeb6c2;line-height:1.6">It may have moved when we rebuilt the site. Try one of these instead.</p>
+  <div style="display:flex;flex-wrap:wrap;gap:10px"><a href="#" onClick="{{ go.home }}" style="padding:12px 20px;background:#008cf7;color:#fff;border-radius:6px;font-weight:600">Home</a><a href="#" onClick="{{ go.services }}" style="padding:12px 20px;border:1px solid #2a3140;color:#fff;border-radius:6px;font-weight:600">Services</a><a href="#" onClick="{{ go.contact }}" style="padding:12px 20px;border:1px solid #2a3140;color:#fff;border-radius:6px;font-weight:600">Contact us</a></div>
+</div></section>
+</sc-if>
+
+<!-- ================= BLOCK LIBRARY ================= -->
+<sc-if value="{{ is.blocks }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Block library" style="background:#fff7e6;border-bottom:1px dashed #d9a441;padding:12px 20px;font:12px/1.5 ui-monospace,Menlo,monospace;color:#6b4d0f">Every CMS section in the new theme, stacked. The small amber label names the block type it maps to.</div>
+<section style="background:#fff;border-bottom:1px solid #e5e9ef"><div style="max-width:1200px;margin:0 auto;padding:72px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:40px;align-items:center">
+  <div><div style="font:11px ui-monospace,Menlo,monospace;color:#d9a441;margin-bottom:12px">hero</div><h1 style="margin:0 0 16px;font:800 clamp(34px,4.5vw,52px)/1.05 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">Heading</h1><p style="margin:0 0 24px;font-size:18px;color:#5b6675;line-height:1.6">Subheading text sits under the heading in muted grey.</p><a href="#" style="display:inline-block;padding:14px 24px;background:#008cf7;color:#fff;border-radius:6px;font-weight:600">CTA label</a></div>
+  <img src="assets/rack-96tb.png" alt="" style="width:100%;height:auto">
+</div></section>
+<section style="background:#fff"><div style="max-width:760px;margin:0 auto;padding:56px 20px;font-size:17px;line-height:1.7;color:#374151"><div style="font:11px ui-monospace,Menlo,monospace;color:#d9a441;margin-bottom:12px">rich_text</div><h2 style="margin:0 0 12px;font:800 28px/1.15 Manrope,sans-serif;color:#0a0d12">H2 — Heading</h2><p style="margin:0 0 14px">Body copy at 17px with a 1.7 line height, capped at 760px for reading. <a href="#">Links are blue</a>, <strong>bold is 600</strong>.</p><h3 style="margin:24px 0 10px;font:800 21px/1.2 Manrope,sans-serif;color:#0a0d12">H3 — Sub-heading</h3><ul style="margin:0 0 14px;padding-left:22px"><li>Bulleted list item</li><li>Another item</li></ul><blockquote style="margin:20px 0;padding:4px 0 4px 20px;border-left:3px solid #008cf7;color:#5b6675;font-style:italic">A pull quote, set off with the brand blue rule.</blockquote><table style="width:100%;border-collapse:collapse;font-size:15px"><thead><tr><th style="text-align:left;padding:10px;background:#f4f6f9;border:1px solid #e5e9ef">Header</th><th style="text-align:left;padding:10px;background:#f4f6f9;border:1px solid #e5e9ef">Header</th></tr></thead><tbody><tr><td style="padding:10px;border:1px solid #e5e9ef">Cell</td><td style="padding:10px;border:1px solid #e5e9ef">Cell</td></tr></tbody></table></div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:56px 20px"><div style="font:11px ui-monospace,Menlo,monospace;color:#d9a441;margin-bottom:12px">cards</div><h2 style="margin:0 0 24px;font:800 32px/1.1 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">Section heading</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px">
+  <a href="#" style="display:block;background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:28px;color:#111827" style-hover="border-color:#008cf7"><div style="width:40px;height:40px;border-radius:10px;background:rgba(0,140,247,.12);margin-bottom:18px"></div><h3 style="margin:0 0 8px;font:800 20px/1.2 Manrope,sans-serif;color:#0a0d12">Card title</h3><p style="margin:0;color:#5b6675;font-size:15px;line-height:1.55">Short card text, two lines at most.</p></a>
+  <a href="#" style="display:block;background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:28px;color:#111827" style-hover="border-color:#008cf7"><div style="width:40px;height:40px;border-radius:10px;background:rgba(0,140,247,.12);margin-bottom:18px"></div><h3 style="margin:0 0 8px;font:800 20px/1.2 Manrope,sans-serif;color:#0a0d12">Card title</h3><p style="margin:0;color:#5b6675;font-size:15px;line-height:1.55">Short card text, two lines at most.</p></a>
+  <a href="#" style="display:block;background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:28px;color:#111827" style-hover="border-color:#008cf7"><div style="width:40px;height:40px;border-radius:10px;background:rgba(0,140,247,.12);margin-bottom:18px"></div><h3 style="margin:0 0 8px;font:800 20px/1.2 Manrope,sans-serif;color:#0a0d12">Card title</h3><p style="margin:0;color:#5b6675;font-size:15px;line-height:1.55">Short card text, two lines at most.</p></a>
+</div></div></section>
+<section style="background:#0a0d12;color:#fff"><div style="max-width:1200px;margin:0 auto;padding:48px 20px"><div style="font:11px ui-monospace,Menlo,monospace;color:#d9a441;margin-bottom:12px">stats</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:24px"><div style="border-left:2px solid #008cf7;padding-left:18px"><div style="font:800 40px/1 Manrope,sans-serif">300+</div><div style="margin-top:8px;color:#aeb6c2;font-size:14px">label</div></div><div style="border-left:2px solid #008cf7;padding-left:18px"><div style="font:800 40px/1 Manrope,sans-serif">25 yrs</div><div style="margin-top:8px;color:#aeb6c2;font-size:14px">label</div></div><div style="border-left:2px solid #008cf7;padding-left:18px"><div style="font:800 40px/1 Manrope,sans-serif">3</div><div style="margin-top:8px;color:#aeb6c2;font-size:14px">label</div></div></div></div></section>
+<section style="background:#008cf7;color:#fff"><div style="max-width:1200px;margin:0 auto;padding:56px 20px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:20px"><div><div style="font:11px ui-monospace,Menlo,monospace;color:#0a0d12;margin-bottom:12px">cta</div><h2 style="margin:0;font:800 30px/1.15 Manrope,sans-serif;letter-spacing:-.02em">A line of text and a button.</h2></div><a href="#" style="padding:16px 28px;background:#0a0d12;color:#fff;border-radius:6px;font-weight:600">Button label</a></div></section>
+<section style="background:#fff"><div style="max-width:800px;margin:0 auto;padding:56px 20px"><div style="font:11px ui-monospace,Menlo,monospace;color:#d9a441;margin-bottom:12px">faq</div><h2 style="margin:0 0 20px;font:800 32px/1.1 Manrope,sans-serif;letter-spacing:-.02em;color:#0a0d12">Frequently asked</h2>
+  <details open style="border-top:1px solid #e5e9ef;padding:18px 0"><summary style="cursor:pointer;font-weight:600;font-size:17px;color:#0a0d12;list-style:none;display:flex;justify-content:space-between;gap:12px">Is a snapshot a backup? <span style="color:#008cf7">+</span></summary><p style="margin:12px 0 0;color:#5b6675;line-height:1.6">Snapshots recover deleted or corrupt data instantly. Replication to a second site or the cloud is still needed for true DR.</p></details>
+  <details style="border-top:1px solid #e5e9ef;padding:18px 0"><summary style="cursor:pointer;font-weight:600;font-size:17px;color:#0a0d12;list-style:none;display:flex;justify-content:space-between;gap:12px">Can I replace a failed drive with another brand? <span style="color:#008cf7">+</span></summary><p style="margin:12px 0 0;color:#5b6675;line-height:1.6">Yes. IOPStor is hardware agnostic; any component can come from any vendor.</p></details>
+  <details style="border-top:1px solid #e5e9ef;border-bottom:1px solid #e5e9ef;padding:18px 0"><summary style="cursor:pointer;font-weight:600;font-size:17px;color:#0a0d12;list-style:none;display:flex;justify-content:space-between;gap:12px">What does the warranty cover? <span style="color:#008cf7">+</span></summary><p style="margin:12px 0 0;color:#5b6675;line-height:1.6">Three years of hardware warranty, with unlimited telephonic and web support in the first year. Customised options available.</p></details>
+</div></section>
+<section style="background:#f4f6f9"><div style="max-width:900px;margin:0 auto;padding:56px 20px"><div style="font:11px ui-monospace,Menlo,monospace;color:#d9a441;margin-bottom:12px">testimonial</div><blockquote style="margin:0;background:#0a0d12;color:#fff;border-radius:14px;padding:40px"><p style="margin:0 0 20px;font:500 clamp(20px,2.4vw,26px)/1.4 Manrope,sans-serif">“Set it up once. Haven’t had to touch it in 2 years.”</p><footer style="display:flex;align-items:center;gap:14px;font-size:14.5px;color:#aeb6c2"><div style="width:44px;height:44px;border-radius:50%;background:#2a3140"></div><div><strong style="color:#fff">Mark D.</strong><br>Small Business Owner</div></footer></blockquote></div></section>
+<section style="background:#fff"><div style="max-width:800px;margin:0 auto;padding:56px 20px"><div style="font:11px ui-monospace,Menlo,monospace;color:#d9a441;margin-bottom:12px">spec_table</div><table style="width:100%;border-collapse:collapse;font-size:15px"><caption style="text-align:left;font:800 22px/1.2 Manrope,sans-serif;color:#0a0d12;margin-bottom:14px">IOPStor Edge</caption><tbody><tr><th style="text-align:left;padding:12px 0;border-bottom:1px solid #e5e9ef;color:#5b6675;font-weight:500;width:35%">CPU</th><td style="padding:12px 0;border-bottom:1px solid #e5e9ef">Xeon 6 core</td></tr><tr><th style="text-align:left;padding:12px 0;border-bottom:1px solid #e5e9ef;color:#5b6675;font-weight:500">Memory</th><td style="padding:12px 0;border-bottom:1px solid #e5e9ef">64 GB DDR4 2400</td></tr><tr><th style="text-align:left;padding:12px 0;border-bottom:1px solid #e5e9ef;color:#5b6675;font-weight:500">Storage</th><td style="padding:12px 0;border-bottom:1px solid #e5e9ef">960 GB Enterprise SSD</td></tr><tr><th style="text-align:left;padding:12px 0;color:#5b6675;font-weight:500">Network</th><td style="padding:12px 0">2 × 10G, 2 × 1G</td></tr></tbody></table></div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:56px 20px"><div style="font:11px ui-monospace,Menlo,monospace;color:#d9a441;margin-bottom:12px">columns (2) · image · gallery</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px"><figure style="margin:0"><div style="aspect-ratio:4/3;border-radius:12px;background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px);display:flex;align-items:center;justify-content:center;font:12px ui-monospace,Menlo,monospace;color:#5b6675">image</div><figcaption style="margin-top:10px;font-size:13.5px;color:#5b6675">Caption under the picture.</figcaption></figure><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px"><div style="aspect-ratio:1;border-radius:8px;background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)"></div><div style="aspect-ratio:1;border-radius:8px;background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)"></div><div style="aspect-ratio:1;border-radius:8px;background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)"></div><div style="aspect-ratio:1;border-radius:8px;background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)"></div><div style="aspect-ratio:1;border-radius:8px;background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)"></div><div style="aspect-ratio:1;border-radius:8px;background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)"></div></div></div></div></section>
+<section style="background:#fff"><div style="max-width:560px;margin:0 auto;padding:56px 20px"><div style="font:11px ui-monospace,Menlo,monospace;color:#d9a441;margin-bottom:12px">warranty_check</div><form style="background:#f4f6f9;border-radius:12px;padding:28px;display:grid;gap:12px"><h3 style="margin:0;font:800 22px/1.2 Manrope,sans-serif;color:#0a0d12">Check your warranty</h3><label style="display:grid;gap:6px;font-size:14px;font-weight:500">Serial number<input type="text" placeholder="As printed on the unit" style="padding:12px 14px;border:1px solid #cfd6df;border-radius:6px;background:#fff"></label><button type="button" style="padding:13px;background:#0a0d12;color:#fff;border:0;border-radius:6px;font-weight:600;cursor:pointer">Check</button><div style="margin-top:6px;padding:16px;background:#fff;border:1px solid #e5e9ef;border-radius:8px;display:grid;gap:6px;font-size:14.5px"><div style="display:flex;justify-content:space-between"><span style="color:#5b6675">Status</span><strong style="color:#0a8a3a">In warranty</strong></div><div style="display:flex;justify-content:space-between"><span style="color:#5b6675">Expires</span><span>2028-03-14</span></div><div style="display:flex;justify-content:space-between"><span style="color:#5b6675">AMC</span><span>Yes</span></div></div></form></div></section>
+<section style="background:#f4f6f9"><div style="max-width:1200px;margin:0 auto;padding:56px 20px"><div style="font:11px ui-monospace,Menlo,monospace;color:#d9a441;margin-bottom:12px">post_list · pdf · embed_html · contact_form</div><p style="margin:0;color:#5b6675;font-size:15px">post_list uses the card grid above (case study / blog / service variants shown on their pages). pdf and embed_html render inside a 12px-radius frame with the same border. contact_form is the dark quote form on the Contact page.</p></div></section>
+</sc-if>
+</main>
+
+<footer style="background:#0a0d12;color:#aeb6c2;border-top:1px solid #1c2230">
+  <div style="max-width:1200px;margin:0 auto;padding:56px 20px 28px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:32px">
+      <div style="grid-column:span 1"><img src="assets/logo.png" alt="IOPStor" style="height:20px;filter:brightness(0) invert(1);margin-bottom:14px"><p style="margin:0 0 10px;font-size:14px;line-height:1.6">The Storage Specialist. Meet business needs now and tomorrow with converged infrastructure.</p><p style="margin:0;font-size:13px;line-height:1.6">Marketed by Prime ABGB Pvt. Ltd.<br>106–109, Simlim Square, D. B. Marg,<br>Grant Road, Mumbai 400007</p></div>
+      <div><h4 style="margin:0 0 14px;font:700 13px/1 Manrope,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#fff">Services</h4><ul style="margin:0;padding:0;list-style:none;display:grid;gap:8px;font-size:14px"><sc-for list="{{ services }}" as="g" hint-placeholder-count="5"><li><a href="#" onClick="{{ go.services }}" style="color:#aeb6c2" style-hover="color:#fff">{{ g.name }}</a></li></sc-for></ul></div>
+      <div><h4 style="margin:0 0 14px;font:700 13px/1 Manrope,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#fff">Company</h4><ul style="margin:0;padding:0;list-style:none;display:grid;gap:8px;font-size:14px"><li><a href="#" onClick="{{ go.about }}" style="color:#aeb6c2" style-hover="color:#fff">About Us</a></li><li><a href="#" onClick="{{ go.cases }}" style="color:#aeb6c2" style-hover="color:#fff">Case Studies</a></li><li><a href="#" onClick="{{ go.partners }}" style="color:#aeb6c2" style-hover="color:#fff">Technology Partners</a></li><li><a href="#" onClick="{{ go.events }}" style="color:#aeb6c2" style-hover="color:#fff">Events</a></li><li><a href="#" onClick="{{ go.careers }}" style="color:#aeb6c2" style-hover="color:#fff">Careers</a></li><li><a href="#" onClick="{{ go.blog }}" style="color:#aeb6c2" style-hover="color:#fff">Blog</a></li></ul></div>
+      <div><h4 style="margin:0 0 14px;font:700 13px/1 Manrope,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#fff">Contact</h4><ul style="margin:0;padding:0;list-style:none;display:grid;gap:8px;font-size:14px"><li><a href="tel:+919821909800" style="color:#aeb6c2" style-hover="color:#fff">+91 98219 09800</a></li><li><a href="mailto:sales@primeabgb.com" style="color:#aeb6c2" style-hover="color:#fff">sales@primeabgb.com</a></li><li><a href="#" onClick="{{ go.datasheets }}" style="color:#aeb6c2" style-hover="color:#fff">Datasheets</a></li><li><a href="#" onClick="{{ go.warranty }}" style="color:#aeb6c2" style-hover="color:#fff">Warranty check</a></li><li><a href="#" onClick="{{ go.contact }}" style="color:#008cf7;font-weight:600">Request a quote →</a></li></ul></div>
+    </div>
+    <div style="margin-top:40px;padding-top:20px;border-top:1px solid #1c2230;display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;font-size:13px"><span>© 2026 IOPStor. All rights reserved.</span><span><a href="#" style="color:#aeb6c2">Sitemap</a> · <a href="#" style="color:#aeb6c2">RSS</a> · <a href="#" style="color:#aeb6c2">llms.txt</a></span></div>
+  </div>
+</footer>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { page: 'home', wide: true, servicesOpen: false, companyOpen: false, mobileMenu: false, checkout: false, activeGroup: 0 };
+  componentDidMount() {
+    this._m = () => this.setState({ wide: window.innerWidth >= 960, mobileMenu: window.innerWidth >= 960 ? false : this.state.mobileMenu });
+    this._m(); window.addEventListener('resize', this._m);
+    const saved = localStorage.getItem('iopstor.page'); if (saved) this.setState({ page: saved });
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._m); }
+  nav(p) { return (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ page: p, servicesOpen: false, companyOpen: false, mobileMenu: false, checkout: false }); localStorage.setItem('iopstor.page', p); window.scrollTo(0, 0); }; }
+  renderVals() {
+    const s = this.state;
+    const pages = ['home','services','service','cases','case','blog','partners','about','events','careers','contact','datasheets','products','warranty','notfound','blocks'];
+    const is = {}; pages.forEach(p => is[p] = s.page === p);
+    const go = {}; pages.forEach(p => go[p] = this.nav(p));
+    const services = [
+      { num: '01', name: 'Storage', blurb: 'Software-defined NAS, DAS and SAS on ZFS, with AWS integration for disaster recovery.', children: ['NAS','DAS','SAS','AWS Integration (DR)'] },
+      { num: '02', name: 'Hyper Converged Media', blurb: 'Compute, storage and management in one turnkey appliance. Scales linearly from 5 users.', children: ['Proxmox','VMware'] },
+      { num: '03', name: 'Cloud', blurb: 'Own your private cloud: desktops, storage, containers and DR delivered as a service.', children: ['Desktop as a Service','Storage as a Service','VPS','Linux Containers','Serverless','S3 Bucket Solutions','DRaaS'] },
+      { num: '04', name: 'AI', blurb: 'On-premise GPU servers for training and inference, with your data staying in your rack.', children: ['On-prem AI Servers'] },
+      { num: '05', name: 'Software Based', blurb: 'Sizing, deployment and storage tuning for the business applications you already run.', children: ['SQL Server','Tally','SAP'] },
+    ];
+    const cases = [
+      { client: 'LKS', industry: 'Finance', solution: 'Virtualisation', summary: 'Standalone servers consolidated onto one virtualised IOPStor platform.' },
+      { client: 'SCM', industry: 'Education', solution: 'Big Data', summary: 'Research datasets on a scalable ZFS pool with snapshot protection.' },
+      { client: 'FM', industry: 'Post Production', solution: 'Media', summary: 'Shared high-throughput NAS for editors working on large media files.' },
+      { client: 'DCSL', industry: 'Services', solution: 'Private Cloud', summary: 'Domain controller, NAS and firewall in a single private cloud appliance.' },
+      { client: 'SSC', industry: 'Distribution', solution: 'Private Cloud', summary: 'Centralised data with remote access for a distributed sales team.' },
+      { client: 'ATPL', industry: 'Travel', solution: 'HCI', summary: 'Hyper-converged workspace stack replacing separate servers and storage.' },
+      { client: 'KLPL', industry: 'Logistics', solution: 'Private Cloud', summary: 'Multi-application servers with ransomware protection and hourly snapshots.' },
+    ];
+    const partners = [
+      { name: 'Micron', role: 'NVMe and SSD media', src: 'assets/partners/micron.png' }, { name: 'Samsung', role: 'Enterprise SSD', src: 'assets/partners/samsung.jpg' },
+      { name: 'Western Digital', role: 'Enterprise HDD', src: 'assets/partners/wd.jpg' }, { name: 'HGST', role: 'Enterprise HDD', src: 'assets/partners/hgst.png' },
+      { name: 'Toshiba', role: 'Enterprise HDD', src: 'assets/partners/toshiba.png' }, { name: 'SanDisk', role: 'Flash media', src: 'assets/partners/sandisk.jpg' },
+      { name: 'Supermicro', role: 'Server platforms', src: 'assets/partners/supermicro.png' }, { name: 'NVM Express', role: 'Storage protocol', src: 'assets/partners/nvme.png' },
+      { name: 'VMware', role: 'Hypervisor (certified)', src: 'assets/partners/vmware.jpg' }, { name: 'Microsoft', role: 'Windows Server (certified)', src: 'assets/partners/microsoft.png' },
+      { name: 'Red Hat', role: 'Linux platform', src: 'assets/partners/redhat.png' }, { name: 'CentOS', role: 'Linux platform', src: 'assets/partners/centos.png' },
+      { name: 'OmniOS', role: 'ZFS operating system', src: 'assets/partners/omnios.png' }, { name: 'Solaris', role: 'ZFS operating system', src: 'assets/partners/solaris.png' },
+    ];
+    const products = [
+      { name: 'IOPStor Classic NAS', form: 'Mini tower · Model IOP4MB', users: '5 – 10 users · 4 TB to 16 TB HDD or 720 GB to 2.88 TB SSD', blurb: 'Intel Celeron J1900 (10 W, 4 core), 8 GB DDR3, 120 GB SATA SSD boot. ZFS NAS with SMB/CIFS/AFP/FTP file sharing and iSCSI block storage.', price: 'Price on request', img: 'assets/tower.png' },
+      { name: 'IOPStor Classic HCI', form: 'Hyper-converged appliance', users: '5 – 10 users*', blurb: 'Xeon 4 core, 32 GB DDR4 2400, 480 GB enterprise SSD, 2 × 10G + 2 × 1G. Domain controller, firewall, NAS and hypervisor in one box.', price: 'Price on request', img: 'assets/rack-96tb.png' },
+      { name: 'IOPStor Edge HCI', form: 'Hyper-converged appliance', users: '10 – 20 users*', blurb: 'Xeon 6 core, 64 GB DDR4 2400, 960 GB enterprise SSD, 2 × 10G + 2 × 1G. The full integrated workspace stack for larger teams.', price: 'Price on request', img: 'assets/introducing-rack.png' },
+    ];
+    const nasWhy = [
+      { n: '01', t: 'Set it and forget it', d: 'Once installed, it just works. No complex setup, no constant checking.' },
+      { n: '02', t: 'Never lose a file again', d: 'Automatic error correction, snapshots and self-healing storage keep your files intact.' },
+      { n: '03', t: 'Snapshots: time travel for your data', d: 'Accidentally deleted something? Go back to yesterday, last week or last month in a few clicks.' },
+      { n: '04', t: 'Rock-solid performance 24/7', d: 'Backups, streaming, file sharing and remote access at speed, with zero hiccups.' },
+      { n: '05', t: 'Plug, play and expand', d: 'Add drives anytime. No reformatting, no migration. Plug it in and keep growing.' },
+      { n: '06', t: 'Military-grade encryption (optional)', d: 'Enterprise-level encryption. Only you hold the keys.' },
+      { n: '07', t: 'Save energy, save costs', d: 'Efficient power usage means lower electricity bills and longer hardware life.' },
+      { n: '08', t: 'Fully supported by real humans', d: 'No bots, no endless tickets. A real, friendly tech support team.' },
+    ];
+    const zfs = [
+      ['128-bit file system', '16 billion billion times the capacity of a 64-bit file system.'],
+      ['Read / write cache', 'RAM, SSD and NVMe combined. Frequent reads served from cache; writes land in cache first, removing latency.'],
+      ['Snapshots and clones', 'Snapshot policy recovers deleted or corrupt data and protects against ransomware.'],
+      ['RAID-Z', 'No write hole, no data loss, instantaneous build. A rebuild after drive failure does not affect work.'],
+      ['End-to-end data integrity', 'Every block is checksummed.'],
+      ['Compression and de-duplication', 'Fast compression with no performance impact; only one copy of a file is ever stored.'],
+      ['Replication and cloud sync', 'Replicate on-site or off-site, or sync datasets to cloud storage for DR.'],
+      ['AD integration and link aggregation', 'Active Directory credentials and groups for access control; bonded NICs for throughput and failover.'],
+    ];
+    const events = [
+      { year: '2018', month: 'Dec', title: 'Seagate Collaboration', where: 'Joint session with Seagate on enterprise drive roadmaps for ZFS pools.' },
+      { year: '2018', month: 'Oct', title: 'Broadcast 2018', where: 'IOPStor NAS for post-production and media workflows on the show floor.' },
+    ];
+    const posts = [
+      { date: '2026-08-14', title: 'Why RAID-Z has no write hole', excerpt: 'Hardware RAID can lose data during a power cut mid-write. Here is how ZFS avoids it.' },
+      { date: '2026-07-02', title: 'Sizing a private cloud for 20 users', excerpt: 'CPU cores, RAM and SSD for a Classic vs Edge appliance, with real workloads.' },
+      { date: '2026-05-21', title: 'Snapshots vs backups', excerpt: 'Snapshots roll back ransomware in minutes. They are not a substitute for an off-site copy.' },
+    ];
+    const datasheets = [
+      { title: 'IOPStor Classic NAS (IOP4MB)', meta: 'Software-defined storage NAS · 2 pages · PDF' },
+      { title: 'IOPStor Hyper Converged Infrastructure', meta: 'Classic and Edge appliances, workspace stack · 2 pages · PDF' },
+      { title: 'Own Your Private Cloud', meta: '20-point feature list, configuration details · 2 pages · PDF' },
+      { title: 'ZFS NAS: Your Data. Safer. Smarter. Forever.', meta: 'Why choose our NAS · 1 page · PDF' },
+    ];
+    const tabBase = 'display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:8px;color:#5b6675;transition:background .15s,color .15s';
+    const serviceTabs = services.map((g, i) => ({ num: g.num, name: g.name, hover: () => this.setState({ activeGroup: i }),
+      style: i === s.activeGroup ? tabBase + ';background:#f4f6f9;color:#0a0d12' : tabBase, arrow: i === s.activeGroup ? 'color:#008cf7' : 'color:transparent' }));
+    const wRegister = { 'IO01X7CDFIRD10X12-LN/2512291': ['Mecord Systems & Services Private Limited','—','29 Dec 2025','28 Dec 2028',false,'',false],
+      'IO01X7CDFIRD10X12-LN/2512292': ['Mecord Systems & Services Private Limited','—','29 Dec 2022','28 Dec 2025',false,'',false],
+      'IOP4MB-2401-0187': ['Kaveri Logistics','it@kaveri.in','18 Jan 2024','17 Jan 2027',true,'PSU replaced under RMA, Oct 2025',true],
+      'IOPC-2312-0042': ['Studio FrameLab','ops@framelab.co','5 Dec 2023','4 Dec 2026',false,'',false],
+      'IOPE-2106-0004': ['ATPL Travel','—','10 Jun 2021','9 Jun 2024',false,'Unit decommissioned',false],
+      'IOPC-2503-0210': ['DCSL Services','helpdesk@dcsl.in','3 Mar 2025','2 Mar 2028',true,'',false] };
+    const wKey = (s.wChecked || '').trim().toUpperCase();
+    const wRow = wKey ? wRegister[wKey] : null;
+    const wActive = wRow ? new Date(wRow[3]) >= new Date('2026-09-07') : false;
+    const wResult = wRow ? { serial: wKey, customer: wRow[0], email: wRow[1], purchase: wRow[2], expiry: wRow[3], amc: wRow[4] ? 'Active' : 'None', status: wActive ? 'In warranty' : 'Warranty expired', note: wActive ? 'Hardware cover is active until ' + wRow[3] + '.' : 'Cover ended on ' + wRow[3] + '. An AMC can bring the unit back under support.', hasRemarks: !!(wRow[6] && wRow[5]), remarks: wRow[5], cta: wActive ? 'Raise a support request' : 'Ask about an AMC' } : {};
+    return {
+      wQuery: s.wQuery || '', wQueryShown: wKey, wType: e => this.setState({ wQuery: e.target.value }), wCheck: e => { e.preventDefault(); this.setState({ wChecked: s.wQuery || '' }); },
+      wNone: !wKey, wMiss: !!wKey && !wRow, wHit: !!wRow, wResult, wDemo: !wKey,
+      wBanner: 'padding:24px 28px;color:#fff;background:' + (wActive ? '#0a8a3a' : '#b42323'),
+      serviceTabs, activeGroup: services[s.activeGroup] || services[0],
+      servicesTriggerStyle: s.servicesOpen ? 'display:block;padding:22px 14px;color:#008cf7;transition:color .15s' : 'display:block;padding:22px 14px;color:#e6e9ef;transition:color .15s',
+      page: s.page, is, go, wide: s.wide, narrow: !s.wide, servicesOpen: s.servicesOpen, companyOpen: s.companyOpen, mobileMenu: s.mobileMenu, menuGlyph: s.mobileMenu ? '×' : '☰',
+      checkout: s.checkout,
+      onPick: (e) => this.nav(e.target.value)(),
+      openServices: () => this.setState({ servicesOpen: true, companyOpen: false }), openCompany: () => this.setState({ companyOpen: true, servicesOpen: false }), closeMenu: () => this.setState({ servicesOpen: false, companyOpen: false }),
+      toggleMenu: () => this.setState({ mobileMenu: !s.mobileMenu }),
+      openCheckout: () => this.setState({ checkout: true }), closeCheckout: () => this.setState({ checkout: false }), stop: (e) => e.stopPropagation(),
+      services, cases, casesHome: cases.slice(0, 4), industries: cases.map(c => c.industry), partners, products, nasWhy, zfs: zfs.map(z => ({ t: z[0], d: z[1] })), events, posts, datasheets,
+    };
+  }
+}
+</script>
+</body>
+</html>

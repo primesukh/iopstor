@@ -42,7 +42,7 @@ migrations/              0000_bootstrap.sql (run once by hand in Studio) + NNNN_
 tests/                   pytest: test_offline.py always; the rest are marked live and skip without the Supabase in .env
 docs/                    TECHNICAL.md + NON-TECHNICAL.md — the two docs every change keeps current
 .claude/                 docs/ (design.md, requirements.md), skills/ (the procedures below), hooks/session-start.sh, settings.json (enforced rules)
-website_assets/          the client's mock (mock-website.html), pictures, partner logos — untracked; loaded with `flask import-media`
+website_assets/          the client's mock (mock-website.html), pictures, partner logos — tracked; loaded into Supabase with `flask import-media`
 graphify-out/            the knowledge graph — gitignored; code nodes rebuilt by git hooks per commit, prose + labels only on main via /after-merge
 ```
 
@@ -141,7 +141,7 @@ So the full order is: branch → work → three docs → `/pr` → **stop** → 
 
 ## Env keys (`.env.example`)
 
-`SECRET_KEY, SITE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, MEDIA_BUCKET, PAYMENT_PROVIDER` (+ `FLASK_APP=iopstor`, `FLASK_DEBUG=1` for development).
+`SECRET_KEY, SITE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, MEDIA_BUCKET, PAYMENT_PROVIDER, THROTTLE_DB, LOGIN_MAX_FAILURES, LOGIN_WINDOW` (+ `FLASK_APP=iopstor`, `FLASK_DEBUG=1` for development).
 Dev Supabase: `http://developmentserver-supabase-9f7088-111-125-233-170.sslip.io` (LAN, self-signed cert on https → use http until a real cert exists).
 `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` are the same values as `JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY` in the Supabase compose env.
 The `media` bucket is created in Supabase Studio; public or private no longer matters, since the app uploads and reads it with the service-role key and nothing a visitor loads points at it. RLS is enabled on all app tables (`migrations/0002_enable_rls.sql`; a new table repeats the line) so the anon key
