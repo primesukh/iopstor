@@ -575,11 +575,21 @@ The other three shapes size from `auto` tracks that stay inside a 390px card (da
 
 ### The admin shell
 
-`templates/admin/base.html` is a 230px black sidebar and a grey page canvas, not the old top nav. Three things about it are load-bearing:
+`templates/admin/base.html` is a 248px black sidebar and a grey page canvas, not the old top nav. Three things about it are load-bearing:
 
 - **It uses its own class names** (`.adm-shell`, `.adm-side`, `.adm-nav`, `#adm-toggle`), not `.site-header` / `.site-nav` / `.brand` / `#nav-toggle`. Those live in `site.css` and belong to the public header; restyling them here would repaint every public page, and two `#nav-toggle` checkboxes would fight over the same `:checked ~` rule.
 - **One `{% block content %}`, wrapped conditionally.** Jinja refuses the same block name twice in a template even in branches that cannot both run, so the shell opens before the block and closes after it rather than the block appearing in both arms of the `if`.
 - **`.admin-main:has(#post-form)` is `height:100vh`**, not `calc(100vh - 66px)`. The editor now owns a grid column rather than sitting under a top bar, so there is no header height to subtract.
+
+**The nav icons are one inline sprite.** `admin/base.html` opens with a `<svg hidden>` of sixteen `<symbol id="i-…" viewBox="0 0 24 24">`; each row carries `<svg class="ic"><use href="#i-…"></use></svg>`. The symbols are bare `<path>`/`<rect>` elements — `fill`, `stroke`, `stroke-width` and the line joins are inherited from `.adm-nav .ic` in `admin.css`, which is also how `a.on .ic` recolours one to blue without touching the markup. The wrapper needs `hidden`: a `<svg>` holding only symbols still renders as a 300×150 box otherwise. The eight CONTENT rows are **`post_types` rows, not code**, so a Jinja `ICON` map turns a slug into a symbol name and `ICON.get(t.slug, 'dot')` gives anything an editor adds later the neutral `i-dot` rather than a broken reference.
+
+**The sidebar's colours come from the dark tokens.** `--muted` (`#5b6675`) is a *light-background* token and lands near 3:1 on `--black`; the group labels, the counts and the resting icons use `--muted-dark-2` (`#7d8794`) instead. The active row is `--black-3` with `box-shadow:inset 3px 0 0 var(--blue)` and a blue icon, not a solid blue fill — fifteen rows of brand colour were louder than the page they lead to. `:focus-visible` on the nav, brand and footer links draws a `--blue-light` outline; there was none before.
+
+**The footer's user block truncates, it does not wrap.** `.adm-me-t b` (the name) and its `span` (the email) are `white-space:nowrap` + `text-overflow:ellipsis`, with the full address in a `title`. That needs `min-width:0` on **both** `.adm-me` and `.adm-me-t`: a flex item defaults to `min-width:auto`, refuses to shrink below its content, and the ellipsis silently never appears. The name itself is the `display_name()` Jinja global (`__init__.py`) — `users.name` when set, otherwise the email's local part with `. _ -` turned to spaces and title-cased. `admin/users.html` calls the same global, so the table and the sidebar cannot disagree.
+
+**`users.name` is written once, at invite time**, by the *Name* field on the Users screen — there is no rename screen and no `POST /admin/users/name`. So an account made by `flask create-admin` (which passes `name=""`) shows the derived name for good, which is the intended outcome rather than a gap: the derivation is right for a `first.last@` address, and anyone who needs a different one is invited with it. Changing an existing name means a `users` row update in Studio.
+
+The invite form is `autocomplete="off"` and its *Temporary password* is `autocomplete="new-password"`: an email field beside a password field is a login form to a password manager, which was filling the signed-in admin's own saved address and password into the invite, ready to create a duplicate account.
 
 **The settings tabs are CSS, and that is load-bearing.** `settings()` saves `{k: request.form.get(k, "") for k in SETTING_KEYS}`, so **any key missing from the submitted form is blanked**. Rendering only the visible tab would wipe the other three on every save. So all four panes stay in the DOM and a radio + `:checked` sibling rule shows one. The pairing uses explicit ordinal classes (`.t1`/`.p1`), not `:nth-of-type` — the form's hidden CSRF field is an `<input>` too, so type counting put every radio one place out.
 

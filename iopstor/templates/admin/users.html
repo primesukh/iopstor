@@ -7,8 +7,8 @@
     <table>
       <tr><th>Person</th><th>Role</th><th></th></tr>
       {% for u in users %}<tr>
-        <td><span class="who"><span class="avatar {{ u.role }}">{{ (u.name or u.email)[0]|upper }}</span>
-          <span><strong>{{ u.name or u.email.split('@')[0] }}</strong>{% if u.id == admin_user.id %} <span class="pill scheduled">you</span>{% endif %}
+        <td><span class="who"><span class="avatar {{ u.role }}">{{ display_name(u)[0]|upper }}</span>
+          <span><strong>{{ display_name(u) }}</strong>{% if u.id == admin_user.id %} <span class="pill scheduled">you</span>{% endif %}
           <span class="t-path">{{ u.email }}</span></span></span></td>
         <td>{{ u.role }}</td>
         <td>{% if u.id != admin_user.id %}<form method="post" action="{{ url_for('admin_ui.user_delete', pk=u.id) }}" onsubmit="return confirm('Remove this user? They lose access immediately.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="danger">Remove</button></form>{% endif %}</td>
@@ -17,11 +17,11 @@
   </div>
   <aside class="m-panel">
     <h2>Invite a user</h2>
-    <form method="post">
+    <form method="post" autocomplete="off">
       <input type="hidden" name="csrf" value="{{ csrf }}">
-      <label>Name <input type="text" name="name"></label>
-      <label>Email <input type="email" name="email" required></label>
-      <label>Temporary password <input type="password" name="password" required minlength="8"></label>
+      <label>Name <input type="text" name="name" autocomplete="off"></label>
+      <label>Email <input type="email" name="email" required autocomplete="off"></label>
+      <label>Temporary password <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
       <p class="role-cards">
         <label class="role-card"><input type="radio" name="role" value="editor" checked>
           <span><strong>Editor</strong><small>Write and edit content, upload files, answer leads.</small></span></label>

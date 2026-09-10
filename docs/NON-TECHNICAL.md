@@ -34,7 +34,9 @@ If you can log in but see "Forbidden", your login exists but has not been given 
 
 ---
 
-**Finding your way around.** Everything lives in the black bar down the left. *Content* lists every kind of page with how many of each there are; *Site* holds Media, Leads, Warranty and — if you are an administrator — Settings and Users. The page you are on is highlighted in blue, and a blue number next to **Leads** means new enquiries are waiting. On a narrow screen the bar collapses to a single line with a ☰ button.
+**Finding your way around.** Everything lives in the black bar down the left. Every line has a small picture beside it so you can find the one you want without reading down the list. *Content* lists every kind of page with how many of each there are; *Site* holds Media, Leads, Warranty and — if you are an administrator — Settings and Users. The page you are on is marked with a blue stripe down its left edge, and a blue number next to **Leads** means new enquiries are waiting. On a narrow screen the bar collapses to a single line with a ☰ button.
+
+At the bottom of that bar it says who is signed in — your name, and your email address underneath it. A long email address is shortened with a "…"; hover over it to see the whole thing. The name comes from the **Name** box that was filled in when the account was created, on the Users screen. If it was left empty — which it is for the very first administrator, created from the command line — the system makes a sensible one out of the email address instead, so `sukhpreet.saluja@…` shows as *Sukhpreet Saluja*. There is no screen for changing it afterwards; ask whoever runs the database if a name needs correcting.
 
 ---
 

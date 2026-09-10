@@ -28,6 +28,14 @@ def rupees(n):
     return ("-" if paise < 0 else "") + "\u20b9 " + digits
 
 
+def display_name(user):
+    """The name to show for a CMS user: their own if they set one, otherwise the email's local part
+    made readable \u2014 sukhpreet.saluja@\u2026 reads as "Sukhpreet Saluja". users.name defaults to '' and
+    `flask create-admin` never fills it, so without the fallback the sidebar would say nothing."""
+    return (user.get("name") or "").strip() or \
+        user["email"].split("@")[0].replace(".", " ").replace("_", " ").replace("-", " ").title()
+
+
 def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_object(config)
@@ -52,6 +60,7 @@ def create_app(test_config=None):
 
     app.jinja_env.globals.update(
         rupees=rupees,
+        display_name=display_name,   # the admin sidebar's user block and the Users table say the same name
         count_up=count_up,        # stats.html splits a figure into the part a CSS counter can roll to
         section_class=section_class,   # and whitelists one figure's own effect the same way a section's is
         media_url=lambda i: (db.get_media(int(i)) or {}).get("url", "") if i else "",
