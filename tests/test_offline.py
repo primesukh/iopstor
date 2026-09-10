@@ -397,6 +397,25 @@ def test_section_width_is_a_named_step_or_a_plain_number(app, monkeypatch):
     assert blocks_text(blocks) == "hi"                      # not "950"
 
 
+def test_stylesheets_are_balanced():
+    """A stray brace silently kills the rules after it, and no other test can see a stylesheet.
+
+    One orphan `}` left by an edit to site.css took `.hero`'s padding out of the cascade while
+    every rule around it kept working, so the page looked almost right and pytest was green."""
+    import re
+    from pathlib import Path
+
+    for name in ("site.css", "admin.css", "canvas.css"):
+        css = Path("iopstor/static", name).read_text()
+        css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)   # a brace inside a comment is not a brace
+        depth = 0
+        for i, line in enumerate(css.split("\n"), 1):
+            for ch in line:
+                depth += (ch == "{") - (ch == "}")
+                assert depth >= 0, f"{name}: unmatched closing brace, line {i}"
+        assert depth == 0, f"{name}: {depth} unclosed block(s)"
+
+
 def test_count_up_splits_a_figure():
     """The whole number a CSS counter can roll to, the digits as typed, and the rest."""
     from iopstor.blocks import count_up
