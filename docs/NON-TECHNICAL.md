@@ -487,11 +487,11 @@ places, a little faster on a repeat visit.
 *1,200 TB*, also stays still: the counter cannot draw the comma, and a figure that ended up reading
 *1200 TB* would not be the one you typed. Write it as *1200 TB* and it counts.
 
-**On my screen the effects do nothing.** Effects that happen as you scroll need a recent browser
-(Chrome, Edge, Safari, or Firefox 144 and newer). On anything older the section simply sits there
-with all its words and figures showing, which is the point — nothing ever goes missing, it just does
-not move. The same is true if you have asked your computer to reduce motion: everything is there,
-nothing animates.
+**Do the effects work in my browser?** Yes, in any current one. On the newest browsers an effect
+waits until you scroll down to that section and then plays, which is the nicest version. On an older
+one — Firefox before version 144, say — it plays once as the page loads instead. Either way you see
+it. If you have asked your computer to reduce motion, nothing animates at all and every figure and
+heading simply sits there in full, which is deliberate.
 
 **I changed something and the website looks the same.** Check the status is *Published* and the publish date is not in the future. Then refresh with Ctrl+F5.
 
