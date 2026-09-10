@@ -1,5 +1,6 @@
 """Pure logic — no Supabase needed."""
 from iopstor import display_name
+from iopstor.admin_ui import _password_errors
 from iopstor.blocks import at_path, blocks_md, blocks_text, col_widths, render_blocks, validate_blocks
 from iopstor.db import slugify
 
@@ -744,3 +745,12 @@ def test_display_name_falls_back_to_the_email():
     assert display_name({"name": "", "email": "sukhpreet.saluja@primeabgb.com"}) == "Sukhpreet Saluja"
     assert display_name({"name": "   ", "email": "jane_doe@x.com"}) == "Jane Doe"
     assert display_name({"email": "a-b@x.com"}) == "A B"
+
+
+def test_password_errors():
+    assert _password_errors("shortie", "shortie")[0].startswith("The new password must be")
+    assert _password_errors("longenough", "longenoug")[0].startswith("The two new passwords")
+    assert _password_errors("longenough", "longenough") == []
+    # the admin's one-field reset has nothing to confirm against, so the second check must not fire
+    assert _password_errors("longenough") == []
+    assert _password_errors("short")

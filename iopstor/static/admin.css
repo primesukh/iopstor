@@ -40,7 +40,7 @@
 .admin-anon{display:flex;align-items:center;justify-content:center;background:var(--black);min-height:100vh}
 .admin-anon>*{width:100%}
 @media(max-width:1000px){
-  .adm-shell{grid-template-columns:1fr}
+  .adm-shell{grid-template-columns:1fr;grid-template-rows:auto 1fr}
   .adm-side{position:static;height:auto;padding:10px 12px}
   .admin .adm-burger{display:flex}
   .adm-nav,.adm-foot{display:none}
@@ -306,6 +306,15 @@
 .m-sub .ok{color:var(--green);font-weight:600}
 .m-sub .no{color:var(--red);font-weight:600}
 .m-panel{position:sticky;top:20px;background:var(--white);border:1px solid var(--line);border-radius:10px;padding:20px}
+/* a one-form page is a column, not the 1200px canvas; sticky means nothing with nothing to scroll past */
+.m-panel.acct{position:static;max-width:440px}
+.pw-set{margin-top:8px}
+.pw-set summary{cursor:pointer;font-size:13px;color:var(--muted)}
+.pw-set form{display:flex;gap:6px;margin-top:6px}
+/* (0,3,1), to tie `.admin input:not([type=checkbox]):not([type=file])` and win on source order --
+   a plain `.admin .pw-set input` is (0,2,1) and silently loses its width to that rule's 100% */
+.admin .pw-set input[type=password]{width:160px;padding:.4rem .55rem;font-size:13px}
+.pw-set button{padding:.4rem .8rem;font-size:13px}
 .m-panel h2{margin:0 0 12px}
 .m-big{display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;background:var(--grey);border-radius:8px;margin:0 0 12px}
 .m-big img{max-width:100%;max-height:100%;object-fit:contain}

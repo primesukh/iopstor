@@ -11,7 +11,14 @@
           <span><strong>{{ display_name(u) }}</strong>{% if u.id == admin_user.id %} <span class="pill scheduled">you</span>{% endif %}
           <span class="t-path">{{ u.email }}</span></span></span></td>
         <td>{{ u.role }}</td>
-        <td>{% if u.id != admin_user.id %}<form method="post" action="{{ url_for('admin_ui.user_delete', pk=u.id) }}" onsubmit="return confirm('Remove this user? They lose access immediately.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="danger">Remove</button></form>{% endif %}</td>
+        <td>{% if u.id != admin_user.id %}<form method="post" action="{{ url_for('admin_ui.user_delete', pk=u.id) }}" onsubmit="return confirm('Remove this user? They lose access immediately.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="danger">Remove</button></form>
+          <details class="pw-set"><summary>Set a password</summary>
+            <form method="post" action="{{ url_for('admin_ui.user_password', pk=u.id) }}">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="password" name="password" required minlength="8" placeholder="New password" autocomplete="new-password">
+              <button type="submit">Set</button>
+            </form>
+          </details>{% endif %}</td>
       </tr>{% endfor %}
     </table>
   </div>
