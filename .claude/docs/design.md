@@ -252,12 +252,13 @@ Decisions that are easy to undo by accident:
 | 2026-09-09 | `/after-merge` owns the whole graph refresh; the git hooks are not relied on after a pull | A fast-forward pull fires no hook, so the graph sat three commits behind `main` on the first run |
 | 2026-09-09 | `gh pr merge` taken off the deny list; the agent merges only when told, on that PR | A deny cannot see consent, and the user wants to say "merge it" and have it done |
 | 2026-09-10 | Logo sized by a fixed 150x22 box cropped with `object-fit:cover`, shared by header and footer | A fixed height alone does not normalise a logo: whitespace baked into the PNG was being counted as logo, so a swapped-in file rendered at less than half the size |
+| 2026-09-10 | The mega panel's pane is the next sibling of its own link, opened by `+` and held open by `.mega-pane:hover` | Pairing link and pane by `nth-child` could not survive the cursor leaving the link: the pane snapped back to group one across the 55px of padding between the two columns, so only the first group's tiles were ever clickable. Sibling hover also drops the eight-group ceiling and lets `Tab` reach the tiles |
 
 ---
 
 ## 15. Known ceilings
 
-Marked `# ponytail:` in source (30 at last count; `/ponytail-debt` harvests them). The ones an agent trips over: HS256-only JWT; hierarchy index < 2000 posts per type; one sitemap < 5000 URLs; honeypot-only spam control; raw HTML trusted; `execCommand` editor; 8 mega-panel groups; rotator keyframes for 2 and 3 pictures only; per-process caches; `checkout` and `index` are reserved slugs; counting rolls whole numbers only and refuses grouped ones; scroll *triggering* needs Chrome 115+ / Safari 26+ / Firefox 144+ and otherwise plays at load; the counter needs `@property` (Firefox 128+) or the figure reads 0; `_html_md()` is regex, not a parser; `/media/` is a reserved first segment, its files are read whole into memory and have no server-side cache; `DummyGateway` moves no money.
+Marked `# ponytail:` in source (32 at last count; `/ponytail-debt` harvests them). The ones an agent trips over: HS256-only JWT; hierarchy index < 2000 posts per type; one sitemap < 5000 URLs; honeypot-only spam control; raw HTML trusted; `execCommand` editor; rotator keyframes for 2 and 3 pictures only; per-process caches; `checkout` and `index` are reserved slugs; counting rolls whole numbers only and refuses grouped ones; scroll *triggering* needs Chrome 115+ / Safari 26+ / Firefox 144+ and otherwise plays at load; the counter needs `@property` (Firefox 128+) or the figure reads 0; `_html_md()` is regex, not a parser; `/media/` is a reserved first segment, its files are read whole into memory and have no server-side cache; `DummyGateway` moves no money.
 
 ---
 
