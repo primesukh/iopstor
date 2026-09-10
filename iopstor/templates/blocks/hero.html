@@ -17,8 +17,11 @@
     {%- if data.images and data.images|length > 1 and not data.dark %}{% set n = data.images|length %}<div class="hero-media">
       <div class="hero-slides" style="--n:{{ n }}">
         {%- for im in data.images %}<div class="hero-slide" style="--i:{{ loop.index0 }}"><img src="{{ media_url(im.media_id) }}" alt="{{ im.alt or data.heading }}"></div>{% endfor %}
-        <div class="hero-dots" style="--n:{{ n }}" aria-hidden="true">{% for im in data.images %}<span style="--i:{{ loop.index0 }}"></span>{% endfor %}</div>
       </div>
+      {#- the dots sit outside .hero-slides on purpose: that element carries the `float` loop, and a
+          child of it bobs up and down with the picture. They mark which slide is up, so they hold
+          still while it drifts. #}
+      <div class="hero-dots" style="--n:{{ n }}" aria-hidden="true">{% for im in data.images %}<span style="--i:{{ loop.index0 }}"></span>{% endfor %}</div>
     </div>
     {%- elif data.image and not data.dark %}<div class="hero-media"><img src="{{ media_url(data.image) }}" alt="{{ data.heading }}"></div>{% endif %}
   </div>

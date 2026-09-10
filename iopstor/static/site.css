@@ -399,6 +399,9 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .hero-slide img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 30px 40px rgba(10,13,18,.25))}
 /* no fill mode on the dot: `both` would hold the first frame through the delay and leave every dot
    wide until its turn came round. Un-filled, a dot waits at its own 14px base. */
+/* Positioned against .hero-media, not .hero-slides: the slides element carries the `float`
+   loop and anything inside it drifts up and down with the picture. An indicator that bobs
+   is hard to read, so it is a sibling of the pictures rather than a child. */
 .hero-dots{position:absolute;left:0;right:0;bottom:-6px;display:flex;align-items:center;justify-content:center;gap:8px}
 .hero-dots span{height:4px;width:14px;border-radius:999px;background-color:var(--line);background-image:linear-gradient(var(--blue),var(--blue));background-repeat:no-repeat;background-size:0 100%;
   animation:dot3 calc(var(--n) * 4.5s) linear calc(var(--i) * 4.5s) infinite}
