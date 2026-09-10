@@ -646,18 +646,14 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .t-dark .specs caption{color:var(--white)}
 .t-dark .specs tr:last-child th,.t-dark .specs tr:last-child td{border-bottom:0}
 
-/* contact_form: the light panel, and the dark one a quote form gets */
+/* contact_form: the plain white card, and the grey panel a quote or career form gets */
 .lead-form{--w-def:640px;max-width:var(--w,640px);background:var(--white);border:1px solid var(--line);border-radius:12px;padding:28px}
 .lead-form .form-title{margin:0;font-size:22px;line-height:1.15}
-.cf-dark .form-title{color:var(--white)}
 .lead-form label{display:block;margin:14px 0 0;font:500 14px/1.4 var(--body);color:var(--ink)}
 .lead-form input,.lead-form textarea,.lead-form select{width:100%;margin-top:6px;padding:12px 14px;border:1px solid var(--line-2);border-radius:6px;background:var(--white);color:var(--ink);font:inherit;font-size:15px}
 .lead-form textarea{min-height:120px}
 .lead-form .btn{margin-top:20px}
 .field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0 16px}
-.lead-form.cf-dark{background:var(--black);border-color:var(--line-dark);color:var(--white);padding:32px}
-.cf-dark label{color:var(--muted-dark)}
-.cf-dark input,.cf-dark textarea,.cf-dark select{background:var(--black-3);border-color:var(--line-dark-2);color:var(--white)}
 .lead-form.cf-grey{background:var(--grey);border-color:transparent}
 .notice{background:var(--green-bg);border:1px solid rgba(10,138,58,.25);color:var(--green);padding:14px 16px;border-radius:8px;margin-bottom:20px;font-size:15px}
 

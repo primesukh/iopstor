@@ -102,6 +102,7 @@ In `website_assets/` (untracked in git — the client's files, loaded into the m
 | 2026-09-09 | **Every page has a Markdown twin** (`/about-us.md`, `/index.md`, …) for AI crawlers, linked from `<head>` and from `llms.txt`; `llms-full.txt` is real Markdown. Nothing is generated to disk |
 | 2026-09-09 | The payment provider stays a placeholder until the client names one |
 | 2026-09-10 | **A Numbers or Rich text section can carry an effect** — fade in, gradient, highlighter sweep — and a Numbers section can count its figures up from zero. Each figure can override the band it sits in |
+| 2026-09-10 | **The Contact Us quote form sits on the Careers grey panel**, not the mock's black card. Colour only: it still asks what the visitor is interested in and how many users, and still files a `quote` lead |
 
 ## Status against the brief
 
