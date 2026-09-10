@@ -603,3 +603,32 @@ def test_media_is_served_by_the_app_not_the_storage_gateway(app, client, monkeyp
     monkeypatch.setattr(storage, "fetch", lambda key: 1 / 0)  # reaching Storage for these is a bug
     assert client.get("/media/2026/09/notes.txt").status_code == 404      # not an allowed type
     assert client.get("/media/%2e%2e/%2e%2e/etc/passwd.png").status_code == 404  # nothing climbs out of the bucket
+
+
+def test_media_public_address_is_one_url_whichever_shape_the_row_is_in(app, client, monkeypatch):
+    """The address an editor copies out of Media has to be absolute — and has to stay one URL while
+    migration 0007 is still unapplied and the rows hold the old Storage address."""
+    from iopstor import admin_ui, db
+
+    old = "http://supabase.lan/storage/v1/object/public/media/2026/09/a.png"
+    rows = [{"id": 1, "key": "2026/09/a.png", "url": old, "filename": "a.png", "mime": "image/png", "alt": "", "size": 10},
+            {"id": 2, "key": "2026/09/b.png", "url": "/media/2026/09/b.png", "filename": "b.png", "mime": "image/png", "alt": "", "size": 10}]
+
+    monkeypatch.setattr(admin_ui, "current_user", lambda: {"id": "u1", "email": "e@x.com", "role": "admin"})
+    monkeypatch.setattr(db, "post_types", lambda: [])
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "admin_counts", lambda: {})
+    monkeypatch.setattr(db, "paginate", lambda q, page, per: {"items": rows, "total": len(rows)})
+    class Q:  # the query is built then handed straight to the stubbed paginate()
+        def __getattr__(self, _name):
+            return lambda *a, **k: self
+
+    monkeypatch.setattr(db, "table", lambda *a, **k: Q())
+
+    with client.session_transaction() as sess:
+        sess["access_token"] = "t"
+
+    body = client.get("/admin/media?pick=1").get_data(as_text=True)
+    assert f'value="{old}"' in body                       # still on Storage: shown as it stands
+    body = client.get("/admin/media?pick=2").get_data(as_text=True)
+    assert 'value="http://test/media/2026/09/b.png"' in body   # migrated: SITE_URL in front, once
