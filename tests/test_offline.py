@@ -793,3 +793,27 @@ def test_throttle_fails_open_and_reads_cloudflares_header(app):
         # never None: the key is built with an f-string, and None would put every such request in
         # one shared bucket under the name "None"
         assert throttle.client_ip() == "-"
+
+
+def test_a_losing_token_refresh_keeps_the_winners_cookie(app, monkeypatch):
+    """Two overlapping admin requests refresh the same single-use token. The loser must not clear the
+    session: its Set-Cookie can land after the winner's fresh pair and sign the editor out mid-edit."""
+    import time
+
+    import jwt
+    from flask import session
+    from supabase_auth.errors import AuthError
+
+    from iopstor import auth
+
+    expired = jwt.encode({"sub": "u", "aud": "authenticated", "exp": int(time.time()) - 1},
+                         app.config["SUPABASE_JWT_SECRET"], algorithm="HS256")
+
+    def lose(_token):
+        raise AuthError("Invalid Refresh Token: Already Used", None)
+
+    monkeypatch.setattr(auth, "refresh", lose)
+    with app.test_request_context("/admin/"):
+        session["access_token"], session["refresh_token"] = expired, "the-winner-already-rotated-this"
+        assert auth._session_token() is None
+        assert session.get("refresh_token") == "the-winner-already-rotated-this"

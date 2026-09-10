@@ -223,6 +223,8 @@ def resolve(path):
     full = "/" + path
     r = db.one(db.table("redirects").select("*").eq("from_path", full))
     if r:
+        # ponytail: read-then-write loses hits under parallel visits, and nothing reads the column yet.
+        # A bump_redirect(id) SQL function called via .rpc() makes it exact if it is ever reported on.
         db.update("redirects", r["id"], {"hits": r["hits"] + 1})
         return redirect(r["to_url"], r["code"])
     page_type = db.post_type(slug="page")
