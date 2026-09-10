@@ -1,10 +1,11 @@
-{# kind decides the skin as well as the routing: a quote form is the dark panel from the Contact
-   page, a career form is the grey one from Careers, a contact form the plain white card. An equality test, so nothing typed reaches a
-   class. Anything posted that /api/v1/leads does not know by name lands in leads.data, which is how
-   "interested in" and "number of users" are stored without a migration. #}
+{# kind decides the skin as well as the routing: a quote form and a career form share the grey
+   panel from Careers, a contact form is the plain white card. A membership test against fixed
+   values, so nothing typed reaches a class. Anything posted that /api/v1/leads does not know by
+   name lands in leads.data, which is how "interested in" and "number of users" are stored without
+   a migration. #}
 <section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
   {% if request.args.get('sent') %}<div class="notice">Thank you — we have received your message and will get back to you shortly.</div>{% endif %}
-  <form class="lead-form{{ ' cf-dark' if data.kind == 'quote' }}{{ ' cf-grey' if data.kind == 'career' }}" method="post" action="/api/v1/leads">
+  <form class="lead-form{{ ' cf-grey' if data.kind in ('quote', 'career') }}" method="post" action="/api/v1/leads">
     {% if data.heading or edit %}<h2 class="form-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}
     <input type="hidden" name="kind" value="{{ data.kind }}">
     <input type="hidden" name="back" value="{{ request.path }}">

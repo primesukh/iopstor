@@ -201,7 +201,7 @@ A few sections gained settings worth knowing about, all under the section's own 
   A hero can also hold **more than one picture**. Under *Pictures that take turns*, add a row per picture; from two rows up they fade from one to the next on their own, about four and a half seconds each, with small bars underneath showing which one is up. That is what the home page does with the three appliances. One picture, or none, behaves exactly as before — and a visitor whose device is set to reduce motion simply sees the first picture, still.
 - **Automatic list** — the section that lists your pages and keeps itself up to date. *Header link text* and *Header link* put a link like "All services →" on the right of the section's heading. The cards style themselves to suit what they are listing: services show a number and their sub-services, products show the product picture, case studies show their industry and solution, blog posts show the date. You do not choose that; it follows the content type. A service card lists **four** sub-services and then says "+3 more" rather than all of them — every card in a row is as tall as the tallest, so one long list used to leave the cards beside it half empty. The full list is on the Services page, where each one is a button you can click.
 - **Customer quote** also has a **Dark background** tick, for a quote on a dark card. On its own a quote sits on a soft grey card; **put two side by side in a Columns section and the cards fall away** — the words go italic on the page's own background, which is how the home page runs them. Give the Columns section a *Heading* (“What our clients say”) and it sits above the pair.
-- **Contact form** — *Form type* also picks how the form looks. **quote** is the dark panel from the Contact page, and it asks two extra questions — what the visitor is interested in, and how many users — which arrive with the enquiry under **Leads**. **career** is the soft grey panel used on Careers. **contact** is the plain white card. Whatever you type in *Heading* sits inside the panel, at the top of the form.
+- **Contact form** — *Form type* also picks how the form looks. **quote** sits on the soft grey panel and asks two extra questions — what the visitor is interested in, and how many users — which arrive with the enquiry under **Leads**. **career** is the same grey panel, used on Careers, without those two questions. **contact** is the plain white card. Whatever you type in *Heading* sits inside the panel, at the top of the form.
 
 Two of the sections are not writing at all, and they are there for laying a page out:
 
@@ -498,6 +498,8 @@ from the internet entirely. Nothing about uploading or choosing a file changes.
 ---
 
 ## 13. Quick answers
+
+**The quote form on Contact Us is no longer black.** That is deliberate. It now sits on the same soft grey panel as the *Apply* form on Careers, at the client's request. Nothing else about it changed — it still asks what the visitor is interested in and how many users, and the enquiry still arrives under **Leads** as a quote request.
 
 **A long web address or code runs off the edge of the page.** It no longer does — a word too long to
 fit now breaks and carries on on the next line, in the editor and on the live site, instead of

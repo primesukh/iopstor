@@ -172,7 +172,7 @@ Eighteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `c
 their own, in CSS (§12). Both keys stay, `images` wins when it holds two or more, so a hero that was
 saved before this exists is untouched.
 
-Three types carry a variant switch, and all three are **checkboxes**, never free text: `hero.dark` (the full-bleed band, where `image` becomes a faded backdrop instead of the art beside the words), `testimonial.dark`, and `contact_form`'s existing `kind`. The template tests them for equality (`{{ ' hero-dark' if data.dark }}`), so nothing an editor types can reach a class attribute — which is the same reason `section_class()` is a whitelist.
+Three types carry a variant switch, and all three are **checkboxes**, never free text: `hero.dark` (the full-bleed band, where `image` becomes a faded backdrop instead of the art beside the words), `testimonial.dark`, and `contact_form`'s existing `kind`. The template tests them against fixed values (`{{ ' hero-dark' if data.dark }}`, `{{ ' cf-grey' if data.kind in ('quote', 'career') }}`), so nothing an editor types can reach a class attribute — which is the same reason `section_class()` is a whitelist.
 
 `spacer` and `divider` are the two types that are not content, and both are shaped by what they do
 *not* carry. `spacer` declares one field, `height`, a **whitelist** (`HEIGHTS = ("small", "medium",
@@ -569,7 +569,7 @@ The other three shapes size from `auto` tracks that stay inside a 390px card (da
 
 **A toned section inside a column is a panel.** `.column>.section` normally has its padding neutralised; one carrying `t-grey`, `t-dark` or `t-blue` keeps it and takes the card radius, which is how the design's dark configuration card beside the ZFS list is built out of a `rich_text` with `tone: dark`.
 
-**`contact_form` has three skins**, one per `kind`: `quote` is the dark panel from the Contact screen, `career` the grey one from Careers, `contact` the plain white card. The heading is rendered **inside** the form, because in the design it belongs to the panel rather than sitting above it as a section title.
+**`contact_form` has two skins across three kinds**: `quote` and `career` both take `.cf-grey`, the soft grey panel from Careers; `contact` is the plain white card. The mock draws the Contact screen's quote form on a black card and the theme followed it (`.cf-dark`), but the client asked for the Careers panel there instead (2026-09-10, `requirements.md`), so those rules are gone — the base `.lead-form` inputs stay white on the grey, which is what makes the panel readable without a dark set of its own. `kind` still decides the routing and the two quote-only questions; it just no longer decides the colour. The heading is rendered **inside** the form, because in the design it belongs to the panel rather than sitting above it as a section title.
 
 **A numeric `cards` icon is a counter, not an icon.** `card-icon num` drops the tinted tile for the design's mono blue number, and the deck tightens around it (`.cards:has(.card-icon.num)`).
 
