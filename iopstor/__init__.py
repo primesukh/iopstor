@@ -40,6 +40,7 @@ def create_app(test_config=None):
     from . import db
     from .admin_api import bp as admin_api
     from .admin_ui import ui as admin_ui
+    from .blocks import count_up, section_class
     from .cli import register as register_cli
     from .public import api as public_api, pub as public_site
 
@@ -51,6 +52,8 @@ def create_app(test_config=None):
 
     app.jinja_env.globals.update(
         rupees=rupees,
+        count_up=count_up,        # stats.html splits a figure into the part a CSS counter can roll to
+        section_class=section_class,   # and whitelists one figure's own effect the same way a section's is
         media_url=lambda i: (db.get_media(int(i)) or {}).get("url", "") if i else "",
         media_alt=lambda i: (db.get_media(int(i)) or {}).get("alt", "") if i else "",
         media_download=media_download,

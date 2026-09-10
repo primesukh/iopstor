@@ -90,7 +90,10 @@ def test_editor_metadata_covers_every_block():
     for name, (required, optional) in BLOCKS.items():
         for field in required + optional:
             widget = EDITOR["widgets"].get(f"{name}.{field}") or EDITOR["widgets"].get(field) or "text"
-            assert widget in ("text", "textarea", "code", "richtext", "media", "pdf", "url", "number", "checkbox", "post_type", "kind"), (name, field)
+            assert widget in ("text", "textarea", "code", "richtext", "media", "pdf", "url", "number", "checkbox",
+                              "post_type", "kind", "choice"), (name, field)
+            if widget == "choice":
+                assert EDITOR["choices"].get(field), f"{name}.{field} is a choice with no EDITOR['choices'] entry"
             if field in REPEATERS:
                 assert EDITOR["items"].get(name) is not None, f"{name}.{field} is a repeater with no EDITOR['items'] entry"
     assert set(EDITOR["items"]) <= set(BLOCKS)
@@ -392,6 +395,69 @@ def test_section_width_is_a_named_step_or_a_plain_number(app, monkeypatch):
     assert '<section class="section" style="--w:950px"' in render_blocks(blocks, edit=True)
     assert 'class="section w-full"' in render_blocks([{"type": "rich_text", "data": {"html": "<p>hi</p>", "width": "full"}}])
     assert blocks_text(blocks) == "hi"                      # not "950"
+
+
+def test_count_up_splits_a_figure():
+    """The whole number a CSS counter can roll to, the digits as typed, and the rest."""
+    from iopstor.blocks import count_up
+
+    assert count_up("300+") == (300, "", "300", "+")
+    assert count_up("25+ yrs") == (25, "", "25", "+ yrs")
+    assert count_up("42") == (42, "", "42", "")
+    # words on both sides of the number are left where they are: only the digits roll
+    assert count_up("Up to 5 PB") == (5, "Up to ", "5", " PB")
+    assert count_up("99.999%")[:3] == (99, "", "99")   # counters are integers: the decimals hold still
+    assert count_up("24\u00d77")[0] == 24
+    # nothing to count, or nothing a counter could spell the same way the editor did
+    for bad in ("1,200 TB", "Always on", "0", "  ", "", None):
+        assert count_up(bad) is None, bad
+
+
+def test_section_effects_are_a_whitelist(app, monkeypatch):
+    """fx lands in a class attribute, so it is a whitelist; count_up is a checkbox, so it cannot spell."""
+    from iopstor import db
+    from iopstor.blocks import EDITOR, FX, section_class
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+
+    assert section_class({"fx": "rise"}) == " fx-rise"
+    assert section_class({"fx": "sweep", "tone": "grey"}) == " t-grey fx-sweep"
+    for bad in ("rise; }", "<script>", "RISE", "fx-rise", "", None, {}, 1):
+        assert section_class({"fx": bad}) == "", bad
+    # every option the editor is offered is one the whitelist accepts (blank = no effect)
+    assert [v for v, _ in EDITOR["choices"]["fx"] if v] == list(FX)
+
+    data = {**EDITOR["seed"]["stats"], "count_up": True, "fx": "rise"}
+    html = render_blocks([{"type": "stats", "data": data}])
+    assert 'class="section band-dark fx-rise"' in html
+    assert html.count('<li class="fx-rise fx-count"') == 3      # the section's effect reaches every figure
+    # the digits are really in the HTML, not only in a CSS counter: crawlers and copy-paste read them
+    assert '<span class="cv">99</span><span class="cr"></span>.999%' in html and 'style="--to:99"' in html
+    assert blocks_text([{"type": "stats", "data": data}]).count("rise") == 0    # fx is not words
+
+
+def test_one_figure_can_differ_from_its_band(app, monkeypatch):
+    """Numbers items carry their own fx/count_up; a row that sets nothing falls back to the section."""
+    from iopstor import db
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+
+    html = render_blocks([{"type": "stats", "data": {"fx": "rise", "items": [
+        {"value": "300+", "label": "customers", "fx": "gradient", "count_up": True},
+        {"value": "5 PB", "label": "per rack"},                       # inherits fx-rise, does not count
+        {"value": "Always on", "label": "support", "count_up": True},  # nothing to count: plain text
+    ]}}])
+    assert '<li class="fx-gradient fx-count"' in html and 'style="--to:300"' in html
+    # only the number is swapped for a counter; the words either side stay put
+    assert '>Up to <span class="cv">5</span><span class="cr"></span> PB</strong>' in render_blocks(
+        [{"type": "stats", "data": {"count_up": True, "items": [{"value": "Up to 5 PB", "label": "x"}]}}])
+    assert '<li class="fx-rise"><strong>5 PB</strong>' in html
+    assert '<li class="fx-rise"><strong>Always on</strong>' in html
+    # an item's effect is still a whitelist, the same one the section goes through
+    assert "fx-" not in render_blocks([{"type": "stats", "data": {"items": [
+        {"value": "1", "label": "x", "fx": "rise;}"}]}}])
 
 
 def test_edit_mode_survives_a_half_finished_block(app, monkeypatch):

@@ -418,10 +418,15 @@
   function labelFor(field) {
     return SPEC.ui.labels[field] || (field.charAt(0).toUpperCase() + field.slice(1)).replace(/_/g, " ");
   }
+  var REPEATERS = ["items", "images", "rows", "cols"];   // blocks.py REPEATERS
   function fieldsOf(type) {
     var spec = SPEC.blocks[type] || [[], []];
-    return spec[0].map(function (f) { return { key: f, required: true }; })
+    var fields = spec[0].map(function (f) { return { key: f, required: true }; })
       .concat(spec[1].map(function (f) { return { key: f, required: false }; }));
+    // A repeater is as tall as it has rows, so anything declared after it — a Numbers section's
+    // effect, a Cards heading — sat below six rows of fields and was never found. Rows go last.
+    return fields.filter(function (f) { return REPEATERS.indexOf(f.key) < 0; })
+      .concat(fields.filter(function (f) { return REPEATERS.indexOf(f.key) >= 0; }));
   }
 
   // One input for data[key]. `data` is mutated in place, so keys the editor does not render survive.
@@ -439,6 +444,12 @@
     var input;
     if (widget === "textarea" || widget === "code") {
       input = el("textarea", widget === "code" ? { "class": "code" } : {});
+    } else if (widget === "choice") {
+      // options are [value, label] pairs in EDITOR["choices"][key], so the empty one reads "None"
+      input = el("select");
+      (SPEC.ui.choices[key] || []).forEach(function (o) {
+        input.appendChild(el("option", { value: o[0], text: o[1] }));
+      });
     } else if (widget === "post_type" || widget === "kind") {
       input = el("select");
       input.appendChild(el("option", { value: "", text: "— choose —" }));

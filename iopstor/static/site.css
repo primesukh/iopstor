@@ -58,6 +58,14 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 @keyframes slides3{0%{opacity:0;transform:translateX(60px) scale(.94)}
   2.2%,30%{opacity:1;transform:translateX(0) scale(1)}
   33.3%,100%{opacity:0;transform:translateX(-60px) scale(.94)}}
+/* The four section effects an editor can pick under a section's gear (blocks.py FX + count_up).
+   --cv is registered so it can be interpolated: counter() only reads integers, and an unregistered
+   custom property animates in one jump. */
+@property --cv{syntax:"<integer>";initial-value:0;inherits:false}
+@keyframes cv{to{--cv:var(--to)}}
+@keyframes fxrise{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fxwipe{to{background-size:100% .3em}}
+@keyframes fxdrift{to{background-position:200% 0}}
 
 /* --- header ---------------------------------------------------------------------------------
    The mega panel is a child of the Services <li> and absolutely positioned against .site-header
@@ -242,16 +250,6 @@ main{min-height:60vh}
 .cards:has(.card-icon.num) .card p{font-size:14.5px;line-height:1.55}
 a.card{text-decoration:none;color:inherit;display:block;transition:border-color .15s,transform .15s}
 a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
-/* Everything that moves, stopped in one place. The blanket `animation-duration:.01ms` the mock
-   uses would leave every hero slide on its final frame, which is the hidden one -- so the slides
-   are stood down explicitly and the first picture is simply left showing. */
-@media(prefers-reduced-motion:reduce){
-  a.card:hover{transform:none}
-  .hero-text,.hero-media,.hero-media::before,.hero-media>img,.hero-slides,.site-nav .sub,.mega,.mega-panes>.mega-pane,.nav-toggle:checked~.site-nav{animation:none}
-  .hero-slide{animation:none;opacity:0}
-  .hero-slide:first-child{opacity:1}
-  .hero-dots{display:none}
-}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
 .chips-kids{margin:12px 0 0}
 .chip{font-size:12.5px;line-height:1.4;padding:4px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}
@@ -312,6 +310,53 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .w-wide{--w:100%}
 .w-full{--w:100%}.w-full>.wrap{max-width:none}
 .column{--w:initial}   /* a section inside a column keeps its own measure, not the grid's */
+
+/* Section effects, set per section under ⚙ (blocks.py FX + count_up; keyframes at the top of this
+   file). Four classes, all CSS: the public site still ships no JavaScript. Effects compose — a
+   Numbers band can count up AND fade in — so each one is its own class. A Numbers figure carries
+   the same classes on its own <li> (stats.html), which is what lets one figure differ from the
+   band it sits in; that is why every rule below names both the section and the figure. */
+/* fx-gradient and fx-sweep are two values of one select, so they never meet: both paint the
+   section's big text — every heading, plus a Numbers figure, which is a <strong> and not a heading
+   at all — and they share that selector. The gradient needs no timeline, so it lives out here. */
+.fx-gradient :is(h1,h2,h3),.fx-gradient .stats strong,.stats li.fx-gradient strong{
+  background:linear-gradient(90deg,var(--blue),var(--blue-light),var(--blue)) 0 0/200% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:fxdrift 6s linear infinite}
+
+/* Everything that rides the scroll, behind one gate. It is not optional politeness: a browser that
+   parses `animation-timeline` but cannot resolve view() holds a `both`-filled animation on its
+   opening frame for ever — a fade-in section would simply never appear, and a counted figure would
+   be an empty box. Off the gate they are all plain content, which is the honest fallback. */
+@supports (animation-timeline:view()){
+  .fx-rise>.wrap,.stats li.fx-rise{animation:fxrise .7s cubic-bezier(.2,.7,.2,1) both;
+    animation-timeline:view();animation-range:entry 0% cover 25%}
+
+  /* A marker pen drawn under the words as they arrive. Painted as the element's own background
+     rather than an ::after with z-index:-1, which would sit behind the section's band instead —
+     which is also why the box shrinks to the words: a heading is a block and its bar would
+     otherwise run the width of the column. */
+  .fx-sweep :is(h1,h2,h3),.fx-sweep .stats strong,.stats li.fx-sweep strong{width:fit-content;
+    background:linear-gradient(var(--blue-tint),var(--blue-tint)) no-repeat left bottom/0 .3em;
+    animation:fxwipe .6s cubic-bezier(.2,.7,.2,1) both;animation-timeline:view();animation-range:entry 20% cover 35%}
+  .al-center.fx-sweep :is(h1,h2,h3){margin-inline:auto}
+  /* band-dark and t-dark are classes on the section itself, not an ancestor — stats.html writes
+     the first one, an editor's tone the second — so the tint that reads on white is swapped. */
+  .band-dark.fx-sweep :is(h1,h2,h3),.band-dark.fx-sweep .stats strong,.stats li.fx-sweep strong,
+  .t-dark.fx-sweep :is(h1,h2,h3),.t-blue.fx-sweep :is(h1,h2,h3){
+    background-image:linear-gradient(rgba(0,140,247,.35),rgba(0,140,247,.35))}
+
+  /* Figures that roll up from zero. The digits an editor typed are really in the HTML
+     (stats.html) inside .cv; the counter is drawn into the empty .cr that follows it, so it rolls
+     exactly where the number was and the words either side of it never move. Only here, which is
+     what guarantees every other browser shows the real number instead of nothing.
+     The roll is animated on .cr and not on the <strong>, because `animation` is one property and
+     one element can only hold one: on the <strong> it silently replaced the sweep's wipe and the
+     gradient's drift, so a counted figure could never also be swept. One effect, one element. */
+  .stats li.fx-count .cr{counter-reset:cv var(--cv);
+    animation:cv 1.6s cubic-bezier(.2,.7,.2,1) both;animation-timeline:view();animation-range:entry 20% cover 35%}
+  .stats li.fx-count .cr::before{content:counter(cv)}
+  .stats li.fx-count .cv{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+}
 
 /* --- blocks ---------------------------------------------------------------------------------
    One rule-group per type, in the order they appear in BLOCKS. */
@@ -436,7 +481,7 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .stats{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px}
 .stats li{border-left:2px solid var(--blue);padding-left:18px}
 .stats strong{display:block;font:800 40px/1 var(--head);color:var(--white);letter-spacing:-.02em}
-.stats span{display:block;margin-top:8px;font-size:14px;line-height:1.5;color:var(--muted-dark)}
+.stats li>span{display:block;margin-top:8px;font-size:14px;line-height:1.5;color:var(--muted-dark)}   /* > : a counted figure carries a span of its own */
 .band-dark.section{padding:40px 0}
 
 /* testimonial */
@@ -673,3 +718,27 @@ a.chip:hover{border-color:var(--blue);color:var(--blue)}
 .checkout-card input{width:100%;margin-top:6px;padding:12px 14px;border:1px solid var(--line-2);border-radius:6px;font:inherit;font-size:15px}
 .checkout-card .btn{width:100%;margin-top:20px;text-align:center}
 .checkout-card .hint{margin:14px 0 0;font-size:12.5px;color:var(--muted)}
+
+
+/* Everything that moves, stopped in one place, and !important because this is a user preference
+   and has to win: @media adds no specificity, so without it `.hero-text{animation:none}` lost to
+   `.hero-split .hero-text` further up and the hero kept moving for a reader who asked it not to.
+   The blanket `animation-duration:.01ms` the mock uses would leave every hero slide on its final
+   frame, which is the hidden one -- so the slides are stood down explicitly and the first picture
+   is simply left showing. */
+@media(prefers-reduced-motion:reduce){
+  a.card:hover{transform:none}
+  .hero-text,.hero-media,.hero-media::before,.hero-media>img,.hero-slides,.site-nav .sub,.mega,.mega-panes>.mega-pane,.nav-toggle:checked~.site-nav{animation:none!important}
+  .hero-slide{animation:none!important;opacity:0}
+  .hero-slide:first-child{opacity:1}
+  .hero-dots{display:none}
+  .fx-rise>.wrap,.stats li.fx-rise,
+  .fx-gradient :is(h1,h2,h3),.fx-gradient .stats strong,.stats li.fx-gradient strong,
+  .fx-sweep :is(h1,h2,h3),.fx-sweep .stats strong,.stats li.fx-sweep strong,
+  .stats li.fx-count .cr{animation:none!important}
+  .fx-sweep :is(h1,h2,h3),.fx-sweep .stats strong,.stats li.fx-sweep strong{background-size:100% .3em}
+  /* stopping the count is not enough: --cv would stay at 0, so the counter is stood down and the
+     real digits stats.html wrote come back out of hiding. */
+  .stats li.fx-count .cr::before{content:none}
+  .stats li.fx-count .cv{position:static;width:auto;height:auto;overflow:visible;clip-path:none}
+}

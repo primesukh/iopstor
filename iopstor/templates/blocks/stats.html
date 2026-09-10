@@ -1,2 +1,15 @@
-{# always the dark band: on the design's pages a row of figures is the black strip under the hero #}
-<section class="section band-dark{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap"><ul class="stats">{% for s in data['items'] %}<li{{ fe('items', loop.index0) }}><strong{{ fe('value') }}>{{ s.value }}</strong> <span{{ fe('label') }}>{{ s.label }}</span></li>{% endfor %}</ul></div></section>
+{# always the dark band: on the design's pages a row of figures is the black strip under the hero.
+   Each figure carries its own classes, so an effect can be set once for the whole band under ⚙ or
+   per row in Items — a row that sets nothing falls back to the section's. With counting on, the
+   words either side of the number are left alone and only the digits are swapped: they stay in the
+   HTML inside .cv (search engines, copy-paste, a browser without scroll timelines and the canvas's
+   own contenteditable all read them), and site.css hides that and rolls the counter into the empty
+   .cr beside it — in place, so "Up to 5 PB" keeps its "Up to" and its "PB" still.
+   section_class() does the whitelisting for a figure's own effect, as it does for the section. #}
+<section class="section band-dark{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap"><ul class="stats">
+{%- for s in data['items'] %}
+{%- set c = count_up(s.value) if s.count_up or data.count_up else None %}
+{%- set icls = (section_class({'fx': s.fx or data.fx}) ~ (' fx-count' if c else '')).strip() %}
+<li{% if icls %} class="{{ icls }}"{% endif %}{{ fe('items', loop.index0) }}><strong{{ fe('value') }}{% if c %} style="--to:{{ c[0] }}"{% endif %}>{% if c %}{{ c[1] }}<span class="cv">{{ c[2] }}</span><span class="cr"></span>{{ c[3] }}{% else %}{{ s.value }}{% endif %}</strong> <span{{ fe('label') }}>{{ s.label }}</span></li>
+{%- endfor %}
+</ul></div></section>

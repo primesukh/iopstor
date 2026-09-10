@@ -66,3 +66,16 @@
 /* a blank document needs a comfortable click target, not a single line of placeholder */
 .rich-text[data-f]{min-height:6rem}
 .column .rich-text[data-f]{min-height:2.5rem}   /* a column is not a blank document: 6rem dominates it */
+
+/* --- section effects, shown at rest -------------------------------------------------------
+   admin.js swaps one <section> per keystroke (canvasBlock), so every effect would otherwise
+   replay each time an editor typed. The canvas shows all four in their finished state instead:
+   the styling is there to judge, the movement is not in the way. A counted figure also has to
+   put its real digits back, because that <strong> is the contenteditable the editor types into. */
+.fx-rise>.wrap,.stats li.fx-rise,
+.fx-gradient :is(h1,h2,h3),.fx-gradient .stats strong,.stats li.fx-gradient strong,
+.fx-sweep :is(h1,h2,h3),.fx-sweep .stats strong,.stats li.fx-sweep strong,
+.stats li.fx-count .cr{animation:none}
+.fx-sweep :is(h1,h2,h3),.fx-sweep .stats strong,.stats li.fx-sweep strong{background-size:100% .3em}
+.stats li.fx-count .cr::before{content:none}
+.stats li.fx-count .cv{position:static;width:auto;height:auto;overflow:visible;clip-path:none}

@@ -259,7 +259,29 @@ left, whatever you pick — those two are designed that way on purpose.
 Set a width and an alignment together and they work as you would expect: a section narrowed to 700
 and set to *Align the section: Centre* sits as a neat centred column.
 
-**Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live on the section itself: hover it, click the **⚙** on its little dark toolbar, and a small panel opens over that section with exactly its own options — **Align the content**, **Align the section**, **Width**, the picture, the button link, how many posts to list, and **+ Add** / ✕ for rows in a Cards, FAQ, Numbers or Specification section. Any picture field there has a **Choose file** button that uploads on the spot. The page updates as you type. Close it with **Esc**, the ✕, another press of ⚙, or by clicking anywhere else.
+**Making a section move as the reader scrolls to it.** Two sections can be given an effect: **Numbers**
+(the strip of big figures) and your own writing. Open the section's **⚙** and you will find an
+**Effect** box under the width:
+
+| Effect | What the visitor sees |
+|---|---|
+| **None** | Nothing moves. This is how every section starts. |
+| **Fades in as you scroll to it** | The section drifts up into place as it comes onto the screen, instead of just being there. |
+| **Gradient across the big text** | The headings — or, in a Numbers section, the big figures — are painted in the brand blue rather than plain black or white. |
+| **Highlighter sweep behind the headings** | A blue bar draws itself under the heading, left to right, like a marker pen, as you scroll to it. |
+
+A **Numbers** section has one more box, a tick called **Count up from zero**. Tick it and every figure
+in the strip counts up as the reader arrives at it — 0 to 300 for *300+*, 0 to 25 for *25+ yrs*. Only
+the number moves: words you put around it stay where they are, so *Up to 5 PB* keeps its "Up to" and
+its "PB" still and only the 5 climbs. A figure with no number in it, like *Always on*, simply sits there.
+
+**Setting an effect on one figure instead of the whole strip.** Under **Items** in a Numbers section,
+each row now has its own **Effect** box and its own **Count up from zero** tick, next to the value and
+the label. Leave them alone and that figure does whatever the whole section is set to; set them and
+that one figure wins. So you can have one figure counting up in brand blue and the three beside it
+sitting still.
+
+**Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live on the section itself: hover it, click the **⚙** on its little dark toolbar, and a small panel opens over that section with exactly its own options — **Align the content**, **Align the section**, **Width**, **Effect** where the section has one, the picture, the button link, how many posts to list, and **+ Add** / ✕ for rows in a Cards, FAQ, Numbers or Specification section. Rows always come last in that panel, so the settings above them are never buried under a long list. Any picture field there has a **Choose file** button that uploads on the spot. The page updates as you type. Close it with **Esc**, the ✕, another press of ⚙, or by clicking anywhere else.
 
 Nothing is saved until you press **Save**. If you try to leave with unsaved changes, your browser will warn you. If something required is missing, the page comes back with the problem listed at the top and your work still in place.
 
@@ -459,6 +481,17 @@ column on the right.
 **Are the pictures on the site still working?** Yes. They are now handed out by the website itself
 instead of by the file store behind it, which is a change nobody sees: the same pictures, at the same
 places, a little faster on a repeat visit.
+
+**I ticked Count up from zero and my figure is not counting.** It needs a number in it to count —
+*Always on* has nothing to climb to, so it just sits there. A figure written with a comma, like
+*1,200 TB*, also stays still: the counter cannot draw the comma, and a figure that ended up reading
+*1200 TB* would not be the one you typed. Write it as *1200 TB* and it counts.
+
+**On my screen the effects do nothing.** Effects that happen as you scroll need a recent browser
+(Chrome, Edge, Safari, or Firefox 144 and newer). On anything older the section simply sits there
+with all its words and figures showing, which is the point — nothing ever goes missing, it just does
+not move. The same is true if you have asked your computer to reduce motion: everything is there,
+nothing animates.
 
 **I changed something and the website looks the same.** Check the status is *Published* and the publish date is not in the future. Then refresh with Ctrl+F5.
 
