@@ -17,7 +17,7 @@ BLOCKS = {  # type: (required fields, optional fields)
     # published changes shape.
     "hero": (["heading"], ["eyebrow", "subheading", "image", "images", "cta_label", "cta_url",
                            "cta2_label", "cta2_url", "dark"]),
-    "rich_text": (["html"], []),  # ponytail: raw HTML from trusted staff; add nh3 sanitising if untrusted authors appear
+    "rich_text": (["html"], ["fx"]),  # ponytail: raw HTML from trusted staff; add nh3 sanitising if untrusted authors appear
     "image": (["media_id"], ["alt", "caption"]),
     "gallery": (["images"], []),  # images: [{media_id, alt}]
     "cards": (["items"], ["heading"]),  # items: [{title, text, icon, url}]
@@ -26,7 +26,7 @@ BLOCKS = {  # type: (required fields, optional fields)
     "columns": (["cols"], ["heading", "widths"]),  # widths: "50/25/25", blank = equal
     "cta": (["heading", "button_label", "button_url"], ["text"]),
     "faq": (["items"], ["heading"]),  # items: [{q, a}] → also emits FAQPage JSON-LD
-    "stats": (["items"], []),  # items: [{value, label}]
+    "stats": (["items"], ["count_up", "fx"]),  # items: [{value, label, fx, count_up}] — a figure can override the section
     "testimonial": (["quote", "author"], ["role", "company", "dark"]),
     "embed_html": (["html"], []),
     # link_label/link_url are the "All services →" link in the section header.
@@ -49,9 +49,10 @@ EDITOR = {
                 "caption": "textarea", "quote": "textarea", "image": "media", "media_id": "media", "file_media_id": "pdf",
                 "url": "url", "cta_url": "url", "button_url": "url", "limit": "number",
                 "top_level": "checkbox", "post_type": "post_type", "kind": "kind",
-                "cta2_url": "url", "link_url": "url", "dark": "checkbox"},
+                "cta2_url": "url", "link_url": "url", "dark": "checkbox",
+                "count_up": "checkbox", "fx": "choice"},
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
-    "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label"],
+    "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label", "fx", "count_up"],
               "spec_table": ["k", "v"], "gallery": ["media_id", "alt"], "hero": ["media_id", "alt"],
               "columns": []},  # a column is a list of blocks, not a row of fields: the panel only adds/moves/removes it
     # friendlier labels; anything missing is the key with underscores as spaces
@@ -62,8 +63,15 @@ EDITOR = {
                "term": "Term slug", "eyebrow": "Small label above the heading",
                "cta2_label": "Second button text", "cta2_url": "Second button link",
                "link_label": "Header link text", "link_url": "Header link",
-               "dark": "Dark background"},
+               "dark": "Dark background",
+               "count_up": "Count up from zero", "fx": "Effect"},
     "kinds": ["contact", "quote", "career"],
+    # options for the "choice" widget, keyed by field: [value, label] pairs, so the empty one can
+    # say what it means. blocks.py FX is the whitelist these values are checked against.
+    "choices": {"fx": [["", "None"],
+                       ["rise", "Fades in as you scroll to it"],
+                       ["gradient", "Gradient across the big text"],
+                       ["sweep", "Highlighter sweep behind the headings"]]},
     # order the section picker offers them in, commonest first (Jinja's tojson sorts dict keys,
     # so BLOCKS' own order does not survive the trip to the browser)
     "order": ["hero", "rich_text", "cards", "columns", "cta", "faq", "stats", "testimonial", "spec_table",
@@ -130,7 +138,8 @@ def layout(name):
     return [{"type": t, "data": deepcopy(EDITOR["seed"].get(t) or {})} for t in LAYOUTS.get(name, [])]
 
 _NON_TEXT_KEYS = {"url", "cta_url", "cta2_url", "button_url", "link_url", "icon", "image", "media_id", "file_media_id",
-                  "post_type", "term", "limit", "kind", "top_level", "dark", "type", "widths", "align", "align_box", "width"}
+                  "post_type", "term", "limit", "kind", "top_level", "dark", "type", "widths", "align", "align_box", "width",
+                  "tone", "fx", "count_up"}
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
 _TEXT_ORDER = ("eyebrow", "heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company",
                "value", "label", "k", "v", "caption", "alt", "cta_label", "cta2_label", "button_label", "link_label",
@@ -184,22 +193,45 @@ def col_widths(data):
     return " ".join(f"{n:g}fr" for n in nums) if all(n > 0 for n in nums) else ""
 
 
+_COUNT = re.compile(r"(?<![\d,.])(\d+)(?![\d,])")
+
+
+def count_up(value):
+    """Find the one whole number in a figure that a CSS counter can roll up to, and split the words
+    off either side of it so only the number moves: "300+" -> (300, "", "300", "+"),
+    "Up to 5 PB" -> (5, "Up to ", "5", " PB"). None when there is nothing to count, and stats.html
+    leaves the figure as plain text. The number reaches a style attribute as an int, so nothing
+    typed can get in — the same guarantee section_style() makes about --w.
+    ponytail: the first whole number wins, and only whole ones. CSS counters are integers, so
+    "99.999%" rolls 0->99 and holds ".999%"; a grouped "1,200" is refused by the two lookarounds
+    rather than counting to a figure that spells itself differently from the one on the page."""
+    m = _COUNT.search(str(value or ""))
+    if not m or int(m.group(1)) <= 0:
+        return None
+    v = str(value)
+    return int(m.group(1)), v[:m.start()], m.group(1), v[m.end():]
+
+
 TONES = ("grey", "dark", "blue")   # the bands a section can sit on; absent = the page's own white
 ALIGNS = ("left", "center", "right")
 WIDTHS = {"wide": "w-wide", "full": "w-full"}   # "width" also takes a number of pixels; see section_style()
+FX = ("rise", "gradient", "sweep")   # the motion an editor can put on a section; counting figures up is its own checkbox
 MAX_W = 4000
 
 
 def section_class(data):
-    """The layout classes for one section, from three optional keys — absent means the theme's own
+    """The layout classes for one section, from five optional keys — absent means the theme's own
     layout. "align" lines up what is inside it, "align_box" moves the box, "tone" is the band it sits
     on (the design alternates white and grey down a page for rhythm), "width" is either a named
-    step (wide / full) or a number of pixels, which section_style() carries instead. A whitelist, not
-    a passthrough: the result goes straight into a class attribute, the same reason col_widths() is
-    strict. Returns "" or " al-center", " al-center alb-right w-full", …"""
+    step (wide / full) or a number of pixels, which section_style() carries instead, and "fx" is
+    the motion in site.css's effects group. A whitelist, not a passthrough: the result goes
+    straight into a class attribute, the same reason col_widths() is strict — which is also why
+    stats.html calls this for one figure's own effect rather than building the class itself.
+    Returns "" or " al-center", " al-center alb-right w-full fx-rise", …"""
     out = [p + data[k] for k, p in (("align", "al-"), ("align_box", "alb-")) if data.get(k) in ALIGNS]
     out += ["t-" + data["tone"]] if data.get("tone") in TONES else []
     out += [WIDTHS[str(data.get("width"))]] if str(data.get("width")) in WIDTHS else []
+    out += ["fx-" + data["fx"]] if data.get("fx") in FX else []
     return (" " + " ".join(out)) if out else ""
 
 
