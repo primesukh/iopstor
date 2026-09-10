@@ -101,7 +101,6 @@ In `website_assets/` (untracked in git — the client's files, loaded into the m
 | 2026-09-09 | **Prices are rupees only**; the currency choice is gone from products and settings. The price shows on the Buy button, not as a detail tile. Specifications are typed as label/value rows and keep their order |
 | 2026-09-09 | **Every page has a Markdown twin** (`/about-us.md`, `/index.md`, …) for AI crawlers, linked from `<head>` and from `llms.txt`; `llms-full.txt` is real Markdown. Nothing is generated to disk |
 | 2026-09-09 | The payment provider stays a placeholder until the client names one |
-| 2026-09-10 | **The logo keeps the artwork's own colours in the footer too**, not knocked out to white as the mock had it — this extends the 2026-09-08 header decision to the dark band. It is also a **fixed 150x22 box in both**, cropped to fill, so swapping the file in Settings cannot change how big the logo reads |
 | 2026-09-10 | **A Numbers or Rich text section can carry an effect** — fade in, gradient, highlighter sweep — and a Numbers section can count its figures up from zero. Each figure can override the band it sits in |
 
 ## Status against the brief
