@@ -308,6 +308,15 @@ The **Media** section is the shared library for every image, logo and PDF.
 
 **Putting a PDF on a page.** Press `/` on an empty line and choose **PDF**. The section drops in; hover it, press **⚙**, and pick the PDF from the list — or press **Choose file** to upload one on the spot. Only PDFs are offered there, so you cannot pick a photo by mistake. Visitors then read it without leaving the page — scrolling, zooming and printing with their browser's own controls — and there is a **Download the PDF** button under it, which saves the file to their computer under the name it was uploaded with. That button is also how people on a phone read it: phone browsers usually will not show a PDF inside a page, so they download it and open it from there. Give the section a heading by typing straight onto the page above the viewer.
 
+**The website hands out the pictures itself.** Every picture and PDF is now delivered by the website
+rather than by the storage system behind it, so the file store can be shut away where only the website
+can reach it. You will not notice a difference while working — files are uploaded, picked and shown
+exactly as before — but two things follow from it. The **Public address** shown beside a selected file
+in Media is the address on the website itself, safe to paste into an email or another page. And a
+picture you have already used stays in the visitor's browser for a long time, so the site feels quicker
+on a second visit; if you ever replace a picture, upload it as a new file rather than expecting an old
+address to change.
+
 **You do not have to go to Media first.** Anywhere a page asks for a picture — a Hero image, an Image or Gallery section, the Featured image in the panel on the right — there is a **Choose file** button right there. Pick a file and it uploads straight away, gets used on the spot, and joins the Media library so you can reuse it elsewhere. A small thumbnail next to it shows what is currently selected. Uploads made this way have no alt text yet, so add it in the Media section afterwards for anything important.
 
 ---
@@ -427,6 +436,10 @@ to white — the footer stays dark, and the logo is still white down there. And 
 shows in a browser tab (the "favicon") is now the IOPSTOR mark at every size a phone or a bookmark
 asks for.
 
+**One more thing changed behind the scenes** and needs nothing from you: pictures and PDFs are now
+delivered by the website itself instead of by the file store behind it, so that store can be closed off
+from the internet entirely. Nothing about uploading or choosing a file changes.
+
 **Still to come:** a live payment provider.
 
 ---
@@ -442,6 +455,10 @@ group now reads down the page — the number, the group name, its description, t
 full-width buttons you can tap. On a laptop it is unchanged: the words on the left, the services in a
 column on the right.
 
+
+**Are the pictures on the site still working?** Yes. They are now handed out by the website itself
+instead of by the file store behind it, which is a change nobody sees: the same pictures, at the same
+places, a little faster on a repeat visit.
 
 **I changed something and the website looks the same.** Check the status is *Published* and the publish date is not in the future. Then refresh with Ctrl+F5.
 

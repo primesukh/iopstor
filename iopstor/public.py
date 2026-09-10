@@ -1,13 +1,16 @@
 """Public site: catch-all page resolver, SEO endpoints (sitemap/robots/llms/feed), and the read-only JSON API."""
 import json
 from datetime import date
+from io import BytesIO
+from pathlib import PurePosixPath
 
-from flask import Blueprint, Response, abort, jsonify, redirect, render_template, request
+from flask import Blueprint, Response, abort, jsonify, redirect, render_template, request, send_file
 from markupsafe import escape
 from postgrest import APIError
+from storage3.exceptions import StorageApiError
 from werkzeug.exceptions import HTTPException
 
-from . import db, seo
+from . import db, seo, storage
 from .admin_api import _http_error, _pg_error, page_args
 from .blocks import blocks_md, blocks_text, render_blocks
 from .payments import GATEWAYS, gateway
@@ -279,6 +282,37 @@ def _indexable(post):
 def _live_term_ids():
     q = db.table("post_terms").select("term_id, posts!inner(status, published_at)").eq("posts.status", "published").lte("posts.published_at", db.now_iso())
     return {r["term_id"] for r in db.rows(q)}
+
+
+@pub.get("/media/<path:key>")
+def media_file(key):
+    """Every picture and PDF on the site comes through here. Supabase sits on the LAN and only this app
+    is exposed, so the browser asks Flask and Flask asks Storage with the service-role key it already
+    holds. The key is a uuid under YYYY/MM, so the bytes behind a URL never change: cache for a year and
+    answer a repeat view with a 304. ?download=<name> is what media_download() appends — Storage used to
+    turn that into a Content-Disposition, now we do.
+    # ponytail: no server-side cache, so a cold client costs one Storage round trip per file. The
+    # immutable year covers repeat views; put a CDN or a disk cache in front if that stops being enough."""
+    mime = storage.EXT.get(PurePosixPath(key).suffix.lower())
+    if not mime or ".." in key:
+        abort(404)
+    try:
+        data = storage.fetch(key)
+    except StorageApiError:  # the API answered and said no; a gateway that is down still raises a 500
+        abort(404)
+    # the name the file saves under. A newline would split the header; werkzeug quotes everything else,
+    # and the name has to survive intact — "flash array.pdf" is what the editor uploaded.
+    name = "".join(c for c in request.args.get("download", "") if c not in "\r\n")[:300]
+    r = send_file(BytesIO(data), mimetype=mime, etag=key, conditional=True, max_age=31536000,
+                  as_attachment=bool(name), download_name=name or None)
+    r.cache_control.immutable = True
+    if mime == "image/svg+xml":
+        # An SVG is a document that can carry <script>, and this origin holds the admin session cookie —
+        # a Storage URL was cross-origin and could not. Visited directly it now runs sandboxed, in an
+        # opaque origin with scripts off; used as <img src> nothing changes, images never execute anyway.
+        # Scoped to SVG on purpose: an empty sandbox on a PDF can stop the browser's own viewer.
+        r.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+    return r
 
 
 @pub.get("/sitemap.xml")

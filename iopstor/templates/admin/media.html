@@ -36,7 +36,7 @@
       <small>What the picture shows, for screen readers and search engines. Leave blank for decoration.</small>
       <p><button type="submit">Save alt text</button></p>
     </form>
-    <label>Public address <input class="mono" value="{{ sel.url }}" readonly onclick="this.select()"></label>
+    <label>Public address <input class="mono" value="{{ sel.url if '://' in sel.url else config.SITE_URL + sel.url }}" readonly onclick="this.select()"></label>
     <form method="post" action="{{ url_for('admin_ui.media_delete', pk=sel.id) }}" onsubmit="return confirm('Delete this file? Anything using it will lose it.')">
       <input type="hidden" name="csrf" value="{{ csrf }}"><p><button type="submit" class="danger">Delete</button></p>
     </form>

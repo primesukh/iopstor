@@ -26,13 +26,13 @@ iopstor/config.py        env → constants (module, no class)
 iopstor/db.py            supabase-py clients + query helpers: table(), one(), rows(), insert(), update(), live(), select_posts(), tree(),
                          with_paths()/ancestors()/hydrate() (hierarchical URLs, has_pages), unique_slug(), ensure_term(), paginate(), admin_counts(), post_types()/settings() caches
 iopstor/auth.py          login/refresh/logout via GoTrue, verify_jwt() (local HS256), require_role(), create_auth_user()
-iopstor/storage.py       save_upload()/delete_media() → Supabase Storage bucket + media table
+iopstor/storage.py       save_upload()/delete_media() → Supabase Storage bucket + media table; public_path() (= media.url), fetch() (the bytes back)
 iopstor/blocks.py        BLOCKS + EDITOR + LAYOUTS + NEVER_NESTED, validate_blocks(), section_class()/section_style(), render_blocks(), blocks_text(), blocks_md()
 iopstor/seo.py           site(), build_meta(), jsonld(), md_url()
 iopstor/payments.py      PaymentGateway, DummyGateway, GATEWAYS
 iopstor/admin_api.py     /api/admin/v1 (JWT-protected REST; apply_post() is the single validation path)
 iopstor/admin_ui.py      browser admin at /admin: session login, post form + POST /admin/canvas + /admin/preview, media, leads, warranty, menus, settings, users
-iopstor/public.py        catch-all resolver (+ .md twins, /checkout), archives, sitemap/robots/llms/feed, /api/v1 public read API, leads, checkout
+iopstor/public.py        catch-all resolver (+ .md twins, /checkout), archives, /media/<key> file proxy, sitemap/robots/llms/feed, /api/v1 public read API, leads, checkout
 iopstor/cli.py           flask migrate | seed | import-media | create-admin
 iopstor/templates/       base.html post.html archive.html 404.html checkout.html _card.html (the one card macro), blocks/<type>.html (16, each a full-width <section>), admin/*.html
 iopstor/static/site.css  the whole public theme: tokens at the top, header + mega panel + footer, .cards/.card/.btn/.section, layout group (.al-* .w-* .t-*), one rule-group per block
@@ -129,23 +129,24 @@ So the full order is: branch → work → three docs → `/pr` → **stop** → 
 - Public queries go through `db.live(q)` (`status='published' AND published_at <= now()`; a future `published_at` = scheduled). A `has_pages=false` type gets `path=None` from `with_paths()`, and that one value removes its detail page, sitemap entry, `.md` twin and card link.
 - URL scheme: pages at `/<slug>` (slug `home` = `/`), others at `/<url_prefix>/<slug>`, hierarchical types at `/<prefix>/<parent>/<slug>`,
   term archives at `/<taxonomy>/<term>`, `/<prefix>/<slug>/checkout` for a product with a price, and every resolvable URL + `.md` as its Markdown twin. `checkout` and `index` are reserved slugs. Slugs are unique per post type.
+- **Every picture and PDF is served by the app**, at `/media/<bucket key>` (`public.media_file()`), never straight from the Storage gateway: Supabase is LAN-only and Flask is the only exposed service. `media.url` stores that path (`storage.public_path()`), which is why every reader — the `media_url`/`media_download` Jinja globals, `featured_media.url`, `seo._image()`, `blocks._media()`, the admin JSON — needs no special case. `media` is a reserved first URL segment.
 - SEO output (meta, canonical, Open Graph, JSON-LD, sitemap, robots, llms.txt, llms-full.txt, `.md` twins, RSS) is server-rendered from `seo.py` + `public.py`; keep it there. `_indexable()` is the one gate for sitemap, llms and twins.
 - Auth: admin API expects `Authorization: Bearer <Supabase JWT>`; the browser admin keeps the tokens in the signed session cookie and refreshes on expiry. Both verify locally with `SUPABASE_JWT_SECRET` (HS256). `users.id` = GoTrue `sub`. Browser POSTs carry a `csrf` field checked by `ui_required`.
   Roles: `editor` < `admin`. A GoTrue login without a `users` row gets 403.
 - Payments: only `PaymentGateway` subclasses in `payments.py`; `PAYMENT_PROVIDER` env selects one. `dummy` is the placeholder.
-- Ponytail mode is on for this repo: fewest files, stdlib first, mark deliberate ceilings with `# ponytail:` comments (28 in source; `/ponytail-debt` lists them). Non-trivial logic gets one small pytest test in `tests/test_offline.py` when it can run without Supabase.
+- Ponytail mode is on for this repo: fewest files, stdlib first, mark deliberate ceilings with `# ponytail:` comments (30 in source; `/ponytail-debt` lists them). Non-trivial logic gets one small pytest test in `tests/test_offline.py` when it can run without Supabase.
 
 ## Env keys (`.env.example`)
 
 `SECRET_KEY, SITE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, MEDIA_BUCKET, PAYMENT_PROVIDER` (+ `FLASK_APP=iopstor`, `FLASK_DEBUG=1` for development).
 Dev Supabase: `http://developmentserver-supabase-9f7088-111-125-233-170.sslip.io` (LAN, self-signed cert on https → use http until a real cert exists).
 `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` are the same values as `JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY` in the Supabase compose env.
-The `media` bucket must be created **public** in Supabase Studio. RLS is enabled on all app tables (`migrations/0002_enable_rls.sql`; a new table repeats the line) so the anon key
+The `media` bucket is created in Supabase Studio; public or private no longer matters, since the app uploads and reads it with the service-role key and nothing a visitor loads points at it. RLS is enabled on all app tables (`migrations/0002_enable_rls.sql`; a new table repeats the line) so the anon key
 cannot read drafts or leads; the app's service-role key bypasses RLS.
 
 ## First-time setup on a Supabase instance
 
 1. Studio → SQL editor: paste and run `migrations/0000_bootstrap.sql`.
-2. Studio → Storage: create a **public** bucket named `media`.
+2. Studio → Storage: create a bucket named `media` (the instances so far are public; the app does not require it).
 3. `pipenv run flask migrate` → `pipenv run flask seed` → `pipenv run flask create-admin EMAIL PASSWORD` → `pipenv run flask import-media website_assets` → `pipenv run flask seed` again so the pages pick up the pictures by filename.
 4. If `flask migrate` stops on `relation "…" already exists`, the schema was built by hand: paste `migrations/repair_schema_migrations.sql` into Studio once and re-run.

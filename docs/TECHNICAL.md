@@ -12,7 +12,7 @@ Companion documents: [NON-TECHNICAL.md](NON-TECHNICAL.md) for editors, [`.claude
 |---|---|
 | Language | Python 3.13 |
 | Web | Flask 3.1, gunicorn, Jinja2 |
-| Data / Auth / Files | Self-hosted **Supabase** via **supabase-py 2.x** — PostgREST, GoTrue, Storage, all through the Kong gateway |
+| Data / Auth / Files | Self-hosted **Supabase** via **supabase-py 2.x** — PostgREST, GoTrue, Storage, all through the Kong gateway. Only this app talks to it: a browser never does, not even for a picture |
 | Tokens | PyJWT (local HS256 verification) |
 | Packaging | pipenv (`Pipfile` + `Pipfile.lock`); `requirements*.txt` are generated from the lock and are what Docker installs |
 | Tests | pytest |
@@ -20,7 +20,7 @@ Companion documents: [NON-TECHNICAL.md](NON-TECHNICAL.md) for editors, [`.claude
 
 Three constraints shape everything below:
 
-1. **Supabase is the only backend, reached only through Kong.** No `DATABASE_URL`, no psycopg, no SQLAlchemy, no ORM. Rows are plain dicts.
+1. **Supabase is the only backend, reached only through Kong, and only by this app.** No `DATABASE_URL`, no psycopg, no SQLAlchemy, no ORM. Rows are plain dicts. Supabase is on the LAN with nothing but Flask exposed, so every byte a visitor sees — pictures and PDFs included — is served by Flask (§8, `/media/<key>`).
 2. **Content types are rows, not code.** Adding "Job Openings" is a `post_types` row, not a table and not a model class.
 3. **Ponytail mode.** Fewest files, stdlib first, deliberate ceilings marked with `# ponytail:` comments.
 
@@ -34,7 +34,8 @@ iopstor/__init__.py   create_app(), /healthz, blueprint + CLI registration, Jinj
 iopstor/config.py     env → Flask config. A plain module, not a class.
 iopstor/db.py         supabase-py clients + every query helper. The single data-access seam.
 iopstor/auth.py       GoTrue login/refresh/logout, verify_jwt(), require_role(), create_auth_user()
-iopstor/storage.py    save_upload() / delete_media() → Supabase Storage bucket + media table
+iopstor/storage.py    save_upload() / delete_media() → Supabase Storage bucket + media table.
+                      public_path() is the address the site serves an object at, fetch() reads the bytes back.
 iopstor/blocks.py     BLOCKS registry, validate_blocks(), render_blocks(), blocks_text(), blocks_md()
 iopstor/seo.py        site(), build_meta(), jsonld(), md_url()
 iopstor/payments.py   PaymentGateway ABC, DummyGateway, GATEWAYS
@@ -64,7 +65,7 @@ Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_w
 | `post_types` | Content types **as data** | `slug`, `url_prefix`, `hierarchical`, `field_schema` (JSONB), `taxonomies` (JSONB), `jsonld_type`, `in_sitemap`, `has_pages` |
 | `posts` | Every piece of content | `post_type_id`, `parent_id`, `slug`, `title`, `excerpt`, `blocks` (JSONB), `meta` (JSONB), `seo` (JSONB), `status`, `published_at`, `featured_media_id`, `author_id`, `menu_order` |
 | `taxonomies` / `terms` / `post_terms` | Classification, many-to-many | `terms` unique on `(taxonomy_id, slug)` |
-| `media` | Uploads | `key`, `url`, `mime`, `size`, `alt`, `uploaded_by` |
+| `media` | Uploads | `key` (the path inside the bucket), `url` (**the path this site serves it at, `/media/<key>` — not the Storage address**), `mime`, `size`, `alt`, `uploaded_by` |
 | `users` | CMS roles. `id` **is** the GoTrue `sub` | `email`, `name`, `role` |
 | `leads` | Form submissions | `kind`, contact fields, `data` (JSONB), `status` |
 | `warranties` | The warranty register, looked up by serial number | `serial`, `serial_key` (generated), `customer_name`, `email`, `purchase_date`, `expiry_date`, `amc`, `remarks`, `remarks_public` |
@@ -133,7 +134,12 @@ Resulting scheme:
 /<prefix>/<slug>        post of that type
 /<prefix>/<parent>/…    hierarchical type, full ancestry in the path
 /<taxonomy>/<term>      term archive
+/media/<bucket key>     an uploaded picture or PDF, served by the app (§8)
 ```
+
+`/media/` is a **reserved first segment**, the way `checkout` and `index` are reserved slugs. Its route is
+declared literally, so Werkzeug ranks it above the catch-all — but a `post_types.url_prefix` of `media`
+would be unreachable, and so would a hierarchical page whose top-level slug is `media`.
 
 ---
 
@@ -222,7 +228,7 @@ Two behaviours worth knowing:
   - **`at_path(blocks, path)`** resolves a `data-b` path (`"3"`, `"3.1.0"`) to one block. `/admin/canvas?p=` is its only caller.
 - **`warranty_check` is queried at render time too, from the URL.** The section is a plain `method="get"` form posting back to `request.path` with one `sn` field — **no route, no endpoint, no CSRF**: the lookup is a read, and the result is a bookmarkable URL a customer can forward to support. `render_blocks()` hands the block a `found` value from `_warranty()`: `None` when nothing was asked (draw the bare form), `{}` when the serial matched nothing, otherwise the `warranties` row with `active` added. The match is `.eq("serial_key", typed.strip().upper())` — see §3 for why the generated column, and not `ilike`, is the key. `edit=True` short-circuits it to `None`, so the admin canvas draws the box without touching the database. There is deliberately no `intro` field: explanatory copy is a `rich_text` section above it.
   - **The whole record is public to anyone holding the serial**, customer name and registered email included — the client's decision, so `remarks` is the one field held back unless the record's `remarks_public` is ticked. Marked with a `# ponytail:` comment on `_warranty()`: require the registered email as a second factor, or rate-limit, if serials turn out to be guessable.
-- **`pdf` is an `<iframe>` at the file, nothing more** — the browser's own PDF viewer, no pdf.js. Its field is `file_media_id`, not `media_id`, because `EDITOR["labels"]` is keyed by the bare field name and `media_id` already reads "Image" (it also matches the `file_media_id` meta convention the `datasheet` type uses in `cli.py`). Height is fixed in `site.css` (`min(80vh,900px)`); the `<a class="btn ghost">` under the frame downloads the file — its `href` is the `media_download` Jinja global (`__init__.py`), the public Storage URL plus `?download=<filename>`, which is how Supabase Storage sets `Content-Disposition: attachment` and names the saved file after the upload instead of the uuid in its bucket key. That button is also the way in for iOS Safari and Android Chrome, which render only the first page of a framed PDF or nothing at all — they save it rather than open it in a tab. `.btn.ghost` has to set its own `color` (and its own `:hover`) in `site.css`: `.btn` paints `color:#fff` for the accent fill, so a ghost button that only clears the background is white text and a white `currentColor` border on the light page. Unlike `embed_html` the canvas renders it for real: the src is the public Storage bucket, so it is cross-origin to the admin session. `canvas.css` gives it `pointer-events:none` so a click still selects the section.
+- **`pdf` is an `<iframe>` at the file, nothing more** — the browser's own PDF viewer, no pdf.js. Its field is `file_media_id`, not `media_id`, because `EDITOR["labels"]` is keyed by the bare field name and `media_id` already reads "Image" (it also matches the `file_media_id` meta convention the `datasheet` type uses in `cli.py`). Height is fixed in `site.css` (`min(80vh,900px)`); the `<a class="btn ghost">` under the frame downloads the file — its `href` is the `media_download` Jinja global (`__init__.py`), the file's `/media/<key>` address plus `?download=<filename>`, which is how `public.media_file()` sets `Content-Disposition: attachment` and names the saved file after the upload instead of the uuid in its bucket key. Supabase Storage used to answer that query string; since §8 the app does, and the contract is deliberately unchanged. That button is also the way in for iOS Safari and Android Chrome, which render only the first page of a framed PDF or nothing at all — they save it rather than open it in a tab. `.btn.ghost` has to set its own `color` (and its own `:hover`) in `site.css`: `.btn` paints `color:#fff` for the accent fill, so a ghost button that only clears the background is white text and a white `currentColor` border on the light page. Unlike `embed_html` the canvas renders it for real. It used to be safe because the src was a cross-origin Storage bucket; a `/media/` URL is **same-origin with the admin session**, so the reason is now simply that a PDF in an `<iframe>` is a document, not a script with a cookie. `canvas.css` gives it `pointer-events:none` so a click still selects the section.
 
 **Editor metadata.** Alongside `BLOCKS`, `blocks.py` exports `EDITOR` — how each field is edited in the browser admin, so the field shapes that used to live only in comments are data:
 
@@ -305,6 +311,41 @@ Writes: `POST /leads` (also the target of the HTML contact form — plain form P
 
 It is post-redirect-get only when the write **succeeds**. A refused save falls through to the same render with the submitted values back in the form and a `400`, the way `new_post` / `edit_post` re-render rather than redirect — a redirect would answer a typo by making the editor retype the record. A refusal is a `(field, message)` pair, **not** a `flash()`: the form carries it as `data-refused-field` / `data-refused`, `initWarranty()` in `admin.js` puts it on that field with `setCustomValidity()` and calls `reportValidity()`, and a `<noscript>` copy says the same sentence without JS. Only a success flashes, at the top, where a confirmation belongs. `editing` is the form's contents, from `request.form` on a refusal and from the row on `?edit=`; the template keys add-vs-edit off `editing.id`, not off `editing` being truthy, so a rejected *new* record does not come back wearing an Edit heading. `?q=` and `?page=` ride through every redirect (save, delete, cancel) so a filtered list survives the round trip.
 
+### `/media/<bucket key>` — the file proxy, `public.media_file()`
+
+Every picture and PDF on the site, the admin included. Supabase sits on the LAN with only Flask exposed,
+so a browser cannot fetch an object out of the Storage bucket: it asks Flask, and Flask asks Storage with
+the service-role key it already holds (`storage.fetch()`).
+
+The URL **is** the bucket key — `/media/2026/09/<uuid>.png` — so the route needs no database read at all.
+The extension is looked up in `storage.EXT` (the reverse of `ALLOWED`), which both names the `Content-Type`
+and whitelists what is servable: anything else 404s before Storage is touched, as does a key containing
+`..`. Only `StorageApiError` becomes a 404 — a gateway that is down must still be a 500, not a lie about a
+missing file.
+
+Because a key carries a uuid, the bytes behind a URL never change, so `send_file()` is handed
+`max_age=31536000` + `immutable` and the key as the ETag: a repeat view costs a 304 and no Storage round
+trip, and `conditional=True` brings Range support with it, which is what a phone's PDF viewer asks for.
+`?download=<name>` sets `Content-Disposition: attachment` — Supabase Storage used to do that, now this does.
+The name is passed through with only `\r` and `\n` removed: werkzeug quotes and RFC-2231-encodes the rest,
+and `secure_filename()` would rename "flash array.pdf" to "flash_array.pdf", defeating the point of the
+button.
+
+**An SVG gets `Content-Security-Policy: default-src 'none'; sandbox`.** This is the one thing serving media
+ourselves made *worse*: an SVG is a document that can carry `<script>`, and a `/media/` URL is same-origin
+with the admin session cookie, which a Storage URL never was. The header sandboxes a direct visit into an
+opaque origin with scripts off, and changes nothing about `<img src>`, which never executes script. It is
+scoped to SVG deliberately — an empty sandbox on a PDF can stop the browser's own viewer, which §6 depends
+on. Guarded by `test_media_is_served_by_the_app_not_the_storage_gateway`.
+
+**What is stored is the path, not the address.** `media.url` holds `/media/<key>` (written by
+`storage.public_path()` at upload, in `save_upload()` and in `flask import-media`), which is why nothing on
+the read side had to change: `media_url()`, `media_download()`, `featured_media.url` in `post.html` and
+`_card.html`, `seo._image()`, `blocks._media()` and the admin JSON all hand back the column verbatim.
+`seo._abs()` promotes it to an absolute `SITE_URL/media/...` for `og:image` and JSON-LD, which is exactly
+the job it was written for and never did while the column held an absolute URL.
+`migrations/0007_media_through_flask.sql` rewrites the rows that were written before this.
+
 ### Crawler endpoints
 
 `/sitemap.xml`, `/robots.txt`, `/feed.xml`, `/llms.txt`, `/llms-full.txt`, plus `/healthz`.
@@ -333,7 +374,7 @@ open across several requests; a stale flag there would serve Markdown to a brows
   `description`), then the body. The `#` comes from the hero when the page starts with one and from
   the post title otherwise, mirroring `post.html`, so the twin has the same single h1 as the page.
   The type's own `field_schema` values follow (`_md_fields()`, split by shape the way `post.html`
-  splits them, with `price` through `rupees()` and a `media` field as the file's URL), then
+  splits them, with `price` through `rupees()` and a `media` field as the file's `/media/<key>` path), then
   `blocks_md()`, then the child/sibling links.
 - **An archive** (`_md_page()`) → front matter, `# {title}`, the page's posts as a link list, and a
   `[Next page]` line while `has_next`.
@@ -384,6 +425,12 @@ Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in nam
 4. Commit both together
 
 **When the ledger and the database disagree.** A schema built by pasting the files into Studio leaves every table in place and `schema_migrations` empty, so `flask migrate` starts again at the beginning and stops on `0001_initial.sql: relation "menus" already exists`. Nothing is broken — the ledger simply never recorded what was done by hand. `migrations/repair_schema_migrations.sql` fixes it: pasted into Studio, it records each file **only if the thing that file makes is actually present** — the `posts` table for `0001`, `pg_class.relrowsecurity` for `0002` (the table can exist with RLS still off, which is the very state `0002` fixes), `warranties` for `0003`, the `warranties_expiry_after_purchase` constraint for `0004`. A file that was genuinely never applied stays unrecorded and `flask migrate` then applies it normally. Safe to run twice, and safe on a database in any state. `migrate()` names that script in its own error when the failure text contains "already exists".
+
+Not every step alters the schema. `0007_media_through_flask.sql` is a **data** migration: it rewrites the
+absolute Storage URLs frozen into `media.url`, `settings`, `posts.blocks` and `posts.seo` into `/media/<key>`
+paths (§8). It matches any host with a regex rather than naming one, every statement is guarded so a second
+run changes nothing, and the code works before **and** after it — new uploads already write the new path,
+old rows keep the address they have until it runs.
 
 `0002_enable_rls.sql` enables RLS on every app table, so the anon key cannot read drafts or leads. The app's service-role key bypasses RLS by design. A new table repeats that one line for itself — `0003_warranty.sql` ends with `ALTER TABLE warranties ENABLE ROW LEVEL SECURITY;`, and defines no policies.
 
@@ -819,7 +866,7 @@ silently does nothing — the bug that once showed the layout chooser and the ca
 ## 13. Tests
 
 ```
-tests/test_offline.py    always runs — slugify, validate_blocks, render_blocks, JWT matrix
+tests/test_offline.py    always runs — slugify, validate_blocks, render_blocks, JWT matrix, the /media route
 tests/conftest.py        app/client fixtures, admin_headers/editor_headers, seeded corpus, cleanup
 tests/test_auth.py       JWT matrix, mocked GoTrue login, real bad-password rejection
 tests/test_admin_api.py  create/publish visibility, scheduled-post hiding, terms/settings/menus
@@ -839,6 +886,10 @@ Everything except `test_offline.py` is marked `live` and skips when `.env` has n
 
 Dev gateway: `http://developmentserver-supabase-9f7088-111-125-233-170.sslip.io` — LAN, self-signed cert on https, so use http until a real certificate exists.
 
+`SUPABASE_URL` needs to be reachable **from the app only**. Nothing a visitor's browser loads points at it
+any more (§8), so the gateway can sit on a private network with Flask as the only exposed service. `SITE_URL`
+is what the outside world sees, and it is what `seo._abs()` puts in front of a `/media/` path.
+
 ---
 
 ## 15. Running it
@@ -855,7 +906,7 @@ pipenv run pytest
 **First-time setup on a Supabase instance:**
 
 1. Studio → SQL editor: run `migrations/0000_bootstrap.sql`
-2. Studio → Storage: create a **public** bucket named `media`
+2. Studio → Storage: create a bucket named `media`. Public or private no longer matters to the app — it uploads and reads with the service-role key (§8), and nothing a visitor loads points at the bucket. The instances built so far use a public one
 3. `flask migrate` → `flask seed` → `flask create-admin`
 
 After any `Pipfile` change, regenerate both lockfile exports:
@@ -904,6 +955,8 @@ Marked in code with `# ponytail:` comments.
 - `--w` is one measure per section, so a hero's headline and its paragraph (820px and 720px by default) take the same custom width. Per-element widths would need a key per element, which no editor has asked for.
 - A custom width is pixels only — no `%`, `rem` or `vw`. The three named steps cover the proportional cases, and `section_style()` stays a digits-only check rather than a unit parser.
 - `.cta` and table cells keep their own explicit `text-align`, so a centred section does not restyle a CTA band or a spec table's columns. `align_box` likewise only moves a section narrower than the page; a full-width one has nowhere to go.
+- `public.media_file()` reads the whole file into memory before answering — `MAX_CONTENT_LENGTH` caps an upload at 20 MB, so the worst case is bounded. Stream it through httpx if big PDFs ever land.
+- No server-side cache in front of Storage: a cold client costs one LAN round trip per file. The immutable year plus the ETag mean repeat views cost nothing, and `gunicorn --threads 8` keeps a page's images off each other's way; put a CDN or a disk cache in front if that stops being enough.
 - `DummyGateway` moves no money.
 - `post_types` and `settings` are cached per process, not per cluster. A multi-worker deployment sees an update after `uncache()` runs in *that* worker.
 - FAQPage JSON-LD is not wired up (§9).

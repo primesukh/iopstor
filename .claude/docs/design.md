@@ -1,4 +1,4 @@
-# IOPSTOR CMS — architecture spec (current state, 2026-09-09)
+# IOPSTOR CMS — architecture spec (current state, 2026-09-10)
 
 **What this file is.** The map an agent reads before touching anything: what exists, where it lives, and *why* it has the shape it has. The territory is the source, and the long-form developer reference is `docs/TECHNICAL.md` (§ numbers below point into it). Client brief and client decisions: `requirements.md`. Rules and commands: `CLAUDE.md` (repo root).
 
@@ -10,8 +10,8 @@
 
 | Area | State |
 |---|---|
-| Content model, data access, migrations | Done (13 tables, migrations `0001`–`0006`) |
-| Public site with the client's design | Done — the mock in `website_assets/mock-website.html` is the reference; header is white by client decision |
+| Content model, data access, migrations | Done (13 tables, migrations `0001`–`0007`; `0007` is a data migration awaiting the user) |
+| Public site with the client's design | Done — the mock in `website_assets/mock-website.html` is the reference; header is white by client decision. Pictures and PDFs come from the app itself (§7 `/media/`), so nothing a visitor loads needs Supabase |
 | Browser admin `/admin` | Done — sidebar shell, document editor with `/` sections, live preview at three widths, media, leads, warranty register, menus, settings, users |
 | SEO + AI output | Done — meta/OG/JSON-LD, sitemap, robots, RSS, `llms.txt`, `llms-full.txt`, a `.md` twin of every page |
 | Warranty register + public serial check | Done |
@@ -25,7 +25,7 @@
 | Piece | Choice |
 |---|---|
 | App | Python 3.13, Flask 3.1, Jinja2; one public stylesheet, no JS on the public site, no build step |
-| Data / auth / files | Self-hosted **Supabase**, reached **only through its Kong gateway** with `supabase-py` 2.x and the service-role key: PostgREST for rows, GoTrue for logins, Storage bucket `media` for uploads. No direct Postgres, no ORM — rows are dicts |
+| Data / auth / files | Self-hosted **Supabase**, reached **only through its Kong gateway** with `supabase-py` 2.x and the service-role key: PostgREST for rows, GoTrue for logins, Storage bucket `media` for uploads **and reads**. Only this app ever talks to it — a browser does not, not even for a picture (§7 `/media/`). No direct Postgres, no ORM — rows are dicts |
 | Tokens | PyJWT verifies Supabase access tokens locally (HS256, `SUPABASE_JWT_SECRET`) |
 | Packaging | pipenv (`Pipfile`, `Pipfile.lock`, in-project `.venv/`); `requirements.txt` / `requirements-dev.txt` are **generated from the lock** and are what Docker installs |
 | Deploy | Dokploy → `Dockerfile` (python:3.13-slim, `flask migrate && gunicorn -w 2`) |
@@ -46,7 +46,8 @@ iopstor/config.py             os.environ → constants (a module, not a class)
 iopstor/db.py                 the single data-access seam: table()/one()/rows()/insert()/update(), live(), select_posts(), with_paths()/ancestors()/hydrate(),
                               tree(), unique_slug(), ensure_term(), set_post_terms(), paginate(), admin_counts(), get_menu()/set_menu(), post_types()/settings() caches
 iopstor/auth.py               GoTrue login/refresh/logout, verify_jwt(), current_user(), require_role(), create/delete auth user; ROLES editor<admin
-iopstor/storage.py            save_upload()/delete_media() → Storage bucket + media table; ALLOWED mime → extension
+iopstor/storage.py            save_upload()/delete_media() → Storage bucket + media table; ALLOWED mime → extension,
+                              EXT the reverse; public_path() = /media/<key> (what media.url holds), fetch() = the bytes
 iopstor/blocks.py             BLOCKS, EDITOR, LAYOUTS, NEVER_NESTED, validate_blocks(), section_class()/section_style()/col_widths(),
                               render_blocks(), blocks_text(), blocks_md(), at_path(), _post_list(), _warranty()/warranty_active()
 iopstor/seo.py                site(), build_meta(), jsonld(), md_url()
@@ -78,7 +79,7 @@ Dependency direction: `public.py` and `admin_ui.py` import from `admin_api.py`; 
 | `post_types` | content types **as rows**: `slug, name, url_prefix ("" = top-level pages), hierarchical, field_schema [{key,label,type,required}], taxonomies [slugs], jsonld_type, in_sitemap, has_pages (0005)` |
 | `posts` | everything editable: `post_type_id, parent_id, slug, title, excerpt, blocks [{type,data}], meta {}, seo {title,description,canonical,robots,og_image}, status draft/published, published_at (future = scheduled), featured_media_id, author_id, menu_order`; unique `(post_type_id, slug)` |
 | `taxonomies`, `terms`, `post_terms` | classification; `post_terms` has a composite PK so PostgREST can embed `terms(*)` |
-| `media` | `key` (bucket path), `url`, `filename, mime, size, alt, uploaded_by` |
+| `media` | `key` (bucket path), `url` (**`/media/<key>`, the path this app serves it at — not the Storage address**), `filename, mime, size, alt, uploaded_by` |
 | `users` | `id` = GoTrue `sub`; `email, name, role editor/admin` — the row is what grants CMS access |
 | `leads` | `kind contact/quote/career, name, email, phone, company, message, post_id, data {}, status new/in_progress/handled` |
 | `warranties` (0003, 0004) | `serial`, `serial_key` = `upper(btrim(serial))` **generated, unique** (the lookup key: case- and space-insensitive, exact `.eq()` because serials may hold `%`/`_`), `customer_name, email, purchase_date, expiry_date, amc, remarks, remarks_public`; CHECK `expiry_date >= purchase_date` added `NOT VALID` |
@@ -147,6 +148,7 @@ RLS is on for every table (`0002`; a new table repeats the one `ENABLE ROW LEVEL
 | product checkout | `/products/<slug>/checkout` — handled inside the resolver; `checkout` is a reserved last segment |
 | term archive | `/<taxonomy>/<term>` |
 | Markdown twin | any resolvable URL + `.md`; `/` → `/index.md` (`index` is a reserved page slug); gated by `_indexable()` like the sitemap |
+| media | `/media/<bucket key>` → `public.media_file()`: Flask fetches the object with the service-role key and serves it (`?download=<name>` = attachment; an SVG also gets a `sandbox` CSP, because same-origin now means the admin's cookie). `media` is a **reserved first segment** |
 | crawler files | `/sitemap.xml /robots.txt /llms.txt /llms-full.txt /feed.xml`, `/healthz` |
 | public JSON | `/api/v1/post-types`, `/posts?type=&term=&page=`, `/posts/<type>/<slug>` (with `text`), `/taxonomies/<slug>/terms`, `/menus/<slug>`, `/settings`; `POST /leads`, `POST /payments/checkout`, `POST /payments/webhook/<provider>` |
 | admin | `/admin/{login,logout,,posts,posts/new,posts/<id>,posts/<id>/delete,media,media/upload,media/<id>/alt,media/<id>/delete,leads,leads/<id>/status,warranty,warranty/<id>/delete,menus,settings,users,users/<uuid>/delete,canvas,preview}` |
@@ -231,6 +233,7 @@ Decisions that are easy to undo by accident:
 | 2026-09-09 | `has_pages` column on `post_types` (partners have no pages) | A type is a row; "does it get pages" is a property of the row |
 | 2026-09-09 | Rupees only; `specs` is `kv` rows | A currency choice should not exist; `jsonb` sorts object keys |
 | 2026-09-09 | `.md` twin of every page, rendered on request | AI crawlers read Markdown, not the theme; nothing to keep in sync |
+| 2026-09-10 | Pictures and PDFs are served by Flask at `/media/<bucket key>`; `media.url` stores that path, so every reader followed without a change | Supabase goes LAN-only — a browser that cannot reach the gateway must still be able to load a picture |
 | 2026-09-09 | `.claude/` refreshed with every PR merge; hard rules enforced in `settings.json` | The map had drifted six days behind the territory |
 | 2026-09-09 | `/after-merge` owns the whole graph refresh; the git hooks are not relied on after a pull | A fast-forward pull fires no hook, so the graph sat three commits behind `main` on the first run |
 | 2026-09-09 | `gh pr merge` taken off the deny list; the agent merges only when told, on that PR | A deny cannot see consent, and the user wants to say "merge it" and have it done |
@@ -239,7 +242,7 @@ Decisions that are easy to undo by accident:
 
 ## 15. Known ceilings
 
-Marked `# ponytail:` in source (28 at last count; `/ponytail-debt` harvests them). The ones an agent trips over: HS256-only JWT; hierarchy index < 2000 posts per type; one sitemap < 5000 URLs; honeypot-only spam control; raw HTML trusted; `execCommand` editor; 8 mega-panel groups; rotator keyframes for 2 and 3 pictures only; per-process caches; `checkout` and `index` are reserved slugs; `_html_md()` is regex, not a parser; `DummyGateway` moves no money.
+Marked `# ponytail:` in source (30 at last count; `/ponytail-debt` harvests them). The ones an agent trips over: HS256-only JWT; hierarchy index < 2000 posts per type; one sitemap < 5000 URLs; honeypot-only spam control; raw HTML trusted; `execCommand` editor; 8 mega-panel groups; rotator keyframes for 2 and 3 pictures only; per-process caches; `checkout` and `index` are reserved slugs; `_html_md()` is regex, not a parser; `/media/` is a reserved first segment, its files are read whole into memory and have no server-side cache; `DummyGateway` moves no money.
 
 ---
 
