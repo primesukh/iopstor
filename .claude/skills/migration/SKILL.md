@@ -21,6 +21,15 @@ The dev Supabase is shared and live. You write `migrations/NNNN_short_name.sql`;
    - **`posts.meta` has no per-key default.** A field that "defaults to 12" is a `default` key in its descriptor (the form pre-fills it; nothing validates descriptor keys, so it is additive) *plus* a backfill `UPDATE posts … SET meta = meta || '{…}' WHERE NOT (meta ? 'key')`.
    - **A backfill on a seeded post loses to the next `flask seed --reset-content`**, which overwrites `meta` wholesale — put the same value into the seed's post data (`cli.py` `_post(..., meta=…)`) too.
 8. **Code tolerates the gap.** The app must run against a database where the file is not applied yet. New column: read it with `.get(col, default)` (`with_paths()` reads `has_pages` that way); do not `SELECT` it by name in a list that a missing column would 400. New `field_schema` field: the form, `post.html`, `_card.html` and `_md_fields()` iterate descriptors generically, so before the migration the box simply is not there — say so in the hand-over, and check that any new code reading `meta.get('key')` is inert when the key is absent.
+8b. **A data migration has the opposite gap.** When the file changes the *shape of values* in a column that
+   already exists (`0007` rewrote every absolute Storage URL into a `/media/` path), nothing 400s and nothing
+   is missing — the rows simply still hold the old shape. Code written for the new shape is then wrong for
+   every row until the user runs the file, and that is the state the reviewer, the dev box and production are
+   all in when the PR lands. So **run the app against unmigrated rows before opening the PR**, on the screens
+   the change touches, and make the code correct in both shapes: `0007` shipped an admin field that prefixed
+   `SITE_URL` unconditionally and printed two URLs glued together for every existing row. `seo._abs()` is the
+   pattern — prefix only a relative value. "The code tolerates the gap" is a claim to test, not to assert.
+
 9. **Docs** — `/docs`: TECHNICAL.md §3 (table, or the per-type-data paragraph for a `field_schema` change) and §10 only if the workflow gained a wrinkle; NON-TECHNICAL.md whenever an editor sees a new box or a new line on the site; `.claude/docs/design.md` in every place that names the migration range — §0 status, §2 tree, §3 heading — plus the §3 table or types paragraph.
 10. **Tell the user**, in the reply and in the PR's **Needs applying** section: the file name, what it does, what the app does before it is applied.
 

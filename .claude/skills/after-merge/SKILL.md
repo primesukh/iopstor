@@ -19,7 +19,17 @@ Merging is the user's act. Everything after it is yours, on `main`, without a si
    ```
    /graphify . --update
    ```
-   Two things to expect. Community labelling is a manual step in the skill (a 2–5 word name per community). And the first `--update` after a graphify upgrade re-extracts **every** prose file, because the cache is keyed on the extraction prompt — 54 files and ~400k subagent tokens the first time; run it anyway, on `main`, it is what the rule is for. Confirm afterwards that the report's `Built from commit` line equals `git rev-parse --short HEAD`.
+   **Only what the merge changed — never the whole corpus.** `--update` runs on the changed subset that
+   `detect_incremental()` reports, so a merge that touched six docs costs six subagent files, not fifty-four.
+   Two things re-report the whole corpus as new and must not be paid for: a graphify upgrade re-keys the
+   semantic cache on the extraction prompt, and a wiped or stale manifest makes every file look unseen. If the
+   cache check is about to dispatch far more files than the merge touched, stop and narrow it back to
+   `git diff --name-only "$PREV"..HEAD`. A whole-corpus prose pass is hundreds of thousands of subagent tokens
+   for a shape that has barely moved; it is never the right answer to one merge. The code half is free either
+   way — the AST has no LLM in it — so the rule is only ever about the prose files.
+
+   Community labelling is a manual step in the skill (a 2–5 word name per community). Confirm afterwards that
+   the report's `Built from commit` line equals `git rev-parse --short HEAD`.
 
 3. **Audit `.claude/` against what landed**: `git diff --stat "$PREV"..HEAD` and `git log --oneline "$PREV"..HEAD`, then for each kind of change:
 
