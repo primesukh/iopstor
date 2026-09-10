@@ -408,6 +408,14 @@ A serial number already on file is the one thing the browser cannot know by itse
 
 **Settings** holds the things that appear everywhere: site name, tagline, logo, contact email and phone, address, social links, and the Google Analytics ID.
 
+**About the logo.** Whichever picture you choose, the logo appears at the same size in the header and
+at the bottom of every page — the site does not shrink or stretch it to suit the file. It fills that
+space, which means blank margins inside your picture are trimmed off rather than counted as part of
+the logo: you no longer have to crop a file perfectly for it to look right. The one thing to avoid is
+artwork that is as tall as it is wide with the design running right to the edges, because the top and
+bottom of a picture like that will be cut off. A wide, letterbox-shaped logo is what the space is cut
+for.
+
 **Menus** has its own screen now. Each row is one link: a label, where it goes, and whether it sits at the top level or drops down under the item above it. Drag the handle on the left to reorder, **+ Add item** for a new one, **✕** to remove one. Save writes the whole menu at once. One level of drop-down is all the site shows.
 
 **Menus** control the header and footer navigation. The header menu supports one level of drop-down, which is how *Company* expands.

@@ -81,8 +81,11 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 .site-header .wrap{display:flex;align-items:center;gap:24px;min-height:64px}
 .brand{display:flex;align-items:center;gap:8px;color:var(--ink);text-decoration:none;font:800 20px/1 var(--head);letter-spacing:-.01em}
 /* The header is white, so its logo stays the client's own artwork. Only the footer, which is
-   still the dark band, knocks the PNG out to white. */
-.brand img{height:22px;width:auto}
+   still the dark band, knocks the PNG out to white. Both get the same fixed box, so swapping the
+   file in Settings cannot change how big the logo reads.
+   ponytail: cover crops to fill, which is what neutralises whitespace baked into an uploaded PNG;
+   a square or tall logo would lose its top and bottom. The box is 6.8:1 to match the wordmark. */
+.brand img{width:150px;height:22px;object-fit:cover;object-position:center;flex:none}
 .nav-toggle{display:none}
 .nav-toggle-label{display:none;margin-left:auto;width:44px;height:44px;align-items:center;justify-content:center;border:1px solid var(--line-2);border-radius:8px;cursor:pointer;color:var(--ink);font-size:18px;line-height:1}
 .site-nav{margin-left:auto}
@@ -174,7 +177,7 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 .site-footer h4{font:700 13px/1.3 var(--head);text-transform:uppercase;letter-spacing:.1em;color:var(--white);margin:0 0 14px}
 .site-footer p{margin:0 0 10px;font-size:14px;line-height:1.6}
 .site-footer .brand{margin-bottom:14px;font-size:18px}
-.site-footer .brand img{height:20px;filter:brightness(0) invert(1)}
+.site-footer .brand img{filter:brightness(0) invert(1)}
 .site-footer a{color:var(--muted-dark);text-decoration:none;font-size:14px}
 .site-footer a:hover{color:var(--white)}
 .site-footer ul{list-style:none;padding:0;margin:0}
