@@ -174,7 +174,12 @@ def test_seeded_content_is_valid_blocks():
 def test_hero_takes_turns_only_with_two_pictures_or_more(app, monkeypatch):
     """The rotator is CSS: each slide carries its turn as --i and the container the count as --n, and
     one picture stays the single <img> it always was, dots and all switched off."""
-    monkeypatch.setattr("iopstor.blocks.media_url", lambda i: f"/m/{i}", raising=False)
+    from iopstor import db
+
+    # media_url() is a Jinja global over db.get_media(), not a name in blocks.py — patching it there
+    # patched nothing and let the render reach for PostgREST.
+    monkeypatch.setattr(db, "get_media", lambda pk: {"url": f"/m/{pk}", "alt": ""})
+    monkeypatch.setattr(db, "settings", lambda: {})
     one = [{"type": "hero", "data": {"heading": "Hi", "images": [{"media_id": 1, "alt": "a"}]}}]
     three = [{"type": "hero", "data": {"heading": "Hi", "images": [
         {"media_id": i, "alt": f"a{i}"} for i in (1, 2, 3)]}}]
@@ -285,11 +290,11 @@ def test_pdf_block_renders_the_browser_viewer(app, monkeypatch):
 
     monkeypatch.setattr(db, "settings", lambda: {})
     monkeypatch.setattr(db, "get_menu", lambda slug: [])
-    monkeypatch.setattr(db, "get_media", lambda pk: {"url": "https://x/media/a.pdf", "filename": "flash array.pdf"})
+    monkeypatch.setattr(db, "get_media", lambda pk: {"url": "/media/2026/09/a.pdf", "filename": "flash array.pdf"})
 
     html = render_blocks([{"type": "pdf", "data": {"file_media_id": 7, "heading": "Datasheet"}}])
-    assert '<iframe src="https://x/media/a.pdf#view=FitH"' in html
-    assert 'href="https://x/media/a.pdf?download=flash%20array.pdf"' in html and ">Download the PDF</a>" in html
+    assert '<iframe src="/media/2026/09/a.pdf#view=FitH"' in html
+    assert 'href="/media/2026/09/a.pdf?download=flash%20array.pdf"' in html and ">Download the PDF</a>" in html
     assert validate_blocks([{"type": "pdf", "data": {"heading": "no file"}}]) == ["blocks[0].file_media_id required"]
 
 
@@ -564,3 +569,32 @@ def test_warranty_form_hands_back_what_was_typed_when_the_save_is_refused(app, c
     monkeypatch.setattr(db, "insert", lambda name, r: saved.update(r) or {"id": 1})
     r = client.post("/admin/warranty", data={**typed, "purchase_date": ""})
     assert r.status_code == 302 and saved["expiry_date"] == "2024-06-01" and saved["purchase_date"] is None
+
+
+def test_media_is_served_by_the_app_not_the_storage_gateway(app, client, monkeypatch):
+    """Supabase is LAN-only, so every picture and PDF comes through /media/<bucket key>: Flask fetches
+    the bytes server-side, caches them for a year, and turns ?download into an attachment. Only the
+    extensions the uploader allows are servable, and that check happens before Storage is touched."""
+    from iopstor import db, storage
+
+    monkeypatch.setattr(db, "settings", lambda: {})          # chrome for the 404 page at the end
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    monkeypatch.setattr(db, "post_type", lambda **kw: None)
+    monkeypatch.setattr(db, "table", lambda *a, **k: 1 / 0)  # a media request must not query PostgREST
+    monkeypatch.setattr(storage, "fetch", lambda key: b"\x89PNG" + key.encode())
+
+    r = client.get("/media/2026/09/abc.png")
+    assert r.status_code == 200 and r.data == b"\x89PNG2026/09/abc.png"
+    assert r.mimetype == "image/png"
+    assert r.cache_control.max_age == 31536000 and r.cache_control.immutable and r.cache_control.public
+    assert client.get("/media/2026/09/abc.png", headers={"If-None-Match": r.headers["ETag"]}).status_code == 304
+
+    r = client.get("/media/2026/09/a.pdf?download=flash array.pdf")
+    assert r.mimetype == "application/pdf"
+    assert r.headers["Content-Disposition"] == 'attachment; filename="flash array.pdf"'  # the name survives
+    r = client.get("/media/2026/09/a.pdf?download=x%0d%0aX-Evil:%201")
+    assert r.status_code == 200 and "X-Evil" not in r.headers                             # ...but a header cannot be split
+
+    monkeypatch.setattr(storage, "fetch", lambda key: 1 / 0)  # reaching Storage for these is a bug
+    assert client.get("/media/2026/09/notes.txt").status_code == 404      # not an allowed type
+    assert client.get("/media/%2e%2e/%2e%2e/etc/passwd.png").status_code == 404  # nothing climbs out of the bucket

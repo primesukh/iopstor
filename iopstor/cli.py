@@ -460,7 +460,7 @@ def import_media(directory, dry_run):
     import uuid
     from datetime import datetime, timezone
 
-    from .storage import ALLOWED
+    from .storage import ALLOWED, public_path
 
     have = {m["filename"] for m in db.rows(db.table("media").select("filename").limit(5000))}
     bucket = db.sb().storage.from_(current_app.config["MEDIA_BUCKET"])
@@ -482,7 +482,7 @@ def import_media(directory, dry_run):
         data = path.read_bytes()
         key = f"{datetime.now(timezone.utc):%Y/%m}/{uuid.uuid4().hex}{ALLOWED[mime]}"
         bucket.upload(key, data, {"content-type": mime, "upsert": "false"})
-        row = db.insert("media", {"key": key, "url": bucket.get_public_url(key), "filename": path.name[:300],
+        row = db.insert("media", {"key": key, "url": public_path(key), "filename": path.name[:300],
                                   "mime": mime, "size": len(data), "alt": alt_from_name(path.name)})
         click.echo(f"  #{row['id']:<5} {path.name}")
         have.add(path.name)
