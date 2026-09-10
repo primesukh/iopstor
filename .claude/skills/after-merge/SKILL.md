@@ -15,11 +15,34 @@ Merging is the user's act. Everything after it is yours, on `main`, without a si
    git fetch -p && git branch -d <merged-branch>     # or /clean_gone for every [gone] branch
    ```
 
-2. **Refresh the graph** — the only moment the LLM pass ever runs. Do not expect the git hooks to have done it: `post-checkout` fired when you switched to `main`, but a fast-forward `git pull` fires no hook, so after step 1 the graph is still the *old* `main`. On `main` only (`git branch --show-current` must print `main`), invoke the skill; it re-extracts every file changed since the last manifest — code with the AST (free) and prose with subagents — and re-labels the communities:
+2. **Refresh the graph — two commands, and the code half is free.** Do not expect the git hooks to have done it: `post-checkout` fired when you switched to `main`, but a fast-forward `git pull` fires no hook, so after step 1 the graph is still the *old* `main`. The halves update **independently**, so run them in this order, on `main` only (`git branch --show-current` must print `main`):
+
+   ```bash
+   graphify update .        # code nodes. Pure AST, no LLM, no subagents, seconds. Always run this.
    ```
-   /graphify . --update
    ```
-   Two things to expect. Community labelling is a manual step in the skill (a 2–5 word name per community). And the first `--update` after a graphify upgrade re-extracts **every** prose file, because the cache is keyed on the extraction prompt — 54 files and ~400k subagent tokens the first time; run it anyway, on `main`, it is what the rule is for. Confirm afterwards that the report's `Built from commit` line equals `git rev-parse --short HEAD`.
+   /graphify --update       # doc nodes + community labels. Subagents, costs tokens. Ask first.
+   ```
+
+   `graphify update .` is the whole of the merge for a code-only PR, and it is what the report's
+   `Built from commit` line follows — check it equals `git rev-parse --short HEAD` afterwards. It also
+   backs the curated graph up into a dated folder under `graphify-out/` before writing, so a bad
+   rebuild is recoverable.
+
+   The second command is the only moment the LLM pass ever runs, and it is the one to be careful with.
+   Two things to expect. Community labelling is a manual step in the skill (a 2–5 word name per
+   community). And the first `--update` after a graphify upgrade re-extracts **every** prose file,
+   because the cache is keyed on the extraction prompt — 54 files and ~400k subagent tokens the first
+   time. **Say what it will cost and let the user decide** rather than firing it off: a merge whose
+   prose did not change does not need it at all, and the doc nodes being one merge stale is a much
+   smaller problem than the tokens. Unrefreshed files stay unstamped in the manifest, so they re-queue
+   on the next update instead of being silently marked done.
+
+   **Never pass a subdirectory to either command.** `graphify update ./docs` or `/graphify ./docs --update`
+   re-roots the manifest at that path, so every tracked file outside it reads as *deleted* and its nodes
+   are pruned — 88 files here, the whole code half, on 2026-09-10. The path is always `.`. To limit the
+   expensive half to a few files, run `--update` from the root and filter the semantic file list, never
+   the scan root.
 
 3. **Audit `.claude/` against what landed**: `git diff --stat "$PREV"..HEAD` and `git log --oneline "$PREV"..HEAD`, then for each kind of change:
 
