@@ -148,7 +148,7 @@ RLS is on for every table (`0002`; a new table repeats the one `ENABLE ROW LEVEL
 | product checkout | `/products/<slug>/checkout` — handled inside the resolver; `checkout` is a reserved last segment |
 | term archive | `/<taxonomy>/<term>` |
 | Markdown twin | any resolvable URL + `.md`; `/` → `/index.md` (`index` is a reserved page slug); gated by `_indexable()` like the sitemap |
-| media | `/media/<bucket key>` → `public.media_file()`: Flask fetches the object with the service-role key and serves it (`?download=<name>` = attachment). `media` is a **reserved first segment** |
+| media | `/media/<bucket key>` → `public.media_file()`: Flask fetches the object with the service-role key and serves it (`?download=<name>` = attachment; an SVG also gets a `sandbox` CSP, because same-origin now means the admin's cookie). `media` is a **reserved first segment** |
 | crawler files | `/sitemap.xml /robots.txt /llms.txt /llms-full.txt /feed.xml`, `/healthz` |
 | public JSON | `/api/v1/post-types`, `/posts?type=&term=&page=`, `/posts/<type>/<slug>` (with `text`), `/taxonomies/<slug>/terms`, `/menus/<slug>`, `/settings`; `POST /leads`, `POST /payments/checkout`, `POST /payments/webhook/<provider>` |
 | admin | `/admin/{login,logout,,posts,posts/new,posts/<id>,posts/<id>/delete,media,media/upload,media/<id>/alt,media/<id>/delete,leads,leads/<id>/status,warranty,warranty/<id>/delete,menus,settings,users,users/<uuid>/delete,canvas,preview}` |

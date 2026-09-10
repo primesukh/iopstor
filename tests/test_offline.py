@@ -595,6 +595,11 @@ def test_media_is_served_by_the_app_not_the_storage_gateway(app, client, monkeyp
     r = client.get("/media/2026/09/a.pdf?download=x%0d%0aX-Evil:%201")
     assert r.status_code == 200 and "X-Evil" not in r.headers                             # ...but a header cannot be split
 
+    # an SVG can carry <script> and this origin has the admin's cookie, so it is served sandboxed
+    r = client.get("/media/2026/09/logo.svg")
+    assert r.headers["Content-Security-Policy"] == "default-src 'none'; sandbox"
+    assert "Content-Security-Policy" not in client.get("/media/2026/09/a.pdf").headers  # would break the viewer
+
     monkeypatch.setattr(storage, "fetch", lambda key: 1 / 0)  # reaching Storage for these is a bug
     assert client.get("/media/2026/09/notes.txt").status_code == 404      # not an allowed type
     assert client.get("/media/%2e%2e/%2e%2e/etc/passwd.png").status_code == 404  # nothing climbs out of the bucket

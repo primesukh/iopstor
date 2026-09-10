@@ -306,6 +306,12 @@ def media_file(key):
     r = send_file(BytesIO(data), mimetype=mime, etag=key, conditional=True, max_age=31536000,
                   as_attachment=bool(name), download_name=name or None)
     r.cache_control.immutable = True
+    if mime == "image/svg+xml":
+        # An SVG is a document that can carry <script>, and this origin holds the admin session cookie —
+        # a Storage URL was cross-origin and could not. Visited directly it now runs sandboxed, in an
+        # opaque origin with scripts off; used as <img src> nothing changes, images never execute anyway.
+        # Scoped to SVG on purpose: an empty sandbox on a PDF can stop the browser's own viewer.
+        r.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
     return r
 
 

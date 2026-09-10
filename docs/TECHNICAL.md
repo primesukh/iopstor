@@ -329,7 +329,14 @@ trip, and `conditional=True` brings Range support with it, which is what a phone
 `?download=<name>` sets `Content-Disposition: attachment` — Supabase Storage used to do that, now this does.
 The name is passed through with only `\r` and `\n` removed: werkzeug quotes and RFC-2231-encodes the rest,
 and `secure_filename()` would rename "flash array.pdf" to "flash_array.pdf", defeating the point of the
-button. Guarded by `test_media_is_served_by_the_app_not_the_storage_gateway`.
+button.
+
+**An SVG gets `Content-Security-Policy: default-src 'none'; sandbox`.** This is the one thing serving media
+ourselves made *worse*: an SVG is a document that can carry `<script>`, and a `/media/` URL is same-origin
+with the admin session cookie, which a Storage URL never was. The header sandboxes a direct visit into an
+opaque origin with scripts off, and changes nothing about `<img src>`, which never executes script. It is
+scoped to SVG deliberately — an empty sandbox on a PDF can stop the browser's own viewer, which §6 depends
+on. Guarded by `test_media_is_served_by_the_app_not_the_storage_gateway`.
 
 **What is stored is the path, not the address.** `media.url` holds `/media/<key>` (written by
 `storage.public_path()` at upload, in `save_upload()` and in `flask import-media`), which is why nothing on
