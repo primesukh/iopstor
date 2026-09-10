@@ -682,6 +682,25 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .warranty-result.none h3{margin:0 0 8px;font-size:20px}
 .warranty-result.none p{margin:0 0 16px;font-size:15px;color:var(--muted)}
 
+/* spacer / divider: the two sections that are not content. Both zero .section's own 80px first --
+   a gap that is 160px before anyone picks a height is not a gap. The heights are scoped to .spacer
+   rather than left bare like .fx-*, because "height" is a plausible future field on another block
+   (see the ponytail note on pdf in blocks.py) and sp-* is emitted by section_class for whoever
+   declares it. */
+.spacer{padding:0;height:40px}
+.spacer.sp-small{height:16px}.spacer.sp-medium{height:40px}.spacer.sp-large{height:80px}.spacer.sp-huge{height:140px}
+.divider{padding:24px 0}
+.divider hr{border:0;border-top:1px solid var(--line);margin:0}
+/* t-dark is a class on the divider itself, not an ancestor, so this is .divider.t-dark and not a descendant */
+.divider.t-dark hr,.divider.t-blue hr{border-top-color:var(--line-dark-2)}
+/* Inside a column the stacking gap is padding on the section that FOLLOWS (.column>.section+.section
+   near the top of this file). A spacer is that gap, so it neither takes one nor hands one on --
+   otherwise a Small spacer stands 40px tall instead of the 16px it says. Written .column>.section.spacer
+   to tie that (0,3,0) rule and win on source order. */
+.column>.section.spacer{padding-top:0}
+.column>.section.divider{padding:16px 0}
+.column>.spacer+.section,.column>.divider+.section{padding-top:0}
+
 /* --- archives and detail pages ----------------------------------------------------------------
    Two header treatments: the catalogue types get the black band (band-dark, the same class the
    stats block uses), the reading types get the white one. archive.html picks which. */

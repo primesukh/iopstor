@@ -195,6 +195,21 @@ A few sections gained settings worth knowing about, all under the section's own 
 - **Customer quote** also has a **Dark background** tick, for a quote on a dark card. On its own a quote sits on a soft grey card; **put two side by side in a Columns section and the cards fall away** — the words go italic on the page's own background, which is how the home page runs them. Give the Columns section a *Heading* (“What our clients say”) and it sits above the pair.
 - **Contact form** — *Form type* also picks how the form looks. **quote** is the dark panel from the Contact page, and it asks two extra questions — what the visitor is interested in, and how many users — which arrive with the enquiry under **Leads**. **career** is the soft grey panel used on Careers. **contact** is the plain white card. Whatever you type in *Heading* sits inside the panel, at the top of the form.
 
+Two of the sections are not writing at all, and they are there for laying a page out:
+
+- **Spacer** is a gap and nothing else. Drop one between two sections when they sit too close
+  together, then open its **⚙** and pick a **Height** — *Small*, *Medium*, *Large* or
+  *Extra large*. On the page a visitor sees only white space; in the editor it shows as a faint
+  dashed strip so you can find it, move it or take it out again.
+- **Divider** is one thin line straight across the page. It has no settings of its own, because the
+  boxes every section already has do the job: set **Width** to a number like *400* and the line gets
+  shorter, and **Align the section** puts that shorter line on the left, in the middle or on the
+  right. It is the same line as the **—** button on the writing toolbar — that one draws a line
+  *inside* a piece of writing, this one draws a line *between* two sections.
+
+Both can go inside a **Columns** section as well, where the spacer's height is exactly the gap you
+asked for.
+
 One section is worth calling out: **Warranty check**. Drop it on a page and visitors get a box where they type the serial number of their unit and see straight away whether it is still in warranty. What it shows comes from the **Warranty** screen — see section 8 below.
 
 ### Putting things side by side
@@ -492,6 +507,14 @@ waits until you scroll down to that section and then plays, which is the nicest 
 one — Firefox before version 144, say — it plays once as the page loads instead. Either way you see
 it. If you have asked your computer to reduce motion, nothing animates at all and every figure and
 heading simply sits there in full, which is deliberate.
+
+**How do I put a bit more space between two sections?** Press `/` on an empty line and pick
+**Spacer**, then set its **Height** under the **⚙**. Four sizes, from a small nudge to a big
+breath. Adding empty lines used to be the only way; this is the tidy one, and it survives being
+dragged around like any other section.
+
+**How do I draw a line between two sections?** Press `/` and pick **Divider**. For a line inside a
+paragraph of writing instead, use the **—** button on the writing toolbar. They draw the same line.
 
 **I changed something and the website looks the same.** Check the status is *Published* and the publish date is not in the future. Then refresh with Ctrl+F5.
 

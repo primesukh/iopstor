@@ -40,6 +40,12 @@ BLOCKS = {  # type: (required fields, optional fields)
     # nothing required: the section is a serial-number box, and the answer is looked up at render time.
     # Explanatory copy goes in a rich_text section above it, like any other words on the page.
     "warranty_check": ([], ["heading"]),
+    # The two sections that are not content. Nothing required: a gap is a gap and a line is a line.
+    # height is a whitelist (HEIGHTS -> sp-*), not a number, because it lands in a class attribute;
+    # a divider takes nothing of its own -- the universal width/align_box keys already shorten it
+    # and move it, through --w and .alb-*.
+    "spacer": ([], ["height"]),
+    "divider": ([], []),
 }
 # Admin editor metadata: how each field is edited in /admin (iopstor/static/admin.js).
 # Field shapes that used to live in the comments above are data here so the editor has one source of truth.
@@ -50,7 +56,7 @@ EDITOR = {
                 "url": "url", "cta_url": "url", "button_url": "url", "limit": "number",
                 "top_level": "checkbox", "post_type": "post_type", "kind": "kind",
                 "cta2_url": "url", "link_url": "url", "dark": "checkbox",
-                "count_up": "checkbox", "fx": "choice"},
+                "count_up": "checkbox", "fx": "choice", "height": "choice"},
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
     "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label", "fx", "count_up"],
               "spec_table": ["k", "v"], "gallery": ["media_id", "alt"], "hero": ["media_id", "alt"],
@@ -71,11 +77,13 @@ EDITOR = {
     "choices": {"fx": [["", "None"],
                        ["rise", "Fades in as you scroll to it"],
                        ["gradient", "Gradient across the big text"],
-                       ["sweep", "Highlighter sweep behind the headings"]]},
+                       ["sweep", "Highlighter sweep behind the headings"]],
+                "height": [["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["huge", "Extra large"]]},
     # order the section picker offers them in, commonest first (Jinja's tojson sorts dict keys,
     # so BLOCKS' own order does not survive the trip to the browser)
-    "order": ["hero", "rich_text", "cards", "columns", "cta", "faq", "stats", "testimonial", "spec_table",
-              "image", "gallery", "pdf", "post_list", "contact_form", "warranty_check", "embed_html"],
+    "order": ["hero", "rich_text", "cards", "columns", "spacer", "divider", "cta", "faq", "stats",
+              "testimonial", "spec_table", "image", "gallery", "pdf", "post_list", "contact_form",
+              "warranty_check", "embed_html"],
     # the visual inserter: icon, plain-English name, one line on what the visitor sees
     "names": {
         "hero": ("\U0001F3D4", "Hero", "The big opening band: headline, one line of text, one button."),
@@ -94,6 +102,8 @@ EDITOR = {
         "warranty_check": ("\U0001F6E1", "Warranty check", "A box where a customer types their serial number and sees their warranty."),
         "pdf": ("\U0001F4C4", "PDF", "A PDF shown on the page in the reader's own PDF viewer."),
         "embed_html": ("</>", "Embedded code", "Paste code from YouTube, a map or another service."),
+        "spacer": ("\u2195", "Spacer", "A blank gap between two sections, in one of four heights."),
+        "divider": ("\u2500", "Divider", "A thin line straight across the page."),
     },
     # starting content for a freshly inserted block, so a new section is visible and clickable.
     # Anything with placeholder copy also passes validate_blocks(), so the page saves straight away.
@@ -121,6 +131,8 @@ EDITOR = {
         "image": {"caption": ""},      # media_id must be chosen: no placeholder can stand in for a picture
         "pdf": {"heading": ""},        # same for the file: an empty viewer is worse than an empty section
         "gallery": {"images": []},
+        "spacer": {"height": "medium"},
+        "divider": {},               # a line has nothing to fill in
     },
 }
 REPEATERS = ("items", "images", "rows", "cols")
@@ -139,7 +151,7 @@ def layout(name):
 
 _NON_TEXT_KEYS = {"url", "cta_url", "cta2_url", "button_url", "link_url", "icon", "image", "media_id", "file_media_id",
                   "post_type", "term", "limit", "kind", "top_level", "dark", "type", "widths", "align", "align_box", "width",
-                  "tone", "fx", "count_up"}
+                  "tone", "fx", "count_up", "height"}
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
 _TEXT_ORDER = ("eyebrow", "heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company",
                "value", "label", "k", "v", "caption", "alt", "cta_label", "cta2_label", "button_label", "link_label",
@@ -216,22 +228,25 @@ TONES = ("grey", "dark", "blue")   # the bands a section can sit on; absent = th
 ALIGNS = ("left", "center", "right")
 WIDTHS = {"wide": "w-wide", "full": "w-full"}   # "width" also takes a number of pixels; see section_style()
 FX = ("rise", "gradient", "sweep")   # the motion an editor can put on a section; counting figures up is its own checkbox
+HEIGHTS = ("small", "medium", "large", "huge")   # how tall a spacer is; the CSS holds the pixels
 MAX_W = 4000
 
 
 def section_class(data):
-    """The layout classes for one section, from five optional keys — absent means the theme's own
+    """The layout classes for one section, from six optional keys — absent means the theme's own
     layout. "align" lines up what is inside it, "align_box" moves the box, "tone" is the band it sits
     on (the design alternates white and grey down a page for rhythm), "width" is either a named
     step (wide / full) or a number of pixels, which section_style() carries instead, and "fx" is
-    the motion in site.css's effects group. A whitelist, not a passthrough: the result goes
-    straight into a class attribute, the same reason col_widths() is strict — which is also why
-    stats.html calls this for one figure's own effect rather than building the class itself.
+    the motion in site.css's effects group, and "height" is how tall a spacer stands. A whitelist,
+    not a passthrough: the result goes straight into a class attribute, the same reason col_widths()
+    is strict — which is also why stats.html calls this for one figure's own effect rather than
+    building the class itself.
     Returns "" or " al-center", " al-center alb-right w-full fx-rise", …"""
     out = [p + data[k] for k, p in (("align", "al-"), ("align_box", "alb-")) if data.get(k) in ALIGNS]
     out += ["t-" + data["tone"]] if data.get("tone") in TONES else []
     out += [WIDTHS[str(data.get("width"))]] if str(data.get("width")) in WIDTHS else []
     out += ["fx-" + data["fx"]] if data.get("fx") in FX else []
+    out += ["sp-" + data["height"]] if data.get("height") in HEIGHTS else []
     return (" " + " ".join(out)) if out else ""
 
 
@@ -337,7 +352,7 @@ def blocks_text(blocks):
     return " ".join(" ".join(out).split())
 
 
-MD_SKIP = ("embed_html",)   # an iframe is a video or a map, not words: nothing to write down
+MD_SKIP = ("embed_html", "spacer")   # an iframe is a video or a map, and a gap is a gap: nothing to write down
 
 
 def _html_md(html):
@@ -433,6 +448,8 @@ def blocks_md(blocks, h1=True):
             out += [head, "*(a form on the page — name, email and a message)*"]
         elif t == "warranty_check":
             out += [head, "*(a box on the page where a customer types their serial number)*"]
+        elif t == "divider":
+            out.append("---")   # the join is "\n\n", so this can only ever be a thematic break
     return "\n\n".join(x for x in out if x and x.strip())
 
 

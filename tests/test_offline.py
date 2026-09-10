@@ -20,8 +20,12 @@ def test_render_blocks_uses_template(app, monkeypatch):
     from iopstor import db
     monkeypatch.setattr(db, "settings", lambda: {})  # base template context processor reads site settings
     monkeypatch.setattr(db, "get_menu", lambda slug: [])
-    html = render_blocks([{"type": "hero", "data": {"heading": "Fast <NAS>"}}, {"type": "stats", "data": {"items": [{"value": "5PB", "label": "per rack"}]}}])
+    html = render_blocks([{"type": "hero", "data": {"heading": "Fast <NAS>"}}, {"type": "stats", "data": {"items": [{"value": "5PB", "label": "per rack"}]}},
+                          {"type": "spacer", "data": {"height": "large"}}, {"type": "divider", "data": {}}])
     assert "<h1>Fast &lt;NAS&gt;</h1>" in html and "5PB" in html
+    # the two content-less blocks are here because nothing else asserts a template exists, and a
+    # missing one is a 500 on the public page rather than a failing test
+    assert '<section class="section spacer sp-large"></section>' in html and "<hr>" in html
 
 
 def test_blocks_text_flattens():
@@ -69,6 +73,19 @@ def test_blocks_md_covers_every_block(app, monkeypatch):
         if name in MD_SKIP or validate_blocks([block]):
             continue
         assert blocks_md([block]).strip(), name
+
+
+def test_spacer_and_divider_are_layout_not_words():
+    """The two sections with nothing to say still have to say nothing correctly: a divider is a
+    thematic break in the .md twin, a spacer is skipped there, and the height an editor picks lands
+    in a class attribute — so it goes through the whitelist and never into the page's text."""
+    from iopstor.blocks import section_class
+
+    assert blocks_md([{"type": "divider", "data": {}}]).strip() == "---"
+    assert blocks_md([{"type": "spacer", "data": {"height": "large"}}]) == ""
+    assert blocks_text([{"type": "spacer", "data": {"height": "large"}}]) == ""
+    assert section_class({"height": "large"}) == " sp-large"
+    assert section_class({"height": '40px" onload="x'}) == ""
 
 
 def test_md_url_is_the_only_place_the_suffix_is_spelled():
