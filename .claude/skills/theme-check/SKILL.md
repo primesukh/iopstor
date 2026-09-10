@@ -24,11 +24,26 @@ No browser extension is connected on this machine. Firefox headless works; Playw
    mkdir -p /tmp/claude-1000/shots /tmp/claude-1000/ffprofile
    firefox --headless --profile /tmp/claude-1000/ffprofile --window-size=1440,2400 --screenshot /tmp/claude-1000/shots/home-1440.png http://localhost:5001/
    ```
-4. **The mock at the same width**, for the comparison:
+4. **A footer needs a taller window.** `--window-size` *is* the capture, not a viewport it scrolls: a page
+   longer than the height is truncated, and the home page is ~5800px, so the footer is simply not in a
+   2400px shot. Shoot tall, find where the content ends, then crop to it — three commands, one Bash call each:
+   ```bash
+   firefox --headless --profile /tmp/claude-1000/ffprofile --window-size=1440,9000 --screenshot /tmp/claude-1000/shots/home-full.png http://localhost:5001/
+   ```
+   ```bash
+   convert /tmp/claude-1000/shots/home-full.png -bordercolor white -border 1 -trim -format "%wx%h\n" info:
+   ```
+   ```bash
+   convert /tmp/claude-1000/shots/home-full.png -crop 1440x340+0+5500 +repage /tmp/claude-1000/shots/foot.png
+   ```
+   The `-trim` prints the real content height; crop a band ending there. A crop that comes back
+   `Grayscale ... 2c` is blank page below the content — the offset was past the end, not a broken footer.
+   `identify` reports any PNG's size and is the quickest way to check a source image's own aspect ratio.
+5. **The mock at the same width**, for the comparison:
    ```bash
    firefox --headless --profile /tmp/claude-1000/ffprofile --window-size=1440,2400 --screenshot /tmp/claude-1000/shots/mock-1440.png file:///home/sukhpreetsaluja/Documents/coding-stuff/iopstor/website_assets/mock-website.html
    ```
-5. Read each PNG. `convert` (ImageMagick) exists for cropping or a side-by-side montage; Python PIL does not. Stop the server; the profile directory can stay.
+6. Read each PNG. `convert` and `identify` (ImageMagick) exist for cropping, measuring and side-by-side montages; Python PIL does not. Stop the server; the profile directory can stay.
 
 ## Which pages
 
