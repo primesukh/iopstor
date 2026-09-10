@@ -37,8 +37,10 @@
 .admin-main{background:var(--grey);padding:32px;min-width:0}
 .admin-main>*{max-width:1200px}
 /* the login screen has no shell: a black page with the card in the middle of it */
-.admin-anon{display:flex;align-items:center;justify-content:center;background:var(--black);min-height:100vh}
-.admin-anon>*{width:100%}
+/* column, not the default row: base.html renders flashes as a sibling of the card, and two children
+   of a row flex each asking for width:100% split the viewport down the middle instead of stacking */
+.admin-anon{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--black);min-height:100vh}
+.admin-anon>*{width:100%;max-width:420px}
 @media(max-width:1000px){
   .adm-shell{grid-template-columns:1fr;grid-template-rows:auto 1fr}
   .adm-side{position:static;height:auto;padding:10px 12px}

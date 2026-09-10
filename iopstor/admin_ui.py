@@ -83,11 +83,10 @@ def login_page():
         try:
             s = login(request.form.get("email", ""), request.form.get("password", ""))
         except AuthError:
-            flash("Wrong email or password.")
-            return render_template("admin/login.html"), 401
+            return render_template("admin/login.html", error="Wrong email or password."), 401
         if db.one(db.table("users").select("id").eq("id", s["user_id"])) is None:
-            flash("This login has no CMS account. Ask an admin to add you under Users.")
-            return render_template("admin/login.html"), 403
+            return render_template("admin/login.html",
+                                   error="This login has no CMS account. Ask an admin to add you under Users."), 403
         session["access_token"], session["refresh_token"] = s["access_token"], s["refresh_token"]
         return redirect(_safe_next())
     return render_template("admin/login.html")
