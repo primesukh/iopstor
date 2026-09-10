@@ -7,8 +7,8 @@
     <table>
       <tr><th>Person</th><th>Role</th><th></th></tr>
       {% for u in users %}<tr>
-        <td><span class="who"><span class="avatar {{ u.role }}">{{ (u.name or u.email)[0]|upper }}</span>
-          <span><strong>{{ u.name or u.email.split('@')[0] }}</strong>{% if u.id == admin_user.id %} <span class="pill scheduled">you</span>{% endif %}
+        <td><span class="who"><span class="avatar {{ u.role }}">{{ display_name(u)[0]|upper }}</span>
+          <span><strong>{{ display_name(u) }}</strong>{% if u.id == admin_user.id %} <span class="pill scheduled">you</span>{% endif %}
           <span class="t-path">{{ u.email }}</span></span></span></td>
         <td>{{ u.role }}</td>
         <td>{% if u.id != admin_user.id %}<form method="post" action="{{ url_for('admin_ui.user_delete', pk=u.id) }}" onsubmit="return confirm('Remove this user? They lose access immediately.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="danger">Remove</button></form>{% endif %}</td>
@@ -16,6 +16,12 @@
     </table>
   </div>
   <aside class="m-panel">
+    <h2>Your name</h2>
+    <form method="post" action="{{ url_for('admin_ui.user_name') }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Shown in the sidebar <input type="text" name="name" maxlength="200" value="{{ admin_user.name }}" placeholder="{{ display_name(admin_user) }}"></label>
+      <p><button type="submit">Save name</button></p>
+    </form>
     <h2>Invite a user</h2>
     <form method="post">
       <input type="hidden" name="csrf" value="{{ csrf }}">

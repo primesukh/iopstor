@@ -34,7 +34,9 @@ If you can log in but see "Forbidden", your login exists but has not been given 
 
 ---
 
-**Finding your way around.** Everything lives in the black bar down the left. *Content* lists every kind of page with how many of each there are; *Site* holds Media, Leads, Warranty and — if you are an administrator — Settings and Users. The page you are on is highlighted in blue, and a blue number next to **Leads** means new enquiries are waiting. On a narrow screen the bar collapses to a single line with a ☰ button.
+**Finding your way around.** Everything lives in the black bar down the left. Every line has a small picture beside it so you can find the one you want without reading down the list. *Content* lists every kind of page with how many of each there are; *Site* holds Media, Leads, Warranty and — if you are an administrator — Settings and Users. The page you are on is marked with a blue stripe down its left edge, and a blue number next to **Leads** means new enquiries are waiting. On a narrow screen the bar collapses to a single line with a ☰ button.
+
+At the bottom of that bar it says who is signed in — your name, and your email address underneath it. A long email address is shortened with a "…"; hover over it to see the whole thing. If you have not told the system your name it makes a sensible one out of your email address, so `sukhpreet.saluja@…` shows as *Sukhpreet Saluja*. To set it properly, go to **Users** and fill in **Your name** at the top of the right-hand panel, then press *Save name*. Leave the box empty and it goes back to the guess. (Only administrators can reach the Users screen; if you are an editor, the guessed name is what you get.)
 
 ---
 

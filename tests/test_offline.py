@@ -1,4 +1,5 @@
 """Pure logic — no Supabase needed."""
+from iopstor import display_name
 from iopstor.blocks import at_path, blocks_md, blocks_text, col_widths, render_blocks, validate_blocks
 from iopstor.db import slugify
 
@@ -734,3 +735,12 @@ def test_media_public_address_is_one_url_whichever_shape_the_row_is_in(app, clie
     assert f'value="{old}"' in body                       # still on Storage: shown as it stands
     body = client.get("/admin/media?pick=2").get_data(as_text=True)
     assert 'value="http://test/media/2026/09/b.png"' in body   # migrated: SITE_URL in front, once
+
+
+def test_display_name_falls_back_to_the_email():
+    assert display_name({"name": "Sukhpreet Saluja", "email": "s@x.com"}) == "Sukhpreet Saluja"
+    # users.name defaults to '' and `flask create-admin` never fills it, so the fallback is the
+    # common case, not the edge one
+    assert display_name({"name": "", "email": "sukhpreet.saluja@primeabgb.com"}) == "Sukhpreet Saluja"
+    assert display_name({"name": "   ", "email": "jane_doe@x.com"}) == "Jane Doe"
+    assert display_name({"email": "a-b@x.com"}) == "A B"
