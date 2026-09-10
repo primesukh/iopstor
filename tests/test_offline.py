@@ -3,17 +3,6 @@ from iopstor.blocks import at_path, blocks_md, blocks_text, col_widths, render_b
 from iopstor.db import slugify
 
 
-def test_every_supabase_client_carries_the_ngrok_header(app):
-    # one kwarg on db._client(), but it has to reach all three sub-clients: PostgREST, GoTrue and
-    # Storage each build their own session, and a tunnelled SUPABASE_URL breaks on whichever misses it
-    from iopstor import db
-    c = db.sb()
-    key, value = next(iter(db.SKIP_NGROK_WARNING.items()))
-    assert c.postgrest.session.headers.get(key) == value
-    assert c.auth._headers.get(key) == value
-    assert c.storage.session.headers.get(key) == value
-
-
 def test_slugify():
     assert slugify("NAS Storage!") == "nas-storage"
     assert slugify("  Désktop as a Service  ") == "desktop-as-a-service"

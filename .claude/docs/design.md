@@ -137,7 +137,6 @@ RLS is on for every table (`0002`; a new table repeats the one `ENABLE ROW LEVEL
 - Browser admin: same login through a form; tokens in the signed session cookie (SameSite=Lax, Secure on https), `auth._session_token()` refreshes silently. Every POST carries a per-session `csrf` field checked by `ui_required`; `next` accepts relative same-origin paths only.
 - Roles: `editor` (content, media, leads, warranty add/edit) < `admin` (delete, post types, settings, users, redirects, warranty delete).
 - Sign-in uses a throwaway anon client, never the service-role client.
-- `db._client()` is the **only** `create_client()`: both `sb()` and `anon()` build through it, so per-request truths are set once. It sends `db.SKIP_NGROK_WARNING` (`ngrok-skip-browser-warning: 1`) on everything (2026-09-10) — a tunnelled `SUPABASE_URL` otherwise gets ngrok's HTML interstitial where JSON should be. `supabase-py` fans `options.headers` out to three sessions (PostgREST, GoTrue, Storage) and the offline test asserts all three.
 
 ---
 
@@ -253,7 +252,6 @@ Decisions that are easy to undo by accident:
 | 2026-09-09 | `/after-merge` owns the whole graph refresh; the git hooks are not relied on after a pull | A fast-forward pull fires no hook, so the graph sat three commits behind `main` on the first run |
 | 2026-09-09 | `gh pr merge` taken off the deny list; the agent merges only when told, on that PR | A deny cannot see consent, and the user wants to say "merge it" and have it done |
 | 2026-09-10 | Logo sized by a fixed 150x22 box cropped with `object-fit:cover`, shared by header and footer | A fixed height alone does not normalise a logo: whitespace baked into the PNG was being counted as logo, so a swapped-in file rendered at less than half the size |
-| 2026-09-10 | `ngrok-skip-browser-warning` sent on every Supabase request, hardcoded in `db._client()` | ngrok only checks the header is present, never its value, so an env key would be a setting with one possible meaning; Kong ignores it, so there is nothing to sniff for |
 
 ---
 

@@ -91,20 +91,6 @@ Indexes: `posts (post_type_id, status, published_at)`, `leads (status, created_a
 
 Every query goes through this module. Nothing else builds a PostgREST query.
 
-**`_client()` is the only `create_client()` in the codebase** — `sb()` (service-role, one per app) and
-`anon()` (throwaway, sign-in only) both build through it, so anything that has to be true of every
-Supabase request is set there once. It carries `auto_refresh_token=False, persist_session=False` and
-`headers=db.SKIP_NGROK_WARNING`.
-
-**`SKIP_NGROK_WARNING = {"ngrok-skip-browser-warning": "1"}`.** ngrok's free tier answers a plain
-request with an HTML interstitial instead of proxying it, and any request carrying that header skips
-it — the *value* is never read, only its presence, so it is a constant and not an env key. Without it
-a `SUPABASE_URL` pointed at an ngrok tunnel returns that HTML page where PostgREST's JSON should be,
-and every read fails at parse time rather than with a status code. Kong ignores the header, so it is
-sent unconditionally rather than sniffed for `.ngrok`. `supabase-py` fans `options.headers` out to
-three separate sessions — PostgREST, GoTrue and Storage — and `test_offline.py` asserts the header
-reached all three, because a tunnel breaks on whichever one misses it.
-
 | Helper | Contract |
 |---|---|
 | `table(name)` | Service-role PostgREST query builder |

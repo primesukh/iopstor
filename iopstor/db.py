@@ -13,15 +13,9 @@ POST_SELECT = "*, post_type:post_types(*), featured_media:media(*), terms(*, tax
 POST_SELECT_BY_TERM = POST_SELECT + ", post_terms!inner(term_id)"  # + .eq("post_terms.term_id", id)
 
 
-# ngrok's free tier answers a plain browser request with an HTML interstitial instead of proxying it,
-# and any request carrying this header skips it -- the value is never read. Sent on every Supabase
-# call so a tunnelled SUPABASE_URL returns JSON rather than that page; harmless to Kong otherwise.
-SKIP_NGROK_WARNING = {"ngrok-skip-browser-warning": "1"}
-
-
 def _client(key):
     cfg = current_app.config
-    return create_client(cfg["SUPABASE_URL"], key, ClientOptions(auto_refresh_token=False, persist_session=False, headers=dict(SKIP_NGROK_WARNING)))
+    return create_client(cfg["SUPABASE_URL"], key, ClientOptions(auto_refresh_token=False, persist_session=False))
 
 
 def sb():
