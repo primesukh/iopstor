@@ -1,9 +1,9 @@
 ---
 name: after-merge
-description: Use when the user says a PR was merged, or asks to "sync", "pull main", "rebuild the graph", "refresh .claude", "clean up branches" — the post-merge housekeeping for this repo.
+description: Use when the user says a PR was merged, or asks to "sync", "pull main", "refresh .claude", "clean up branches" — the post-merge housekeeping for this repo.
 ---
 
-# After a merge: pull, refresh the map, audit `.claude/`
+# After a merge: pull, then bring `.claude/` back in line by hand
 
 Merging is the user's act. Everything after it is yours, on `main`, without a single push.
 
@@ -15,13 +15,7 @@ Merging is the user's act. Everything after it is yours, on `main`, without a si
    git fetch -p && git branch -d <merged-branch>     # or /clean_gone for every [gone] branch
    ```
 
-2. **Refresh the graph** — the only moment the LLM pass ever runs. Do not expect the git hooks to have done it: `post-checkout` fired when you switched to `main`, but a fast-forward `git pull` fires no hook, so after step 1 the graph is still the *old* `main`. On `main` only (`git branch --show-current` must print `main`), invoke the skill; it re-extracts every file changed since the last manifest — code with the AST (free) and prose with subagents — and re-labels the communities:
-   ```
-   /graphify . --update
-   ```
-   Two things to expect. Community labelling is a manual step in the skill (a 2–5 word name per community). And the first `--update` after a graphify upgrade re-extracts **every** prose file, because the cache is keyed on the extraction prompt — 54 files and ~400k subagent tokens the first time; run it anyway, on `main`, it is what the rule is for. Confirm afterwards that the report's `Built from commit` line equals `git rev-parse --short HEAD`.
-
-3. **Audit `.claude/` against what landed**: `git diff --stat "$PREV"..HEAD` and `git log --oneline "$PREV"..HEAD`, then for each kind of change:
+2. **Bring `.claude/` back in line, by hand.** This is the whole job — nothing rebuilds it for you. A sentence that was true last week is the failure mode, and the diff is the only thing that proves it either way, so read what landed — `git diff --stat "$PREV"..HEAD` and `git log --oneline "$PREV"..HEAD` — then open every file the table points at and check the sentence describing the changed thing still describes it:
 
    | Landed | Refresh |
    |---|---|
@@ -38,14 +32,14 @@ Merging is the user's act. Everything after it is yours, on `main`, without a si
 
    Also read the merged PR body's **Decisions worth reviewing** — those rows belong in §14.
 
-4. **Nothing drifted?** Say so, with the graph commit line, and stop.
+3. **Nothing drifted?** Say which files you read and stop.
    **Something drifted?** `git checkout -b chore/claude-sync-<date>`, make the edits, `/pr`. Never commit to `main`.
 
-5. **Per-machine facts** learned on the way (a CLI that appeared, a tool that stopped working) go to Claude's memory directory, not to the repo.
+4. **Per-machine facts** learned on the way (a CLI that appeared, a tool that stopped working) go to Claude's memory directory, not to the repo.
 
 ## Do not
 
-- Run `/graphify` or `graphify label` on a branch (`CLAUDE.md` rule 1). The git hooks' code-only rebuild is not that.
+- Run `/graphify . --update`, `/graphify` or `graphify label`. The graph is queried, never rebuilt from here — its code half follows the git hooks on its own, and its prose half is deliberately left where it is (`CLAUDE.md` rule 1).
 - Touch the database.
 - Push anything from `main`.
 - Rewrite `design.md` from scratch; it is refreshed, section by section, against the diff.

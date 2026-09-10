@@ -10,6 +10,7 @@ The PR is the hand-off. It is opened by you and merged by the user, never by you
 ## Pre-flight (every line must be true before `git push`)
 
 - On a `feat/ | fix/ | docs/ | chore/` branch, not `main`: `git branch --show-current`
+- **Cut from `origin/main`, carrying only this work**: `git log origin/main..HEAD --oneline` lists your commits and nothing else. `git checkout -b` branches from whatever was checked out, so a branch started while an unmerged chore branch was current inherits its commits and the PR shows someone else's work. Fix before the first push: `git rebase --onto origin/main <the-inherited-commit> <your-branch>`.
 - `pipenv run pytest -q` was run in this session. Record the count. A failure that also fails on `main` is reported as such **after checking** (`git stash; git checkout main; pytest <test>; git checkout -; git stash pop`), never assumed.
 - `/docs` is done: `docs/TECHNICAL.md`, `docs/NON-TECHNICAL.md`, `.claude/docs/design.md` — or the body says which audience is genuinely unaffected and why.
 - A new `migrations/NNNN_*.sql` exists → it was **not** applied by you, and the body has a **Needs applying** section naming it.
