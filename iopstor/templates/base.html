@@ -41,8 +41,7 @@
       <ul>
         {% for i in menu('header') %}{% set is_mega = svc and i.url == svc.url %}<li{% if is_mega %} class="nav-mega"{% endif %}><a href="{{ i.url }}">{{ i.label }}{% if is_mega or i.children %} <span aria-hidden="true">&#9662;</span>{% endif %}</a>
           {%- if is_mega %}<div class="mega"><div class="wrap">
-            <div class="mega-groups">{% for g in svc.groups %}<a class="mega-g" href="{{ g.path }}"><span class="n">{{ '%02d' % loop.index }}</span>{{ g.title }}<span class="arrow" aria-hidden="true">&rarr;</span></a>{% endfor %}</div>
-            <div class="mega-panes">{% for g in svc.groups %}<div class="mega-pane"><h3>{{ g.title }}</h3>{% if g.excerpt %}<p class="blurb">{{ g.excerpt }}</p>{% endif %}<div class="mega-tiles">{% for c in g.children %}<a href="{{ c.path }}">{{ c.title }}<span class="arrow" aria-hidden="true">&rarr;</span></a>{% endfor %}</div></div>{% endfor %}</div>
+            <div class="mega-cats">{% for g in svc.groups %}<a class="mega-g" href="{{ g.path }}"><span class="n">{{ '%02d' % loop.index }}</span>{{ g.title }}<span class="arrow" aria-hidden="true">&rarr;</span></a><div class="mega-pane"><h3>{{ g.title }}</h3>{% if g.excerpt %}<p class="blurb">{{ g.excerpt }}</p>{% endif %}<div class="mega-tiles">{% for c in g.children %}<a href="{{ c.path }}">{{ c.title }}<span class="arrow" aria-hidden="true">&rarr;</span></a>{% endfor %}</div></div>{% endfor %}</div>
             <div class="mega-foot"><a href="{{ i.url }}">All services &rarr;</a><a class="q" href="/contact-us">Request a quote &rarr;</a></div>
           </div></div>
           {%- elif i.children %}<ul class="sub">{% for c in i.children %}<li><a href="{{ c.url }}">{{ c.label }}</a></li>{% endfor %}</ul>{% endif %}</li>{% endfor %}

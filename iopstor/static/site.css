@@ -106,43 +106,42 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 /* --- services mega menu --------------------------------------------------------------------- */
 .mega{display:none;position:absolute;top:100%;left:0;right:0;background:var(--white);color:var(--ink);border-bottom:1px solid var(--line);box-shadow:0 30px 60px rgba(10,13,18,.25);animation:drop .22s cubic-bezier(.2,.7,.2,1)}
 .nav-mega:hover>.mega,.nav-mega:focus-within>.mega{display:block}
-.mega>.wrap{display:grid;grid-template-columns:260px minmax(0,1fr)}
-.mega-groups{border-right:1px solid var(--line);padding:18px 18px 18px 0}
-.mega-g{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:8px;text-decoration:none;color:var(--muted);font:600 15px/1.3 var(--body)}
+/* the nav link is 59px tall in a 64px header, so a slow or diagonal approach crosses 2.5px of bare
+   header and the panel closes on the way in; the bridge exists only while the panel is already
+   open, so it can hold one open but never open one. 3px, to barely graze the links above it. */
+.mega::before{content:'';position:absolute;bottom:100%;left:0;right:0;height:3px}
+.mega>.wrap{display:block}
+/* One grid, and each pane is the next sibling of its own link. The links fill column one and the
+   divider is the pane's own border-left, so there is no unhoverable strip between a link and the
+   pane it opens; span 99 is "every row of the list", so the pane is beside the last link too. */
+.mega-cats{display:grid;grid-template-columns:260px minmax(0,1fr)}
+.mega-g{grid-column:1;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:8px;text-decoration:none;color:var(--muted);font:600 15px/1.3 var(--body)}
+.mega-g:first-child{margin-top:18px}
+.mega-g:last-of-type{margin-bottom:18px}
 .mega-g .n{flex:none;width:22px;font:700 11px/1 var(--mono);color:var(--blue)}
 .mega-g .arrow{margin-left:auto;color:var(--blue);opacity:0}
-.mega-g:hover{background:var(--grey);color:var(--black)}
-.mega-g:hover .arrow{opacity:1}
-.mega-panes{padding:28px 0 28px 36px}
-.mega-panes>.mega-pane{animation:fade .2s ease-out both}
+.mega-pane{grid-column:2;grid-row:1/span 99;border-left:1px solid var(--line);padding:28px 0 28px 36px;animation:fade .2s ease-out both}
 .mega-pane h3{font:800 22px/1.2 var(--head);margin:0 0 6px;color:var(--black)}
 .mega-pane .blurb{font:400 14.5px/1.5 var(--body);color:var(--muted);max-width:560px;margin:0 0 18px}
 .mega-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
 .mega-tiles a{display:flex;align-items:center;gap:8px;background:var(--grey);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font:400 14px/1.3 var(--body);color:var(--ink);text-decoration:none;transition:background .15s,border-color .15s,color .15s}
 .mega-tiles a:hover{background:var(--white);border-color:var(--blue);color:var(--blue)}
 .mega-tiles .arrow{margin-left:auto;color:var(--blue)}
-.mega-foot{grid-column:1/-1;display:flex;gap:24px;border-top:1px solid var(--line);padding:14px 0}
+.mega-foot{display:flex;gap:24px;border-top:1px solid var(--line);padding:14px 0}
 .mega-foot a{font:600 14px/1 var(--body);color:var(--black);text-decoration:none}
 .mega-foot a.q{color:var(--blue)}
-/* Which group is showing. Nothing hovered = the first one, which is also the whole behaviour in a
-   browser without :has(). The "hide the default" rule is deliberately less specific than the
-   per-index rules below it, so the hovered pane wins. Eight groups is the ceiling.
-   ponytail: a ninth service would silently show pane one; add a line if that ever happens. */
-.mega-panes>.mega-pane{display:none}
-.mega-panes>.mega-pane:first-child{display:block}
-.mega-groups>.mega-g:first-child{background:var(--grey);color:var(--black)}
-.mega-groups>.mega-g:first-child .arrow{opacity:1}
-.mega:has(.mega-g:hover) .mega-panes>.mega-pane:first-child{display:none}
-.mega:has(.mega-g:hover) .mega-groups>.mega-g:first-child:not(:hover){background:transparent;color:var(--muted)}
-.mega:has(.mega-g:hover) .mega-groups>.mega-g:first-child:not(:hover) .arrow{opacity:0}
-.mega:has(.mega-g:nth-child(1):hover) .mega-panes>.mega-pane:nth-child(1),
-.mega:has(.mega-g:nth-child(2):hover) .mega-panes>.mega-pane:nth-child(2),
-.mega:has(.mega-g:nth-child(3):hover) .mega-panes>.mega-pane:nth-child(3),
-.mega:has(.mega-g:nth-child(4):hover) .mega-panes>.mega-pane:nth-child(4),
-.mega:has(.mega-g:nth-child(5):hover) .mega-panes>.mega-pane:nth-child(5),
-.mega:has(.mega-g:nth-child(6):hover) .mega-panes>.mega-pane:nth-child(6),
-.mega:has(.mega-g:nth-child(7):hover) .mega-panes>.mega-pane:nth-child(7),
-.mega:has(.mega-g:nth-child(8):hover) .mega-panes>.mega-pane:nth-child(8){display:block}
+/* Which group is showing. The link opens the pane next to it and the pane then holds itself open
+   while the pointer is inside it -- without that second half the pane vanishes the moment the
+   cursor leaves the link, and no tile except the first group's is reachable. :has() walks the
+   highlight back from a hovered pane to its link. Nothing hovered or focused = the first group,
+   which is also the whole behaviour in a browser without :has(). No ceiling on the group count. */
+.mega-pane{display:none}
+.mega-g:hover+.mega-pane,.mega-g:focus+.mega-pane,.mega-pane:hover,.mega-pane:focus-within{display:block}
+.mega-g:hover,.mega-g:focus,.mega-g:has(+.mega-pane:hover,+.mega-pane:focus-within){background:var(--grey);color:var(--black)}
+.mega-g:hover .arrow,.mega-g:focus .arrow,.mega-g:has(+.mega-pane:hover,+.mega-pane:focus-within) .arrow{opacity:1}
+.mega-cats:not(:has(:hover,:focus)) .mega-g:first-child{background:var(--grey);color:var(--black)}
+.mega-cats:not(:has(:hover,:focus)) .mega-g:first-child .arrow{opacity:1}
+.mega-cats:not(:has(:hover,:focus)) .mega-g:first-child+.mega-pane{display:block}
 
 @media(max-width:960px){
   .nav-toggle-label{display:flex}
@@ -158,10 +157,11 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
   .site-nav .nav-cta>a{text-align:center;padding:14px 18px}
   /* the panel collapses to a plain list: no group column, every pane shown, no blurbs */
   .mega{display:block;position:static;background:transparent;color:inherit;border:0;box-shadow:none;animation:none}
-  .mega>.wrap{display:block;padding:0}
-  .mega-groups{display:none}
-  .mega-panes{padding:0 0 8px}
-  .mega-panes>.mega-pane{display:block}
+  .mega::before{display:none}
+  .mega>.wrap{padding:0}
+  .mega-cats{display:block}
+  .mega-g{display:none}
+  .mega-pane{display:block;border-left:0;padding:0 0 8px}
   .mega-pane h3{font:600 15px/1.3 var(--body);color:var(--muted);margin:12px 0 4px}
   .mega-pane .blurb{display:none}
   .mega-tiles{grid-template-columns:1fr;gap:0}
@@ -768,7 +768,7 @@ a.chip:hover{border-color:var(--blue);color:var(--blue)}
    is simply left showing. */
 @media(prefers-reduced-motion:reduce){
   a.card:hover{transform:none}
-  .hero-text,.hero-media,.hero-media::before,.hero-media>img,.hero-slides,.site-nav .sub,.mega,.mega-panes>.mega-pane,.nav-toggle:checked~.site-nav{animation:none!important}
+  .hero-text,.hero-media,.hero-media::before,.hero-media>img,.hero-slides,.site-nav .sub,.mega,.mega-pane,.nav-toggle:checked~.site-nav{animation:none!important}
   .hero-slide{animation:none!important;opacity:0}
   .hero-slide:first-child{opacity:1}
   .hero-dots{display:none}
