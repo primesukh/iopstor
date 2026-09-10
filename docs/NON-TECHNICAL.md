@@ -40,6 +40,8 @@ At the bottom of that bar it says who is signed in — your name, and your email
 
 **Changing your password.** Click **Password** at the bottom of the black bar. You need your current password, then the new one twice — at least 8 characters. Everyone can do this, editors included. You stay signed in afterwards.
 
+**Too many wrong passwords locks the door for a while.** After ten wrong attempts the login page stops accepting tries from that internet connection and says how long to wait — fifteen minutes by default. It clears itself; nobody has to unlock anything, and an administrator cannot let you back in early. It counts by internet connection, not by account, so nobody can lock *you* out by guessing at your email address, and being locked out on one device does not stop you signing in from another. The same limit applies to the **Password** screen if you keep getting your current password wrong.
+
 **If someone forgets their password**, an administrator can hand them a new one: **Users**, then *Set a password* under that person's name. Type one, press *Set*, and tell them what it is so they can change it themselves. There is no "forgot my password" email — this website's Supabase does not send mail. Your own row has no *Set a password*; use the **Password** screen for yourself, which is the one that checks you know the old one.
 
 ---

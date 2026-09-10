@@ -754,3 +754,42 @@ def test_password_errors():
     # the admin's one-field reset has nothing to confirm against, so the second check must not fire
     assert _password_errors("longenough") == []
     assert _password_errors("short")
+
+
+def test_throttle_counts_failures_per_key(app, tmp_path):
+    from iopstor import throttle
+
+    app.config.update(TESTING=False, THROTTLE_DB=str(tmp_path / "t.db"),
+                      LOGIN_MAX_FAILURES=3, LOGIN_WINDOW=900)
+    with app.test_request_context("/admin/login"):
+        assert throttle.retry_after("ip:1.2.3.4") == 0
+        for _ in range(3):
+            throttle.record_failure("ip:1.2.3.4")
+        wait = throttle.retry_after("ip:1.2.3.4")
+        assert 0 < wait <= 900
+        assert throttle.retry_after("ip:9.9.9.9") == 0    # one key's failures are not another's
+        throttle.clear("ip:1.2.3.4")                       # a correct password wipes the slate
+        assert throttle.retry_after("ip:1.2.3.4") == 0
+        # a failure older than the window has rolled off
+        app.config["LOGIN_WINDOW"] = 0
+        throttle.record_failure("ip:1.2.3.4")
+        assert throttle.retry_after("ip:1.2.3.4") == 0
+
+
+def test_throttle_fails_open_and_reads_cloudflares_header(app):
+    from iopstor import throttle
+
+    # a counter that cannot open its file must never lock the owner out of their own site
+    app.config.update(TESTING=False, THROTTLE_DB="/nonexistent-dir/t.db", LOGIN_MAX_FAILURES=1)
+    with app.test_request_context("/admin/login"):
+        throttle.record_failure("ip:1.2.3.4")
+        assert throttle.retry_after("ip:1.2.3.4") == 0
+    base = {"REMOTE_ADDR": "127.0.0.1"}
+    with app.test_request_context("/admin/login", environ_base=base, headers={"CF-Connecting-IP": "9.9.9.9"}):
+        assert throttle.client_ip() == "9.9.9.9"         # behind the tunnel: the header is the visitor
+    with app.test_request_context("/admin/login", environ_base=base):
+        assert throttle.client_ip() == "127.0.0.1"       # dev: no proxy in the way
+    with app.test_request_context("/admin/login"):
+        # never None: the key is built with an f-string, and None would put every such request in
+        # one shared bucket under the name "None"
+        assert throttle.client_ip() == "-"
