@@ -8,6 +8,7 @@ from . import db
 from .auth import ROLES, create_auth_user, delete_auth_user, login, logout, refresh, require_role
 from .blocks import BLOCKS, validate_blocks
 from .storage import delete_media, save_upload
+from .throttle import clear as throttle_clear, client_ip, record_failure, retry_after
 
 bp = Blueprint("admin_api", __name__, url_prefix="/api/admin/v1")
 
@@ -76,10 +77,16 @@ def parse_dt(value):
 @bp.post("/auth/login")
 def auth_login():
     b = body()
+    key = f"ip:{client_ip()}"
+    wait = retry_after(key)
+    if wait:
+        abort(make_response(jsonify(error="too many attempts"), 429, {"Retry-After": wait}))
     try:
         s = login(b.get("email", ""), b.get("password", ""))
     except AuthApiError:
+        record_failure(key)
         fail("invalid email or password", 401)
+    throttle_clear(key)  # the password was right; whether there is a CMS row is a separate question
     user = db.one(db.table("users").select("*").eq("id", s["user_id"]))
     if user is None:
         fail("no CMS account for this login; ask an admin to add you", 403)

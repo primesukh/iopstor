@@ -30,6 +30,7 @@ iopstor/storage.py       save_upload()/delete_media() → Supabase Storage bucke
 iopstor/blocks.py        BLOCKS + EDITOR + LAYOUTS + NEVER_NESTED, validate_blocks(), section_class()/section_style(), render_blocks(), blocks_text(), blocks_md()
 iopstor/seo.py           site(), build_meta(), jsonld(), md_url()
 iopstor/payments.py      PaymentGateway, DummyGateway, GATEWAYS
+iopstor/throttle.py      failed-password counter shared by every worker (sqlite on tmpfs); client_ip() reads CF-Connecting-IP
 iopstor/admin_api.py     /api/admin/v1 (JWT-protected REST; apply_post() is the single validation path)
 iopstor/admin_ui.py      browser admin at /admin: session login, post form + POST /admin/canvas + /admin/preview, media, leads, warranty, menus, settings, users
 iopstor/public.py        catch-all resolver (+ .md twins, /checkout), archives, /media/<key> file proxy, sitemap/robots/llms/feed, /api/v1 public read API, leads, checkout
@@ -118,7 +119,9 @@ So the full order is: branch → work → three docs → `/pr` → **stop** → 
   (SECURITY DEFINER, executable by service_role only) which `flask migrate` calls per file over Kong — each file runs in one transaction.
   Workflow for a schema change: write the `ALTER`/`CREATE` SQL as a new file → tell the user it's ready for them to apply → update the code so it tolerates the column not existing yet → commit.
   **The seed only inserts** (`_get_or_create()`): a change to a seeded `post_types` row (field_schema, has_pages) or a setting needs a migration that `UPDATE`s the existing row as well.
-- **Supabase is the only backend, reached only through Kong with the supabase library.** No `DATABASE_URL`, no psycopg, no SQLite. Local development and tests
+- **Supabase is the only backend, reached only through Kong with the supabase library.** No `DATABASE_URL`, no psycopg, no SQLite **as an application data store**.
+  The one exception is `throttle.py`: a failed-password counter in a `sqlite3` file on tmpfs (`/dev/shm`), which is shared memory for the ~30 gunicorn workers
+  and is wiped by every redeploy. It holds no application data, nothing reads it but the throttle, and losing it costs nothing. Local development and tests
   point at the same self-hosted Supabase; the app refuses to start without `SUPABASE_URL`, both keys and the JWT secret.
 - Every query goes through `iopstor/db.py`; use `db.select_posts()` (embeds `post_type`, `featured_media`, `terms`) and `db.hydrate()`/`db.with_paths()` so posts carry `path`.
   Never call `.delete()` without a filter (PostgREST would wipe the table).

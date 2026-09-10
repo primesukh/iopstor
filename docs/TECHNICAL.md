@@ -598,6 +598,26 @@ The invite form is `autocomplete="off"` and its *Temporary password* is `autocom
 - `_password_errors(new, confirm=None)` is the shared validator: eight characters minimum (matching the invite form's `minlength`; GoTrue's own floor is six), and a mismatch check that `confirm=None` skips for the admin's one-field form.
 - **Neither path ends that user's other sessions** — GoTrue's admin API has no sign-out-everywhere. Marked `# ponytail:` on `set_password()`.
 
+**Failed passwords are counted, and the counter is a sqlite file on tmpfs** (`iopstor/throttle.py`). Three endpoints verify a password and two of them are anonymous, so all three are behind it:
+
+| Door | Key | Refusal |
+|---|---|---|
+| `POST /admin/login` (`admin_ui.py`) | `ip:<addr>` | the login card re-rendered with a red message naming the wait, `429` + `Retry-After` |
+| `POST /api/admin/v1/auth/login` (`admin_api.py`) | `ip:<addr>` | `{"error": "too many attempts"}`, `429` + `Retry-After` |
+| `POST /admin/account` (`admin_ui.py`) | `user:<id>` | the message in the page's `errors` list, `429` |
+
+The third is the one that is easy to miss: it re-checks the current password, so a stolen session cookie was an unlimited guessing oracle. It keys on the **user id** rather than the address, because the session already says which account is guessing.
+
+**Keys are never the email typed in.** An email-keyed lock lets anyone shut a named person out of their own site by guessing their password ten times; the IP-keyed version can be evaded by rotating addresses but cannot be turned into a weapon. A correct password calls `clear()`, so two typos and then the right one cost nothing.
+
+**The counter fails open.** Every function swallows `sqlite3.Error` and allows the attempt. A counter that cannot open its file must not be able to lock the owner out of their own site — a throttle that is briefly not throttling is a smaller problem than an admin that cannot log in. It is also skipped entirely under `TESTING`, because the live suite posts to the login route several times inside one test.
+
+**Why `sqlite3` on `/dev/shm`, given the "no SQLite" rule.** The container runs ~30 workers in separate address spaces, so a module-level dict would be thirty independent counters and thirty times the ceiling. `/dev/shm` is tmpfs: RAM, shared by every process in the container, empty again after a redeploy — which is the lifetime this wants. sqlite supplies the cross-process locking, the expiry and an unbounded key space for a fraction of the code a hand-packed `mmap` table needs. `CREATE TABLE IF NOT EXISTS` runs on every connect on purpose: a fresh container has an empty `/dev/shm`, so the file builds itself the first time anyone fails a login. `CLAUDE.md`'s hard rule now carries the matching carve-out. **`# ponytail:` it is per container** — scale to two replicas and each gets its own counter, doubling the effective limit; Redis is the upgrade path.
+
+**The client address is `CF-Connecting-IP`, not `ProxyFix`.** Nothing in this app read `remote_addr` before, and behind a proxy every visitor looks like one address — the first attacker to trip the limit would have locked out the whole site. With a Cloudflare tunnel there are several hops (edge → cloudflared → app), so `ProxyFix(x_for=1)` would take the wrong entry and `x_for=N` would be a guess at the hop count. Cloudflare sets `CF-Connecting-IP` to the true client and strips any copy the client sent, and cloudflared is **outbound-only**, so nothing can reach the origin around it — that unreachability is exactly what makes trusting the header safe. `remote_addr` is the development fallback, and `"-"` the last resort, because the key is built with an f-string and a `None` would put every such request in one bucket named `"None"`. **`# ponytail:`** publish port 8000 on a network someone else is on and they can spoof the header past the limit.
+
+Limits are `LOGIN_MAX_FAILURES` (10) and `LOGIN_WINDOW` (900s) in `config.py`, env-readable because a rate limit is exactly the number you tune while under attack. Cloudflare can also rate-limit `/admin/login` at the edge, which is strictly better where it applies — the flood never reaches the origin — and the two are complements, not alternatives.
+
 **The login screen is a *column* flex, and that is load-bearing.** `.admin-anon` (the class `base.html` puts on `<main>` when nobody is signed in) sets `flex-direction:column` and caps `>*` at `max-width:420px`. The default `row` was a bug: `base.html` renders `get_flashed_messages()` as a **sibling** of the login card, so the moment anything flashed there were two children each asking for `width:100%`, and a row flex split the viewport down the middle — the message became a full-height bar on the left and the card slid right. Any future second child on that screen would have done the same thing, which is why the fix is on the container rather than on the message.
 
 Relatedly, **`login_page()` passes `error=` to the template instead of calling `flash()`**. A refused login is not a success, and `.flash` is the green one; it now renders as `.error` inside the card, above the fields, where the thing it is about lives. Nothing flashes on the anon screen any more.

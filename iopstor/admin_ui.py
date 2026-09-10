@@ -16,6 +16,7 @@ from . import db, seo
 from .admin_api import apply_post
 from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login, set_password
 from .blocks import BLOCKS, EDITOR, LAYOUTS, at_path, render_blocks, warranty_active
+from .throttle import clear as throttle_clear, client_ip, record_failure, retry_after, wait_text
 from .storage import delete_media, save_upload
 
 ui = Blueprint("admin_ui", __name__, url_prefix="/admin", template_folder="templates")
@@ -80,12 +81,20 @@ def _safe_next(default="/admin/"):
 @ui.route("/login", methods=["GET", "POST"])
 def login_page():
     if request.method == "POST":
+        # keyed by address, never by the email typed in: an email-keyed lock would let anyone shut a
+        # named person out of their own site by guessing their password ten times.
+        key = f"ip:{client_ip()}"
+        wait = retry_after(key)
+        if wait:
+            return render_template("admin/login.html", error=wait_text(wait)), 429, {"Retry-After": wait}
         try:
             s = login(request.form.get("email", ""), request.form.get("password", ""))
         except AuthError:
+            record_failure(key)
             return render_template("admin/login.html", error="Wrong email or password."), 401
-        if db.one(db.table("users").select("id").eq("id", s["user_id"])) is None:
-            return render_template("admin/login.html",
+        throttle_clear(key)  # the password was right, so two typos before it cost nothing; whether
+        if db.one(db.table("users").select("id").eq("id", s["user_id"])) is None:   # there is a CMS
+            return render_template("admin/login.html",                              # row is separate
                                    error="This login has no CMS account. Ask an admin to add you under Users."), 403
         session["access_token"], session["refresh_token"] = s["access_token"], s["refresh_token"]
         return redirect(_safe_next())
@@ -116,14 +125,18 @@ def account():
     The second login() is not optional either: GoTrue can revoke the refresh token minted under the
     old password, and without fresh tokens in the session the user is signed out on the next
     _session_token() refresh — one click after changing their password."""
-    errors = []
+    errors, wait = [], 0
     if request.method == "POST":
         f = request.form
-        errors = _password_errors(f.get("new_password", ""), f.get("confirm", ""))
+        # by user id, not address: the session is already proof of which account is guessing
+        key = f"user:{g.user['id']}"
+        wait = retry_after(key)
+        errors = [wait_text(wait)] if wait else _password_errors(f.get("new_password", ""), f.get("confirm", ""))
         if not errors:
             try:
                 login(g.user["email"], f.get("current_password", ""))
             except AuthError:
+                record_failure(key)
                 errors = ["That is not your current password."]
         if not errors:
             try:
@@ -132,10 +145,11 @@ def account():
             except AuthError as e:
                 errors = [f"Supabase refused the new password: {getattr(e, 'message', e)}"]
             else:
+                throttle_clear(key)
                 session["access_token"], session["refresh_token"] = s["access_token"], s["refresh_token"]
                 flash("Password changed.")
                 return redirect(url_for("admin_ui.account"))
-    return render_template("admin/account.html", errors=errors), (400 if errors else 200)
+    return render_template("admin/account.html", errors=errors), (429 if wait else 400 if errors else 200)
 
 
 @ui.get("/logout")
