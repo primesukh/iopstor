@@ -102,6 +102,7 @@ In `website_assets/` (untracked in git — the client's files, loaded into the m
 | 2026-09-09 | **Every page has a Markdown twin** (`/about-us.md`, `/index.md`, …) for AI crawlers, linked from `<head>` and from `llms.txt`; `llms-full.txt` is real Markdown. Nothing is generated to disk |
 | 2026-09-09 | The payment provider stays a placeholder until the client names one |
 | 2026-09-10 | **A Numbers or Rich text section can carry an effect** — fade in, gradient, highlighter sweep — and a Numbers section can count its figures up from zero. Each figure can override the band it sits in |
+| 2026-09-10 | **Both hero shapes use the same vertical padding**, 96px top / 80px bottom (64/56 on a phone) — the white hero read as cramped at 72/56 |
 | 2026-09-10 | **The hero's slide indicator is a solid blue bar**, not a progress bar that fills across the slide's turn — the creeping fill read as a countdown timer |
 
 ## Status against the brief

@@ -380,7 +380,10 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 
 /* hero: words left, picture right. .hero-dark is the full-bleed variant, where the picture is a
    faded backdrop behind the words instead of the art beside them. */
-.hero{position:relative;background:var(--white);border-bottom:1px solid var(--line);padding:72px 0 56px}
+/* One padding for both hero shapes: .hero-dark always carries .hero too, so the dark band's own
+   96/80 is simply what .hero is now (client, 2026-09-10 — the white hero read as cramped at
+   72/56). That is why neither .hero-dark nor the phone rule repeats it. */
+.hero{position:relative;background:var(--white);border-bottom:1px solid var(--line);padding:96px 0 80px}
 .hero>.wrap{display:grid;gap:40px;align-items:center}
 .hero-split>.wrap{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
 .hero-text{min-width:0}
@@ -405,12 +408,12 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .hero-dots span{height:4px;width:14px;border-radius:999px;background-color:var(--line);background-image:linear-gradient(var(--blue),var(--blue));background-repeat:no-repeat;background-size:0 100%;
   animation:dot3 calc(var(--n) * 4.5s) linear calc(var(--i) * 4.5s) infinite}
 .hero-dots[style*="--n:2"] span{animation-name:dot2}
-.hero-dark{background:var(--black);color:#d1d6de;border-bottom:0;padding:96px 0 80px;overflow:hidden}
+.hero-dark{background:var(--black);color:#d1d6de;border-bottom:0;overflow:hidden}
 .hero-dark h1{color:var(--white)}
 .hero-dark .lead{color:#d1d6de;max-width:640px}
 .hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.18}
 .hero-dark>.wrap{position:relative}
-@media(max-width:700px){.hero{padding:48px 0 40px}.hero-dark{padding:64px 0 56px}}
+@media(max-width:700px){.hero{padding:64px 0 56px}}
 
 /* Prose typed in the admin's document editor. Everything an editor can produce with the
    toolbar needs a rule here, or it falls through to the browser default and looks unfinished. */
