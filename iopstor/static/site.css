@@ -40,13 +40,14 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 @keyframes heroin{from{opacity:0;transform:translateX(40px) scale(.96)}to{opacity:1;transform:translateX(0) scale(1)}}
 @keyframes glow{0%,100%{opacity:.7;transform:scale(1)}50%{opacity:1;transform:scale(1.06)}}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
-/* The dot for the slide showing now is wide and fills blue across its turn; the rest sit small
-   and empty. One loop each, offset by the same delay as the slide it belongs to. */
-@keyframes dot2{0%{width:36px;background-size:0 100%;background-color:var(--line-2)}
-  49.9%{width:36px;background-size:100% 100%;background-color:var(--line-2)}
+/* The dot for the slide showing now is a wide, solid blue bar for the whole of its turn; the rest
+   sit small and empty. One loop each, offset by the same delay as the slide it belongs to.
+   Both frames of the turn hold the same values on purpose — there is nothing to interpolate, so the
+   bar does not creep left to right. It used to fill progressively, which read as a countdown timer
+   nobody had asked for (client, 2026-09-10). */
+@keyframes dot2{0%,49.9%{width:36px;background-size:100% 100%;background-color:var(--line-2)}
   50%,100%{width:14px;background-size:0 100%;background-color:var(--line)}}
-@keyframes dot3{0%{width:36px;background-size:0 100%;background-color:var(--line-2)}
-  33.2%{width:36px;background-size:100% 100%;background-color:var(--line-2)}
+@keyframes dot3{0%,33.2%{width:36px;background-size:100% 100%;background-color:var(--line-2)}
   33.3%,100%{width:14px;background-size:0 100%;background-color:var(--line)}}
 /* One slide in, held, out again -- the mock's iopSlideIn + iopSlideOut folded into one loop so the
    rotation needs no script. The percentages are the slide's share of the whole cycle, so a set is
