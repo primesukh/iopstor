@@ -416,6 +416,10 @@ artwork that is as tall as it is wide with the design running right to the edges
 bottom of a picture like that will be cut off. A wide, letterbox-shaped logo is what the space is cut
 for.
 
+The logo also shows in its own colours in both places — the site no longer turns it white for the
+dark footer. Worth knowing if your artwork is mostly dark ink: it will be hard to read down there.
+A logo with a light or brightly coloured element in it is the safe choice.
+
 **Menus** has its own screen now. Each row is one link: a label, where it goes, and whether it sits at the top level or drops down under the item above it. Drag the handle on the left to reorder, **+ Add item** for a new one, **✕** to remove one. Save writes the whole menu at once. One level of drop-down is all the site shows.
 
 **Menus** control the header and footer navigation. The header menu supports one level of drop-down, which is how *Company* expands.
@@ -477,7 +481,8 @@ Products can carry a price and a checkout button. The payment step is currently 
 
 **Two things changed across every page** and need nothing from you: the bar at the top of the site is
 now **white with black text**, with the IOPSTOR logo in its own blue-and-black rather than knocked out
-to white — the footer stays dark, and the logo is still white down there. And the little icon that
+to white. The footer stays dark, and since September 2026 the logo keeps its own colours down there
+too, rather than being turned white. And the little icon that
 shows in a browser tab (the "favicon") is now the IOPSTOR mark at every size a phone or a bookmark
 asks for.
 
