@@ -65,7 +65,7 @@ migrations/                   0000_bootstrap.sql (hand-run once) 0001_initial 00
 tests/                        conftest.py test_offline.py test_auth.py test_admin_api.py test_admin_ui.py test_public.py
 docs/                         TECHNICAL.md (developers) NON-TECHNICAL.md (editors)
 website_assets/               the client's mock (mock-website.html), pictures and partner logos — untracked, imported with `flask import-media`
-graphify-out/                 the knowledge graph (gitignored); code nodes rebuilt by git hooks per commit, prose + labels only on main via /after-merge
+graphify-out/                 the knowledge graph (gitignored); queried, never rebuilt by hand. Code nodes follow the git hooks per commit; prose nodes and labels are frozen
 ```
 
 Dependency direction: `public.py` and `admin_ui.py` import from `admin_api.py`; everything imports `db.py`; `db.py` imports nothing from the app.
@@ -177,7 +177,7 @@ Decisions that are easy to undo by accident:
 
 - **Header is white** with the logo in its own colours (client, 2026-09-08); the footer stays dark and knocks the logo out.
 - **Logo is a fixed box, not a fixed height**: `.brand img{width:150px;height:22px;object-fit:cover}`, one rule for header and footer (2026-09-10). The mock's `height:22px;width:auto` counted an uploaded file's own padding as logo — the live 2172x724 PNG has its wordmark in the middle 271 rows and rendered at 8px. `cover` crops the box full so the file's margins stop mattering; the 6.8:1 box shaves ~1px a side off the original 180x26 artwork, and a square logo drawn edge to edge loses its top and bottom.
-- **Mega panel is CSS only** (`:hover`/`:focus-within`, `:has()` to switch groups, 8-group ceiling), fed by `service_nav()` over `db.tree("service")`.
+- **Mega panel is CSS only** (`:hover`/`:focus-within` to open, `:has()` for the highlight), fed by `service_nav()` over `db.tree("service")`. Each pane is the **next sibling of its own link** inside one `.mega-cats` grid: the link opens it, `.mega-pane:hover` holds it open, and that only works because **no unhoverable pixel sits between the two** — the links fill the 260px column and the divider is the pane's own `border-left` (2026-09-10). Put padding back between the columns and the pane snaps to group one the moment the cursor leaves the link, which is the bug this shape fixed. No group ceiling: the eight `nth-child` rules are gone.
 - **Hero rotator is CSS** (`--n`/`--i`, one keyframe set per picture count: 2 and 3 exist). `.hero-dots` sits *outside* `.hero-slides` — that element carries the `float` loop and anything inside it bobs with the picture; do not move the dots back in (2026-09-10).
 - **Section effects are CSS** (`fx-rise`, `fx-gradient`, `fx-sweep`, `fx-count`): `@property --cv` + `counter()` for the roll, `animation-timeline: view()` for the scroll trigger. Four things not to undo. (1) The group is **base rules + a trailing `@supports (animation-timeline: view())`** that only adds `animation-timeline`/`animation-range`: every browser plays the effect at load, modern ones re-time it to the scroll. Putting the whole feature inside that gate makes it do *nothing* in Firefox ≤143, which parses the property but cannot resolve `view()` and so freezes each animation on its opening frame. (2) **No `var()` in the counter's keyframe** — Firefox will not interpolate one and the figure jumps 0 → 300 in a single frame, while Chrome tweens it, so the bug does not show in a Chromium screenshot; `--cv` runs a literal `0 → 1` and `counter-reset: cv calc(var(--to) * var(--cv))` applies the target. (3) The sweep is a **background**, not an `::after` with `z-index:-1`, which would sit behind the section's band. (4) **One effect, one element** — `animation` is a single property, so the counter is animated on its own `.cr` span or it silently replaces the sweep and the gradient on the same `<strong>`.
 - **`prefers-reduced-motion` is the LAST block in the file and says `!important`** (2026-09-10). `@media` adds no specificity; from where it used to sit it lost to the block groups below it, and the hero kept moving for a reader who had asked it not to.
@@ -249,10 +249,11 @@ Decisions that are easy to undo by accident:
 | 2026-09-09 | `.md` twin of every page, rendered on request | AI crawlers read Markdown, not the theme; nothing to keep in sync |
 | 2026-09-10 | Pictures and PDFs are served by Flask at `/media/<bucket key>`; `media.url` stores that path, so every reader followed without a change | Supabase goes LAN-only — a browser that cannot reach the gateway must still be able to load a picture |
 | 2026-09-09 | `.claude/` refreshed with every PR merge; hard rules enforced in `settings.json` | The map had drifted six days behind the territory |
-| 2026-09-09 | `/after-merge` owns the whole graph refresh; the git hooks are not relied on after a pull | A fast-forward pull fires no hook, so the graph sat three commits behind `main` on the first run |
+| 2026-09-09 | *(superseded 2026-09-10)*  `/after-merge` owns the whole graph refresh; the git hooks are not relied on after a pull | A fast-forward pull fires no hook, so the graph sat three commits behind `main` on the first run |
 | 2026-09-09 | `gh pr merge` taken off the deny list; the agent merges only when told, on that PR | A deny cannot see consent, and the user wants to say "merge it" and have it done |
 | 2026-09-10 | Logo sized by a fixed 150x22 box cropped with `object-fit:cover`, shared by header and footer | A fixed height alone does not normalise a logo: whitespace baked into the PNG was being counted as logo, so a swapped-in file rendered at less than half the size |
 | 2026-09-10 | The mega panel's pane is the next sibling of its own link, opened by `+` and held open by `.mega-pane:hover` | Pairing link and pane by `nth-child` could not survive the cursor leaving the link: the pane snapped back to group one across the 55px of padding between the two columns, so only the first group's tiles were ever clickable. Sibling hover also drops the eight-group ceiling and lets `Tab` reach the tiles |
+| 2026-09-10 | The graph's LLM pass is retired: `/after-merge` no longer runs `/graphify . --update`, and `.claude/` + `docs/` are kept current by hand | Re-reading every document to rebuild a machine description of it cost more than writing the description, and the description was the half going stale. The code half still self-maintains through the git hooks, so the graph stays useful for the shape of the code; prose is read from the file (user, 2026-09-10) |
 
 ---
 
@@ -267,13 +268,13 @@ Marked `# ponytail:` in source (32 at last count; `/ponytail-debt` harvests them
 | Path | Role |
 |---|---|
 | `settings.json` | Permission **deny** list that enforces the hard rules mechanically (no `flask migrate/seed/create-admin/import-media`, no `pip install`, no `git merge`/push to main, no hand edits to generated `requirements*.txt` / `Pipfile.lock` / `.env`; `gh pr merge` is *not* denied so the user can delegate a merge by saying so); allow list for the read-only commands used every session; `includeCoAuthoredBy: false`; the session-start hook |
-| `hooks/session-start.sh` | Prints branch, dirty files, the last 12 commits and how far behind `HEAD` the graph is (non-zero is normal right after a pull, until `/after-merge`; otherwise a git-hook rebuild failed — see `~/.cache/graphify-rebuild.log`) — rule 0 and the graph-freshness check, for free, every session |
+| `hooks/session-start.sh` | Prints branch, dirty files and the last 12 commits — rule 0, for free, every session. The graph-freshness line went with the graph refresh (2026-09-10) |
 | `skills/pr` | branch → checks → push → PR body → **stop** |
 | `skills/docs` | which of the three docs a change touches, and in what voice |
 | `skills/new-block` | the eleven places a block type lives |
 | `skills/migration` | write a numbered `.sql`, never run it, code that tolerates the gap |
 | `skills/theme-check` | Firefox-headless screenshots at 1440/834/390 on port 5001 against the mock |
-| `skills/after-merge` | pull `main`, refresh the graph's prose and labels, audit `.claude/` against the merged diff |
+| `skills/after-merge` | pull `main`, then bring `.claude/` back in line with the merged diff by hand |
 | `docs/requirements.md` | the client brief verbatim + dated client decisions |
 
 Per-machine facts (which CLI is installed, how screenshots work) go to Claude's memory directory, not this folder.

@@ -40,8 +40,31 @@ A change can hit several rows; screenshot every row that matches.
 | a block's rule group | a page holding it on its own **and inside a Columns section** |
 | archive shapes (`pl-*`) | `/services`, `/products`, `/events`, `/datasheets`, `/case-studies`, `/partners` |
 | `post.html`, `_card.html` | one post of every type that renders differently: service, product (+ `/checkout`), blog, datasheet |
-| mega panel / mobile sheet | `/` at 1440 (hover cannot be captured — check the markup) and 390 |
+| mega panel / mobile sheet | `/` at 1440, forced open (below), and 390 |
 | `admin.css`, `canvas.css`, `admin.js` | needs a logged-in session; screenshot what is public, and describe the admin check the user should do |
+
+## Hover-only UI, forced open
+
+Headless Firefox cannot move a pointer, but it does not have to: fetch the page, give it a `<base>`
+so `/static/site.css` still resolves, and append a stylesheet that pins the state you want. That is
+how the mega panel is checked — the default state, a *non-first* group, and an over-tall pane all
+render without a mouse.
+
+```python
+import urllib.request
+h = urllib.request.urlopen('http://localhost:5001/').read().decode()
+h = h.replace('<head>', '<head><base href="http://localhost:5001/">', 1)
+h = h.replace('</head>', '<style>.nav-mega>.mega{display:block!important}</style></head>', 1)
+open('/tmp/claude-1000/shots/panel.html', 'w').write(h)
+```
+
+Then shoot the `file://` copy. To stand in for `:hover` on the *n*-th group, add `!important`
+overrides for the pane you want shown and the row you want tinted (the real rules out-specify a
+plain class selector, so `!important` is what makes the stand-in win). Add `min-height` to a pane to
+prove a tall one does not spread the group list.
+
+**This proves layout, never hover itself.** The screenshot cannot tell you the pointer survives the
+trip from the link to the pane — say so, and ask the user to click it.
 
 ## What to look for
 

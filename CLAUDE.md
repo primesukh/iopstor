@@ -42,7 +42,7 @@ tests/                   pytest: test_offline.py always; the rest are marked liv
 docs/                    TECHNICAL.md + NON-TECHNICAL.md — the two docs every change keeps current
 .claude/                 docs/ (design.md, requirements.md), skills/ (the procedures below), hooks/session-start.sh, settings.json (enforced rules)
 website_assets/          the client's mock (mock-website.html), pictures, partner logos — untracked; loaded with `flask import-media`
-graphify-out/            the knowledge graph — gitignored; code nodes rebuilt by git hooks per commit, prose + labels only on main via /after-merge
+graphify-out/            the knowledge graph — gitignored; queried, never rebuilt by hand. Code nodes follow the git hooks per commit; prose nodes and labels are frozen
 ```
 
 ## Commands
@@ -70,12 +70,12 @@ The procedures this repo repeats, as slash commands. Load the one that fits befo
 | `/new-block` | adding or reshaping a section type — the eleven places a block lives |
 | `/migration` | the schema or a seeded row must change — write the `.sql`, never run it |
 | `/theme-check` | anything in `site.css`, a block template, `_card.html`, `admin.js` — screenshots at three widths |
-| `/after-merge` | the user says a PR is merged — pull, refresh the graph's prose and labels, audit `.claude/` |
+| `/after-merge` | the user says a PR is merged — pull, then bring `.claude/` back in line with the merged diff by hand |
 
 ## Workflow (non-negotiable)
 
 **0. Check recent git history before planning or implementing anything.**
-The session-start hook prints the branch, dirty files, the last 12 commits and how stale the graph is. Still run `git log -p` / `git show` on anything that looks related before touching a new feature or an existing one — recent commits often already cover, half-cover, or conflict with the task. Do this before graphify/grep in step 1.
+The session-start hook prints the branch, dirty files and the last 12 commits. Still run `git log -p` / `git show` on anything that looks related before touching a new feature or an existing one — recent commits often already cover, half-cover, or conflict with the task. Do this before graphify/grep in step 1.
 
 **1. Explore with graphify first, then grep.**
 Before answering an architecture question or touching an unfamiliar area, read `.claude/docs/design.md` and query the knowledge graph at `graphify-out/graph.json`:
@@ -88,7 +88,7 @@ graphify explain "apply_post"        # plain-language explanation of one node
 
 The graph gives the shape: which modules connect, which communities a symbol bridges, where the god nodes are (`table()`, `require_role()`, `render_blocks()`, `one()`, `apply_post()`). *Then* grep and read the actual files to confirm the detail — the graph is the map, the source is the territory. Never skip straight to grep on a question the graph can answer, and never trust the graph alone for a claim you are about to write down.
 
-**The code half of the graph maintains itself; the prose half is refreshed only on `main`.** Git hooks installed by `graphify hook install` (`.git/hooks/post-commit`, `post-checkout`) re-extract changed code files in the background after every commit and branch switch (not after a `git pull`) — no LLM, a few seconds, log in `~/.cache/graphify-rebuild.log` — so the code nodes follow whatever branch is checked out. `.sql` files contribute nothing until `tree_sitter_sql` is installed beside graphify. The doc nodes (`CLAUDE.md`, `docs/*.md`, `.claude/docs/*.md`) and the community labels come from the LLM pass, and that runs only on `main`, from `/after-merge` (`/graphify . --update`). Never run `/graphify` or `graphify label` on a branch: a branch may be abandoned or reworked, and labelling it burns tokens on a shape that may never land. Query a slightly stale graph, then confirm against source.
+**The code half of the graph maintains itself; the prose half is frozen.** Git hooks installed by `graphify hook install` (`.git/hooks/post-commit`, `post-checkout`) re-extract changed code files in the background after every commit and branch switch (not after a `git pull`) — no LLM, a few seconds, log in `~/.cache/graphify-rebuild.log` — so the code nodes follow whatever branch is checked out. `.sql` files contribute nothing until `tree_sitter_sql` is installed beside graphify. The doc nodes (`CLAUDE.md`, `docs/*.md`, `.claude/docs/*.md`) and the community labels came from an LLM pass that is **no longer run** (2026-09-10) — the prose in this repo is kept current by hand, in the PR that changes it (rule 3) and in `/after-merge` (rule 4), which is cheaper and more accurate than re-reading every document to rebuild a description of it. So: **never run `/graphify . --update`, `/graphify` or `graphify label`.** Query the graph for the shape of the code, treat any doc node or community label as possibly out of date, and read the file itself for anything about prose.
 
 **2. Every feature goes on its own branch and PR. Never merge without being told.**
 
@@ -106,7 +106,7 @@ Open the PR and **stop there**. Do not merge, do not squash, do not push to `mai
 `docs/TECHNICAL.md` for developers (modules, schema, endpoints, contracts, ceilings), `docs/NON-TECHNICAL.md` for editors (what it does, in plain English, no jargon), and `.claude/docs/design.md` for the next agent (what exists and why, compressed; a dated row in its decision log for anything surprising). `/docs` says which sections. A feature is not finished until all three reflect it. If a change genuinely affects only some audiences, say so in the PR body rather than silently skipping the rest.
 
 **4. `.claude/` is refreshed with every PR merge.**
-The PR itself carries the `design.md` change (rule 3). After the user merges, `/after-merge` on `main`: pull, `/graphify . --update`, then audit `.claude/` against the merged diff — layout in this file, `design.md` sections, `requirements.md` decisions, the skill whose procedure turned out incomplete, `settings.json` allow/deny for commands that prompted or must never run. Drift goes into a `chore/claude-sync` branch and its own PR, never straight to `main`. Per-machine facts (which CLI is installed, how screenshots work) belong in Claude's memory, not in the repo.
+The PR itself carries the `design.md` change (rule 3). After the user merges, `/after-merge` on `main`: pull, then audit `.claude/` by hand against the merged diff — layout in this file, `design.md` sections, `requirements.md` decisions, the skill whose procedure turned out incomplete, `settings.json` allow/deny for commands that prompted or must never run. Drift goes into a `chore/claude-sync` branch and its own PR, never straight to `main`. Per-machine facts (which CLI is installed, how screenshots work) belong in Claude's memory, not in the repo.
 
 So the full order is: branch → work → three docs → `/pr` → **stop** → (user merges) → `/after-merge`.
 
