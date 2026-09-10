@@ -569,17 +569,6 @@ def users():
     return render_template("admin/users.html", users=db.rows(db.table("users").select("*").order("email")))
 
 
-@ui.post("/users/name")
-@ui_required("admin")
-def user_name():
-    """Set your own display name — the sidebar's user block falls back to the email without it.
-    # ponytail: admin-only because the form lives on the admin-only Users screen; an editor keeps the
-    # derived name. Give it its own /admin/account page when an editor needs to set one."""
-    db.update("users", g.user["id"], {"name": request.form.get("name", "").strip()[:200]})
-    flash("Name updated.")
-    return redirect(url_for("admin_ui.users"))
-
-
 @ui.post("/users/<uuid:pk>/delete")
 @ui_required("admin")
 def user_delete(pk):
