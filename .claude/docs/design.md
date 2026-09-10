@@ -234,6 +234,9 @@ Decisions that are easy to undo by accident:
 | 2026-09-09 | Rupees only; `specs` is `kv` rows | A currency choice should not exist; `jsonb` sorts object keys |
 | 2026-09-09 | `.md` twin of every page, rendered on request | AI crawlers read Markdown, not the theme; nothing to keep in sync |
 | 2026-09-10 | Pictures and PDFs are served by Flask at `/media/<bucket key>`; `media.url` stores that path, so every reader followed without a change | Supabase goes LAN-only — a browser that cannot reach the gateway must still be able to load a picture |
+| 2026-09-10 | The media URL mirrors the bucket key rather than carrying the filename | The key is the whole address, so the route needs no database read at all; a pretty `/media/<id>/<name>.jpg` buys a little image SEO and costs a row lookup on every image |
+| 2026-09-10 | An SVG is served sandboxed (`default-src 'none'; sandbox`), not dropped from `ALLOWED` | Serving media ourselves put SVG on the origin that holds the admin cookie, which Storage never did; `<img src>` is unaffected, and the header is scoped to SVG because an empty sandbox can stop the browser's PDF viewer |
+| 2026-09-10 | The `media` bucket stays public | Kong is LAN-only, so public inside the LAN is already unreachable from outside, and the app reads with the service-role key either way — private would also work, and needs no code change |
 | 2026-09-09 | `.claude/` refreshed with every PR merge; hard rules enforced in `settings.json` | The map had drifted six days behind the territory |
 | 2026-09-09 | `/after-merge` owns the whole graph refresh; the git hooks are not relied on after a pull | A fast-forward pull fires no hook, so the graph sat three commits behind `main` on the first run |
 | 2026-09-09 | `gh pr merge` taken off the deny list; the agent merges only when told, on that PR | A deny cannot see consent, and the user wants to say "merge it" and have it done |

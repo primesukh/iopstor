@@ -10,6 +10,7 @@ The PR is the hand-off. It is opened by you and merged by the user, never by you
 ## Pre-flight (every line must be true before `git push`)
 
 - On a `feat/ | fix/ | docs/ | chore/` branch, not `main`: `git branch --show-current`
+- **Branched off `main`, not off another feature branch**: `git log --oneline origin/main..HEAD` lists *only* your own commits. A branch cut from a branch with an open PR carries that PR's commits into yours, and the first sign of it is the authorship grep below hitting a commit you never wrote. Fix before pushing: `git rebase --onto origin/main <the-commit-that-is-not-yours>`.
 - `pipenv run pytest -q` was run in this session. Record the count. A failure that also fails on `main` is reported as such **after checking** (`git stash; git checkout main; pytest <test>; git checkout -; git stash pop`), never assumed.
 - `/docs` is done: `docs/TECHNICAL.md`, `docs/NON-TECHNICAL.md`, `.claude/docs/design.md` — or the body says which audience is genuinely unaffected and why.
 - A new `migrations/NNNN_*.sql` exists → it was **not** applied by you, and the body has a **Needs applying** section naming it.
