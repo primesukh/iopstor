@@ -18,7 +18,7 @@
           {% if k in ('social_links','address','robots_extra') %}<textarea name="{{ k }}">{{ s.get(k) or '' }}</textarea>
           {% else %}<input type="text" name="{{ k }}" value="{{ s.get(k) or '' }}">{% endif %}</label>{% endfor %}
       </div>
-      {% if name == 'Contact details' %}<small>Social links: one URL per line. The address shows in the footer exactly as you type it, line breaks and all.</small>{% endif %}
+      {% if name == 'Contact details' %}<small>Social links: one URL per line. LinkedIn, X, YouTube, Instagram and Facebook get their own icon under the logo in the footer; any other address shows as its website name. The address shows in the footer exactly as you type it, line breaks and all.</small>{% endif %}
       {% if name == 'SEO & analytics' %}<small>Robots extra: lines appended to robots.txt. The sitemap, RSS feed and llms.txt publish themselves.</small>{% endif %}
       {% if name == 'Payments' %}
       <p class="notice-amber">The payment provider is <strong>{{ provider }}</strong>, a placeholder that records the order without charging anything.

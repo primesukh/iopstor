@@ -97,6 +97,21 @@ def test_md_url_is_the_only_place_the_suffix_is_spelled():
     assert md_url("/services/nas") == "/services/nas.md"
 
 
+def test_social_links_get_a_name_and_an_icon(app, monkeypatch):
+    """Settings stores bare URLs. The footer needs a network name for the aria-label and a sprite id
+    for the glyph; the Organization's sameAs still needs the plain strings it always had."""
+    from iopstor import db, seo
+
+    urls = ["https://www.linkedin.com/company/iopstor", "https://twitter.com/iopstor", "https://mastodon.social/@iopstor"]
+    monkeypatch.setattr(db, "settings", lambda: {"social_links": urls})
+    assert [(x["name"], x["icon"]) for x in seo.site()["social"]] == [
+        ("LinkedIn", "linkedin"),       # a www. in front of a known host still matches
+        ("X", "x"),                     # twitter.com and x.com are one glyph
+        ("mastodon.social", ""),        # unknown network: hostname as the label, and text, not a blank link
+    ]
+    assert seo.jsonld()[0]["sameAs"] == urls
+
+
 def test_jwt_matrix_without_db(client):
     assert client.get("/api/admin/v1/posts").status_code == 401
     assert client.get("/api/admin/v1/posts", headers={"Authorization": "Bearer nope"}).status_code == 401

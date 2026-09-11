@@ -1,14 +1,31 @@
 """Meta tags and JSON-LD. Everything a crawler sees in <head> is built here and rendered by base.html. Posts are dicts with 'path'."""
+from urllib.parse import urlsplit
+
 from flask import current_app
 
 from . import db
+
+# Which networks get a glyph in the footer sprite (base.html). Keyed by the registrable host, so
+# in.linkedin.com and m.youtube.com match too; twitter.com and x.com are the same bird.
+SOCIAL = {"linkedin.com": ("LinkedIn", "linkedin"), "x.com": ("X", "x"), "twitter.com": ("X", "x"),
+          "youtube.com": ("YouTube", "youtube"), "instagram.com": ("Instagram", "instagram"),
+          "facebook.com": ("Facebook", "facebook")}
+
+
+def _social(url):
+    """A profile URL from Settings as {url, name, icon}. A network that is not in SOCIAL keeps its
+    hostname and no icon, so one an editor pastes later still renders as a link rather than vanishing."""
+    host = (urlsplit(url).netloc or url.split("/")[0]).lower()      # tolerate a schemeless paste
+    key = next((k for k in SOCIAL if host == k or host.endswith("." + k)), None)
+    name, icon = SOCIAL[key] if key else (host.removeprefix("www."), "")
+    return {"url": url, "name": name or url, "icon": icon}
 
 
 def site():
     s = db.settings()
     return {
         "name": s.get("site_name") or "IOPSTOR", "tagline": s.get("tagline") or "", "url": current_app.config["SITE_URL"],
-        "logo": s.get("logo_url") or "", "og_image": s.get("default_og_image") or "", "social": s.get("social_links") or [],
+        "logo": s.get("logo_url") or "", "og_image": s.get("default_og_image") or "", "social": [_social(u) for u in s.get("social_links") or []],
         "ga_id": s.get("ga_id") or "", "email": s.get("contact_email") or "", "phone": s.get("contact_phone") or "",
         "address": s.get("address") or "", "robots_extra": s.get("robots_extra") or "",
     }
@@ -59,7 +76,7 @@ def jsonld(post=None, crumbs=()):
     if s["logo"]:
         org["logo"] = _abs(s["logo"], s["url"])
     if s["social"]:
-        org["sameAs"] = s["social"]
+        org["sameAs"] = [x["url"] for x in s["social"]]
     out = []
     if len(crumbs) <= 1:  # home
         out.append({"@context": "https://schema.org", **org})
