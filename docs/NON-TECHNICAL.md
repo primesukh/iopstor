@@ -340,6 +340,9 @@ Every piece of content has a **status**:
 - **Draft** — only you can see it. Nobody on the internet can reach it, even with the direct link.
 - **Published** — live on the website.
 - **Scheduled** — set the publish date to a future date and time. The page stays hidden and appears by itself when that moment arrives. Nobody has to press anything.
+- **Deleted** — gone from the website and from your lists, but see section 12: an administrator can still bring it back.
+
+The publish date is in **Indian time**, and so is every date and time shown anywhere in the admin panel. They used to be shown in London's winter time, five and a half hours behind, without saying so.
 
 ---
 
@@ -480,15 +483,47 @@ Each page also carries its title, description, social-sharing preview and machin
 
 ---
 
-## 11. Payments
+## 11. Activity: who did what
+
+**Activity**, at the bottom of the sidebar, is the record of everything anybody has done in the admin panel — and it is only visible to administrators.
+
+Every line says the same four things: **when** (in Indian time), **who**, **what**, and the internet address they were working from. It covers far more than pages: a setting changed, a menu rearranged, a picture removed, an enquiry marked done, somebody signing in or out, and somebody typing the wrong password. Nothing is left out and nothing can be edited away afterwards — not by you, not by an administrator, not by anybody. That is the point of it.
+
+Where something was changed rather than merely created, the line says so — *2 things changed* — and clicking that opens a small table with one row per thing that moved: the name of what changed, what it **was**, and what it is **now**. For a page, that includes the writing itself, so you can read the old version of a paragraph beside the new one.
+
+### Putting something back
+
+Under that table is **Restore this version**. It puts the old values back exactly as they were, and the restore itself appears in Activity as a new line, so the record stays complete. It works for anything that was changed — a page, a setting, a menu, a picture's description — and for a page that was deleted.
+
+It does not work for things that were properly removed: a person whose account was deleted, a picture deleted from the library, a category that was removed. Those lines still show you everything the record held, so you can see what was there and re-enter it, but the system will not recreate them behind your back and leave you with something half-working.
+
+### Finding one thing
+
+The three boxes at the top narrow the list: a particular person, a particular kind of action, or a kind of thing — type `posts` to see only page changes, `settings` for settings. Leave them alone to see everything.
+
+---
+
+## 12. If you delete a page by mistake
+
+Deleting a page still warns you that it cannot be undone, and you should carry on treating it that way — it disappears from the website immediately and from your lists, and anybody visiting its address gets a "page not found".
+
+But it is not actually thrown away. An administrator can find it by going to any content list, opening the status dropdown in the filter bar, choosing **trash**, and pressing **Filter**. Deleted pages appear there with a **Restore** button beside each one.
+
+A restored page comes back as a **Draft**, not live — it has been off the website for a while, so somebody should look at it before visitors do. Everything else survives the round trip: its web address, its categories and tags, any pages filed underneath it, and any enquiries that came in about it. Press **Published** when you are happy with it and it is back exactly where it was.
+
+Its web address stays reserved while it is in the trash, so a new page cannot quietly take it.
+
+---
+
+## 13. Payments
 
 Products can carry a price and a checkout button. The payment step is currently a **placeholder** — it walks through the full flow and records the order, but no money moves. Connecting a real provider such as Razorpay or Stripe is a configuration change, not a rebuild.
 
 ---
 
-## 12. Where the project stands
+## 14. Where the project stands
 
-**Done:** the content system, the public website with its theme, the admin panel, search-engine and AI output, enquiry capture, the warranty register and its public check, media library, users and roles, and the payment placeholder.
+**Done:** the content system, the public website with its theme, the admin panel, search-engine and AI output, enquiry capture, the warranty register and its public check, media library, users and roles, the payment placeholder, and the Activity record with its trash and restore.
 
 **Two things changed across every page** and need nothing from you: the bar at the top of the site is
 now **white with black text**, with the IOPSTOR logo in its own blue-and-black rather than knocked out
@@ -512,7 +547,7 @@ Your sign-in is per site too: the password you use on one is not the password on
 
 ---
 
-## 13. Quick answers
+## 15. Quick answers
 
 **Is there a practice version of the site?** Yes — the one used while the site was being built. It is a
 completely separate copy: content does not travel between the two in either direction, so a page you want
@@ -533,6 +568,22 @@ addresses. Add the rest under **Settings → Contact details → Social links**,
 **A long web address or code runs off the edge of the page.** It no longer does — a word too long to
 fit now breaks and carries on on the next line, in the editor and on the live site, instead of
 pushing the page sideways.
+
+**Who changed this page?** Open **Activity** in the sidebar (administrators only) and type `posts` in
+the third box. Every change to every page is there with the person's name, the date and time, and what
+the page said before and after.
+
+**I deleted a page by mistake.** It is not gone. Ask an administrator: they open the list the page was
+in, set the status filter to **trash**, and press **Restore**. It comes back as a draft with its address,
+its categories and anything filed under it intact, ready to be published again. See section 12.
+
+**The times in the admin panel have changed.** They are now Indian time, and every screen says IST after
+the time so there is no doubt. They were previously five and a half hours behind without saying so, which
+also meant a publish date you typed was acted on five and a half hours late. Both are now correct.
+
+**Somebody has been trying to sign in as me.** Wrong passwords are recorded. An administrator can open
+**Activity**, choose *login failed* in the middle box, and see every attempt with the email that was
+typed, the time, and where it came from.
 
 **The Services list ran off the side of my phone.** It no longer does. On a narrow screen each service
 group now reads down the page — the number, the group name, its description, then its services as

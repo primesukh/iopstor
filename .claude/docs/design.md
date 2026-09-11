@@ -1,4 +1,4 @@
-# IOPSTOR CMS — architecture spec (current state, 2026-09-10)
+# IOPSTOR CMS — architecture spec (current state, 2026-09-11)
 
 **What this file is.** The map an agent reads before touching anything: what exists, where it lives, and *why* it has the shape it has. The territory is the source, and the long-form developer reference is `docs/TECHNICAL.md` (§ numbers below point into it). Client brief and client decisions: `requirements.md`. Rules and commands: `CLAUDE.md` (repo root).
 
@@ -10,9 +10,10 @@
 
 | Area | State |
 |---|---|
-| Content model, data access, migrations | Done (13 tables, migrations `0001`–`0007`; `0007` is a data migration awaiting the user) |
+| Content model, data access, migrations | Done (14 tables, migrations `0001`–`0008`; `0008` creates `audit_log` and awaits the user) |
 | Public site with the client's design | Done — the mock in `website_assets/mock-website.html` is the reference; header is white by client decision. Pictures and PDFs come from the app itself (§7 `/media/`), so nothing a visitor loads needs Supabase |
-| Browser admin `/admin` | Done — sidebar shell, document editor with `/` sections, live preview at three widths, media, leads, warranty register, menus, settings, users |
+| Browser admin `/admin` | Done — sidebar shell, document editor with `/` sections, live preview at three widths, media, leads, warranty register, menus, settings, users, activity log. Every date shown is IST |
+| Audit log + trash | Done — `audit_log` records every write, login and failed login; `/admin/audit` (admin-only) shows the before/after of each and restores it; deleting a post moves it to `status='trash'` instead of removing the row |
 | SEO + AI output | Done — meta/OG/JSON-LD, sitemap, robots, RSS, `llms.txt`, `llms-full.txt`, a `.md` twin of every page |
 | Warranty register + public serial check | Done |
 | Payments | Placeholder only (`DummyGateway`); a real provider is the one open item from the brief |
@@ -74,7 +75,7 @@ Dependency direction: `public.py` and `admin_ui.py` import from `admin_api.py`; 
 
 ---
 
-## 3. Tables (`migrations/0001_initial.sql` + `0003`–`0006`)
+## 3. Tables (`migrations/0001_initial.sql` + `0003`–`0008`)
 
 | Table | Purpose / notable columns |
 |---|---|
@@ -89,11 +90,14 @@ Dependency direction: `public.py` and `admin_ui.py` import from `admin_api.py`; 
 | `menus` | `slug` header/footer → `items [{label, url, children}]`, one level |
 | `redirects` | `from_path → to_url`, `code`, `hits` |
 | `payments` | `provider, provider_ref, post_id, lead_id, amount, currency, status, raw` |
+| `audit_log` (0008) | **who did what, and what it was before**: `at, user_id (no FK), user_email, ip, action create/update/delete/restore/login/logout/login_failed, table_name, row_id (text), label, changes {field: [was, now]}`. `BIGINT GENERATED ALWAYS AS IDENTITY`, `TEXT` not `VARCHAR(n)`, and **append-only by trigger** (`audit_log_no_change` raises on UPDATE or DELETE) — the app holds the service-role key and could otherwise rewrite its own evidence. One index, `(user_id, id DESC)` |
 | `schema_migrations` | applied file names, created by the bootstrap |
 
 RLS is on for every table (`0002`; a new table repeats the one `ENABLE ROW LEVEL SECURITY` line, no policies) so the anon key sees nothing; the service-role key bypasses it. NOT NULL columns carry defaults; `updated_at` via `moddatetime` triggers.
 
 **`field_schema` types in use:** `text, textarea, number, date, url, media, json, kv`. Nothing validates the list — an unknown type falls through to a text input, so adding one is additive. `kv` (0006) is label/value rows stored as an ordered **array** `[{k,v}]`, because `jsonb` sorts an object's keys and a spec table must keep its order.
+
+**`posts.status` has a third value, `trash` (no migration — the column is a plain varchar).** Deleting a post moves it there; the row, its id, its children's `parent_id`, its `post_terms` and its leads all survive, which re-creating a row could not manage. It needed no new filter because every public read goes through `db.live()` (`status='published'`). The places that *did* need one are the four that were not filtering by status — `admin_ui.posts()`, `admin_ui.dashboard()`, `admin_api.list_posts()`, `db.admin_counts()` — plus `admin_ui.edit_post()` and `admin_api._post_or_404()`, which 404 a trashed post so **Save** cannot silently un-trash it. `unique_slug()` still counts a trashed slug as taken, which is what makes restore collision-free.
 
 **Seeded types:** `page ""`, `post blog`, `service services` (hierarchical), `case_study case-studies`, `event events`, `partner partners` (`has_pages=false`), `datasheet datasheets`, `product products` (price in rupees, `specs` kv, `sku`, `datasheet_media_id`).
 
@@ -151,6 +155,7 @@ RLS is on for every table (`0002`; a new table repeats the one `ENABLE ROW LEVEL
 | service (hierarchical) | `/services/<group>/<slug>`, `/services/<group>`, archive `/services` (groups with child tiles) |
 | case_study / event / datasheet / product | `/<prefix>/<slug>`, archive `/<prefix>` |
 | partner (`has_pages=false`) | archive `/partners` only; `/partners/<slug>` 404s |
+| a trashed post | nothing — `db.live()` excludes it, so the detail page, the sitemap, the `.md` twin, the archives and the feed all drop it exactly as they drop a draft |
 | product checkout | `/products/<slug>/checkout` — handled inside the resolver; `checkout` is a reserved last segment |
 | term archive | `/<taxonomy>/<term>` |
 | Markdown twin | any resolvable URL + `.md`; `/` → `/index.md` (`index` is a reserved page slug); gated by `_indexable()` like the sitemap |
@@ -199,6 +204,12 @@ Decisions that are easy to undo by accident:
 
 **Document editor** (`post_form.html` + `admin.js`, TECHNICAL §12.1): a post opens as one empty `rich_text` with the caret in it; `/` on an empty line inserts a section; every section has a hover bar (drag via SortableJS, ↑↓, duplicate, ⚙ settings popover, remove); `columns` are drop targets with their own bars. The canvas is `POST /admin/canvas` → `render_blocks(edit=True)` in an iframe via `srcdoc`; typing writes straight into the block objects, only structural changes re-render — and then one block (`?p=<path>`). *Advanced* is the raw JSON textarea, still the only field that POSTs, so `_form_body()` → `apply_post()` → `validate_blocks()` stays the single validation path. Toolbar commands run against the canvas document (`savedRange`; the bar goes dead rather than lying after a re-render). Style select offers Normal + H1–H6 (H1 present but not default); size is a separate `rem` dropdown disabled on headings; paste keeps an allowlist of tags; link/picture/table/embed are modal dialogs; table columns resize by dragging (writes a `<colgroup>`). Slug is auto from the title (`freeSlug()` mirrors `db.unique_slug()`), unlocked by *Edit* with a taken-warning; terms are a chip picker posting `new_terms` as `"<taxonomy>:<Name>"`, resolved only on save.
 
+**Activity** (`/admin/audit`, `admin/audit.html`, admin-only): every `audit_log` row newest first, `?user=`/`?action=`/`?table=`, the `db.paginate(..., 50)` idiom. Ordered by `id DESC`, not `at` — ids are issued in time order so the primary key does the sorting and the table needs no second index. Each row opens a `<details>` of Field / Was / Now (JSON in `<pre>`), and **Restore this version** writes the "was" half back through the ordinary helpers, so the restore is itself logged. `_restorable()` is the rule worth knowing: an `update` always, a `delete` **only for `posts`** (that is a trash move, the row is still there). Every other delete is real and re-creating the row would be a lie — a deleted user's GoTrue account is gone, a media row would point at a removed bucket object, `warranties.serial_key` is `GENERATED ALWAYS`, a taxonomy's terms cascaded. Restore has three writers because `db.update()` is keyed by `id`: `settings` and `menus` go through `set_settings()`/`set_menu()`.
+
+**The recording lives in `db.insert()`/`update()`/`delete()`, not in the routes** — a write path added later is logged without anybody remembering to. `_audit()` returns immediately when `has_request_context()` is false, which is the entire `flask seed` / `import-media` exclusion. It swallows its own failures (the content write already succeeded, and the app must run before `0008` is applied), so a gap in the log is possible and only a logger warning names it. `update(..., action=…)` relabels a trash move as `delete`. The one write deliberately not recorded is `public.py`'s `redirects.hits` bump — an anonymous page view, and the only `.update()` chain left outside `db.py`.
+
+**IST everywhere in the admin**: `db.ist()` / `db.ist_input()` registered as Jinja *filters* in `create_app()`, a fixed `+05:30` rather than `zoneinfo` (no DST in India, no tzdata in the slim image). `admin_ui._as_ist()` stamps the offset onto the publish-date input — at that input only, never in `db.parse_dt()`, which the JSON API shares and where a missing offset must still mean UTC.
+
 **Preview** (`POST /admin/preview`): the real `post.html` in the real `base.html` from the unsaved form, `noindex`, no analytics (`{% if site.ga_id and not preview %}`), device widths 1440/834/390 by scaling the iframe.
 
 **The `[hidden]` rule:** `.admin [hidden]{display:none!important}` — author `display` rules beat the UA's `[hidden]`, which once showed two panes at once.
@@ -229,6 +240,14 @@ Decisions that are easy to undo by accident:
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-09-11 | Every write is audited **inside `db.insert()`/`update()`/`delete()`**, not by Postgres triggers per table and not in an `after_request` hook | A trigger would also catch edits made directly in Supabase Studio, but it cannot know *which CMS user* is acting — that needs a per-request header reaching PostgREST, which the single shared `sb()` client cannot set safely across ~30 workers. An `after_request` hook sees the response, not the row, so it could never produce the field-level before/after the screen is built on. The helpers already carried 28 of the 31 write sites; routing the other three through them closed the funnel and killed the unfiltered-delete hazard at the same time |
+| 2026-09-11 | The audit exclusion for `flask seed` / `import-media` is `has_request_context()`, not a flag | There is no flag to remember and no way to forget it. The same test skips the extra before-read in `update()`, so the seed costs nothing |
+| 2026-09-11 | `audit_log` is append-only **by database trigger**, and a failed audit write is **swallowed** | The app holds the service-role key, so "the app offers no delete" protects nothing — only Postgres can. The swallow is the opposite trade and deliberate: the content write has already succeeded when `_audit()` runs, so raising would show an editor an error for a save that happened, and it is what lets the app run before `0008` is applied. The cost is a possible silent gap; the mitigation is a logger warning |
+| 2026-09-11 | Deleting a post sets `status='trash'`; a `deleted_at` column was rejected | Every public read already funnels through `db.live()` (`status='published'`), so one more status value costs no migration and no new filter, while a column would need one in six read paths and any single miss leaks a deleted page to the public site. Keeping the row keeps the id, so children, terms and leads survive a restore — which re-inserting from the log could never do (user, 2026-09-11) |
+| 2026-09-11 | Restore is offered for an `update` entry always, for a `delete` entry **only on `posts`** | Re-creating a genuinely deleted row is a lie the log should not tell: the user's GoTrue account is gone, the media file has left the bucket, `warranties.serial_key` is `GENERATED ALWAYS`, a taxonomy's terms cascaded away. Those entries still show the whole row, which is what makes them evidence |
+| 2026-09-11 | The delete confirmation still says **"This cannot be undone"** even though the trash makes it reversible | The user's call: the warning is there to make an editor stop and think, and the trash is an administrator's safety net, not a promise made at the dialog (user, 2026-09-11) |
+| 2026-09-11 | Admin dates are IST via a fixed `timedelta(hours=5, minutes=30)`, not `zoneinfo.ZoneInfo("Asia/Kolkata")` | India has never observed daylight saving, so the offset is exact for every date there will ever be, and `zoneinfo` needs tzdata, which the slim container image does not ship |
+| 2026-09-11 | The publish-date box's missing offset is stamped in `admin_ui._as_ist()`, never in `db.parse_dt()` | `parse_dt()` is the fallback for every naive timestamp including JSON API bodies, where no offset should keep meaning UTC. Fixed at the one input that had the bug — an editor typing 2 pm had been storing 7.30 pm |
 | 2026-09-03 | Supabase through Kong only, dict rows, `.sql` migrations, pipenv | Client's platform; no second database, no ORM to fight |
 | 2026-09-03 | Content types are rows; per-type fields in `posts.meta` described by `field_schema` | "Job Openings" must not need a developer |
 | 2026-09-03 | The graph's LLM pass (prose, labels) runs only on `main`; since 2026-09-04 git hooks keep the code nodes current per commit | A branch may never land; labelling it wastes tokens. Code re-extraction is free, so it can follow the branch |
@@ -270,7 +289,7 @@ Decisions that are easy to undo by accident:
 
 ## 15. Known ceilings
 
-Marked `# ponytail:` in source (36 at last count; `/ponytail-debt` harvests them). Deployment-side, not in source: `flask migrate` runs at boot with no lock, so two containers starting a *new* migration together leave the loser with `relation already exists` and one wasted boot (one replica is the deployed shape; `pg_advisory_xact_lock` in `apply_migration()` is the fix); the container runs as root; `/healthz` is liveness-only, so nothing polls Supabase's health. The ones an agent trips over: HS256-only JWT; hierarchy index < 2000 posts per type; one sitemap < 5000 URLs; honeypot-only spam control; raw HTML trusted; `execCommand` editor; rotator keyframes for 2 and 3 pictures only; per-request caches, so `post_types` and `settings` cost a round trip each per request; a redirect's `hits` loses counts under parallel visits; PostgREST calls wait up to 120 s; `checkout` and `index` are reserved slugs; counting rolls whole numbers only and refuses grouped ones; scroll *triggering* needs Chrome 115+ / Safari 26+ / Firefox 144+ and otherwise plays at load; the counter needs `@property` (Firefox 128+) or the figure reads 0; `_html_md()` is regex, not a parser; `/media/` is a reserved first segment, its files are read whole into memory and have no server-side cache; `DummyGateway` moves no money.
+Marked `# ponytail:` in source (37 at last count; `/ponytail-debt` harvests them). Deployment-side, not in source: `flask migrate` runs at boot with no lock, so two containers starting a *new* migration together leave the loser with `relation already exists` and one wasted boot (one replica is the deployed shape; `pg_advisory_xact_lock` in `apply_migration()` is the fix); the container runs as root; `/healthz` is liveness-only, so nothing polls Supabase's health. The ones an agent trips over: HS256-only JWT; hierarchy index < 2000 posts per type; one sitemap < 5000 URLs; honeypot-only spam control; raw HTML trusted; `execCommand` editor; rotator keyframes for 2 and 3 pictures only; per-request caches, so `post_types` and `settings` cost a round trip each per request; a redirect's `hits` loses counts under parallel visits; PostgREST calls wait up to 120 s; `checkout` and `index` are reserved slugs; counting rolls whole numbers only and refuses grouped ones; scroll *triggering* needs Chrome 115+ / Safari 26+ / Firefox 144+ and otherwise plays at load; the counter needs `@property` (Firefox 128+) or the figure reads 0; `_html_md()` is regex, not a parser; `/media/` is a reserved first segment, its files are read whole into memory and have no server-side cache; `DummyGateway` moves no money; **a failed `audit_log` write is swallowed**, so the log can have a gap the log cannot report (watch the logger warnings); `audit_log` has no retention job and stores a page's whole old and new `blocks` array on every save; a restore is not pre-checked against media or a parent that has since been deleted, so it surfaces as a 502 through `_pg_error`.
 
 ---
 
