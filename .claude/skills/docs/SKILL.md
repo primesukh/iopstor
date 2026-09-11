@@ -26,6 +26,7 @@ A feature is not finished until all three say so, in the same PR. `TECHNICAL.md`
 | A `# ponytail:` ceiling | §17 | — | §15 if an agent will trip on it |
 | Client decision | — | §12 | `requirements.md` decisions table (dated) |
 | Workflow / tooling / `.claude/` | §18 | — | §16 + `CLAUDE.md` |
+| Deployment / hosting / env key | §14 (the key and what breaks without it), §15 (the runbook step) | §12 only if the address or the live/practice split changes | §1 platform table, §14 row + `CLAUDE.md` Env keys |
 
 A change can match several rows; apply every row that matches. A client decision about the header is a dated `requirements.md` row **and** a `design.md` §9 rule an agent could undo **and** a TECHNICAL.md §12 paragraph.
 

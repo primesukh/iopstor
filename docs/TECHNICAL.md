@@ -16,7 +16,7 @@ Companion documents: [NON-TECHNICAL.md](NON-TECHNICAL.md) for editors, [`.claude
 | Tokens | PyJWT (local HS256 verification) |
 | Packaging | pipenv (`Pipfile` + `Pipfile.lock`); `requirements*.txt` are generated from the lock and are what Docker installs |
 | Tests | pytest |
-| Deploy | Dokploy, Dockerfile + gunicorn |
+| Deploy | Dokploy. Development: the `Dockerfile` alone. Production: `docker-compose.yml` — that same image as `app`, plus `cloudflared`, one Compose service, the tunnel the only way in (§15) |
 
 Three constraints shape everything below:
 
@@ -305,6 +305,10 @@ Browser     tokens in the signed Flask session cookie, refreshed on expiry
 ```
 
 Both verify **locally** with `SUPABASE_JWT_SECRET` (HS256) — no network round trip per request. `users.id` equals the GoTrue `sub`, which is how a token becomes a CMS user.
+
+**The `csrf` token is minted for admin requests only, and the guard that does it is one line in the wrong-looking place.** `_globals()` in `admin_ui.py` is an `@ui.app_context_processor`, and Flask's `app_context_processor` is **app-wide despite the blueprint it is registered on** — so it ran on every `render_template`, public pages included, and put a `csrf` value in the session of every anonymous visitor. Nothing was insecure about that; what it cost was cacheability. A touched session means `Set-Cookie` on the response, and no HTTP cache stores a response carrying one, so behind the Cloudflare tunnel the public site could never be cached at the edge no matter what rules were written. `if not has_request_context() or request.blueprint != ui.name: return {}` fixes it, and it is safe because no public template reads `csrf`, `admin_user`, `post_types` or `nav_counts`, while `/admin/canvas` and `/admin/preview` are `admin_ui` routes and keep theirs. `test_public_pages_mint_no_session_cookie` asserts both halves — `{}` on `/`, a token on `/admin/login`.
+
+`SESSION_COOKIE_SECURE` is derived from `SITE_URL`, not from `request.is_secure` (`config.py`), which is the right way round behind a TLS-terminating tunnel: the app only ever sees plain HTTP from cloudflared, so a request-derived flag would never set. `SESSION_COOKIE_SAMESITE = "Lax"` is load-bearing rather than hygienic — `/api/admin/v1` accepts the session cookie when there is no `Authorization` header and `require_role()` does not check CSRF, so SameSite is what keeps a cross-site POST from reaching it. Never relax it to `None`.
 
 **Roles are a ladder:** `ROLES = {"editor": 1, "admin": 2}`, enforced by `require_role(min_role)`. A valid GoTrue login with **no `users` row gets 403** — authentication and authorization are deliberately separate.
 
@@ -979,17 +983,36 @@ Everything except `test_offline.py` is marked `live` and skips when `.env` has n
 
 ## 14. Configuration
 
-`SECRET_KEY`, `SITE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `MEDIA_BUCKET`, `PAYMENT_PROVIDER`. `FLASK_DEBUG=1` in `.env` gives the dev server the debugger and auto-reload.
+`SECRET_KEY`, `SITE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `MEDIA_BUCKET`, `PAYMENT_PROVIDER`, `THROTTLE_DB`, `LOGIN_MAX_FAILURES`, `LOGIN_WINDOW`. `FLASK_DEBUG=1` in `.env` gives the dev server the debugger and auto-reload; it must be **absent** in production, and nothing in the Dockerfile guards that.
+
+**Six are required, and the app refuses to boot without them** — `create_app()`'s `REQUIRED`, checked before a blueprint is registered. The four `SUPABASE_*` were always there; `SECRET_KEY` and `SITE_URL` joined them when production became real, and `config.py` dropped their defaults to make the check bite. **Why a refusal rather than a sensible default.** Both used to fail *silently*, which is the expensive way to fail. `SECRET_KEY` fell back to `"dev-only-change-me"`, a string printed in this repo — and `auth.py` accepts a session token as a Bearer fallback when no `Authorization` header is present, so a forged cookie is a way in. `SITE_URL` fell back to `http://localhost:5000`, which does two things at once: every canonical, sitemap `<loc>`, `robots.txt` `Sitemap:` line, RSS guid, JSON-LD `url` and OG image points at localhost, and `SESSION_COOKIE_SECURE` — computed at import from `SITE_URL.startswith("https://")`, not from the request — comes out `False`, so the admin cookie ships over the tunnel without `Secure`. Neither shows up in a smoke test; a deploy that forgets one now stops instead. `test_boot_refuses_without_secret_key_or_site_url` passes empty strings rather than omitting keys, because pipenv loads `.env` and an omitted key would inherit a real value and pass for the wrong reason.
 
 `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are the same values as `JWT_SECRET`, `ANON_KEY` and `SERVICE_ROLE_KEY` in the Supabase compose environment.
 
-`GUNICORN_CMD_ARGS` is read by gunicorn itself, not by the app: the Dockerfile sets `-w 2 --threads 8 --preload` and Dokploy's environment raises the worker count (§15).
+`GUNICORN_CMD_ARGS` is read by gunicorn itself, not by the app: the Dockerfile sets `-w 2 --threads 8 --preload --access-logfile -` and Dokploy's environment raises the worker count (§15). `--access-logfile -` is the only request log there is; the `HEALTHCHECK` adds a `/healthz` line every 30 s, which is not traffic.
 
 Dev gateway: `http://developmentserver-supabase-9f7088-111-125-233-170.sslip.io` — LAN, self-signed cert on https, so use http until a real certificate exists.
 
 `SUPABASE_URL` needs to be reachable **from the app only**. Nothing a visitor's browser loads points at it
 any more (§8), so the gateway can sit on a private network with Flask as the only exposed service. `SITE_URL`
 is what the outside world sees, and it is what `seo._abs()` puts in front of a `/media/` path.
+
+Production values, set in the Dokploy Compose service's environment and nowhere else (`.env` and `.env.*` are
+both git-ignored, so a `.env.production` on a laptop cannot be committed):
+
+| Key | Production |
+|---|---|
+| `SITE_URL` | `https://www.iopstor.com` — the tunnel's public hostname, and therefore the Secure flag |
+| `SUPABASE_URL` | `http://<kong-service>:8000` — Kong by Docker service name on `dokploy-network`, never a public host |
+| `SECRET_KEY` | fresh random, per environment. Never the development one |
+| `GUNICORN_CMD_ARGS` | `-w 30 --threads 8 --preload --access-logfile -` (§15) |
+| `TUNNEL_TOKEN` | read by the `cloudflared` service in `docker-compose.yml`, not by the app |
+| `FLASK_DEBUG` | **unset** |
+
+The `SUPABASE_SERVICE_ROLE_KEY` bypasses RLS — `0002_enable_rls.sql` enables RLS on every table and defines
+no policies at all, on purpose (§10), so the app's security boundary is Flask, not the database. That key
+belongs in the deployment's environment and nowhere else: not in the image, not in the repo, not in a
+browser.
 
 ---
 
@@ -1004,7 +1027,7 @@ pipenv run flask create-admin EMAIL PASS    # Supabase Auth user + CMS admin row
 pipenv run pytest
 ```
 
-**First-time setup on a Supabase instance:**
+**First-time setup on a Supabase instance** (development; the production order is the runbook below, which has more steps and cares about all of them):
 
 1. Studio → SQL editor: run `migrations/0000_bootstrap.sql`
 2. Studio → Storage: create a bucket named `media`. Public or private no longer matters to the app — it uploads and reads with the service-role key (§8), and nothing a visitor loads points at the bucket. The instances built so far use a public one
@@ -1020,6 +1043,90 @@ pipenv run pytest
 `--preload` imports the app once in the master and forks it: a broken import fails once instead of thirty crash-looping workers, and the imported code is shared copy-on-write. It is safe here because the Supabase client is created after the fork, the throttle opens its connection per call, and Python reseeds `random` in every child (`unique_slug()`'s suffix).
 
 Sizing: `create_app()` makes no network call and costs about 0.9 s and 63 MB per worker on its own; a thread costs almost nothing, and every request is a wait on Kong. Measured on the dev box, `-w 30 --threads 8 --preload` boots in a few seconds and holds 472 MB of real memory (PSS, shared pages counted once — the summed RSS reads 1.7 GB, which is the number a per-process view shows). `-w 8 --threads 30` is the same 240 slots at a quarter of that. The ceiling behind either is PostgREST's connection pool — `PGRST_DB_POOL`, 10 by default, with a 10 s acquisition timeout — so check it on the Supabase host (`docker exec supabase-rest env | grep PGRST_DB_POOL`) before going wide. Two **replicas** are a different case from thirty workers: the throttle splits, and two containers running `flask migrate` on a cold database at the same instant leave the loser with `relation already exists` and no gunicorn (`cli.py`); once the ledger is full, migrate is one `SELECT` and any number of containers can start together.
+
+**Production (Dokploy + Cloudflare Tunnel).** Production is **one Dokploy Compose service** built from
+`docker-compose.yml` at the repo root, holding two containers: `app`, built from the same `Dockerfile`
+development uses, and `cloudflared`. Supabase is a separate stack from Dokploy's Supabase template.
+`SITE_URL` is `https://www.iopstor.com`.
+
+**Why one compose stack rather than a Dokploy Application plus a separate Compose app for the tunnel.**
+Both shapes work, but the split one has to name the app container as the tunnel's origin, and a Dokploy
+Application's container name is generated — you read it off the host with `docker ps` and it changes when
+the app is recreated, so the tunnel's ingress rule silently points at nothing after a redeploy. Inside a
+compose project the service name *is* the DNS name, so the origin is a fixed `http://app:8000` that no
+deploy can invalidate. `docker compose up -d` also restarts only what changed, so shipping code rebuilds
+`app` and leaves the tunnel connected.
+
+`app` sits on two networks on purpose: the compose-private `default`, which is how `cloudflared` reaches
+it, and the external `dokploy-network`, which is how it reaches Supabase Kong. `cloudflared` is on
+`default` only — it has no business reaching Supabase. `app` has **no `ports:` and no Traefik labels**,
+and that omission is load-bearing rather than tidy: it is the enforcement of *the tunnel is the only
+ingress*, which is what makes `throttle.client_ip()`'s unconditional trust in `CF-Connecting-IP` sound
+(§12). Publish the port or attach a domain and the login throttle becomes decorative — worse, if
+Cloudflare is bypassed the header is absent, `remote_addr` becomes the proxy's address, every visitor
+lands in one bucket, and ten failed logins lock out every admin at once. The required-variable syntax in
+the compose file (`${SECRET_KEY:?...}`) is deliberate too: a missing value fails `docker compose config`
+with a sentence saying what it wanted, rather than starting a container that refuses to boot for reasons
+you then have to read out of a log.
+
+**The order of first deployment matters, and getting it wrong looks like a crash loop.** `CMD` is
+`flask migrate && exec gunicorn …`, so a database without `0000_bootstrap.sql` in it fails migrate and
+gunicorn never starts.
+
+0. **Settle how the operator will reach Kong.** From a phone on mobile data, open the dev gateway URL.
+   If it answers, the Dokploy host's 80/443 are public and a Traefik domain on Kong would put production
+   Supabase on the internet — take 4a. If it times out, the host is LAN-only and 4b is available too.
+1. Deploy the **Supabase template** into the production project. Record `ANON_KEY`, `SERVICE_ROLE_KEY`
+   and `JWT_SECRET` from its compose environment.
+2. Reach Studio the way step 0 chose → SQL editor → run `migrations/0000_bootstrap.sql` **once**.
+3. Studio → Storage → create the bucket `media`.
+4. **Size PostgREST before the app exists.** `-w 30 --threads 8` is 240 concurrent request slots in front
+   of `PGRST_DB_POOL`, which the template ships at **10** with a 10-second acquisition timeout — so a
+   burst does not queue politely, it 504s. Read it
+   (`docker exec <supabase-rest-container> env | grep PGRST_DB_POOL`), raise it in the Supabase stack's
+   compose environment in Dokploy — that is where it lives — and redeploy that service. Size it against
+   Postgres `max_connections` (`show max_connections;` in Studio), remembering GoTrue, Storage, Realtime
+   and Studio draw from the same budget: PostgREST must not be able to exhaust it alone. Then read Kong's
+   service name (`docker ps --format '{{.Names}}' | grep kong`) and confirm it is on `dokploy-network`;
+   that name is the app's `SUPABASE_URL`. For the operator's own access:
+   - **4a — no domain, no published port on Kong.** SSH-forward to the container:
+     `ssh -L 8000:$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <kong-container>):8000 <host>`,
+     then `http://127.0.0.1:8000` serves Studio and the CLI both. The `docker inspect` stays inside the
+     command because the overlay address changes whenever the container is recreated.
+   - **4b — a Dokploy domain on Kong**, the development pattern. Only private because the host is.
+5. Dokploy → **Compose** service → GitHub `primesukh/iopstor`, branch `main`, file `docker-compose.yml`.
+   Set the environment from §14's table plus `TUNNEL_TOKEN`. Give the stack at least 1 GB: thirty
+   `--preload` workers measure at 472 MB of real memory, and an OOM kill at boot is indistinguishable
+   from a failed build in the log. Auto-deploy on push to `main` is a choice to make here, not a default —
+   with it on, merging a PR redeploys production. Two settings on that screen decide whether this shape
+   works at all, and both fail quietly rather than loudly, so check them before the first deploy: the
+   stack must run as **plain Docker Compose, not `docker stack deploy`** (Swarm ignores `build:`,
+   `restart:` and `depends_on`, so there is no image to run), and **service-name randomisation /
+   isolated deployment must be off** (it suffixes service and network names, and then `http://app:8000`
+   resolves to nothing and the tunnel answers 502). After deploying, `docker compose ps` should list a
+   service named literally `app`. Migrate then applies `0001`–`0007`, and gunicorn starts.
+6. Cloudflare Zero Trust → the tunnel that token belongs to → public hostname `www.iopstor.com` →
+   `http://app:8000`. Send the apex to www with a redirect rule, which needs a **proxied** DNS record on
+   the apex to fire at all.
+7. Content, from a machine with the step 4 forward open and `SUPABASE_URL=http://127.0.0.1:8000`:
+   `flask seed` → `flask create-admin EMAIL PASSWORD` → `flask import-media website_assets` → `flask seed`
+   again, so the seeded pages pick their pictures up by filename. This runs from the developer's clone,
+   not the container: `website_assets` is in `.dockerignore` and is not in the image. `create_app()` needs
+   `SECRET_KEY` and `SITE_URL` here too, which the development `.env` supplies — `cli.py` never reads
+   `SITE_URL`, so its development value is harmless.
+8. Check `/healthz`, `/`, `/sitemap.xml` (every `<loc>` must read `https://www.iopstor.com`),
+   `/robots.txt`, and sign in at `/admin` — the session cookie must carry `Secure`.
+
+Two rules rather than steps: **the tunnel is the only ingress** (above), and **Studio and Kong never go on
+it** — Flask is the only public service, which is the whole reason `/media/<key>` exists (§8). Worth adding
+once the site is live: a Cloudflare rate-limit on `/admin/login`, which §12 argues is a complement to the
+sqlite throttle rather than a replacement, since the flood never reaches the origin. Public HTML can also
+be edge-cached now that anonymous requests carry no `Set-Cookie` (§7) — but **leave that off unless someone
+asks for it.** Cloudflare does not cache HTML without a Cache Rule, so it is opt-in, and turning it on buys
+speed at the cost of the property NON-TECHNICAL.md §13 currently promises editors: that a page is live the
+moment they press **Save**. With a Cache Rule a save, and a scheduled `published_at` falling due, both lag
+by the TTL, and there is no purge hook wired to either. Enable it only with a TTL someone has agreed to,
+a rule that excludes `/admin/*` and `/api/*`, and that Quick Answer rewritten to match.
 
 After any `Pipfile` change, regenerate both lockfile exports:
 
@@ -1073,6 +1180,22 @@ Marked in code with `# ponytail:` comments.
 - `public.media_file()` reads the whole file into memory before answering — `MAX_CONTENT_LENGTH` caps an upload at 20 MB, so the worst case is bounded. Stream it through httpx if big PDFs ever land.
 - No server-side cache in front of Storage: a cold client costs one LAN round trip per file. The immutable year plus the ETag mean repeat views cost nothing, and `gunicorn --threads 8` keeps a page's images off each other's way; put a CDN or a disk cache in front if that stops being enough.
 - `DummyGateway` moves no money.
+- `flask migrate` runs at container boot with no lock: `apply_migration()` checks the ledger and inserts
+  without one, so two containers starting a **new** migration at the same instant both pass the check and
+  the loser rolls back with `relation already exists`, exits, and is restarted — one wasted boot per new
+  migration per extra replica, self-healing but noisy, and `cli.py`'s "already exists" hint points at
+  `repair_schema_migrations.sql`, which is the wrong advice for a race. One replica is the deployed shape;
+  `perform pg_advisory_xact_lock(hashtext('apply_migration'))` at the top of that function is the fix if
+  that ever changes.
+- The container runs as root — no `USER` in the Dockerfile. Nothing needs it: the only writes are Storage
+  uploads and `/dev/shm`.
+- `/healthz` is liveness-only and touches nothing, so **nothing polls Supabase's health**. It used to run a
+  PostgREST query, which made the 30-second `HEALTHCHECK` a dependency check: one Supabase restart marked a
+  healthy container unhealthy, and the restart re-ran `flask migrate`, which needs Supabase too. Monitoring
+  Supabase itself is a job for something outside the container.
+- Thirty workers is where `media_file()` reading a whole object into memory stops being theoretical: 240
+  request slots against a 20 MB `MAX_CONTENT_LENGTH` is a 4.8 GB worst case. Streaming through httpx is the
+  upgrade named above; what the worker count changes is that it is now a number to watch, not an argument.
 - `post_types` and `settings` are cached per **request** (`db._cached()` on `flask.g`), so every request pays one PostgREST round trip for each. A per-process cache with a short TTL is the upgrade if PostgREST load ever matters; until then nothing can go stale between workers (§15).
 - PostgREST calls wait up to 120 s — the library default, nothing is configured. A stalled Supabase parks that many gthread threads for two minutes. A shared `httpx.Client(timeout=…)` passed as `ClientOptions(httpx_client=…)` in `db._client()` is the non-deprecated way to shorten it.
 - A redirect's `hits` is a read-then-write, so parallel visits lose counts. Nothing reads the column; a `bump_redirect(id)` SQL function called via `.rpc()` makes it exact if it is ever reported on.

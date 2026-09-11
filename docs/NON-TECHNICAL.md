@@ -12,8 +12,8 @@ There are two halves:
 
 | Half | Who uses it | Where |
 |---|---|---|
-| **The public website** | Customers, prospects, Google, AI crawlers | `https://<your-domain>/` |
-| **The admin panel** | IOPSTOR staff | `https://<your-domain>/admin` |
+| **The public website** | Customers, prospects, Google, AI crawlers | `https://www.iopstor.com/` |
+| **The admin panel** | IOPSTOR staff | `https://www.iopstor.com/admin` |
 
 Anything you change in the admin panel appears on the public website immediately. You never need a developer to publish a page, add a case study, or change the phone number in the footer.
 
@@ -493,11 +493,28 @@ asks for.
 delivered by the website itself instead of by the file store behind it, so that store can be closed off
 from the internet entirely. Nothing about uploading or choosing a file changes.
 
+**The website now has its real address**, `https://www.iopstor.com`, and you sign in to edit it at
+`https://www.iopstor.com/admin`. Nothing about writing a page changes — same screens, same buttons.
+
+There are now **two separate copies** of the site: the live one at that address, and a practice one used
+while the site was being built. They do not share anything. A page written on the practice site does not
+appear on the live one, and vice versa — so anything the live site needs is written on the live site.
+Your sign-in is per site too: the password you use on one is not the password on the other.
+
 **Still to come:** a live payment provider.
 
 ---
 
 ## 13. Quick answers
+
+**Is there a practice version of the site?** Yes — the one used while the site was being built. It is a
+completely separate copy: content does not travel between the two in either direction, so a page you want
+customers to see has to be written on the live site at `https://www.iopstor.com/admin`. If you are ever
+unsure which one you are looking at, check the address at the top of the browser.
+
+**Will visitors see a page the moment I press Save?** Yes, if it is set to **Published** — the live site
+is served straight from what you save, with no waiting and nothing to rebuild. A **Draft** stays invisible,
+and a scheduled page appears by itself at the date you set.
 
 **The quote form on Contact Us is no longer black.** That is deliberate. It now sits on the same soft grey panel as the *Apply* form on Careers, at the client's request. Nothing else about it changed — it still asks what the visitor is interested in and how many users, and the enquiry still arrives under **Leads** as a quote request.
 

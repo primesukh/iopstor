@@ -38,6 +38,7 @@ iopstor/cli.py           flask migrate | seed | import-media | create-admin
 iopstor/templates/       base.html post.html archive.html 404.html checkout.html _card.html (the one card macro), blocks/<type>.html (18, each a full-width <section>), admin/*.html
 iopstor/static/site.css  the whole public theme: tokens at the top, header + mega panel + footer, .cards/.card/.btn/.section, layout group (.al-* .w-* .t-*), one rule-group per block
 iopstor/static/admin.css admin-only rules layered on site.css; canvas.css = editor chrome inside the iframe; admin.js = the editor (plain JS, no build); vendor/sortable.min.js
+docker-compose.yml       production only: `app` (this Dockerfile) + `cloudflared` as one Dokploy Compose service; `app` has no ports and no Traefik labels, so the tunnel is the only ingress
 migrations/              0000_bootstrap.sql (run once by hand in Studio) + NNNN_name.sql applied by `flask migrate`; repair_schema_migrations.sql is a hand-run repair, not a step
 tests/                   pytest: test_offline.py always; the rest are marked live and skip without the Supabase in .env
 docs/                    TECHNICAL.md + NON-TECHNICAL.md — the two docs every change keeps current
@@ -141,13 +142,18 @@ So the full order is: branch → work → three docs → `/pr` → **stop** → 
 
 ## Env keys (`.env.example`)
 
-`SECRET_KEY, SITE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, MEDIA_BUCKET, PAYMENT_PROVIDER, THROTTLE_DB, LOGIN_MAX_FAILURES, LOGIN_WINDOW` (+ `FLASK_APP=iopstor`, `FLASK_DEBUG=1` for development; `GUNICORN_CMD_ARGS` in the container only — `-w 2 --threads 8 --preload` from the Dockerfile, the worker count raised in Dokploy, never in code).
+`SECRET_KEY, SITE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, MEDIA_BUCKET, PAYMENT_PROVIDER, THROTTLE_DB, LOGIN_MAX_FAILURES, LOGIN_WINDOW`
+**`SECRET_KEY` and `SITE_URL` have no defaults and sit in `create_app()`'s `REQUIRED`** beside the four `SUPABASE_*` — the app refuses to boot without them, because both used to fail silently: a signing key printed in this repo, and localhost canonicals plus a session cookie with no `Secure` flag.
+Development also sets `FLASK_APP=iopstor` and `FLASK_DEBUG=1`. `GUNICORN_CMD_ARGS` is container-only and gunicorn reads it itself — `-w 2 --threads 8 --preload --access-logfile -` from the Dockerfile, raised in Dokploy, never in code.
+Production: `SITE_URL=https://www.iopstor.com`, `SUPABASE_URL=http://<kong-service>:8000` (Kong's internal Docker name on `dokploy-network`), `GUNICORN_CMD_ARGS=-w 30 --threads 8 --preload --access-logfile -`, `TUNNEL_TOKEN` for the cloudflared container, and **no `FLASK_DEBUG`**. Set in Dokploy's environment only; `.env` and `.env.*` are both git-ignored. Runbook: `docs/TECHNICAL.md` §15.
 Dev Supabase: `http://developmentserver-supabase-9f7088-111-125-233-170.sslip.io` (LAN, self-signed cert on https → use http until a real cert exists).
 `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` are the same values as `JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY` in the Supabase compose env.
 The `media` bucket is created in Supabase Studio; public or private no longer matters, since the app uploads and reads it with the service-role key and nothing a visitor loads points at it. RLS is enabled on all app tables (`migrations/0002_enable_rls.sql`; a new table repeats the line) so the anon key
 cannot read drafts or leads; the app's service-role key bypasses RLS.
 
-## First-time setup on a Supabase instance
+## First-time setup on a Supabase instance (development)
+
+Production is a different and longer order — Supabase template, `PGRST_DB_POOL`, the Compose service, the tunnel, then content. It lives in `docs/TECHNICAL.md` §15 and is not repeated here.
 
 1. Studio → SQL editor: paste and run `migrations/0000_bootstrap.sql`.
 2. Studio → Storage: create a bucket named `media` (the instances so far are public; the app does not require it).

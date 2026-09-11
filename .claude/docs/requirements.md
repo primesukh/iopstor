@@ -1,4 +1,4 @@
-# IOPSTOR — client requirements (brief verbatim from 2026-09-03; decisions and status to 2026-09-09)
+# IOPSTOR — client requirements (brief verbatim from 2026-09-03; decisions and status to 2026-09-10)
 
 The brief is kept word for word. Everything under **Decisions** is dated and appended to, never rewritten; a later line overrides an earlier one. What the brief asked for versus what exists is in **Status against the brief** at the end.
 
@@ -74,7 +74,7 @@ With the need of Storage growing and with a opportunity to server a un-served ma
 
 ## Assets received
 
-In `website_assets/` (untracked in git — the client's files, loaded into the media library with `flask import-media website_assets`):
+In `website_assets/` (tracked in git since 2026-09-10 — the client's files, loaded into the media library with `flask import-media website_assets`, which runs from a clone because the folder is in `.dockerignore` and never reaches the image):
 
 - `mock-website.html` — the visual design the theme is built from. It is the reference for every theme question; `/theme-check` compares against it.
 - Pictures: `Untitled-4.png` (home hero), `banner-homepage-96tb.png` (ZFS section, IOPStor Edge), `DSC_0305n.png` (IOPStor Classic), `background1.jpg` (About backdrop), `Feature.jpg`, `Services.jpg`, `Untitled-3.png`, `iopstor-logo-white.png`, `iopstor_logo-png1.png` (site logo).
@@ -102,6 +102,7 @@ In `website_assets/` (untracked in git — the client's files, loaded into the m
 | 2026-09-09 | **Every page has a Markdown twin** (`/about-us.md`, `/index.md`, …) for AI crawlers, linked from `<head>` and from `llms.txt`; `llms-full.txt` is real Markdown. Nothing is generated to disk |
 | 2026-09-09 | The payment provider stays a placeholder until the client names one |
 | 2026-09-10 | **A Numbers or Rich text section can carry an effect** — fade in, gradient, highlighter sweep — and a Numbers section can count its figures up from zero. Each figure can override the band it sits in |
+| 2026-09-10 | **The production stack**: a Dokploy project holding one Compose service — the app and a Cloudflare Tunnel container side by side — with the database from Dokploy's Supabase template, the code pulled from GitHub (`primesukh/iopstor`), and the environment set in Dokploy. The site is public at **`https://www.iopstor.com`** through the tunnel, which is the **only** way in: Supabase and its Studio stay unreachable from the internet, and the app itself has no public port. Thirty gunicorn workers. Production and development are separate databases with separate logins and no content passing between them |
 | 2026-09-10 | **The Contact Us quote form sits on the Careers grey panel**, not the mock's black card. Colour only: it still asks what the visitor is interested in and how many users, and still files a `quote` lead |
 
 ## Status against the brief
