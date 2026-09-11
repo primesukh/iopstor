@@ -107,7 +107,7 @@ Open the PR and **stop there**. Do not merge, do not squash, do not push to `mai
 **3. Every feature updates all three docs, in the same PR.**
 `docs/TECHNICAL.md` for developers (modules, schema, endpoints, contracts, ceilings), `docs/NON-TECHNICAL.md` for editors (what it does, in plain English, no jargon), and `.claude/docs/design.md` for the next agent (what exists and why, compressed; a dated row in its decision log for anything surprising). `/docs` says which sections. A feature is not finished until all three reflect it. If a change genuinely affects only some audiences, say so in the PR body rather than silently skipping the rest.
 
-**4. `.claude/` is refreshed with every PR merge — mandatory, and the only thing `/after-merge` does.**
+**4. `.claude/` is refreshed with every PR merge — mandatory, and the whole point of `/after-merge`.**
 The PR itself carries the `design.md` change (rule 3). After the user merges, `/after-merge` on `main`: pull, then audit every written doc against the merged diff — **no graphify command runs, and the audit is not optional because of it** — layout in this file, `design.md` sections, `requirements.md` decisions, the skill whose procedure turned out incomplete, `settings.json` allow/deny for commands that prompted or must never run. Drift is reported to the user and folded into the next PR that touches the same area — no separate sync PR, and never a commit straight to `main`. A `design.md` row the merged PR should have carried (rule 3) is a miss to name, not a PR to open. Per-machine facts (which CLI is installed, how screenshots work) belong in Claude's memory, not in the repo.
 
 So the full order is: branch → work → three docs → `/pr` → **stop** → (user merges) → `/after-merge`.

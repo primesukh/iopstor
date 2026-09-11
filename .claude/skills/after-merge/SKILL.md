@@ -7,7 +7,7 @@ description: Use when the user says a PR was merged, or asks to "sync", "pull ma
 
 Merging is the user's act. Everything after it is yours, on `main`, without a single push.
 
-The graph is **not** refreshed here — no `/graphify`, no `graphify update` (user, 2026-09-11). The audit is, and it is mandatory: every `.claude/` and `docs/` file the merged diff made untrue is brought up to date on the spot, or named as drift for the next PR. Dropping the graph step does not make this step optional — it is now the whole point of the skill.
+The graph is **not** refreshed here — no `/graphify`, no `graphify update` (user, 2026-09-11). The audit is, and it is mandatory: every `.claude/` and `docs/` file the merged diff made untrue is found and named as drift for the next PR that touches that area — found here, never committed here. Dropping the graph step does not make this step optional — it is now the whole point of the skill.
 
 ## Steps
 
