@@ -94,6 +94,11 @@ def _audit(action, name="", row_id="", changes=None, label="", user=None, system
     """
     if not has_request_context() and not system:
         return
+    # The live tests run against the real Supabase, and audit_log is append-only by trigger -- so
+    # every suite run would leave rows in the client's Activity screen that the cleanup fixture is
+    # not allowed to remove. throttle._off() sits out of TESTING for the same shape of reason.
+    if current_app.config.get("TESTING"):
+        return
     try:
         u = user or (getattr(g, "user", None) if has_request_context() else None) or {}
         table("audit_log").insert({"user_id": u.get("id"), "user_email": u.get("email") or "",

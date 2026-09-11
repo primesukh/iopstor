@@ -1106,3 +1106,35 @@ def test_every_row_reads_as_a_sentence():
     # an unknown post type still reads, and an unknown action still reads
     assert "page or post" in _sentence({"action": "update", "table_name": "posts", "label": "X", "row_id": "99"}, {})
     assert "wibbled" in _sentence({"action": "wibbled", "table_name": "leads", "label": "X", "row_id": "1"}, {})
+
+
+def test_the_test_suite_never_writes_to_the_audit_log(app, monkeypatch):
+    """audit_log is append-only by trigger, and the live suite runs against the real Supabase — so
+    without this guard every run left zz-test rows in the client's Activity screen that the cleanup
+    fixture is forbidden to remove. throttle._off() sits out of TESTING for the same reason.
+    migrations/purge_test_audit_rows.sql clears up after the runs that happened before this."""
+    from iopstor import db
+
+    touched = []
+    monkeypatch.setattr(db, "table", lambda name: touched.append(name) or _NeverExecutes())
+    with app.test_request_context("/admin/posts"):
+        app.config["TESTING"] = True
+        db._audit("create", "posts", 1, {"title": [None, "zz-test"]}, user={"id": "u", "email": "e"})
+        assert touched == []            # nothing reached for a table at all
+
+    # and the guard is the TESTING flag, not the lack of a database: with it off it does try
+    with app.test_request_context("/admin/posts"):
+        app.config["TESTING"] = False
+        db._audit("create", "posts", 1, {"title": [None, "x"]}, user={"id": "u", "email": "e"})
+    assert touched == ["audit_log"], touched
+
+
+class _NeverExecutes:
+    """A PostgREST query builder that records the attempt and refuses to make it. _audit() swallows
+    everything, so the failure has to be visible in what was reached for, not in an exception."""
+
+    def insert(self, *a, **k):
+        return self
+
+    def execute(self):
+        raise AssertionError("the test suite must not write to audit_log")

@@ -40,7 +40,7 @@ iopstor/templates/       base.html post.html archive.html 404.html checkout.html
 iopstor/static/site.css  the whole public theme: tokens at the top, header + mega panel + footer, .cards/.card/.btn/.section, layout group (.al-* .w-* .t-*), one rule-group per block
 iopstor/static/admin.css admin-only rules layered on site.css; canvas.css = editor chrome inside the iframe; admin.js = the editor (plain JS, no build); vendor/sortable.min.js
 docker-compose.yml       production only: `app` (this Dockerfile) + `cloudflared` as one Dokploy Compose service; `app` has no ports and no Traefik labels, so the tunnel is the only ingress
-migrations/              0000_bootstrap.sql (run once by hand in Studio) + NNNN_name.sql applied by `flask migrate`; repair_schema_migrations.sql is a hand-run repair, not a step
+migrations/              0000_bootstrap.sql (run once by hand in Studio) + NNNN_name.sql applied by `flask migrate`; repair_schema_migrations.sql and purge_test_audit_rows.sql are hand-run, not steps
 tests/                   pytest: test_offline.py always; the rest are marked live and skip without the Supabase in .env
 docs/                    TECHNICAL.md + NON-TECHNICAL.md — the two docs every change keeps current
 .claude/                 docs/ (design.md, requirements.md), skills/ (the procedures below), hooks/session-start.sh, settings.json (enforced rules)
