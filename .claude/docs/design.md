@@ -42,7 +42,7 @@ Rejected on the way (user decisions, see git history): SQLAlchemy + psycopg over
 ```
 CLAUDE.md .claude/            rules for agents; docs/ (this file, requirements.md), skills/, hooks/, settings.json
 Pipfile Pipfile.lock requirements*.txt pytest.ini .env.example Dockerfile docker-compose.yml .dockerignore .graphifyignore
-iopstor/__init__.py           create_app(): refuses to start without SUPABASE_*; Jinja globals rupees(), media_url, media_alt, media_download; /healthz
+iopstor/__init__.py           create_app(): refuses to start without SECRET_KEY, SITE_URL or any SUPABASE_* (REQUIRED); Jinja globals rupees(), media_url, media_alt, media_download; /healthz (liveness only, no DB)
 iopstor/config.py             os.environ → constants (a module, not a class)
 iopstor/db.py                 the single data-access seam: table()/one()/rows()/insert()/update(), live(), select_posts(), with_paths()/ancestors()/hydrate(),
                               tree(), unique_slug(), ensure_term(), set_post_terms(), paginate(), admin_counts(), get_menu()/set_menu(), post_types()/settings() caches
@@ -136,7 +136,7 @@ RLS is on for every table (`0002`; a new table repeats the one `ENABLE ROW LEVEL
 ## 6. Auth
 
 - Admin API: `Authorization: Bearer <access token>`; `POST /api/admin/v1/auth/login|refresh|logout`, `GET /auth/me`. 401 bad credentials; 403 for a GoTrue user with no `users` row (authentication ≠ authorization).
-- Browser admin: same login through a form; tokens in the signed session cookie (SameSite=Lax, Secure on https), `auth._session_token()` refreshes silently, and a refresh that loses to a concurrent one leaves the session alone. Every POST carries a per-session `csrf` field checked by `ui_required`; `next` accepts relative same-origin paths only.
+- Browser admin: same login through a form; tokens in the signed session cookie (SameSite=Lax, Secure on https), `auth._session_token()` refreshes silently, and a refresh that loses to a concurrent one leaves the session alone. Every POST carries a per-session `csrf` field checked by `ui_required`; `next` accepts relative same-origin paths only. The token is minted **only for `admin_ui` requests** — `_globals()` is an `app_context_processor`, which is app-wide despite its blueprint, so the `request.blueprint != ui.name` guard is what keeps anonymous public pages from answering with `Set-Cookie` and becoming uncacheable. Do not remove it; no public template reads those globals.
 - Roles: `editor` (content, media, leads, warranty add/edit) < `admin` (delete, post types, settings, users, redirects, warranty delete).
 - Sign-in uses a throwaway anon client, never the service-role client.
 

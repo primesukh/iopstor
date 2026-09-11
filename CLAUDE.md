@@ -21,7 +21,7 @@ Content is edited in the browser admin at `/admin` (login with a Supabase Auth a
 ## Layout
 
 ```
-iopstor/__init__.py      create_app(), /healthz, blueprint + CLI registration, Jinja globals rupees()/media_url/media_alt/media_download; refuses to start without the SUPABASE_* keys
+iopstor/__init__.py      create_app(), /healthz (liveness only, no DB call), blueprint + CLI registration, Jinja globals rupees()/media_url/media_alt/media_download; refuses to start without SECRET_KEY, SITE_URL or any SUPABASE_* key
 iopstor/config.py        env → constants (module, no class)
 iopstor/db.py            supabase-py clients + query helpers: table(), one(), rows(), insert(), update(), live(), select_posts(), tree(),
                          with_paths()/ancestors()/hydrate() (hierarchical URLs, has_pages), unique_slug(), ensure_term(), paginate(), admin_counts(), post_types()/settings() caches
@@ -123,7 +123,7 @@ So the full order is: branch → work → three docs → `/pr` → **stop** → 
 - **Supabase is the only backend, reached only through Kong with the supabase library.** No `DATABASE_URL`, no psycopg, no SQLite **as an application data store**.
   The one exception is `throttle.py`: a failed-password counter in a `sqlite3` file on tmpfs (`/dev/shm`), which is shared memory for the ~30 gunicorn workers
   and is wiped by every redeploy. It holds no application data, nothing reads it but the throttle, and losing it costs nothing. Local development and tests
-  point at the same self-hosted Supabase; the app refuses to start without `SUPABASE_URL`, both keys and the JWT secret.
+  point at the same self-hosted Supabase; the app refuses to start without `SECRET_KEY`, `SITE_URL`, `SUPABASE_URL`, both keys and the JWT secret.
 - Every query goes through `iopstor/db.py`; use `db.select_posts()` (embeds `post_type`, `featured_media`, `terms`) and `db.hydrate()`/`db.with_paths()` so posts carry `path`.
   Never call `.delete()` without a filter (PostgREST would wipe the table).
 - Content types (`post_types`) and taxonomies are **rows**, not code. Adding "Jobs" = a seed entry or an admin API call, not a table.
