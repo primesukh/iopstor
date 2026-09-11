@@ -75,7 +75,7 @@ EDITOR = {
     # options for the "choice" widget, keyed by field: [value, label] pairs, so the empty one can
     # say what it means. blocks.py FX is the whitelist these values are checked against.
     "choices": {"fx": [["", "None"],
-                       ["rise", "Fades in as you scroll to it"],
+                       ["rise", "Fades in as the page loads"],
                        ["gradient", "Gradient across the big text"],
                        ["sweep", "Highlighter sweep behind the headings"]],
                 "height": [["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["huge", "Extra large"]]},

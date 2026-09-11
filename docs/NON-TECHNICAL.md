@@ -282,19 +282,19 @@ left, whatever you pick — those two are designed that way on purpose.
 Set a width and an alignment together and they work as you would expect: a section narrowed to 700
 and set to *Align the section: Centre* sits as a neat centred column.
 
-**Making a section move as the reader scrolls to it.** Two sections can be given an effect: **Numbers**
+**Giving a section a bit of movement as the page opens.** Two sections can be given an effect: **Numbers**
 (the strip of big figures) and your own writing. Open the section's **⚙** and you will find an
 **Effect** box under the width:
 
 | Effect | What the visitor sees |
 |---|---|
 | **None** | Nothing moves. This is how every section starts. |
-| **Fades in as you scroll to it** | The section drifts up into place as it comes onto the screen, instead of just being there. |
+| **Fades in as the page loads** | The section drifts up into place as the page opens, instead of just being there. |
 | **Gradient across the big text** | The headings — or, in a Numbers section, the big figures — are painted in the brand blue rather than plain black or white. |
-| **Highlighter sweep behind the headings** | A blue bar draws itself under the heading, left to right, like a marker pen, as you scroll to it. |
+| **Highlighter sweep behind the headings** | A blue bar draws itself under the heading, left to right, like a marker pen, as the page opens. |
 
 A **Numbers** section has one more box, a tick called **Count up from zero**. Tick it and every figure
-in the strip counts up as the reader arrives at it — 0 to 300 for *300+*, 0 to 25 for *25+ yrs*. Only
+in the strip climbs as the page opens — 0 to 300 for *300+*, 0 to 25 for *25+ yrs*. Only
 the number moves: words you put around it stay where they are, so *Up to 5 PB* keeps its "Up to" and
 its "PB" still and only the 5 climbs. A figure with no number in it, like *Always on*, simply sits there.
 
@@ -623,11 +623,10 @@ places, a little faster on a repeat visit.
 *1,200 TB*, also stays still: the counter cannot draw the comma, and a figure that ended up reading
 *1200 TB* would not be the one you typed. Write it as *1200 TB* and it counts.
 
-**Do the effects work in my browser?** Yes, in any current one. On the newest browsers an effect
-waits until you scroll down to that section and then plays, which is the nicest version. On an older
-one — Firefox before version 144, say — it plays once as the page loads instead. Either way you see
-it. If you have asked your computer to reduce motion, nothing animates at all and every figure and
-heading simply sits there in full, which is deliberate.
+**Do the effects work in my browser?** Yes, in every one, and they all do the same thing: the effect
+plays once as the page opens. A section far down a long page will therefore have finished before you
+scroll to it. If you have asked your computer to reduce motion, nothing animates at all and every
+figure and heading simply sits there in full, which is deliberate.
 
 **How do I put a bit more space between two sections?** Press `/` on an empty line and pick
 **Spacer**, then set its **Height** under the **⚙**. Four sizes, from a small nudge to a big

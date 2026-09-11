@@ -335,13 +335,16 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
    the same classes on its own <li> (stats.html), which is what lets one figure differ from the
    band it sits in; that is why every rule below names both the section and the figure.
 
-   Written in two halves on purpose. The rules here run on the document timeline, so every browser
-   plays them once as the page loads — the same thing .hero-text has always done. The @supports at
-   the end then re-times exactly those animations against the section scrolling into view, which is
-   the better version where it exists (Chrome 115+, Safari 26+, Firefox 144+). An earlier draft put
-   the whole feature behind that gate and every effect simply did nothing in Firefox 140 ESR, which
-   is not a fallback, it is an absence. Nothing below duplicates a keyframe to achieve that: the
-   gate only adds animation-timeline and animation-range. */
+   Every effect runs on the document timeline and plays once as the page loads — the same thing
+   .hero-text has always done, and the same thing in every browser.
+
+   Do not re-time them against the scroll with animation-timeline: view(). That was tried, and a
+   scroll timeline pins the animation to where the reader is rather than to a clock: a section
+   sitting in the first viewport is already part-way through its own range at scroll position 0, so
+   it loads part-way through its animation. The Numbers band under the hero painted 270 for a figure
+   the editor had typed as 300 — a wrong number on the client's home page, in every browser that
+   resolves view(). It looked healthy here only because the Firefox on this machine is 140 ESR,
+   which cannot resolve view() and so fell back to the document timeline these rules now use. */
 
 /* fx-gradient and fx-sweep are two values of one select, so they never meet: both paint the
    section's big text — every heading, plus a Numbers figure, which is a <strong> and not a heading
@@ -380,13 +383,6 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .stats li.fx-count .cr{counter-reset:cv calc(var(--to) * var(--cv));animation:cv 2s ease-out both}
 .stats li.fx-count .cr::before{content:counter(cv)}
 .stats li.fx-count .cv{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-
-/* The enhancement: the same animations, driven by the scroll instead of the clock. */
-@supports (animation-timeline:view()){
-  .fx-rise>.wrap,.stats li.fx-rise{animation-timeline:view();animation-range:entry 0% cover 25%}
-  .fx-sweep :is(h1,h2,h3),.fx-sweep .stats strong,.stats li.fx-sweep strong,
-  .stats li.fx-count .cr{animation-timeline:view();animation-range:entry 20% cover 35%}
-}
 
 /* --- blocks ---------------------------------------------------------------------------------
    One rule-group per type, in the order they appear in BLOCKS. */
