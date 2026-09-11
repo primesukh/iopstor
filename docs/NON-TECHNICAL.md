@@ -434,6 +434,13 @@ Two things follow from that. A service with no Summary shows its name and its su
 
 **The contact details in Settings are used in three places** — the footer address block, the phone and email links, and the search-engine data. They are filled in from the company flyers: Prime ABGB, Simlim Square, and the +91 98219 09800 number.
 
+**Social links.** The box under *Contact details* takes the web address of each of your social profiles,
+**one per line** — paste the whole address, the way it appears in the browser. They show at the bottom of
+every page as a row of small icons under the logo. LinkedIn, X, YouTube, Instagram and Facebook each get
+their own icon; a profile on anything else still appears as a link, labelled with its website name instead
+of an icon. They open in a new tab, so a visitor who clicks one does not lose the page they were reading. Remove a line and it disappears from the site. The same list is what tells Google which social
+accounts belong to the company, so it is worth keeping complete.
+
 **Settings** is split into tabs — Site identity, Contact details, SEO & analytics and Payments. Moving between them changes nothing until you press **Save settings**, and saving stores every tab, not just the one you are looking at.
 
 **Redirects** send an old address to a new one. If a page moves — or you are bringing across links from the old website — add a redirect so the old link keeps working and nobody hits a "not found" page. This protects the search rankings you have already earned.
@@ -515,6 +522,11 @@ unsure which one you are looking at, check the address at the top of the browser
 **Will visitors see a page the moment I press Save?** Yes, if it is set to **Published** — the live site
 is served straight from what you save, with no waiting and nothing to rebuild. A **Draft** stays invisible,
 and a scheduled page appears by itself at the date you set.
+
+**Where did the Instagram link in the footer go?** It is still there, as an icon. The social links used to
+appear as web addresses in the *Contact* column at the bottom of the page; they now sit under the logo as a
+row of icons instead, so you can add all of your profiles without that column turning into a list of web
+addresses. Add the rest under **Settings → Contact details → Social links**, one address per line.
 
 **The quote form on Contact Us is no longer black.** That is deliberate. It now sits on the same soft grey panel as the *Apply* form on Careers, at the client's request. Nothing else about it changed — it still asks what the visitor is interested in and how many users, and the enquiry still arrives under **Leads** as a quote request.
 

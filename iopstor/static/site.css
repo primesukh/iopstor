@@ -184,6 +184,18 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 .site-footer li{margin:0 0 10px}
 .site-footer .q{color:var(--blue)}.site-footer .q:hover{color:var(--blue-light)}
 .site-footer .legal{border-top:1px solid var(--line-dark);margin-top:40px;padding-top:20px;font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+/* The social profiles from Settings, under the footer brand. The glyphs are solid simple-icons
+   paths, so they take fill, not the stroke the admin sprite uses — and currentColor means the
+   .site-footer a / a:hover colours above already drive them. display:block on the glyph rather
+   than line-height:0 on the link: a network with no glyph renders its hostname as text in that
+   same <a>, and a zero line box would clip it. */
+/* The sprite has to be hidden here: the UA's own [hidden]{display:none} carries the HTML namespace,
+   so it never matches an inline <svg> and the sprite would otherwise reserve a replaced element's
+   default 300x150 box above the row. admin.css:124 is the same rule scoped to .admin. */
+.site-footer svg[hidden]{display:none}
+.site-footer .social{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:16px 0 0}
+.site-footer .social li{margin:0}
+.site-footer .social .si{display:block;width:20px;height:20px;fill:currentColor}
 
 /* page chrome */
 main{min-height:60vh}
