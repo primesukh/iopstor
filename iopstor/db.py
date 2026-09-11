@@ -77,31 +77,39 @@ def _before(name, pk):
     return (one(table(name).select("*").eq("id", pk)) or {}) if has_request_context() else {}
 
 
-def _audit(action, name="", row_id="", changes=None, label="", user=None):
+def _audit(action, name="", row_id="", changes=None, label="", user=None, system=False):
     """One row in audit_log. Silent outside a request context, which is exactly how `flask seed` and
-    `flask import-media` stay out of the log.
+    `flask import-media` stay out of the log -- they write content, reproducibly and with no actor.
+
+    `system=True` is the one exception, for `flask create-admin`: creating a credential that can sign
+    in and change anything is not content, and a log that cannot say where an admin account came from
+    has a hole in the place it exists to cover. It has to skip client_ip() as well as the guard --
+    that reads `request`, and off a request it would raise straight into the except below and write
+    nothing at all, which is the silent gap this is closing.
 
     # ponytail: a failed audit write is swallowed, so the log can have a gap the log cannot report.
     # The alternative is worse: the content write has already succeeded by here, so raising would
     # show the editor an error for a save that did happen, and would stop the app running at all
     # against a database where 0008 has not been applied yet. Watch the warnings instead.
     """
-    if not has_request_context():
+    if not has_request_context() and not system:
         return
     try:
-        u = user or getattr(g, "user", None) or {}
+        u = user or (getattr(g, "user", None) if has_request_context() else None) or {}
         table("audit_log").insert({"user_id": u.get("id"), "user_email": u.get("email") or "",
-                                   "ip": client_ip(), "action": action, "table_name": name,
+                                   "ip": client_ip() if has_request_context() else "command line",
+                                   "action": action, "table_name": name,
                                    "row_id": str(row_id), "label": label,
                                    "changes": changes or {}}).execute()
     except Exception as e:   # noqa: BLE001 - see the ceiling above; nothing here may break a save
         current_app.logger.warning("audit %s %s/%s not recorded: %s", action, name, row_id, e)
 
 
-def audit_event(action, label="", user=None):
+def audit_event(action, label="", user=None, system=False):
     """For the things that are not a row write at all -- signing in, signing out, getting the
-    password wrong. `user` is passed in because g.user is not set yet at the moment of a login."""
-    _audit(action, label=label, user=user)
+    password wrong, being locked out. `user` is passed in because g.user is not set yet at the
+    moment of a login."""
+    _audit(action, label=label, user=user, system=system)
 
 
 def insert(name, row):
@@ -364,9 +372,10 @@ def get_menu(slug):
     return m["items"] if m else []
 
 
-def set_menu(slug, items):
-    """The write side of get_menu(), so /admin/menus keeps every query in this module."""
+def set_menu(slug, items, name=None):
+    """The write side of get_menu(), so /admin/menus keeps every query in this module. `name` is for
+    the JSON API, which lets a caller title a menu; the browser screen has no field for it."""
     before = get_menu(slug)
-    table("menus").upsert({"slug": slug, "name": slug.title(), "items": items}, on_conflict="slug").execute()
+    table("menus").upsert({"slug": slug, "name": name or slug.title(), "items": items}, on_conflict="slug").execute()
     if before != items:
         _audit("update", "menus", slug, {"items": [before, items]}, slug)

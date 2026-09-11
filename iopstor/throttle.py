@@ -62,14 +62,23 @@ def retry_after(key, limit=None, window=None):
     return max(1, int(oldest + window - time.time())) if n >= limit else 0
 
 
-def record_failure(key):
+def record_failure(key, limit=None, window=None):
+    """Records one failure. Returns True only for the attempt that *crossed* the limit, so a caller
+    can log the lockout once. Logging it from retry_after() instead would write a row on every
+    blocked attempt for the whole window -- which hands anyone hammering a locked login the ability
+    to fill the audit log at will."""
     if _off():
-        return
+        return False
+    limit = current_app.config["LOGIN_MAX_FAILURES"] if limit is None else limit
+    window = current_app.config["LOGIN_WINDOW"] if window is None else window
     try:
         with _db() as db:
             db.execute("INSERT INTO failures (k, at) VALUES (?, ?)", (key, time.time()))
+            (n,) = db.execute("SELECT count(*) FROM failures WHERE k = ? AND at >= ?",
+                              (key, time.time() - window)).fetchone()
     except sqlite3.Error:
-        pass
+        return False
+    return n == limit   # exactly at the limit: later failures are already behind a closed door
 
 
 def clear(key):

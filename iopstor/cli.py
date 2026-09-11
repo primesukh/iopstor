@@ -518,6 +518,11 @@ def create_admin(email, password):
         user = create_auth_user(email, password, role="admin")
     except AuthError as e:
         raise click.ClickException(f"supabase auth: {getattr(e, 'message', e)}")
+    # the one command-line write that is logged. `seed` and `import-media` write content --
+    # reproducible, no actor, deliberately out. This creates a credential that can sign in and change
+    # anything, and a log that cannot say where an admin account came from has a hole in the middle
+    # of what it is for.
+    db.audit_event("create_admin", email, user=user, system=True)
     click.echo(f"admin created: {user['email']} ({user['id']})")
 
 

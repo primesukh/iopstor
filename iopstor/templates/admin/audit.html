@@ -1,7 +1,4 @@
 {% extends "admin/base.html" %}{% block title %}Activity{% endblock %}
-{# One value of a change, whatever shape it is. A macro rather than a Python filter: nothing here
-   needs testing, and a template that shows JSON should say so in the template. #}
-{% macro shown(v) %}{% if v is none or v == '' %}<span class="muted">nothing</span>{% elif v is string or v is number or v is boolean %}{{ v }}{% else %}<pre>{{ v | tojson(indent=1) }}</pre>{% endif %}{% endmacro %}
 {% block content %}
 <div class="adm-head">
   <div><h1>Activity <small>{{ result.total }}</small></h1>
@@ -9,37 +6,44 @@
 </div>
 <form method="get" class="filter-bar">
   <select name="user"><option value="">Anybody</option>
-    {% for u in people %}<option value="{{ u.id }}" {{ 'selected' if request.args.get('user') == u.id }}>{{ u.email }}</option>{% endfor %}</select>
+    <option value="-" {{ 'selected' if request.args.get('user') == '-' }}>The website (nobody signed in)</option>
+    {% for u in people %}<option value="{{ u.id }}" {{ 'selected' if request.args.get('user') == u.id }}>{{ display_name(u) }}</option>{% endfor %}</select>
   <select name="action"><option value="">Anything</option>
     {% for a in actions %}<option value="{{ a }}" {{ 'selected' if request.args.get('action') == a }}>{{ a.replace('_', ' ') }}</option>{% endfor %}</select>
-  <input type="search" name="table" value="{{ request.args.get('table', '') }}" placeholder="Kind, e.g. posts">
+  {# no raw table name on the screen: the values are what the database calls them, the words are not #}
+  <select name="table"><option value="">Anything at all</option>
+    <option value="posts" {{ 'selected' if request.args.get('table') == 'posts' }}>Pages and other content</option>
+    {% for k, word in kinds %}<option value="{{ k }}" {{ 'selected' if request.args.get('table') == k }}>{{ word|capitalize }}</option>{% endfor %}</select>
   <button type="submit" class="secondary">Filter</button>
   {% if request.args %}<a class="btn secondary" href="{{ url_for('admin_ui.audit') }}">Clear</a>{% endif %}
 </form>
 <div class="table-card">
   <table class="aud-table">
-    <tr><th>When</th><th>Who</th><th>What</th><th>From</th></tr>
+    <tr><th>When</th><th>Who</th><th>What they did</th><th>From</th></tr>
     {% for e in result['items'] %}
     <tr>
       <td class="muted aud-when">{{ e.at | ist }}</td>
-      <td>{{ e.user_email or 'a visitor' }}</td>
+      <td title="{{ e.user_email }}">{{ e.who }}</td>
       <td>
-        <span class="pill {{ e.action }}">{{ e.action.replace('_', ' ') }}</span>
-        {% if e.label or e.table_name %}<span class="aud-what">{{ e.label or e.row_id }}{% if e.table_name %} <span class="muted">in {{ e.table_name }}</span>{% endif %}</span>{% endif %}
-        {% if e.changes %}
+        <p class="aud-said">{{ e.sentence }}</p>
+        {% if e.fields %}
         <details class="aud-diff">
-          <summary>{{ e.changes | length }} thing{{ '' if e.changes | length == 1 else 's' }} changed</summary>
-          <table class="aud-fields">
-            <tr><th>Field</th><th>Was</th><th>Now</th></tr>
-            {% for k, pair in e.changes | dictsort %}
-            <tr><td class="aud-field">{{ k }}</td><td>{{ shown(pair[0]) }}</td><td>{{ shown(pair[1]) }}</td></tr>
-            {% endfor %}
-          </table>
+          <summary>Show what changed</summary>
+          {% for f in e.fields %}
+          <div class="aud-one">
+            <p class="aud-name">{{ f.label }}</p>
+            {% if f.note %}<p class="aud-note">{{ f.note }}</p>{% endif %}
+            <div class="aud-ba">
+              <div><span class="aud-tag">Was</span> {{ f.was }}</div>
+              <div><span class="aud-tag">Now</span> {{ f.now }}</div>
+            </div>
+          </div>
+          {% endfor %}
           {% if e.can_restore %}
           <form method="post" action="{{ url_for('admin_ui.audit_restore', pk=e.id, **request.args) }}"
                 onsubmit="return confirm('Put this back the way it was before this change?')">
             <input type="hidden" name="csrf" value="{{ csrf }}">
-            <button type="submit" class="secondary">Restore this version</button>
+            <button type="submit" class="secondary">Restore</button>
           </form>
           {% endif %}
         </details>

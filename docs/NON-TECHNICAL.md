@@ -487,13 +487,27 @@ Each page also carries its title, description, social-sharing preview and machin
 
 **Activity**, at the bottom of the sidebar, is the record of everything anybody has done in the admin panel — and it is only visible to administrators.
 
-Every line says the same four things: **when** (in Indian time), **who**, **what**, and the internet address they were working from. It covers far more than pages: a setting changed, a menu rearranged, a picture removed, an enquiry marked done, somebody signing in or out, and somebody typing the wrong password. Nothing is left out and nothing can be edited away afterwards — not by you, not by an administrator, not by anybody. That is the point of it.
+Every line is a sentence. *Sukhpreet Saluja — edited the blog post **Prime ABGB***. *Priya Sharma — added the picture or file **hero.png***. Beside it sits the date and time in Indian time and the internet address the person was working from.
 
-Where something was changed rather than merely created, the line says so — *2 things changed* — and clicking that opens a small table with one row per thing that moved: the name of what changed, what it **was**, and what it is **now**. For a page, that includes the writing itself, so you can read the old version of a paragraph beside the new one.
+Each kind of thing is called what you call it. A page says **page**, a service says **service**, a datasheet says **datasheet** — not the name the database uses for them. So it covers, and says so in plain words: every page, blog post, service, case study, event, technology partner, datasheet and product; pictures and files added, renamed or removed; enquiries arriving and being moved along; warranty records; settings; menus; people added, changed or removed; **passwords changed**, both your own and one an administrator sets for somebody else; signing in, signing out, wrong passwords, and being locked out after too many of them.
+
+Nothing can be edited away afterwards — not by you, not by an administrator, not by anybody. That is the point of it.
+
+### Seeing what changed
+
+**Show what changed** opens the detail: one block per thing that moved, with what it **was** and what it is **now** side by side.
+
+For a page, that is the writing itself, in plain words rather than the code behind it, and **the part that changed is marked** — what you removed struck through in red, what you added highlighted in green. A single word altered in a long page is visible at a glance.
+
+Some changes do not show up in the words at all — swapping a picture, changing a link, turning a setting on. Those say so in a sentence instead: *"Changed a picture, link or setting in the Hero section"*, *"Added Cards"*, *"Moved the sections around"*.
+
+### What it does not record
+
+Looking at things. Opening a page to read it, or viewing the Leads screen, leaves no line — on a normal day that would be about fifty lines of looking for every line of doing, and the change you came to find would be buried underneath them. Only things that actually changed, plus signing in and out.
 
 ### Putting something back
 
-Under that table is **Restore this version**. It puts the old values back exactly as they were, and the restore itself appears in Activity as a new line, so the record stays complete. It works for anything that was changed — a page, a setting, a menu, a picture's description — and for a page that was deleted.
+Under that detail is **Restore**. It puts the old values back exactly as they were, and the restore itself appears in Activity as a new line, so the record stays complete. It works for anything that was changed — a page, a setting, a menu, a picture's description — and for a page that was deleted.
 
 It does not work for things that were properly removed: a person whose account was deleted, a picture deleted from the library, a category that was removed. Those lines still show you everything the record held, so you can see what was there and re-enter it, but the system will not recreate them behind your back and leave you with something half-working.
 
@@ -583,7 +597,16 @@ also meant a publish date you typed was acted on five and a half hours late. Bot
 
 **Somebody has been trying to sign in as me.** Wrong passwords are recorded. An administrator can open
 **Activity**, choose *login failed* in the middle box, and see every attempt with the email that was
-typed, the time, and where it came from.
+typed, the time, and where it came from. If somebody gets it wrong enough times in a row the account
+is locked for a while, and that is recorded too, as *login blocked*.
+
+**Does it record password changes?** Yes — both changing your own and an administrator setting a new
+one for somebody else. It records *that* the password was changed and whose it was. The password
+itself is never written down anywhere you or anybody else can read it.
+
+**Why does one line say "the website" instead of a name?** Because nobody was signed in: it is an
+enquiry somebody sent through a form on the public site, or a payment coming back from the payment
+provider. Choose *The website (nobody signed in)* in the first box to see only those.
 
 **The Services list ran off the side of my phone.** It no longer does. On a narrow screen each service
 group now reads down the page — the number, the group name, its description, then its services as

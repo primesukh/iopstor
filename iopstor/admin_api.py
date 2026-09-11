@@ -84,8 +84,9 @@ def auth_login():
     try:
         s = login(b.get("email", ""), b.get("password", ""))
     except AuthApiError:
-        record_failure(key)
         db.audit_event("login_failed", b.get("email", ""))
+        if record_failure(key):   # once, at the crossing -- not on every attempt behind a shut door
+            db.audit_event("login_blocked", b.get("email", ""))
         fail("invalid email or password", 401)
     throttle_clear(key)  # the password was right; whether there is a CMS row is a separate question
     user = db.one(db.table("users").select("*").eq("id", s["user_id"]))
@@ -114,8 +115,9 @@ def auth_logout():
             logout(auth[7:])
         except AuthError:
             pass
-        if user:
-            db.audit_event("logout", user["email"], user=user)
+        # unconditional: the session above is revoked whether or not the token still names a CMS
+        # user, and a revocation nobody can see is exactly what this log is for
+        db.audit_event("logout", user["email"] if user else "", user=user)
     return "", 204
 
 
@@ -522,7 +524,10 @@ def put_menu(slug):
     existing = db.one(db.table("menus").select("*").eq("slug", slug))
     if existing:
         row = {**existing, **{k: v for k, v in row.items() if k in b or k == "slug"}}
-    return jsonify(db.table("menus").upsert(row, on_conflict="slug").execute().data[0])
+    # through db.set_menu(), like /admin/menus: this was the one table write in the app that reached
+    # PostgREST without passing a logged helper, so a menu changed through the API left no trace.
+    db.set_menu(slug, row["items"], name=row["name"])
+    return jsonify(db.one(db.table("menus").select("*").eq("slug", slug)))
 
 
 @bp.get("/redirects")
