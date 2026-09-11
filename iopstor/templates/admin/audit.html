@@ -1,0 +1,59 @@
+{% extends "admin/base.html" %}{% block title %}Activity{% endblock %}
+{% block content %}
+<div class="adm-head">
+  <div><h1>Activity <small>{{ result.total }}</small></h1>
+    <p class="page-sub">Everything anybody has done, newest first. All times are IST.</p></div>
+</div>
+<form method="get" class="filter-bar">
+  <select name="user"><option value="">Anybody</option>
+    <option value="-" {{ 'selected' if request.args.get('user') == '-' }}>The website (nobody signed in)</option>
+    {% for u in people %}<option value="{{ u.id }}" {{ 'selected' if request.args.get('user') == u.id }}>{{ display_name(u) }}</option>{% endfor %}</select>
+  <select name="action"><option value="">Anything</option>
+    {% for a in actions %}<option value="{{ a }}" {{ 'selected' if request.args.get('action') == a }}>{{ a.replace('_', ' ') }}</option>{% endfor %}</select>
+  {# no raw table name on the screen: the values are what the database calls them, the words are not #}
+  <select name="table"><option value="">Anything at all</option>
+    <option value="posts" {{ 'selected' if request.args.get('table') == 'posts' }}>Pages and other content</option>
+    {% for k, word in kinds %}<option value="{{ k }}" {{ 'selected' if request.args.get('table') == k }}>{{ word|capitalize }}</option>{% endfor %}</select>
+  <button type="submit" class="secondary">Filter</button>
+  {% if request.args %}<a class="btn secondary" href="{{ url_for('admin_ui.audit') }}">Clear</a>{% endif %}
+</form>
+<div class="table-card">
+  <table class="aud-table">
+    <tr><th>When</th><th>Who</th><th>What they did</th><th>From</th></tr>
+    {% for e in result['items'] %}
+    <tr>
+      <td class="muted aud-when">{{ e.at | ist }}</td>
+      <td title="{{ e.user_email }}">{{ e.who }}</td>
+      <td>
+        <p class="aud-said">{{ e.sentence }}</p>
+        {% if e.fields %}
+        <details class="aud-diff">
+          <summary>Show what changed</summary>
+          {% for f in e.fields %}
+          <div class="aud-one">
+            <p class="aud-name">{{ f.label }}</p>
+            {% if f.note %}<p class="aud-note">{{ f.note }}</p>{% endif %}
+            <div class="aud-ba">
+              <div><span class="aud-tag">Was</span> {{ f.was }}</div>
+              <div><span class="aud-tag">Now</span> {{ f.now }}</div>
+            </div>
+          </div>
+          {% endfor %}
+          {% if e.can_restore %}
+          <form method="post" action="{{ url_for('admin_ui.audit_restore', pk=e.id, **request.args) }}"
+                onsubmit="return confirm('Put this back the way it was before this change?')">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button type="submit" class="secondary">Restore</button>
+          </form>
+          {% endif %}
+        </details>
+        {% endif %}
+      </td>
+      <td class="muted" title="{{ e.ip }}">{{ e.ip or '—' }}</td>
+    </tr>
+    {% else %}<tr><td colspan="4" class="muted">Nothing recorded yet.</td></tr>{% endfor %}
+  </table>
+</div>
+<p class="pager">{% if page > 1 %}<a class="btn secondary" href="?{{ request.query_string.decode() | replace('page='~page, '') }}&page={{ page-1 }}">Previous</a>{% endif %}
+   {% if has_next %}<a class="btn secondary" href="?{{ request.query_string.decode() | replace('page='~page, '') }}&page={{ page+1 }}">Next</a>{% endif %}</p>
+{% endblock %}

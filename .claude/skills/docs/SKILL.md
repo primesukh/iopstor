@@ -10,7 +10,7 @@ A feature is not finished until all three say so, in the same PR. `TECHNICAL.md`
 | Doc | Reader | Voice |
 |---|---|---|
 | `docs/TECHNICAL.md` | The next developer | The mechanism **and the trap**: what it does, why the obvious alternative was wrong, what breaks if you move it. Names functions, templates, tests. Section numbers are stable — add inside the right §, do not renumber |
-| `docs/NON-TECHNICAL.md` | Marketing, sales, HR, management | Plain English, no identifiers, no jargon. What they can now do, where the button is, what they will see. Every visible behaviour change also gets a line in §13 *Quick answers* (phrased as the question an editor would ask) and §12 *Where the project stands* if it moves the status |
+| `docs/NON-TECHNICAL.md` | Marketing, sales, HR, management | Plain English, no identifiers, no jargon. What they can now do, where the button is, what they will see. Every visible behaviour change also gets a line in *Quick answers* (the last section, phrased as the question an editor would ask) and *Where the project stands* if it moves the status |
 | `.claude/docs/design.md` | The next agent | What exists and why, compressed. Update the section that describes the changed area, and add a dated row to §14 for any decision that would surprise someone |
 
 ## Where a change goes
@@ -27,6 +27,8 @@ A feature is not finished until all three say so, in the same PR. `TECHNICAL.md`
 | Client decision | — | §12 | `requirements.md` decisions table (dated) |
 | Workflow / tooling / `.claude/` | §18 | — | §16 + `CLAUDE.md` |
 | Deployment / hosting / env key | §14 (the key and what breaks without it), §15 (the runbook step) | §12 only if the address or the live/practice split changes | §1 platform table, §14 row + `CLAUDE.md` Env keys |
+
+**NON-TECHNICAL.md's sections are referred to by name here, not by number, on purpose:** its two closing sections are *Where the project stands* and *Quick answers*, and inserting a screen's section ahead of them renumbers both (audit log, 2026-09-11). TECHNICAL.md and design.md numbers *are* stable — add inside the right §, never renumber. If you do move a NON-TECHNICAL heading, `grep -rn "NON-TECHNICAL" .claude/ docs/ CLAUDE.md` and fix what points at it.
 
 A change can match several rows; apply every row that matches. A client decision about the header is a dated `requirements.md` row **and** a `design.md` §9 rule an agent could undo **and** a TECHNICAL.md §12 paragraph.
 

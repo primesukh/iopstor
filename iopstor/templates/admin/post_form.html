@@ -36,7 +36,7 @@
   <aside class="ed-side">
     <h3>Publish</h3>
     <label>Status <select name="status">{% for s in ('draft','published') %}<option value="{{ s }}" {{ 'selected' if (p.status or 'draft')==s }}>{{ s }}</option>{% endfor %}</select></label>
-    <label>Publish date <small>(empty = now; a future date schedules it)</small> <input type="datetime-local" name="published_at" value="{{ (p.published_at or '')[:16] }}"></label>
+    <label>Publish date <small>(IST; empty = now, a future date schedules it)</small> <input type="datetime-local" name="published_at" value="{{ p.published_at | ist_input }}"></label>
 
     <h3>Web address</h3>
     <div class="slug-field"><span class="slug-prefix">/{{ (pt.url_prefix ~ '/') if pt.url_prefix else '' }}</span><input type="text" name="slug" id="post-slug" value="{{ p.slug or '' }}" data-taken="{{ taken_slugs|join(' ') }}" aria-label="Web address" readonly></div>
@@ -100,5 +100,5 @@
 </form>
 {# Outside #post-form on purpose: a form inside a form is dropped by the parser, and the Delete
    button would have saved the post instead. form= on the button points here. #}
-{% if can_delete %}<form id="delete-post" method="post" action="{{ url_for('admin_ui.delete_post', pk=p.id) }}" onsubmit="return confirm('Delete this permanently?')"><input type="hidden" name="csrf" value="{{ csrf }}"></form>{% endif %}
+{% if can_delete %}<form id="delete-post" method="post" action="{{ url_for('admin_ui.delete_post', pk=p.id) }}" onsubmit="return confirm('Delete this page? This cannot be undone.')"><input type="hidden" name="csrf" value="{{ csrf }}"></form>{% endif %}
 {% endblock %}

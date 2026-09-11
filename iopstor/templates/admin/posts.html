@@ -8,19 +8,22 @@
 <form method="get" class="filter-bar">
   {% if current_type %}<input type="hidden" name="type" value="{{ current_type.slug }}">{% endif %}
   <input type="search" name="q" value="{{ request.args.get('q','') }}" placeholder="Search titles">
-  <select name="status"><option value="">Any status</option>{% for s in ('draft','published') %}<option value="{{ s }}" {{ 'selected' if request.args.get('status')==s }}>{{ s }}</option>{% endfor %}</select>
+  <select name="status"><option value="">Any status</option>{% for s in ('draft','published','trash') %}<option value="{{ s }}" {{ 'selected' if request.args.get('status')==s }}>{{ s }}</option>{% endfor %}</select>
   <button type="submit" class="secondary">Filter</button>
 </form>
 <div class="table-card">
   <table>
     <tr><th>Title</th>{% if not current_type %}<th>Type</th>{% endif %}<th>Status</th><th>Updated</th></tr>
     {% for p in result['items'] %}
-    <tr><td><a class="t-title" href="{{ url_for('admin_ui.edit_post', pk=p.id) }}">{{ p.title }}</a>
-            {% if p.path %}<a class="t-path" href="{{ p.path }}" target="_blank" rel="noopener">{{ p.path }}</a>
+    <tr><td>{% if p.status == 'trash' %}<span class="t-title">{{ p.title }}</span>
+            {%- else %}<a class="t-title" href="{{ url_for('admin_ui.edit_post', pk=p.id) }}">{{ p.title }}</a>{% endif %}
+            {% if p.status == 'trash' %}<form method="post" action="{{ url_for('admin_ui.restore_post', pk=p.id, **request.args) }}" class="t-restore">
+              <input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="secondary">Restore</button></form>
+            {%- elif p.path %}<a class="t-path" href="{{ p.path }}" target="_blank" rel="noopener">{{ p.path }}</a>
             {%- else %}<span class="t-path">no page of its own</span>{% endif %}</td>
         {% if not current_type %}<td>{{ p.post_type.name }}</td>{% endif %}
         <td><span class="pill {{ p.status }}">{{ p.status }}</span></td>
-        <td class="muted">{{ p.updated_at[:16].replace('T',' ') }}</td></tr>
+        <td class="muted">{{ p.updated_at | ist }}</td></tr>
     {% else %}<tr><td colspan="4" class="muted">Nothing here yet.</td></tr>{% endfor %}
   </table>
 </div>

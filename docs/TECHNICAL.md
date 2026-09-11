@@ -58,7 +58,7 @@ Dependency direction: `public.py` and `admin_ui.py` both import from `admin_api.
 
 ## 3. Data model
 
-Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_warranty.sql` and `0004_warranty_date_check.sql`.
+Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_warranty.sql` and `0004_warranty_date_check.sql`, and `audit_log` from `0008_audit_log.sql`.
 
 | Table | Purpose | Notable columns |
 |---|---|---|
@@ -73,9 +73,18 @@ Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_w
 | `menus` | Header/footer nav | `items` (JSONB, one level of `children`) |
 | `settings` | Key/value site config | `key`, `value` (JSONB) |
 | `redirects` | Legacy URL mapping | `from_path` (unique), `to_url`, `code`, `hits` |
+| `audit_log` | **Who did what, and what it was before** | `at`, `user_id`, `user_email`, `ip`, `action`, `table_name`, `row_id`, `label`, `changes` (JSONB) |
 | `schema_migrations` | Applied migration names | created by `0000_bootstrap.sql` |
 
 Indexes: `posts (post_type_id, status, published_at)`, `leads (status, created_at)`, `payments (provider, provider_ref)`, `warranties (expiry_date)`. `posts` is unique on `(post_type_id, slug)` — slugs are unique *per type*, not globally. `warranties` is unique on `serial_key`, a `GENERATED ALWAYS AS (upper(btrim(serial))) STORED` column: it makes the public lookup case- and whitespace-insensitive, stops two records claiming the same serial in different cases, and lets the lookup be an exact `.eq()` — a serial may legitimately contain `%` or `_`, which PostgREST's `ilike` would read as wildcards. A `CHECK` constraint, `warranties_expiry_after_purchase` (`0004`), refuses a record whose `expiry_date` is before its `purchase_date`; `/admin/warranty` pre-checks the same thing so an editor gets a sentence rather than a 502, exactly as it pre-checks the duplicate serial. It was added `NOT VALID` — enforced on every write, existing rows unscanned — because the table already held a record with the dates reversed; `ALTER TABLE warranties VALIDATE CONSTRAINT warranties_expiry_after_purchase;` promotes it once those are fixed. Warranty status is **not** stored: "in warranty" is `expiry_date` vs today, worked out at render time by `blocks.warranty_active()` so it can never go stale.
+
+**`audit_log` breaks three of this schema's own conventions, each for a reason.** Its id is `BIGINT GENERATED ALWAYS AS IDENTITY`, not `SERIAL`: it grows per *action* rather than per page, and `GENERATED ALWAYS` additionally refuses an INSERT that supplies its own id. Its strings are `TEXT`, not `VARCHAR(n)`: a title longer than the limit would fail the audit INSERT, and that INSERT is deliberately swallowed (see `db._audit()` in §4), so a length limit would buy silent gaps in the one table that must not have them. And `user_id` has **no foreign key** to `users` — the log has to outlive the row it names, which is why `user_email` is copied in beside it. Index: `(user_id, id DESC)`, one, for the "everything one person did" filter; the screen's default order is `id DESC`, which the primary key already serves.
+
+**Append-only is enforced in Postgres, not by the app.** `audit_log_no_change`, a `BEFORE UPDATE OR DELETE` trigger, raises `audit_log is append-only`. Leaving it to the app declining to offer a delete would be worthless: the app holds the service-role key and could rewrite its own evidence. The cost is that nothing can tidy up after itself, and the live suite is what found it: it runs against the real Supabase, so every run left its `zz-test` writes in the client's Activity screen with the `cleanup` fixture forbidden to remove them. **`db._audit()` therefore returns early under `TESTING`**, the way `throttle._off()` does and for the same shape of reason — the log is a client-facing screen, and a test corpus in it is worse than an untested write path (`test_the_test_suite_never_writes_to_the_audit_log` proves the guard is the flag, not the absence of a database). For the runs that happened before that, `migrations/purge_test_audit_rows.sql` is a hand-run script carrying the `DISABLE TRIGGER` / `DELETE` / `ENABLE TRIGGER` sequence. It is the only sanctioned delete from this table; reaching for it for anything but test rows defeats the point of the trigger.
+
+Note `0008`'s own header still describes the pre-guard behaviour. It is applied, and an applied migration is never edited — a mistake in one becomes a new file.
+
+**`posts.status` has a third value, `trash`.** Deleting a post moves it there instead of removing the row; nothing is destroyed and the id survives, so child pages keep their `parent_id`, `post_terms` links stay, and enquiries go on pointing at it — none of which re-creating a row from the log could do. It needed no migration and no new filter because every public read already passes `db.live()`, which asks for `status='published'`: the sitemap, the `.md` twins, the archives, the resolver, the mega panel and the RSS feed all exclude it exactly as they exclude a draft (`test_a_trashed_post_is_not_live`). The four places that *do* need a rule are the ones that were not filtering by status at all — `admin_ui.posts()`, `admin_ui.dashboard()`, `admin_api.list_posts()` and `db.admin_counts()` — plus `admin_ui.edit_post()` and `admin_api._post_or_404()`, which 404 a trashed post so that saving one cannot quietly un-trash it (the form posts `status=draft` by default). A trashed post's slug stays taken by `unique_slug()`, which is the property that makes restore collision-free.
 
 **Where per-type data lives.** `posts.meta` is a JSON bag described by `post_types.field_schema` — a list of `{key, label, type, required}` descriptors that the admin form renders and the detail template reads back. Types in use: `text`, `textarea`, `number`, `date`, `url`, `media`, `json`, `kv`. **Nothing validates that list** — `post_form.html` and `_form_body()` both fall through to a plain text input on a type they do not know, so adding one is purely additive.
 
@@ -95,7 +104,7 @@ Every query goes through this module. Nothing else builds a PostgREST query.
 |---|---|
 | `table(name)` | Service-role PostgREST query builder |
 | `one(q)` / `rows(q)` | Single dict-or-`None` / list of dicts |
-| `insert()` / `update()` | Write helpers returning the row |
+| `insert()` / `update()` / `delete()` | Write helpers returning the row — **and the only place anything is written to `audit_log`** |
 | `live(q)` | **The public visibility filter**: `status='published' AND published_at <= now()`. A future `published_at` is a scheduled post |
 | `select_posts()` | The canonical post select — embeds `post_type`, `featured_media`, `terms` in one round trip |
 | `with_paths()` / `ancestors()` | Attach the computed `path` to posts; builds one per-request hierarchy index rather than walking parents per row |
@@ -105,12 +114,19 @@ Every query goes through this module. Nothing else builds a PostgREST query.
 | `admin_counts()` | `{post-type slug: n}` plus `_leads`, for the sidebar. One query over posts counted in Python — PostgREST has no `GROUP BY`, and an exact-count call per type would be eight round trips a page |
 | `tree(type_slug)` | Top-level live posts of one type, each with `p["children"]`. One query; the parent/child split happens in Python. Feeds the header's services panel, the services archive and `post_list(top_level)` |
 | `paginate()` | Offset/limit + exact count |
+| `_audit()` / `audit_event()` | One `audit_log` row. `audit_event()` is for the things that are not a row write — login, logout, a wrong password |
+| `ist()` / `ist_input()` | A stored UTC timestamp as the clock an editor in India was looking at, for display and for `<input type="datetime-local">` |
 | `post_types()` / `settings()` | Process-level caches, invalidated with `uncache()` |
 
-Two hard rules:
+**The audit log records itself into the write helpers, not into the routes.** `insert()`, `update()` and `delete()` each call `_audit()` with a `{field: [was, now]}` diff, so a write path added later is logged without anybody remembering to log it — and the diff is field-level, which an `after_request` hook could never produce because it sees the response, not the row. `update()` reads the row first to get the "was" half; that read is skipped entirely outside a request context, which is also the whole of the `flask seed` / `import-media` exclusion — `_audit()` returns immediately when `has_request_context()` is false, so there is no flag to remember and no way to forget it. `update(name, pk, changes, action=…)` takes an action label because moving a post to the trash *is* an UPDATE but has to read as `delete` on the screen. The three writers that are not keyed by `id` keep their own calls: `set_settings()` emits **one entry per changed key** (the Settings form posts all eleven every time, and "which setting did they change" is the question the log is asked), `set_menu()` diffs against `get_menu()`, and `set_post_terms()` logs one entry against the *post* rather than the join-table churn.
 
-- **Never call `.delete()` without a filter** — PostgREST interprets an unfiltered delete as "the whole table".
+Two writes are deliberately not recorded: `public.py`'s `redirects.hits` bump, which is a counter on an anonymous page view and would bury the log (it is the one place that still builds its own `.update()` chain, with a comment saying why), and anything the CLI does.
+
+Three hard rules:
+
+- **Never call `.delete()` without a filter** — PostgREST interprets an unfiltered delete as "the whole table". `db.delete(name, pk)` is the version you cannot forget the filter on; every by-id delete in the app goes through it.
 - Anything user-facing goes through `db.live(q)`. A public query that skips it will serve drafts.
+- **Never write to `audit_log` through `insert()`** — it would recurse. `_audit()` uses `table("audit_log")` directly.
 
 ---
 
@@ -346,13 +362,43 @@ Writes: `POST /leads` (also the target of the HTML contact form — plain form P
 
 ### `/admin` — browser, `admin_ui.py`
 
-`/login`, `/logout`, `/` (dashboard), `/posts`, `/posts/new`, `/posts/<id>`, `/posts/<id>/delete`, `/media`, `/media/upload`, `/media/<id>/delete`, `/leads`, `/leads/<id>/status`, `/warranty`, `/warranty/<id>/delete`, `/settings`, `/users`, `/users/<uuid>/delete`. Server-rendered forms; `_form_body()` turns form fields into the same body dict the JSON API accepts, so both surfaces share validation. `_safe_next()` restricts post-login redirects to relative same-origin paths.
+`/login`, `/logout`, `/` (dashboard), `/posts`, `/posts/new`, `/posts/<id>`, `/posts/<id>/delete`, `/posts/<id>/restore`, `/media`, `/media/upload`, `/media/<id>/delete`, `/leads`, `/leads/<id>/status`, `/warranty`, `/warranty/<id>/delete`, `/settings`, `/users`, `/users/<uuid>/delete`, `/audit`, `/audit/<id>/restore`. Server-rendered forms; `_form_body()` turns form fields into the same body dict the JSON API accepts, so both surfaces share validation. `_safe_next()` restricts post-login redirects to relative same-origin paths.
 
 `POST /admin/media/upload` is the one exception to "server-rendered forms": it takes the same multipart body as `POST /admin/media` (`csrf`, `file`, optional `alt`) through the shared `_upload()` helper, and answers `201 {id, url, filename, mime, alt}` or `4xx {error}` instead of redirecting. It exists so the post form's media pickers can upload without leaving the page; session auth and CSRF come from `ui_required()` unchanged.
 
 `/admin/warranty` is the warranty register: list, `?q=` search over serial / customer / email, and one form that adds a record or edits the one named by `?edit=<id>` — the `users` screen's shape, with `db.paginate(..., 50)` and the `page` / `has_next` idiom used by `/admin/leads`. It refuses a duplicate `serial_key` with a `flash()` before writing, rather than letting a unique violation surface as a 502 through `_pg_error`. Editors may add and edit; **only an admin may delete**, matching `/admin/posts/<id>/delete`. The public side of this table needs no endpoint at all (§6, `warranty_check`).
 
 It is post-redirect-get only when the write **succeeds**. A refused save falls through to the same render with the submitted values back in the form and a `400`, the way `new_post` / `edit_post` re-render rather than redirect — a redirect would answer a typo by making the editor retype the record. A refusal is a `(field, message)` pair, **not** a `flash()`: the form carries it as `data-refused-field` / `data-refused`, `initWarranty()` in `admin.js` puts it on that field with `setCustomValidity()` and calls `reportValidity()`, and a `<noscript>` copy says the same sentence without JS. Only a success flashes, at the top, where a confirmation belongs. `editing` is the form's contents, from `request.form` on a refusal and from the row on `?edit=`; the template keys add-vs-edit off `editing.id`, not off `editing` being truthy, so a rejected *new* record does not come back wearing an Edit heading. `?q=` and `?page=` ride through every redirect (save, delete, cancel) so a filtered list survives the round trip.
+
+`/admin/audit` is the activity log: every entry `audit_log` holds, newest first, admin-only, with `?user=` / `?action=` / `?table=` filters and the same `db.paginate(..., 50)` + `page` / `has_next` idiom as `/admin/leads`. It orders by `id DESC` rather than by `at` — ids are handed out in time order so the two agree, and the primary key then does the sorting without a second index. No `/api/admin/v1` mirror exists: nothing consumes the admin API but this browser admin.
+
+**The screen is translated in `admin_ui.py`, not in the template.** The test it is written against is that somebody who has never seen the database can read a row aloud, so the route hands the template finished rows — `who`, `sentence`, `fields` — and `audit.html` does no thinking. The translators are pure functions living above the routes and importing nothing from them, which is how the offline tests call them directly:
+
+| | |
+|---|---|
+| `VERB` | action → a sentence template with `{kind}` and `{name}` (`update` → "edited the {kind} {name}"). An unknown action still reads as itself |
+| `KIND` | table → the noun an editor uses — `media` → "picture or file", `leads` → "enquiry", `users` → "person" |
+| `POST_KIND` + `_post_context()` | **`posts` is eight different things**, and a log that calls a datasheet edit "posts" looks like it is missing what it is in fact showing. The content type's own name does it, singularised by a slug map that falls back to `post_types.name` for a type added later — the same shape as `base.html`'s `ICON` map and for the same reason. One batched `.in_("id", ids)` query per page, never one per row |
+| `FIELD` + `_label_of()` | column → the label the editor sees elsewhere; `blocks` → *The writing on the page*. The fallback is `settings.html:17`'s own transform, so the two screens cannot disagree |
+| `_value()` | a stored value as something readable: statuses by name (never the word `trash`), timestamps through `ist()`, media ids as filenames, term ids as term names, menus as their labels, `meta`/`seo` as `label: value` lines using the type's `field_schema` labels. JSON is the last resort, not the normal case |
+
+**A page edit shows the words, not the array.** `blocks` skips `_value()` for `_blocks_change()`: `blocks_text()` (§6) flattens both halves — it is pure, the same call `llms-full.txt` makes — and a word-level `difflib.SequenceMatcher` marks what went with `<del>` and what arrived with `<ins>`. Word-level, not character-level, because a word is the unit somebody writing a page thinks in.
+
+The case that matters and is easy to miss: **`blocks_text()` deliberately drops every media id, url and link** (`_NON_TEXT_KEYS`, `blocks.py:152`), so swapping an image leaves both versions reading identically. "Nothing changed" would then be a lie about a save that plainly did something, so `_structural()` compares the two lists of block types instead and says it in a sentence, naming them from `EDITOR["names"]` — "Added Cards", "Moved the sections around", "Changed a picture, link or setting in the Picture section". Guarded by `test_a_change_the_words_cannot_show_is_described_instead`.
+
+**What is deliberately not recorded**, each because recording it would make the log worse rather than better:
+
+- **Reads.** Opening a page, viewing Leads. A working day is roughly fifty lines of looking per line of doing, and the change somebody came to find would be buried.
+- **Session and token mechanics** — the CSRF token, the cookie, and the GoTrue refresh rotation `_session_token()` performs on *every* admin request including GETs. A session staying alive is not a step anybody takes; logging it would add a line per page load. This covers `POST /auth/refresh` and the re-login inside `account()` after a password change, where the password change itself is the event.
+- **Refusals other than a blocked login.** A rejected save or a permission refusal changed nothing and the person simply tried again. A *blocked* login is the line that shows an attack, and is recorded — **once, at the crossing**. `throttle.record_failure()` returns `True` only for the attempt that reaches `LOGIN_MAX_FAILURES`; logging from `retry_after()` instead would write a row on every attempt for the whole window, handing anyone hammering a locked login the ability to fill the audit log at will (`test_a_lockout_is_recorded_once_not_on_every_blocked_attempt`).
+- **The bucket and GoTrue halves** of an upload, a delete, a user create and a user delete — each already sits beside a logged row write carrying the key or the email.
+- **Rows removed by a Postgres cascade** when a taxonomy is deleted: the app never writes them, so it cannot log them. The taxonomy's own entry holds what it was.
+- **`flask seed` and `flask import-media`** — content, reproducible, no actor. `flask create-admin` is the one command-line exception (see §4).
+- **Anything under `TESTING`.** The live suite writes to the real database; without this the client's Activity screen fills with `zz-test` rows that the append-only trigger forbids anyone to remove. See §3.
+
+**`POST /admin/audit/<id>/restore`** writes the "was" half of an entry back — `{k: pair[0] for k, pair in changes.items()}` — and because the restore goes through the ordinary write helpers it is itself logged, as `action="restore"`. One stored format, four writers, because not every entry's fields are columns of the table it names: `settings` and `menus` are keyed by their own column rather than `id`, so they need `set_settings()` / `set_menu()`; a `posts` entry whose one field is `terms` came from `set_post_terms()` and goes back the same way (`posts` has no `terms` column — `db.update()` would 400 on it); everything else takes `db.update()`. Two refusals are flashes rather than 502s: a `settings` entry whose "was" half is `None` (the key did not exist, and `settings.value` is `NOT NULL`), and blocks that no longer validate. `blocks` is re-run through `validate_blocks()` first, because a block type can have been renamed or dropped since the version was saved, and a failure is a `flash()` rather than a 502.
+
+**What is restorable is not what it first looks like** (`_restorable()`). An `update` always is. A `delete` is only for `posts`, because that is a move to the trash and the row is still there. Every other delete is real, and re-creating the row would be a lie: a deleted user's GoTrue account is gone so the row would come back unable to log in, a deleted media row would point at a bucket object already removed, `warranties.serial_key` is `GENERATED ALWAYS` and refuses to be written back, and a deleted taxonomy's terms cascaded away. Those entries still *show* the whole row they removed, which is what makes them evidence. `POST /admin/posts/<id>/restore` is the same undo reached from the Posts list's trash filter, and it comes back as a **draft** — the page has been off the site for a while and whoever restores it should be the one to decide it goes live again.
 
 ### `/media/<bucket key>` — the file proxy, `public.media_file()`
 
@@ -456,7 +502,7 @@ Everything is server-rendered from `seo.py` + `public.py`; keep it there.
 
 ## 10. Migrations
 
-Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in name order and tracked in `schema_migrations`. **Only a four-digit-prefixed name is a step** (`MIGRATION_GLOB` in `cli.py`); anything else in the folder is a script run by hand and is never executed as part of a run.
+Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in name order and tracked in `schema_migrations`. **Only a four-digit-prefixed name is a step** (`MIGRATION_GLOB` in `cli.py`); anything else in the folder is a script run by hand and is never executed as part of a run. There are two: `repair_schema_migrations.sql`, for a database built by pasting files before the ledger existed, and `purge_test_audit_rows.sql`, the only sanctioned delete from the append-only `audit_log` (§3).
 
 `0000_bootstrap.sql` is pasted **once** into Supabase Studio's SQL editor. It creates `apply_migration(name, sql)` — `SECURITY DEFINER`, executable by `service_role` only — which `flask migrate` calls per file over Kong. Each file runs in one transaction.
 
@@ -465,6 +511,8 @@ Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in nam
 1. Write the `ALTER`/`CREATE` as a new numbered file
 2. `pipenv run flask migrate`
 3. Update the code that reads/writes those columns
+
+The code must run against a database where the newest file is **not yet applied**. `0008_audit_log.sql` is the clearest case: `db._audit()` swallows the missing-table error, so every save works and the only sign is a warning in the log.
 4. Commit both together
 
 **When the ledger and the database disagree.** A schema built by pasting the files into Studio leaves every table in place and `schema_migrations` empty, so `flask migrate` starts again at the beginning and stops on `0001_initial.sql: relation "menus" already exists`. Nothing is broken — the ledger simply never recorded what was done by hand. `migrations/repair_schema_migrations.sql` fixes it: pasted into Studio, it records each file **only if the thing that file makes is actually present** — the `posts` table for `0001`, `pg_class.relrowsecurity` for `0002` (the table can exist with RLS still off, which is the very state `0002` fixes), `warranties` for `0003`, the `warranties_expiry_after_purchase` constraint for `0004`. A file that was genuinely never applied stays unrecorded and `flask migrate` then applies it normally. Safe to run twice, and safe on a database in any state. `migrate()` names that script in its own error when the failure text contains "already exists".
@@ -589,7 +637,15 @@ The other three shapes size from `auto` tracks that stay inside a 390px card (da
 - **One `{% block content %}`, wrapped conditionally.** Jinja refuses the same block name twice in a template even in branches that cannot both run, so the shell opens before the block and closes after it rather than the block appearing in both arms of the `if`.
 - **`.admin-main:has(#post-form)` is `height:100vh`**, not `calc(100vh - 66px)`. The editor now owns a grid column rather than sitting under a top bar, so there is no header height to subtract.
 
-**The nav icons are one inline sprite.** `admin/base.html` opens with a `<svg hidden>` of sixteen `<symbol id="i-…" viewBox="0 0 24 24">`; each row carries `<svg class="ic"><use href="#i-…"></use></svg>`. The symbols are bare `<path>`/`<rect>` elements — `fill`, `stroke`, `stroke-width` and the line joins are inherited from `.adm-nav .ic` in `admin.css`, which is also how `a.on .ic` recolours one to blue without touching the markup. The wrapper needs `hidden`: a `<svg>` holding only symbols still renders as a 300×150 box otherwise. The eight CONTENT rows are **`post_types` rows, not code**, so a Jinja `ICON` map turns a slug into a symbol name and `ICON.get(t.slug, 'dot')` gives anything an editor adds later the neutral `i-dot` rather than a broken reference.
+**Every date in the admin is IST.** `db.ist()` is registered as a Jinja *filter* in `create_app()` (a date reads better piped than wrapped) and is used by the Posts, Leads, Dashboard and Activity tables; `db.ist_input()` is its twin for `<input type="datetime-local">`. It is a fixed `timezone(timedelta(hours=5, minutes=30))`, **not** `zoneinfo.ZoneInfo("Asia/Kolkata")`: India has never observed daylight saving, so the offset is exactly right for every date there will ever be, and it does not need tzdata, which the slim container image does not ship. 24-hour, because a log is read for precision.
+
+This also closed a standing bug. `post_form.html`'s publish-date box posts a bare wall clock, `2026-09-11T14:00`, and `db.parse_dt()` reads a missing offset as UTC — so an editor in Mumbai typing 2 pm was storing 7.30 pm. The offset is stamped on in `admin_ui._as_ist()`, at that one input, and **not** in `parse_dt()`, which the JSON API shares and where no offset should still mean UTC. `_as_ist()` and `ist_input()` are a pair: the box shows IST and reads back IST, so a stored instant round-trips unchanged. Guarded by `test_the_publish_box_reads_as_ist` and `test_ist_is_five_and_a_half_hours_ahead`. Public output is untouched — `public.py`'s RSS `pubDate` is UTC with a literal `+0000`, which is correct.
+
+**The Activity table pins three of its four columns** (`.aud-table` in `admin.css`) so the What column takes what is left; without that the row grows wider than its card and `.admin table { overflow: hidden }` clips the address off the end rather than wrapping it. A changed field is a `.aud-one` block — its name, then Was and Now in a two-column `.aud-ba` grid — **not** the three-column table this started as: a page's writing is prose, and prose in a 22%/39%/39% table is a column of single words. `<del>` and `<ins>` inside `.aud-ba` are tinted with the existing red and green tokens.
+
+Two breakpoints, not one. At 1000px the pinned widths are released. **At 700px the row stops being a row**: `.aud-table` and its cells go `display:block` and stack into a card reading date, who, what, where, with the header row hidden. No arrangement of four columns keeps the sentence on a 390px screen, and a table that scrolls sideways hides the one column this screen exists to show — `/admin/leads` reaches for `.lead-card` over a table for the same reason.
+
+**The nav icons are one inline sprite.** `admin/base.html` opens with a `<svg hidden>` of sixteen `<symbol id="i-…" viewBox="0 0 24 24">`; each row carries `<svg class="ic"><use href="#i-…"></use></svg>`. The symbols are bare `<path>`/`<rect>` elements — `fill`, `stroke`, `stroke-width` and the line joins are inherited from `.adm-nav .ic` in `admin.css`, which is also how `a.on .ic` recolours one to blue without touching the markup. The wrapper needs `hidden`: a `<svg>` holding only symbols still renders as a 300×150 box otherwise. The eight CONTENT rows are **`post_types` rows, not code**, so a Jinja `ICON` map turns a slug into a symbol name and `ICON.get(t.slug, 'dot')` gives anything an editor adds later the neutral `i-dot` rather than a broken reference. A new nav row needs a new `<symbol>` here — `i-audit` is the seventeenth, and **Activity** sits inside the `admin_user.role == 'admin'` block with Menus, Settings and Users.
 
 **The sidebar's colours come from the dark tokens.** `--muted` (`#5b6675`) is a *light-background* token and lands near 3:1 on `--black`; the group labels, the counts and the resting icons use `--muted-dark-2` (`#7d8794`) instead. The active row is `--black-3` with `box-shadow:inset 3px 0 0 var(--blue)` and a blue icon, not a solid blue fill — fifteen rows of brand colour were louder than the page they lead to. `:focus-visible` on the nav, brand and footer links draws a `--blue-light` outline; there was none before.
 
@@ -971,7 +1027,9 @@ silently does nothing — the bug that once showed the layout chooser and the ca
 ## 13. Tests
 
 ```
-tests/test_offline.py    always runs — slugify, validate_blocks, render_blocks, JWT matrix, the /media route
+tests/test_offline.py    always runs — slugify, validate_blocks, render_blocks, JWT matrix, the /media route,
+                         the audit diff and its wording, the IST filters, that a trashed post is
+                         never live, and that every state-changing route is accounted for
 tests/conftest.py        app/client fixtures, admin_headers/editor_headers, seeded corpus, cleanup
 tests/test_auth.py       JWT matrix, mocked GoTrue login, real bad-password rejection
 tests/test_admin_api.py  create/publish visibility, scheduled-post hiding, terms/settings/menus
@@ -1125,7 +1183,7 @@ once the site is live: a Cloudflare rate-limit on `/admin/login`, which §12 arg
 sqlite throttle rather than a replacement, since the flood never reaches the origin. Public HTML can also
 be edge-cached now that anonymous requests carry no `Set-Cookie` (§7) — but **leave that off unless someone
 asks for it.** Cloudflare does not cache HTML without a Cache Rule, so it is opt-in, and turning it on buys
-speed at the cost of the property NON-TECHNICAL.md §13 currently promises editors: that a page is live the
+speed at the cost of the property NON-TECHNICAL.md's *Quick answers* currently promises editors: that a page is live the
 moment they press **Save**. With a Cache Rule a save, and a scheduled `published_at` falling due, both lag
 by the TTL, and there is no purge hook wired to either. Enable it only with a TTL someone has agreed to,
 a rule that excludes `/admin/*` and `/api/*`, and that Quick Answer rewritten to match.
@@ -1156,6 +1214,13 @@ pipenv requirements --dev-only > requirements-dev.txt
 ## 17. Known ceilings
 
 Marked in code with `# ponytail:` comments.
+
+- **A failed audit write is swallowed** (`db._audit()`). The content write has already succeeded by the time it runs, so raising would show the editor an error for a save that did happen — and it is what lets the app run against a database where `0008` has not been applied yet. The cost is that the log can have a gap the log cannot report; the warning goes to `current_app.logger`. Watch those warnings.
+- **`audit_log` grows without bound.** No retention job, no archiving. A post save stores the whole old `blocks` array and the whole new one, so a large page costs roughly 50 KB twice over. Point the diff at a revisions table, or trim by age, if it ever gets heavy.
+- **The word diff is bounded at `DIFF_MAX` (2000 words a side).** Past that the two texts print plain with a note, because diffing two novels fifty rows to a page is real CPU on every load.
+- **A hard-deleted post loses its type on the screen** and falls back to "page or post" — `_post_context()` resolves the type from the row. Production never hard-deletes a post (deleting trashes it), so this only shows for rows the test cleanup removes.
+- **A restore is not pre-checked against what it references.** Putting back a version whose featured image or parent page has since been deleted fails on the foreign key and surfaces through `_pg_error` as a 502 page rather than a sentence.
+- **`/admin/audit` pages with offset/limit** like every other admin list. Deep pages get slower; keyset pagination if that day comes.
 
 - `rich_text` and `embed_html` render raw HTML with `|safe`. Fine for trusted staff; add `nh3` sanitising if untrusted authors are ever given accounts.
 - The rich-text toolbar uses `document.execCommand` — deprecated but universally implemented, and 40 lines against a bundled editor. Swap for a real editor if a browser drops it.

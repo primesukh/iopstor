@@ -864,3 +864,277 @@ def test_public_pages_mint_no_session_cookie(app):
         assert _globals() == {}                     # public: nothing minted, session untouched
     with app.test_request_context("/admin/login"):
         assert _globals()["csrf"]                   # admin: the editor still gets a token
+
+
+def test_audit_records_only_the_fields_that_changed():
+    """The whole audit log is this one function: what the row was, what it became, per field.
+    updated_at has to stay out of it — the moddatetime trigger moves it on every single write, so
+    including it would mean every entry claims a change even when nothing changed."""
+    from iopstor import db
+
+    before = {"id": 3, "title": "Old", "status": "draft", "updated_at": "2026-09-10T00:00:00Z"}
+    after = {"id": 3, "title": "New", "status": "draft", "updated_at": "2026-09-11T00:00:00Z"}
+    assert db._diff(before, after) == {"title": ["Old", "New"]}
+
+    # a create is the same shape with nothing on the left, and a delete with nothing on the right,
+    # which is what lets one template render all three and one Restore reverse any of them.
+    assert db._diff({}, {"id": 9, "title": "New"}) == {"id": [None, 9], "title": [None, "New"]}
+    assert db._diff({"id": 9, "title": "Gone"}, {}) == {"id": [9, None], "title": ["Gone", None]}
+    assert db._diff({"title": "Same"}, {"title": "Same"}) == {}
+    # a column that was null and stayed null is not a change worth a row
+    assert db._diff({}, {"parent_id": None}) == {}
+
+
+def test_restore_reverses_a_diff():
+    """Restore is the left-hand half of every pair, and nothing more. It works for any table
+    because the format does not vary by table."""
+    changes = {"title": ["Old", "New"], "blocks": [[{"type": "text"}], []]}
+    assert {k: pair[0] for k, pair in changes.items()} == {"title": "Old", "blocks": [{"type": "text"}]}
+
+
+def test_audit_is_silent_on_the_command_line():
+    """`flask seed` writes hundreds of rows and none of them is a person doing something. There is
+    no request context there, and that one test is the whole exclusion — no flag to remember."""
+    from iopstor import db
+
+    assert db._audit("create", "posts", 1, {"title": [None, "x"]}) is None   # no request, no row, no error
+    assert db.audit_event("login", "someone@example.com") is None
+
+
+def test_ist_is_five_and_a_half_hours_ahead():
+    """Editors are in India and every admin date used to read as unlabelled UTC, so a 9.51 am stamp
+    was really 3.21 pm to the person looking at it. A fixed offset, not a named zone: India has
+    never observed daylight saving, and tzdata is not in the slim container image."""
+    from iopstor import db
+
+    assert db.ist("2026-09-11T09:51:00+00:00") == "11 Sep 2026, 15:21 IST"
+    assert db.ist("2026-09-11T20:00:00+00:00") == "12 Sep 2026, 01:30 IST"   # and it rolls the date
+    assert db.ist(None) == "—"
+    # the publish box and the list have to agree, or the editor sees two times for one instant
+    assert db.ist_input("2026-09-11T09:51:00+00:00") == "2026-09-11T15:21"
+    assert db.ist_input(None) == ""
+
+
+def test_the_publish_box_reads_as_ist():
+    """<input type="datetime-local"> posts a bare wall clock, and every parser downstream reads a
+    missing offset as UTC — so 2 pm typed in Mumbai was stored as 7.30 pm. Stamped at the form, not
+    in db.parse_dt(), which the JSON API shares and where no offset should still mean UTC."""
+    from iopstor.admin_ui import _as_ist
+
+    assert _as_ist("2026-09-11T14:00") == "2026-09-11T14:00+05:30"
+    assert _as_ist("") == ""
+    assert _as_ist("2026-09-11T14:00+05:30") == "2026-09-11T14:00+05:30"    # not stamped twice
+    assert _as_ist("2026-09-11T14:00Z") == "2026-09-11T14:00Z"
+
+
+def test_a_trashed_post_is_not_live():
+    """Deleting a post moves it to the trash instead of removing the row, so the one thing that
+    must hold is that the public site never sees it. It holds because every public read goes
+    through db.live(), which asks for status='published' and nothing else."""
+    from iopstor import db
+
+    assert not db.is_live({"status": "trash", "published_at": "2020-01-01T00:00:00+00:00"})
+    assert db.is_live({"status": "published", "published_at": "2020-01-01T00:00:00+00:00"})
+
+
+def test_every_table_has_something_to_call_a_row():
+    """The audit screen names the row a line is about. One ordered tuple stands in for a per-table
+    map, so the order is the whole logic: media carries a filename and a bucket key, a user a name
+    and an email, a term a name and a slug — and the first match has to be the readable one."""
+    from iopstor import db
+
+    assert db._label({"title": "About Us", "slug": "about"}) == "About Us"           # posts
+    assert db._label({"filename": "hero.png", "key": "2026/09/a1b2.png"}) == "hero.png"   # media
+    assert db._label({"name": "", "email": "priya@iopstor.com"}) == "priya@iopstor.com"   # users
+    assert db._label({"serial": "IOP-2231"}) == "IOP-2231"                           # warranties
+    assert db._label({"from_path": "/old-page"}) == "/old-page"                      # redirects
+    assert db._label({"hits": 3}) == ""                                              # nothing to name
+
+
+def test_only_a_change_and_a_trashed_post_can_be_put_back():
+    """Restore is offered per entry, and the rule is not "anything that was a delete". A deleted
+    post went to the trash and is still there; a deleted user, picture or category is really gone,
+    and re-creating the row would produce something half-working — a login with no Supabase account
+    behind it, a picture row pointing at a file that left the bucket."""
+    from iopstor.admin_ui import _restorable
+
+    assert _restorable({"action": "update", "table_name": "posts"})
+    assert _restorable({"action": "update", "table_name": "settings"})
+    assert _restorable({"action": "delete", "table_name": "posts"})       # the trash
+    assert not _restorable({"action": "delete", "table_name": "users"})   # really gone
+    assert not _restorable({"action": "delete", "table_name": "media"})
+    assert not _restorable({"action": "create", "table_name": "posts"})   # nothing to go back to
+    assert not _restorable({"action": "login_failed", "table_name": ""})
+
+
+# Every route that can change something, and how the audit log catches it. The value is the reason,
+# kept as prose so a reader can check the claim rather than trust the key being present.
+AUDITED = {
+    # content, media, leads, warranty, settings, menus, users, redirects, taxonomies:
+    # the write goes through db.insert()/update()/delete()/set_*(), which record it themselves
+    "admin_api.create_post": "db.insert", "admin_api.update_post": "db.update",
+    "admin_api.delete_post": "db.update to trash", "admin_api.create_post_type": "db.insert",
+    "admin_api.update_post_type": "db.update", "admin_api.delete_post_type": "db.delete",
+    "admin_api.create_taxonomy": "db.insert", "admin_api.update_taxonomy": "db.update",
+    "admin_api.delete_taxonomy": "db.delete", "admin_api.create_term": "db.insert",
+    "admin_api.update_term": "db.update", "admin_api.delete_term": "db.delete",
+    "admin_api.upload_media": "db.insert", "admin_api.update_media": "db.update",
+    "admin_api.remove_media": "db.delete", "admin_api.update_lead": "db.update",
+    "admin_api.delete_lead": "db.delete", "admin_api.put_settings": "db.set_settings",
+    "admin_api.put_menu": "db.set_menu", "admin_api.create_redirect": "db.insert",
+    "admin_api.delete_redirect": "db.delete", "admin_api.create_user": "db.insert",
+    "admin_api.update_user": "db.update", "admin_api.delete_user": "db.delete",
+    "admin_ui.new_post": "db.insert", "admin_ui.edit_post": "db.update",
+    "admin_ui.delete_post": "db.update to trash", "admin_ui.restore_post": "db.update",
+    "admin_ui.media": "db.insert", "admin_ui.media_upload": "db.insert",
+    "admin_ui.media_alt": "db.update", "admin_ui.media_delete": "db.delete",
+    "admin_ui.lead_status": "db.update", "admin_ui.warranty": "db.insert/update",
+    "admin_ui.warranty_delete": "db.delete", "admin_ui.menus": "db.set_menu",
+    "admin_ui.settings": "db.set_settings", "admin_ui.users": "db.insert",
+    "admin_ui.user_delete": "db.delete", "admin_ui.audit_restore": "the helper it writes through",
+    "public_api.api_create_lead": "db.insert, with no signed-in user",
+    "public_api.api_checkout": "db.insert", "public_api.api_webhook": "db.update",
+    # no row of ours changes, so db.py cannot see it: an explicit db.audit_event()
+    "admin_ui.login_page": "audit_event login / login_failed / login_blocked",
+    "admin_ui.account": "audit_event password_changed / login_failed / login_blocked",
+    "admin_ui.user_password": "audit_event password_reset",
+    "admin_api.auth_login": "audit_event login / login_failed / login_blocked",
+    "admin_api.auth_logout": "audit_event logout",
+    # deliberately not recorded -- see TECHNICAL.md §8
+    "admin_ui.canvas": "changes nothing, renders the page into the editor",
+    "admin_ui.preview": "changes nothing, renders the unsaved form as a page",
+    "admin_api.auth_refresh": "session mechanics, not a step anybody takes",
+}
+
+
+def test_every_route_that_can_change_something_is_accounted_for(app):
+    """The password change went unlogged because nothing checked. This is that check: add a route
+    that accepts a POST and the suite fails until somebody writes down how it is recorded — or that
+    it deliberately is not. It cannot prove a row lands, only that the decision was made."""
+    changing = {r.endpoint for r in app.url_map.iter_rules()
+                if r.methods & {"POST", "PATCH", "PUT", "DELETE"}}
+    assert changing - set(AUDITED) == set(), "a route that can change something, with nobody having decided whether it is logged"
+    assert set(AUDITED) - changing == set(), "a route named here no longer exists"
+
+
+def test_a_lockout_is_recorded_once_not_on_every_blocked_attempt(app, tmp_path):
+    """retry_after() says "wait" on every attempt for the whole window, so logging from there would
+    let anyone hammering a locked login write a row per request straight into the audit log. The
+    entry belongs at the crossing, which is the only thing record_failure() reports True for."""
+    from iopstor import throttle
+
+    app.config.update(TESTING=False, THROTTLE_DB=str(tmp_path / "t.db"),
+                      LOGIN_MAX_FAILURES=3, LOGIN_WINDOW=900)
+    with app.test_request_context("/admin/login"):
+        crossings = [throttle.record_failure("ip:1.2.3.4") for _ in range(6)]
+    assert crossings == [False, False, True, False, False, False], crossings
+
+
+def test_the_words_that_changed_are_marked_not_the_json():
+    """The complaint that started this: a one-word edit rendered as two blocks of JSON. The screen
+    shows the writing, with what went struck out and what arrived marked."""
+    from iopstor.admin_ui import _word_diff
+
+    was, now = _word_diff("Always Believe in Better", "Always Believe in Getting Better.")
+    assert was == "Always Believe in <del>Better</del>"
+    assert now == "Always Believe in <ins>Getting Better.</ins>"
+    assert _word_diff("same words", "same words") == ("same words", "same words")
+    # and it escapes: a page saying <script> is text, not markup
+    assert "&lt;script&gt;" in _word_diff("<script>", "")[0]
+
+
+def test_a_change_the_words_cannot_show_is_described_instead():
+    """blocks_text() drops every picture, link and setting (_NON_TEXT_KEYS), so swapping an image
+    leaves both versions reading identically. Saying "nothing changed" would be a lie about a save
+    that plainly did something, so the shape of the page is compared instead."""
+    from iopstor.admin_ui import _blocks_change, _structural
+
+    text = [{"type": "rich_text", "data": {"html": "<p>Hello</p>"}}]
+    assert _structural(text, text + [{"type": "cards", "data": {}}]) == "Added Cards."
+    assert _structural(text + [{"type": "cards", "data": {}}], text) == "Removed Cards."
+    assert _structural([{"type": "image", "data": {"media_id": 1}}],
+                       [{"type": "image", "data": {"media_id": 2}}]) == \
+        "Changed a picture, link or setting in the Picture section."
+    assert _structural([{"type": "hero", "data": {}}, {"type": "cards", "data": {}}],
+                       [{"type": "cards", "data": {}}, {"type": "hero", "data": {}}]) == "Moved the sections around."
+    # the note rides along with the two texts, which are identical in this case
+    was, now, note = _blocks_change(text, text + [{"type": "divider", "data": {}}])
+    assert was == now and note == "Added Divider."
+
+
+def test_a_column_name_never_reaches_the_screen():
+    """Every field an editor can see has a label; anything unmapped still reads as words rather than
+    as a column, using the same transform the Settings screen uses so the two agree."""
+    from iopstor.admin_ui import _label_of
+
+    assert _label_of("blocks") == "The writing on the page"
+    assert _label_of("featured_media_id") == "Main picture"
+    assert _label_of("remarks_public") == "Show the remarks to the customer"
+    assert _label_of("some_future_column") == "Some future column"
+
+
+def test_a_stored_value_is_shown_as_something_a_person_reads():
+    """Never the word "trash", never a bare timestamp, never a raw true."""
+    from iopstor.admin_ui import _value
+
+    assert _value("status", "trash") == "Deleted"
+    assert _value("status", "published") == "Published"
+    assert _value("amc", True) == "Yes"
+    assert _value("amc", False) == "No"
+    assert _value("expiry_date", "2027-03-14T00:00:00+00:00") == "14 Mar 2027, 05:30 IST"
+    assert _value("title", "") == '<span class="muted">nothing</span>'
+    assert _value("published_at", "not a date at all") == "not a date at all"   # falls through, does not raise
+    assert _value("items", [{"label": "Home"}, {"label": "About"}]) == "Home, About"
+
+
+def test_every_row_reads_as_a_sentence():
+    """A page, a service and a datasheet are all rows of `posts`; the screen has to name each one the
+    way the editor's own sidebar does, or the log looks like it is missing what it is in fact showing."""
+    from iopstor.admin_ui import _sentence
+
+    posts = {"12": ("service", {}), "13": ("datasheet", {})}
+    assert _sentence({"action": "update", "table_name": "posts", "label": "Managed Storage", "row_id": "12"},
+                     posts) == "edited the service <b>Managed Storage</b>"
+    assert _sentence({"action": "delete", "table_name": "posts", "label": "Old sheet", "row_id": "13"},
+                     posts) == "deleted the datasheet <b>Old sheet</b>"
+    assert _sentence({"action": "update", "table_name": "settings", "label": "contact_phone", "row_id": "contact_phone"},
+                     {}) == "edited the setting <b>Contact phone</b>"
+    assert _sentence({"action": "create", "table_name": "media", "label": "hero.png", "row_id": "4"},
+                     {}) == "added the picture or file <b>hero.png</b>"
+    assert _sentence({"action": "password_reset", "table_name": "", "label": "priya@x.com", "row_id": ""},
+                     {}) == "set a new password for <b>priya@x.com</b>"
+    # an unknown post type still reads, and an unknown action still reads
+    assert "page or post" in _sentence({"action": "update", "table_name": "posts", "label": "X", "row_id": "99"}, {})
+    assert "wibbled" in _sentence({"action": "wibbled", "table_name": "leads", "label": "X", "row_id": "1"}, {})
+
+
+def test_the_test_suite_never_writes_to_the_audit_log(app, monkeypatch):
+    """audit_log is append-only by trigger, and the live suite runs against the real Supabase — so
+    without this guard every run left zz-test rows in the client's Activity screen that the cleanup
+    fixture is forbidden to remove. throttle._off() sits out of TESTING for the same reason.
+    migrations/purge_test_audit_rows.sql clears up after the runs that happened before this."""
+    from iopstor import db
+
+    touched = []
+    monkeypatch.setattr(db, "table", lambda name: touched.append(name) or _NeverExecutes())
+    with app.test_request_context("/admin/posts"):
+        app.config["TESTING"] = True
+        db._audit("create", "posts", 1, {"title": [None, "zz-test"]}, user={"id": "u", "email": "e"})
+        assert touched == []            # nothing reached for a table at all
+
+    # and the guard is the TESTING flag, not the lack of a database: with it off it does try
+    with app.test_request_context("/admin/posts"):
+        app.config["TESTING"] = False
+        db._audit("create", "posts", 1, {"title": [None, "x"]}, user={"id": "u", "email": "e"})
+    assert touched == ["audit_log"], touched
+
+
+class _NeverExecutes:
+    """A PostgREST query builder that records the attempt and refuses to make it. _audit() swallows
+    everything, so the failure has to be visible in what was reached for, not in an exception."""
+
+    def insert(self, *a, **k):
+        return self
+
+    def execute(self):
+        raise AssertionError("the test suite must not write to audit_log")

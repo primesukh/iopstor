@@ -1,7 +1,9 @@
 """Browser admin at /admin: server-rendered forms on top of the same validation as the admin API.
 Login = Supabase email/password; tokens live in the signed Flask session cookie."""
+import difflib
 import json
 import secrets
+from collections import Counter
 from datetime import date
 from functools import wraps
 from urllib.parse import urlparse
@@ -12,10 +14,10 @@ from postgrest import APIError
 from supabase_auth.errors import AuthError
 from werkzeug.exceptions import HTTPException
 
-from . import db, seo
+from . import db, display_name, seo
 from .admin_api import apply_post
 from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login, set_password
-from .blocks import BLOCKS, EDITOR, LAYOUTS, at_path, render_blocks, warranty_active
+from .blocks import BLOCKS, EDITOR, LAYOUTS, at_path, blocks_text, render_blocks, validate_blocks, warranty_active
 from .throttle import clear as throttle_clear, client_ip, record_failure, retry_after, wait_text
 from .storage import delete_media, save_upload
 
@@ -94,13 +96,18 @@ def login_page():
         try:
             s = login(request.form.get("email", ""), request.form.get("password", ""))
         except AuthError:
-            record_failure(key)
-            return render_template("admin/login.html", error="Wrong email or password."), 401
+            db.audit_event("login_failed", request.form.get("email", ""))
+            if record_failure(key):   # True only on the attempt that closes the door, so a locked
+                db.audit_event("login_blocked", request.form.get("email", ""))   # login cannot
+            return render_template("admin/login.html", error="Wrong email or password."), 401   # flood
         throttle_clear(key)  # the password was right, so two typos before it cost nothing; whether
-        if db.one(db.table("users").select("id").eq("id", s["user_id"])) is None:   # there is a CMS
-            return render_template("admin/login.html",                              # row is separate
+        user = db.one(db.table("users").select("*").eq("id", s["user_id"]))         # there is a CMS
+        if user is None:                                                            # row is separate
+            db.audit_event("login_failed", request.form.get("email", ""))
+            return render_template("admin/login.html",
                                    error="This login has no CMS account. Ask an admin to add you under Users."), 403
         session["access_token"], session["refresh_token"] = s["access_token"], s["refresh_token"]
+        db.audit_event("login", user["email"], user=user)   # g.user is not set yet on this request
         return redirect(_safe_next())
     return render_template("admin/login.html")
 
@@ -140,7 +147,11 @@ def account():
             try:
                 login(g.user["email"], f.get("current_password", ""))
             except AuthError:
-                record_failure(key)
+                # the same wrong password the login screen records; this one is on the way to
+                # changing it, which makes it more worth knowing about, not less
+                db.audit_event("login_failed", g.user["email"])
+                if record_failure(key):
+                    db.audit_event("login_blocked", g.user["email"])
                 errors = ["That is not your current password."]
         if not errors:
             try:
@@ -151,6 +162,10 @@ def account():
             else:
                 throttle_clear(key)
                 session["access_token"], session["refresh_token"] = s["access_token"], s["refresh_token"]
+                # set_password() talks to GoTrue and writes no row of ours, so nothing in db.py can
+                # see this: a credential changed and the log would otherwise say nothing. The
+                # password itself is never recorded -- only that it was changed, and whose.
+                db.audit_event("password_changed", g.user["email"])
                 flash("Password changed.")
                 return redirect(url_for("admin_ui.account"))
     return render_template("admin/account.html", errors=errors), (429 if wait else 400 if errors else 200)
@@ -158,6 +173,8 @@ def account():
 
 @ui.get("/logout")
 def logout():
+    if user := current_user():   # no @ui_required on this route, so g.user was never set
+        db.audit_event("logout", user["email"], user=user)
     session.clear()
     return redirect(url_for("admin_ui.login_page"))
 
@@ -171,7 +188,8 @@ def dashboard():
     # exact-count round trip per post type
     counts = db.admin_counts()
     recent_leads = db.rows(db.table("leads").select("*").eq("status", "new").order("created_at", desc=True).limit(5))
-    recent_posts = db.rows(db.table("posts").select("id,title,status,updated_at").order("updated_at", desc=True).limit(5))
+    recent_posts = db.rows(db.table("posts").select("id,title,status,updated_at")
+                           .neq("status", "trash").order("updated_at", desc=True).limit(5))
     return render_template("admin/dashboard.html", counts=counts, new_leads=counts["_leads"],
                            recent_leads=recent_leads, recent_posts=recent_posts)
 
@@ -183,8 +201,9 @@ def posts():
     pt = db.post_type(slug=request.args.get("type", "")) if request.args.get("type") else None
     if pt:
         q = q.eq("post_type_id", pt["id"])
-    if s := request.args.get("status"):
-        q = q.eq("status", s)
+    # the trash is somewhere you go, never something that turns up in a list you did not ask for
+    status = request.args.get("status")
+    q = q.eq("status", status) if status else q.neq("status", "trash")
     if s := request.args.get("q"):
         s = s.replace(",", " ").replace("(", " ").replace(")", " ")
         q = q.or_(f"title.ilike.%{s}%,slug.ilike.%{s}%")
@@ -194,11 +213,19 @@ def posts():
     return render_template("admin/posts.html", result=result, current_type=pt, page=page, has_next=page * 50 < result["total"])
 
 
+def _as_ist(value):
+    """<input type="datetime-local"> posts a bare wall clock -- "2026-09-11T14:00" -- and every
+    parser downstream reads a missing offset as UTC, so an editor in India typing 2 pm was storing
+    7:30 pm. Stamped here rather than in db.parse_dt(), which is the fallback for the JSON API too,
+    where no offset should still mean UTC."""
+    return f"{value}+05:30" if value and "+" not in value and not value.endswith("Z") else value
+
+
 def _form_body(pt, existing):
     """Turn the post form into the same body dict the JSON API accepts."""
     f = request.form
     b = {"post_type": pt["slug"], "title": f.get("title", ""), "slug": f.get("slug", ""), "status": f.get("status", "draft"),
-         "published_at": f.get("published_at", ""), "excerpt": f.get("excerpt", ""),
+         "published_at": _as_ist(f.get("published_at", "")), "excerpt": f.get("excerpt", ""),
          "parent_id": f.get("parent_id") or None, "featured_media_id": f.get("featured_media_id") or None,
          "terms": [int(t) for t in f.getlist("terms")], "seo": {k: f.get(f"seo_{k}", "") for k in SEO_KEYS if f.get(f"seo_{k}")}}
     meta = dict(existing.get("meta") or {}) if existing else {}
@@ -306,6 +333,10 @@ def new_post():
 @ui_required()
 def edit_post(pk):
     post = db.hydrate(db.get_post(pk)) or abort(404)
+    if post["status"] == "trash":
+        # the POST half is the load-bearing one: the form has no trash option, so saving a trashed
+        # post would quietly bring it back as a draft with nobody having asked for that.
+        abort(404)
     pt = post["post_type"]
     if request.method == "POST":
         _, page = _save(pt, post)
@@ -319,10 +350,26 @@ def edit_post(pk):
 @ui.post("/posts/<int:pk>/delete")
 @ui_required("admin")
 def delete_post(pk):
+    """To the trash, not out of the database. The button still warns that it cannot be undone,
+    because that is the behaviour wanted from whoever clicks it -- the trash is an admin's safety
+    net, not a promise made at the confirmation dialog."""
     post = db.get_post(pk) or abort(404)
-    db.table("posts").delete().eq("id", pk).execute()
+    db.update("posts", pk, {"status": "trash"}, action="delete")
     flash(f"Deleted “{post['title']}”.")
     return redirect(url_for("admin_ui.posts", type=post["post_type"]["slug"]))
+
+
+@ui.post("/posts/<int:pk>/restore")
+@ui_required("admin")
+def restore_post(pk):
+    """Back as a draft, never straight onto the site: the page has been gone for a while and
+    whoever restores it should be the one who decides it goes live again."""
+    post = db.get_post(pk) or abort(404)
+    if post["status"] != "trash":
+        abort(404)   # only a deleted page is restorable; without this a stale form demotes a live one
+    db.update("posts", pk, {"status": "draft"}, action="restore")
+    flash(f"Restored {post['title']} as a draft.")
+    return redirect(url_for("admin_ui.posts", type=post["post_type"]["slug"], status="trash"))
 
 
 @ui.post("/canvas")
@@ -551,7 +598,7 @@ def warranty():
 @ui.post("/warranty/<int:pk>/delete")
 @ui_required("admin")
 def warranty_delete(pk):
-    db.table("warranties").delete().eq("id", pk).execute()
+    db.delete("warranties", pk)
     flash("Warranty record removed.")
     return redirect(url_for("admin_ui.warranty", q=request.args.get("q"), page=request.args.get("page")))
 
@@ -647,6 +694,7 @@ def user_password(pk):
     else:
         try:
             set_password(user, request.form["password"])
+            db.audit_event("password_reset", user["email"])   # whose, never what
             flash(f"New password set for {user['email']}. Tell them, and ask them to change it.")
         except AuthError as e:
             flash(f"Supabase refused: {getattr(e, 'message', e)}")
@@ -663,3 +711,272 @@ def user_delete(pk):
         delete_auth_user(user)
         flash(f"Removed {user['email']}.")
     return redirect(url_for("admin_ui.users"))
+
+
+# ---- activity log ----------------------------------------------------------
+
+# ---- saying what happened, in words an editor uses ------------------------
+# The screen's whole job is that somebody who has never seen the database can read a row aloud. So
+# every column name, table name and JSON blob is translated here before it reaches the template, and
+# the template does no thinking. These are pure functions on purpose -- they sit above the routes,
+# import nothing from them, and the offline tests call them directly.
+
+# {kind} is the thing, {name} is what it is called. A missing action falls through to the last line.
+VERB = {"create": "added the {kind} {name}", "update": "edited the {kind} {name}",
+        "delete": "deleted the {kind} {name}", "restore": "put the {kind} {name} back",
+        "login": "signed in", "logout": "signed out",
+        "login_failed": "tried to sign in as {name} and got the password wrong",
+        "login_blocked": "was locked out after too many wrong passwords (as {name})",
+        "password_changed": "changed their own password",
+        "password_reset": "set a new password for {name}",
+        "create_admin": "created the administrator account {name}"}
+
+# table -> the noun an editor would use for one of them. `posts` is absent on purpose: it is eight
+# different things (pages, blog posts, services, ...) and is answered per row by _post_context().
+KIND = {"media": "picture or file", "leads": "enquiry", "warranties": "warranty record",
+        "users": "person", "terms": "category or tag", "settings": "setting", "menus": "menu",
+        "redirects": "redirect", "post_types": "content type", "taxonomies": "grouping",
+        "payments": "payment", "audit_log": "activity entry"}
+
+# post_types.name is plural ("Pages", "Case Studies") because it titles a list; a sentence wants one
+# of them. Anything added later falls back to that plural name, the way base.html's ICON map falls
+# back to i-dot -- a new content type reads slightly oddly rather than not at all.
+POST_KIND = {"page": "page", "post": "blog post", "service": "service", "case_study": "case study",
+             "event": "event", "partner": "technology partner", "datasheet": "datasheet",
+             "product": "product"}
+
+# column -> the label the editor already sees for it elsewhere in the admin
+FIELD = {"blocks": "The writing on the page", "title": "Title", "slug": "Web address",
+         "status": "Status", "published_at": "Publish date", "excerpt": "Summary",
+         "featured_media_id": "Main picture", "parent_id": "Filed under", "menu_order": "Order",
+         "meta": "Details", "seo": "Search engine settings", "terms": "Categories and tags",
+         "author_id": "Author", "alt": "Description", "filename": "File name", "mime": "File type",
+         "size": "File size", "key": "Stored as", "url": "Address", "uploaded_by": "Uploaded by",
+         "role": "Permission level", "items": "Menu items", "value": "Value", "kind": "Form type",
+         "message": "Message", "data": "Answers from the form", "post_id": "About",
+         "serial": "Serial number", "customer_name": "Customer", "purchase_date": "Purchase date",
+         "expiry_date": "Expiry date", "amc": "Annual maintenance contract", "remarks": "Remarks",
+         "remarks_public": "Show the remarks to the customer", "from_path": "Old address",
+         "to_url": "Goes to", "code": "Redirect type", "hits": "Times followed",
+         "url_prefix": "Address starts with", "field_schema": "Its own fields",
+         "has_pages": "Gets pages of its own", "in_sitemap": "Offered to search engines"}
+
+STATUS = {"draft": "Draft", "published": "Published", "trash": "Deleted"}
+DIFF_MAX = 2000   # ponytail: word-diffing two novels on a 50-row page is real CPU; past this, plain text
+
+
+def _label_of(key):
+    """A column name as a person would say it. The fallback is the transform settings.html already
+    uses, so the two screens never disagree about what a key is called."""
+    return FIELD.get(key) or str(key).replace("_", " ").capitalize()
+
+
+def _block_name(t):
+    """The plain-English name of a section type, from the same table the section picker uses."""
+    return (EDITOR["names"].get(t) or ("", str(t), ""))[1]
+
+
+def _word_diff(before, after):
+    """The two texts, each marked up with what left and what arrived. Word-level, not character-
+    level: a word is the unit somebody writing a page thinks in, and a character diff of "Better" ->
+    "Getting Better." marks up the inside of words for no reader's benefit."""
+    a, b = before.split(), after.split()
+    was, now = [], []
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b).get_opcodes():
+        old, new = escape(" ".join(a[i1:i2])), escape(" ".join(b[j1:j2]))
+        if tag == "equal":
+            was.append(old)
+            now.append(new)
+            continue
+        if i2 > i1:
+            was.append(Markup("<del>%s</del>") % old)
+        if j2 > j1:
+            now.append(Markup("<ins>%s</ins>") % new)
+    return Markup(" ").join(was), Markup(" ").join(now)
+
+
+def _structural(was, now):
+    """What changed when the words did not. blocks_text() deliberately drops every picture, link and
+    setting (_NON_TEXT_KEYS), so swapping an image leaves two versions reading identically -- and
+    "nothing changed" would be a lie about a save that certainly did something."""
+    a, b = [x.get("type") for x in was], [x.get("type") for x in now]
+    gained = Counter(b) - Counter(a)
+    lost = Counter(a) - Counter(b)
+    if gained or lost:
+        said = []
+        if gained:
+            said.append("Added " + ", ".join(_block_name(t) for t in gained.elements()))
+        if lost:
+            said.append("Removed " + ", ".join(_block_name(t) for t in lost.elements()))
+        return "; ".join(said) + "."
+    if a != b:
+        return "Moved the sections around."
+    moved = [_block_name(t) for i, t in enumerate(b) if i < len(was) and was[i] != now[i]]
+    if moved:
+        return f"Changed a picture, link or setting in the {', '.join(moved)} section."
+    return "Nothing an editor would see."
+
+
+def _blocks_change(was, now):
+    """(what it said, what it says, a sentence about it) for a page's content."""
+    was, now = was or [], now or []
+    t_was, t_now = blocks_text(was), blocks_text(now)
+    if t_was == t_now:
+        return escape(t_was), escape(t_now), _structural(was, now)
+    if len(t_was.split()) > DIFF_MAX or len(t_now.split()) > DIFF_MAX:
+        return escape(t_was), escape(t_now), "A long page \u2014 the change is somewhere in here."
+    a, b = _word_diff(t_was, t_now)
+    return a, b, ""
+
+
+def _value(key, v, labels=None):
+    """One stored value, as something readable. Falls through to JSON only when nothing better
+    exists -- which, after this, is a shape nobody has met yet rather than the normal case."""
+    if v is None or v == "" or v == [] or v == {}:
+        return Markup('<span class="muted">nothing</span>')
+    if key == "status":
+        return escape(STATUS.get(v, v))
+    if isinstance(v, bool):
+        return escape("Yes" if v else "No")
+    if key.endswith(("_at", "_date")) and isinstance(v, str):
+        try:
+            return escape(db.ist(v))
+        except ValueError:
+            pass                      # not a date after all; fall through and print it
+    if key.endswith("_media_id") or key == "featured_media_id":
+        return escape((db.get_media(v) or {}).get("filename") or f"picture {v}")
+    if key == "terms" and isinstance(v, list):
+        return escape(", ".join(_term_names(v)) or "none")
+    if key == "items" and isinstance(v, list):
+        return escape(", ".join(str(i.get("label") or "") for i in v if isinstance(i, dict)) or "none")
+    if isinstance(v, dict):
+        # meta/seo/data: one line per key, named by the content type's own field labels where we
+        # know them (post_types.field_schema -- "Client", "Start date", "SKU")
+        labels = labels or {}
+        return Markup("<br>").join(Markup("<b>%s:</b> %s") % (labels.get(k) or _label_of(k), _value(k, x, labels))
+                                   for k, x in sorted(v.items()))
+    if isinstance(v, list):
+        return escape(", ".join(str(x) for x in v))
+    return escape(v)
+
+
+def _term_names(ids):
+    """Ids to names in one query, memoised for the page. Ids can outlive their terms -- deleting a
+    taxonomy cascades its terms away -- so an unresolved one keeps its number rather than vanishing."""
+    if not ids:
+        return []
+    found = db._cached(f"audit_terms_{','.join(map(str, sorted(ids)))}",
+                       lambda: {r["id"]: r["name"] for r in db.rows(db.table("terms").select("id,name").in_("id", ids))})
+    return [found.get(i, f"#{i}") for i in ids]
+
+
+def _post_context(entries):
+    """{row id: (what to call it, {meta key: its label})} for every post named on this page of the
+    log -- one query, not one per row. A post row always survives (deleting one only trashes it), so
+    this resolves for history as well as for today."""
+    ids = [e["row_id"] for e in entries if e["table_name"] == "posts" and str(e["row_id"]).isdigit()]
+    if not ids:
+        return {}
+    out = {}
+    for r in db.rows(db.table("posts").select("id, post_type:post_types(slug,name,field_schema)").in_("id", ids)):
+        pt = r.get("post_type") or {}
+        kind = POST_KIND.get(pt.get("slug")) or pt.get("name") or "page or post"
+        out[str(r["id"])] = (kind, {f.get("key"): f.get("label") for f in (pt.get("field_schema") or [])})
+    return out
+
+
+def _sentence(entry, posts):
+    """The row, as a sentence. Never blank: an unknown action still reads as itself."""
+    action, table = entry["action"], entry["table_name"]
+    name = entry["label"] or entry["row_id"] or ""
+    if table == "settings":
+        name = _label_of(name)
+    kind = posts.get(str(entry["row_id"]), ("page or post", {}))[0] if table == "posts" \
+        else KIND.get(table) or (table or "").replace("_", " ")
+    tmpl = VERB.get(action) or (action.replace("_", " ") + " the {kind} {name}")
+    return Markup(tmpl).format(kind=kind, name=Markup("<b>%s</b>") % escape(name) if name else "")
+
+
+def _present(entry, posts, people):
+    """Everything the template needs, worked out here so the template does none of it."""
+    person = people.get(entry["user_id"]) or ({"email": entry["user_email"]} if entry["user_email"] else None)
+    labels = posts.get(str(entry["row_id"]), ("", {}))[1]
+    fields = []
+    for k, pair in sorted((entry["changes"] or {}).items()):
+        if k == "blocks":
+            was, now, note = _blocks_change(pair[0], pair[1])
+        else:
+            was, now, note = _value(k, pair[0], labels), _value(k, pair[1], labels), ""
+        fields.append({"label": _label_of(k), "was": was, "now": now, "note": note})
+    return {**entry, "can_restore": _restorable(entry), "fields": fields,
+            "who": display_name(person) if person else "the website",
+            "sentence": _sentence(entry, posts)}
+
+
+AUDIT_ACTIONS = ("create", "update", "delete", "restore", "login", "logout", "login_failed",
+                 "login_blocked", "password_changed", "password_reset", "create_admin")
+
+
+def _restorable(entry):
+    """What can be put back. An update can, always -- the "was" half of every changed field is
+    stored. A deleted post can, because deleting a post only moves it to the trash. Every other
+    delete is real, and re-creating the row would be a lie: the user's Supabase login is gone, the
+    media file has left the bucket, the taxonomy's terms cascaded away. The entry still shows what
+    the row held, which is what makes it evidence."""
+    return entry["action"] == "update" or (entry["action"] == "delete" and entry["table_name"] == "posts")
+
+
+@ui.get("/audit")
+@ui_required("admin")
+def audit():
+    """Everything anybody did, newest first. Ordered by id rather than by `at` so the primary key
+    does the sorting -- the two agree, ids being handed out in time order, and that is one index
+    this table then does not need."""
+    q = db.table("audit_log").select("*", count="exact")
+    for arg, col in (("user", "user_id"), ("table", "table_name"), ("action", "action")):
+        if (v := request.args.get(arg)) and v != "-":
+            q = q.eq(col, v)
+    if request.args.get("user") == "-":
+        q = q.is_("user_id", "null")       # the website itself: a form sent by somebody not signed in
+    page = max(request.args.get("page", 1, type=int) or 1, 1)
+    result = db.paginate(q.order("id", desc=True), page, 50)
+    people = db.rows(db.table("users").select("id,email,name").order("email"))
+    posts = _post_context(result["items"])
+    by_id = {p["id"]: p for p in people}
+    result["items"] = [_present(r, posts, by_id) for r in result["items"]]
+    return render_template("admin/audit.html", result=result, page=page, people=people,
+                           actions=AUDIT_ACTIONS, kinds=sorted(KIND.items()),
+                           has_next=page * 50 < result["total"])
+
+
+@ui.post("/audit/<int:pk>/restore")
+@ui_required("admin")
+def audit_restore(pk):
+    """Write the "was" half of an entry back. One stored format, three writers: db.update() reaches
+    anything keyed by id, and settings and menus are keyed by their own column, so they need the
+    helper that knows that. The restore is an ordinary write, so it is itself logged."""
+    entry = db.one(db.table("audit_log").select("*").eq("id", pk)) or abort(404)
+    if not _restorable(entry):
+        abort(400, "there is nothing on this entry to go back to")
+    old = {k: pair[0] for k, pair in (entry["changes"] or {}).items()}
+    name, row_id = entry["table_name"], entry["row_id"]
+    # it was valid when it was saved; a block type can have been renamed or dropped since
+    errors = validate_blocks(old["blocks"] or []) if "blocks" in old else []
+    if name == "settings" and old.get("value") is None:
+        # settings.value is NOT NULL, so "it did not exist before" cannot be restored by writing it
+        errors = ["this setting had no value before that change"]
+    if errors:
+        flash(f"Cannot restore: {errors[0]}")
+    else:
+        if name == "posts" and "terms" in old:
+            # set_post_terms() logs against the post, so the entry says table "posts" but the one
+            # field in it is not a posts column: writing it back through db.update() would 400.
+            db.set_post_terms(int(row_id), old["terms"] or [])
+        elif name == "settings":
+            db.set_settings({row_id: old.get("value")})
+        elif name == "menus":
+            db.set_menu(row_id, old.get("items") or [])
+        else:
+            db.update(name, row_id, old, action="restore")
+        flash(f"Put {entry['label'] or name} back the way it was.")
+    return redirect(url_for("admin_ui.audit", **{k: v for k, v in request.args.items()}))

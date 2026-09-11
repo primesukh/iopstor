@@ -43,4 +43,4 @@ def save_upload(fs, user_id=None):
 
 def delete_media(media):
     _bucket().remove([media["key"]])
-    db.table("media").delete().eq("id", media["id"]).execute()
+    db.delete("media", media["id"])

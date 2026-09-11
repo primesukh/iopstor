@@ -23,7 +23,8 @@ Content is edited in the browser admin at `/admin` (login with a Supabase Auth a
 ```
 iopstor/__init__.py      create_app(), /healthz (liveness only, no DB call), blueprint + CLI registration, Jinja globals rupees()/media_url/media_alt/media_download; refuses to start without SECRET_KEY, SITE_URL or any SUPABASE_* key
 iopstor/config.py        env → constants (module, no class)
-iopstor/db.py            supabase-py clients + query helpers: table(), one(), rows(), insert(), update(), live(), select_posts(), tree(),
+iopstor/db.py            supabase-py clients + query helpers: table(), one(), rows(), insert(), update(), delete(), live(), select_posts(), tree(),
+                         _audit()/audit_event() (every write is logged from inside the three write helpers), ist()/ist_input(),
                          with_paths()/ancestors()/hydrate() (hierarchical URLs, has_pages), unique_slug(), ensure_term(), paginate(), admin_counts(), post_types()/settings() caches
 iopstor/auth.py          login/refresh/logout via GoTrue, verify_jwt() (local HS256), require_role(), create_auth_user()
 iopstor/storage.py       save_upload()/delete_media() → Supabase Storage bucket + media table; public_path() (= media.url), fetch() (the bytes back)
@@ -32,14 +33,14 @@ iopstor/seo.py           site(), build_meta(), jsonld(), md_url()
 iopstor/payments.py      PaymentGateway, DummyGateway, GATEWAYS
 iopstor/throttle.py      failed-password counter shared by every worker (sqlite on tmpfs); client_ip() reads CF-Connecting-IP
 iopstor/admin_api.py     /api/admin/v1 (JWT-protected REST; apply_post() is the single validation path)
-iopstor/admin_ui.py      browser admin at /admin: session login, post form + POST /admin/canvas + /admin/preview, media, leads, warranty, menus, settings, users
+iopstor/admin_ui.py      browser admin at /admin: session login, post form + POST /admin/canvas + /admin/preview, media, leads, warranty, menus, settings, users, /audit (the activity log + restore)
 iopstor/public.py        catch-all resolver (+ .md twins, /checkout), archives, /media/<key> file proxy, sitemap/robots/llms/feed, /api/v1 public read API, leads, checkout
 iopstor/cli.py           flask migrate | seed | import-media | create-admin
 iopstor/templates/       base.html post.html archive.html 404.html checkout.html _card.html (the one card macro), blocks/<type>.html (18, each a full-width <section>), admin/*.html
 iopstor/static/site.css  the whole public theme: tokens at the top, header + mega panel + footer, .cards/.card/.btn/.section, layout group (.al-* .w-* .t-*), one rule-group per block
 iopstor/static/admin.css admin-only rules layered on site.css; canvas.css = editor chrome inside the iframe; admin.js = the editor (plain JS, no build); vendor/sortable.min.js
 docker-compose.yml       production only: `app` (this Dockerfile) + `cloudflared` as one Dokploy Compose service; `app` has no ports and no Traefik labels, so the tunnel is the only ingress
-migrations/              0000_bootstrap.sql (run once by hand in Studio) + NNNN_name.sql applied by `flask migrate`; repair_schema_migrations.sql is a hand-run repair, not a step
+migrations/              0000_bootstrap.sql (run once by hand in Studio) + NNNN_name.sql applied by `flask migrate`; repair_schema_migrations.sql and purge_test_audit_rows.sql are hand-run, not steps
 tests/                   pytest: test_offline.py always; the rest are marked live and skip without the Supabase in .env
 docs/                    TECHNICAL.md + NON-TECHNICAL.md — the two docs every change keeps current
 .claude/                 docs/ (design.md, requirements.md), skills/ (the procedures below), hooks/session-start.sh, settings.json (enforced rules)
@@ -130,7 +131,8 @@ So the full order is: branch → work → three docs → `/pr` → **stop** → 
 - Per-type fields live in `posts.meta` (JSON) described by `post_types.field_schema` (types: text, textarea, number, date, url, media, json, kv). Page content lives in `posts.blocks` (ordered `[{type, data}]`; a `columns` block nests one level).
 - `iopstor/blocks.py` `BLOCKS` is the only place to add a block type; `/new-block` lists the other ten places it must also appear (`EDITOR` names/seed/order, the template wrapped in `<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">…`, a `blocks_md()` branch, a `site.css` rule group, three offline tests). `hero` is the only block that renders its own `<h1>`, and `post.html` skips the page head when a post starts with a hero or a columns block. Unknown types are rejected on save. Anything an editor types that would land in a class or style attribute goes through a whitelist (`section_class()`, `col_widths()`) or is a checkbox.
 - Theme changes go in `static/site.css` (shared by the public site, `body.admin` and the editor canvas; admin extras in `static/admin.css`, canvas chrome in `canvas.css`); no CSS framework, no build step, no JS on the public site. The client's mock in `website_assets/mock-website.html` is the design reference, and the client's later decisions in `requirements.md` override it (white header, price on the Buy button). Verify with `/theme-check`. Public forms post plain HTML to `/api/v1/leads` and get redirected back with `?sent=1`.
-- Public queries go through `db.live(q)` (`status='published' AND published_at <= now()`; a future `published_at` = scheduled). A `has_pages=false` type gets `path=None` from `with_paths()`, and that one value removes its detail page, sitemap entry, `.md` twin and card link.
+- Public queries go through `db.live(q)` (`status='published' AND published_at <= now()`; a future `published_at` = scheduled). A `has_pages=false` type gets `path=None` from `with_paths()`, and that one value removes its detail page, sitemap entry, `.md` twin and card link. `status='trash'` is a deleted post — the row is kept so it can be restored, and `live()` excludes it for free.
+- **Every write is audited.** `db.insert()/update()/delete()` write an `audit_log` row themselves, so a new write path is logged without being asked; `_audit()` is silent outside a request context, which is what keeps `flask seed` out of it. Never write to `audit_log` through `insert()` (it recurses), and never add a route-level audit call for something the helpers already cover. A change that touches **no table of ours** — a GoTrue password, a login, a lockout — is invisible to `db.py` and needs an explicit `db.audit_event()`; `test_every_route_that_can_change_something_is_accounted_for` walks `url_map` and fails until a new non-GET route is written down as logged or deliberately not.
 - URL scheme: pages at `/<slug>` (slug `home` = `/`), others at `/<url_prefix>/<slug>`, hierarchical types at `/<prefix>/<parent>/<slug>`,
   term archives at `/<taxonomy>/<term>`, `/<prefix>/<slug>/checkout` for a product with a price, and every resolvable URL + `.md` as its Markdown twin. `checkout` and `index` are reserved slugs. Slugs are unique per post type.
 - **Every picture and PDF is served by the app**, at `/media/<bucket key>` (`public.media_file()`), never straight from the Storage gateway: Supabase is LAN-only and Flask is the only exposed service. `media.url` stores that path (`storage.public_path()`), which is why every reader — the `media_url`/`media_download` Jinja globals, `featured_media.url`, `seo._image()`, `blocks._media()`, the admin JSON — needs no special case. `media` is a reserved first URL segment.
@@ -138,7 +140,7 @@ So the full order is: branch → work → three docs → `/pr` → **stop** → 
 - Auth: admin API expects `Authorization: Bearer <Supabase JWT>`; the browser admin keeps the tokens in the signed session cookie and refreshes on expiry. Both verify locally with `SUPABASE_JWT_SECRET` (HS256). `users.id` = GoTrue `sub`. Browser POSTs carry a `csrf` field checked by `ui_required`.
   Roles: `editor` < `admin`. A GoTrue login without a `users` row gets 403.
 - Payments: only `PaymentGateway` subclasses in `payments.py`; `PAYMENT_PROVIDER` env selects one. `dummy` is the placeholder.
-- Ponytail mode is on for this repo: fewest files, stdlib first, mark deliberate ceilings with `# ponytail:` comments (36 in source; `/ponytail-debt` lists them). Non-trivial logic gets one small pytest test in `tests/test_offline.py` when it can run without Supabase.
+- Ponytail mode is on for this repo: fewest files, stdlib first, mark deliberate ceilings with `# ponytail:` comments (38 in source; `/ponytail-debt` lists them). Non-trivial logic gets one small pytest test in `tests/test_offline.py` when it can run without Supabase.
 
 ## Env keys (`.env.example`)
 

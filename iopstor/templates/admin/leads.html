@@ -18,7 +18,7 @@
     {% if l.data %}<p class="lead-extra">{% for k, v in l.data.items() %}<span class="chip">{{ k.replace('_',' ') }}: {{ v }}</span>{% endfor %}</p>{% endif %}
   </div>
   <div class="lead-side">
-    <p class="muted">{{ l.created_at[:16].replace('T',' ') }}</p>
+    <p class="muted">{{ l.created_at | ist }}</p>
     <form method="post" action="{{ url_for('admin_ui.lead_status', pk=l.id, **request.args) }}">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <select name="status" onchange="this.form.submit()">

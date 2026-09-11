@@ -5,7 +5,7 @@ from supabase_auth.errors import AuthApiError, AuthError
 from werkzeug.exceptions import HTTPException
 
 from . import db
-from .auth import ROLES, create_auth_user, delete_auth_user, login, logout, refresh, require_role
+from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login, logout, refresh, require_role
 from .blocks import BLOCKS, validate_blocks
 from .storage import delete_media, save_upload
 from .throttle import clear as throttle_clear, client_ip, record_failure, retry_after
@@ -84,12 +84,16 @@ def auth_login():
     try:
         s = login(b.get("email", ""), b.get("password", ""))
     except AuthApiError:
-        record_failure(key)
+        db.audit_event("login_failed", b.get("email", ""))
+        if record_failure(key):   # once, at the crossing -- not on every attempt behind a shut door
+            db.audit_event("login_blocked", b.get("email", ""))
         fail("invalid email or password", 401)
     throttle_clear(key)  # the password was right; whether there is a CMS row is a separate question
     user = db.one(db.table("users").select("*").eq("id", s["user_id"]))
     if user is None:
+        db.audit_event("login_failed", b.get("email", ""))
         fail("no CMS account for this login; ask an admin to add you", 403)
+    db.audit_event("login", user["email"], user=user)
     return jsonify(access_token=s["access_token"], refresh_token=s["refresh_token"], expires_in=s["expires_in"], user=user)
 
 
@@ -106,10 +110,14 @@ def auth_refresh():
 def auth_logout():
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
+        user = current_user()   # the route has no @require_role, so g.user was never set
         try:
             logout(auth[7:])
         except AuthError:
             pass
+        # unconditional: the session above is revoked whether or not the token still names a CMS
+        # user, and a revocation nobody can see is exactly what this log is for
+        db.audit_event("logout", user["email"] if user else "", user=user)
     return "", 204
 
 
@@ -173,7 +181,7 @@ def delete_post_type(slug):
     pt = _post_type_or_404(slug)
     if db.one(db.table("posts").select("id").eq("post_type_id", pt["id"])):
         fail("post type still has posts", 409)
-    db.table("post_types").delete().eq("id", pt["id"]).execute()
+    db.delete("post_types", pt["id"])
     db.uncache("post_types")
     return "", 204
 
@@ -266,12 +274,13 @@ def list_posts():
     if t := request.args.get("type"):
         pt = db.post_type(slug=t) or abort(404)
         q = q.eq("post_type_id", pt["id"])
-    if s := request.args.get("status"):
-        q = q.eq("status", s)
     if term := request.args.get("term", type=int):
         q = db.table("posts").select(db.POST_SELECT_BY_TERM, count="exact").eq("post_terms.term_id", term)
         if t:
             q = q.eq("post_type_id", pt["id"])
+    # after the ?term= branch, which rebuilds q from scratch and would otherwise drop the filter
+    status = request.args.get("status")
+    q = q.eq("status", status) if status else q.neq("status", "trash")
     if s := request.args.get("q"):
         s = s.replace(",", " ").replace("(", " ").replace(")", " ")  # ponytail: PostgREST or= syntax delimiters
         q = q.or_(f"title.ilike.%{s}%,slug.ilike.%{s}%")
@@ -295,16 +304,24 @@ def create_post():
     return jsonify(db.hydrate(db.get_post(row["id"]))), 201
 
 
+def _post_or_404(pk):
+    """In the trash is gone: the API neither shows a trashed post nor lets one be edited back to
+    life. Restoring is /admin/posts/<pk>/restore, which is admin-only, and this keeps the two ends
+    from disagreeing about who may undo a deletion."""
+    post = db.get_post(pk) or abort(404)
+    return abort(404) if post["status"] == "trash" else post
+
+
 @bp.get("/posts/<int:pk>")
 @require_role("editor")
 def get_post(pk):
-    return jsonify(db.hydrate(db.get_post(pk) or abort(404)))
+    return jsonify(db.hydrate(_post_or_404(pk)))
 
 
 @bp.patch("/posts/<int:pk>")
 @require_role("editor")
 def update_post(pk):
-    post = db.get_post(pk) or abort(404)
+    post = _post_or_404(pk)
     changes, term_ids = apply_post(post, body())
     if changes:
         db.update("posts", pk, changes)
@@ -317,8 +334,11 @@ def update_post(pk):
 @bp.delete("/posts/<int:pk>")
 @require_role("admin")
 def delete_post(pk):
+    """Moves the post to the trash; nothing is destroyed. See db.update()'s `action` and the
+    admin's Trash filter -- a deleted page keeps its id, so its children, its categories and the
+    enquiries about it all survive the round trip, which re-creating a row never could."""
     get_or_404("posts", pk, "id")
-    db.table("posts").delete().eq("id", pk).execute()
+    db.update("posts", pk, {"status": "trash"}, action="delete")
     return "", 204
 
 
@@ -362,7 +382,7 @@ def update_taxonomy(slug):
 @require_role("admin")
 def delete_taxonomy(slug):
     t = _taxonomy(slug)
-    db.table("taxonomies").delete().eq("id", t["id"]).execute()  # terms + post_terms cascade in Postgres
+    db.delete("taxonomies", t["id"])  # terms + post_terms cascade in Postgres
     return "", 204
 
 
@@ -397,7 +417,7 @@ def update_term(pk):
 @require_role("editor")
 def delete_term(pk):
     get_or_404("terms", pk, "id")
-    db.table("terms").delete().eq("id", pk).execute()
+    db.delete("terms", pk)
     return "", 204
 
 
@@ -468,7 +488,7 @@ def update_lead(pk):
 @require_role("editor")
 def delete_lead(pk):
     get_or_404("leads", pk, "id")
-    db.table("leads").delete().eq("id", pk).execute()
+    db.delete("leads", pk)
     return "", 204
 
 
@@ -504,7 +524,10 @@ def put_menu(slug):
     existing = db.one(db.table("menus").select("*").eq("slug", slug))
     if existing:
         row = {**existing, **{k: v for k, v in row.items() if k in b or k == "slug"}}
-    return jsonify(db.table("menus").upsert(row, on_conflict="slug").execute().data[0])
+    # through db.set_menu(), like /admin/menus: this was the one table write in the app that reached
+    # PostgREST without passing a logged helper, so a menu changed through the API left no trace.
+    db.set_menu(slug, row["items"], name=row["name"])
+    return jsonify(db.one(db.table("menus").select("*").eq("slug", slug)))
 
 
 @bp.get("/redirects")
@@ -529,7 +552,7 @@ def create_redirect():
 @require_role("admin")
 def delete_redirect(pk):
     get_or_404("redirects", pk, "id")
-    db.table("redirects").delete().eq("id", pk).execute()
+    db.delete("redirects", pk)
     return "", 204
 
 
