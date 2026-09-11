@@ -359,3 +359,37 @@
 .menu-row input,.menu-row select{margin:0}
 .menu-row .grip{cursor:grab;color:var(--muted);user-select:none}
 .menu-row .row-del{margin:0}
+
+/* ---- activity log ---------------------------------------------------------
+   The audit screen is the posts table with one extra trick: every row can open
+   into the fields that changed. A <details> rather than a second page, because
+   "what did this edit actually do" is a glance, not a destination. */
+.pill.create{background:var(--green-bg);color:var(--green)}
+.pill.delete,.pill.login_failed,.pill.trash{background:var(--red-bg);color:var(--red)}
+.pill.restore,.pill.login{background:var(--blue-tint);color:var(--blue-hover)}
+.aud-when{white-space:nowrap}
+/* Pinned columns are a wide-screen luxury. Narrow, they push What -- the column the screen exists
+   for -- off the side of the scrolling card, so below the shell's own breakpoint the date wraps
+   and the browser shares the width out itself. */
+@media(max-width:1000px){
+  .aud-when{white-space:normal}
+  .aud-table td,.aud-table th{width:auto}
+  .aud-table td:last-child,.aud-table th:last-child{width:auto;white-space:normal;word-break:break-all}
+}
+.aud-what{margin-left:8px}
+.aud-diff{margin-top:8px}
+/* The three narrow columns are pinned, so the diff table inside What takes what is left. Without
+   this the nested table pushes the row wider than the card and .admin table's overflow:hidden
+   clips the address off the end of it. */
+.aud-table td:first-child,.aud-table th:first-child{width:170px}
+.aud-table td:nth-child(2),.aud-table th:nth-child(2){width:190px}
+/* an IPv4 always fits; a v6 address is ellipsised with the whole of it on the cell title,
+   which beats breaking either of them across three lines mid-octet */
+.aud-table td:last-child,.aud-table th:last-child{width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aud-diff summary{cursor:pointer;font:600 13px/1.4 var(--body);color:var(--blue)}
+.aud-diff form{margin-top:10px}
+.aud-fields{margin-top:8px;table-layout:fixed;width:100%;min-width:0}
+.aud-fields td{vertical-align:top;font-size:13px;word-break:break-word}
+.aud-fields .aud-field{font:600 13px/1.4 var(--mono);width:22%}
+.aud-fields pre{margin:0;max-height:220px;overflow:auto;white-space:pre-wrap;font:400 12px/1.5 var(--mono);color:var(--muted)}
+.t-restore{margin-top:4px}

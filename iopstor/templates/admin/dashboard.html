@@ -18,7 +18,7 @@
   <div class="panel">
     <div class="panel-head"><h2>Recently edited</h2><a href="{{ url_for('admin_ui.posts') }}">All content</a></div>
     {% for p in recent_posts %}<a class="panel-row" href="{{ url_for('admin_ui.edit_post', pk=p.id) }}">
-      <span>{{ p.title }}<span class="sub">{{ p.updated_at[:10] }}</span></span>
+      <span>{{ p.title }}<span class="sub">{{ p.updated_at | ist }}</span></span>
       <span class="pill {{ p.status }}">{{ p.status }}</span></a>
     {% else %}<p class="panel-empty">Nothing yet.</p>{% endfor %}
   </div>

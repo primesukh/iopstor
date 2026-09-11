@@ -15,7 +15,7 @@ from werkzeug.exceptions import HTTPException
 from . import db, seo
 from .admin_api import apply_post
 from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login, set_password
-from .blocks import BLOCKS, EDITOR, LAYOUTS, at_path, render_blocks, warranty_active
+from .blocks import BLOCKS, EDITOR, LAYOUTS, at_path, render_blocks, validate_blocks, warranty_active
 from .throttle import clear as throttle_clear, client_ip, record_failure, retry_after, wait_text
 from .storage import delete_media, save_upload
 
@@ -95,12 +95,16 @@ def login_page():
             s = login(request.form.get("email", ""), request.form.get("password", ""))
         except AuthError:
             record_failure(key)
+            db.audit_event("login_failed", request.form.get("email", ""))
             return render_template("admin/login.html", error="Wrong email or password."), 401
         throttle_clear(key)  # the password was right, so two typos before it cost nothing; whether
-        if db.one(db.table("users").select("id").eq("id", s["user_id"])) is None:   # there is a CMS
-            return render_template("admin/login.html",                              # row is separate
+        user = db.one(db.table("users").select("*").eq("id", s["user_id"]))         # there is a CMS
+        if user is None:                                                            # row is separate
+            db.audit_event("login_failed", request.form.get("email", ""))
+            return render_template("admin/login.html",
                                    error="This login has no CMS account. Ask an admin to add you under Users."), 403
         session["access_token"], session["refresh_token"] = s["access_token"], s["refresh_token"]
+        db.audit_event("login", user["email"], user=user)   # g.user is not set yet on this request
         return redirect(_safe_next())
     return render_template("admin/login.html")
 
@@ -158,6 +162,8 @@ def account():
 
 @ui.get("/logout")
 def logout():
+    if user := current_user():   # no @ui_required on this route, so g.user was never set
+        db.audit_event("logout", user["email"], user=user)
     session.clear()
     return redirect(url_for("admin_ui.login_page"))
 
@@ -171,7 +177,8 @@ def dashboard():
     # exact-count round trip per post type
     counts = db.admin_counts()
     recent_leads = db.rows(db.table("leads").select("*").eq("status", "new").order("created_at", desc=True).limit(5))
-    recent_posts = db.rows(db.table("posts").select("id,title,status,updated_at").order("updated_at", desc=True).limit(5))
+    recent_posts = db.rows(db.table("posts").select("id,title,status,updated_at")
+                           .neq("status", "trash").order("updated_at", desc=True).limit(5))
     return render_template("admin/dashboard.html", counts=counts, new_leads=counts["_leads"],
                            recent_leads=recent_leads, recent_posts=recent_posts)
 
@@ -183,8 +190,9 @@ def posts():
     pt = db.post_type(slug=request.args.get("type", "")) if request.args.get("type") else None
     if pt:
         q = q.eq("post_type_id", pt["id"])
-    if s := request.args.get("status"):
-        q = q.eq("status", s)
+    # the trash is somewhere you go, never something that turns up in a list you did not ask for
+    status = request.args.get("status")
+    q = q.eq("status", status) if status else q.neq("status", "trash")
     if s := request.args.get("q"):
         s = s.replace(",", " ").replace("(", " ").replace(")", " ")
         q = q.or_(f"title.ilike.%{s}%,slug.ilike.%{s}%")
@@ -194,11 +202,19 @@ def posts():
     return render_template("admin/posts.html", result=result, current_type=pt, page=page, has_next=page * 50 < result["total"])
 
 
+def _as_ist(value):
+    """<input type="datetime-local"> posts a bare wall clock -- "2026-09-11T14:00" -- and every
+    parser downstream reads a missing offset as UTC, so an editor in India typing 2 pm was storing
+    7:30 pm. Stamped here rather than in db.parse_dt(), which is the fallback for the JSON API too,
+    where no offset should still mean UTC."""
+    return f"{value}+05:30" if value and "+" not in value and not value.endswith("Z") else value
+
+
 def _form_body(pt, existing):
     """Turn the post form into the same body dict the JSON API accepts."""
     f = request.form
     b = {"post_type": pt["slug"], "title": f.get("title", ""), "slug": f.get("slug", ""), "status": f.get("status", "draft"),
-         "published_at": f.get("published_at", ""), "excerpt": f.get("excerpt", ""),
+         "published_at": _as_ist(f.get("published_at", "")), "excerpt": f.get("excerpt", ""),
          "parent_id": f.get("parent_id") or None, "featured_media_id": f.get("featured_media_id") or None,
          "terms": [int(t) for t in f.getlist("terms")], "seo": {k: f.get(f"seo_{k}", "") for k in SEO_KEYS if f.get(f"seo_{k}")}}
     meta = dict(existing.get("meta") or {}) if existing else {}
@@ -306,6 +322,10 @@ def new_post():
 @ui_required()
 def edit_post(pk):
     post = db.hydrate(db.get_post(pk)) or abort(404)
+    if post["status"] == "trash":
+        # the POST half is the load-bearing one: the form has no trash option, so saving a trashed
+        # post would quietly bring it back as a draft with nobody having asked for that.
+        abort(404)
     pt = post["post_type"]
     if request.method == "POST":
         _, page = _save(pt, post)
@@ -319,10 +339,26 @@ def edit_post(pk):
 @ui.post("/posts/<int:pk>/delete")
 @ui_required("admin")
 def delete_post(pk):
+    """To the trash, not out of the database. The button still warns that it cannot be undone,
+    because that is the behaviour wanted from whoever clicks it -- the trash is an admin's safety
+    net, not a promise made at the confirmation dialog."""
     post = db.get_post(pk) or abort(404)
-    db.table("posts").delete().eq("id", pk).execute()
+    db.update("posts", pk, {"status": "trash"}, action="delete")
     flash(f"Deleted “{post['title']}”.")
     return redirect(url_for("admin_ui.posts", type=post["post_type"]["slug"]))
+
+
+@ui.post("/posts/<int:pk>/restore")
+@ui_required("admin")
+def restore_post(pk):
+    """Back as a draft, never straight onto the site: the page has been gone for a while and
+    whoever restores it should be the one who decides it goes live again."""
+    post = db.get_post(pk) or abort(404)
+    if post["status"] != "trash":
+        abort(404)   # only a deleted page is restorable; without this a stale form demotes a live one
+    db.update("posts", pk, {"status": "draft"}, action="restore")
+    flash(f"Restored {post['title']} as a draft.")
+    return redirect(url_for("admin_ui.posts", type=post["post_type"]["slug"], status="trash"))
 
 
 @ui.post("/canvas")
@@ -551,7 +587,7 @@ def warranty():
 @ui.post("/warranty/<int:pk>/delete")
 @ui_required("admin")
 def warranty_delete(pk):
-    db.table("warranties").delete().eq("id", pk).execute()
+    db.delete("warranties", pk)
     flash("Warranty record removed.")
     return redirect(url_for("admin_ui.warranty", q=request.args.get("q"), page=request.args.get("page")))
 
@@ -663,3 +699,68 @@ def user_delete(pk):
         delete_auth_user(user)
         flash(f"Removed {user['email']}.")
     return redirect(url_for("admin_ui.users"))
+
+
+# ---- activity log ----------------------------------------------------------
+
+AUDIT_ACTIONS = ("create", "update", "delete", "restore", "login", "logout", "login_failed")
+
+
+def _restorable(entry):
+    """What can be put back. An update can, always -- the "was" half of every changed field is
+    stored. A deleted post can, because deleting a post only moves it to the trash. Every other
+    delete is real, and re-creating the row would be a lie: the user's Supabase login is gone, the
+    media file has left the bucket, the taxonomy's terms cascaded away. The entry still shows what
+    the row held, which is what makes it evidence."""
+    return entry["action"] == "update" or (entry["action"] == "delete" and entry["table_name"] == "posts")
+
+
+@ui.get("/audit")
+@ui_required("admin")
+def audit():
+    """Everything anybody did, newest first. Ordered by id rather than by `at` so the primary key
+    does the sorting -- the two agree, ids being handed out in time order, and that is one index
+    this table then does not need."""
+    q = db.table("audit_log").select("*", count="exact")
+    for arg, col in (("user", "user_id"), ("table", "table_name"), ("action", "action")):
+        if v := request.args.get(arg):
+            q = q.eq(col, v)
+    page = max(request.args.get("page", 1, type=int) or 1, 1)
+    result = db.paginate(q.order("id", desc=True), page, 50,
+                         transform=lambda r: {**r, "can_restore": _restorable(r)})
+    people = db.rows(db.table("users").select("id,email,name").order("email"))
+    return render_template("admin/audit.html", result=result, page=page, people=people,
+                           actions=AUDIT_ACTIONS, has_next=page * 50 < result["total"])
+
+
+@ui.post("/audit/<int:pk>/restore")
+@ui_required("admin")
+def audit_restore(pk):
+    """Write the "was" half of an entry back. One stored format, three writers: db.update() reaches
+    anything keyed by id, and settings and menus are keyed by their own column, so they need the
+    helper that knows that. The restore is an ordinary write, so it is itself logged."""
+    entry = db.one(db.table("audit_log").select("*").eq("id", pk)) or abort(404)
+    if not _restorable(entry):
+        abort(400, "there is nothing on this entry to go back to")
+    old = {k: pair[0] for k, pair in (entry["changes"] or {}).items()}
+    name, row_id = entry["table_name"], entry["row_id"]
+    # it was valid when it was saved; a block type can have been renamed or dropped since
+    errors = validate_blocks(old["blocks"] or []) if "blocks" in old else []
+    if name == "settings" and old.get("value") is None:
+        # settings.value is NOT NULL, so "it did not exist before" cannot be restored by writing it
+        errors = ["this setting had no value before that change"]
+    if errors:
+        flash(f"Cannot restore: {errors[0]}")
+    else:
+        if name == "posts" and "terms" in old:
+            # set_post_terms() logs against the post, so the entry says table "posts" but the one
+            # field in it is not a posts column: writing it back through db.update() would 400.
+            db.set_post_terms(int(row_id), old["terms"] or [])
+        elif name == "settings":
+            db.set_settings({row_id: old.get("value")})
+        elif name == "menus":
+            db.set_menu(row_id, old.get("items") or [])
+        else:
+            db.update(name, row_id, old, action="restore")
+        flash(f"Put {entry['label'] or name} back the way it was.")
+    return redirect(url_for("admin_ui.audit", **{k: v for k, v in request.args.items()}))

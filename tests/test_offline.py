@@ -864,3 +864,104 @@ def test_public_pages_mint_no_session_cookie(app):
         assert _globals() == {}                     # public: nothing minted, session untouched
     with app.test_request_context("/admin/login"):
         assert _globals()["csrf"]                   # admin: the editor still gets a token
+
+
+def test_audit_records_only_the_fields_that_changed():
+    """The whole audit log is this one function: what the row was, what it became, per field.
+    updated_at has to stay out of it — the moddatetime trigger moves it on every single write, so
+    including it would mean every entry claims a change even when nothing changed."""
+    from iopstor import db
+
+    before = {"id": 3, "title": "Old", "status": "draft", "updated_at": "2026-09-10T00:00:00Z"}
+    after = {"id": 3, "title": "New", "status": "draft", "updated_at": "2026-09-11T00:00:00Z"}
+    assert db._diff(before, after) == {"title": ["Old", "New"]}
+
+    # a create is the same shape with nothing on the left, and a delete with nothing on the right,
+    # which is what lets one template render all three and one Restore reverse any of them.
+    assert db._diff({}, {"id": 9, "title": "New"}) == {"id": [None, 9], "title": [None, "New"]}
+    assert db._diff({"id": 9, "title": "Gone"}, {}) == {"id": [9, None], "title": ["Gone", None]}
+    assert db._diff({"title": "Same"}, {"title": "Same"}) == {}
+    # a column that was null and stayed null is not a change worth a row
+    assert db._diff({}, {"parent_id": None}) == {}
+
+
+def test_restore_reverses_a_diff():
+    """Restore is the left-hand half of every pair, and nothing more. It works for any table
+    because the format does not vary by table."""
+    changes = {"title": ["Old", "New"], "blocks": [[{"type": "text"}], []]}
+    assert {k: pair[0] for k, pair in changes.items()} == {"title": "Old", "blocks": [{"type": "text"}]}
+
+
+def test_audit_is_silent_on_the_command_line():
+    """`flask seed` writes hundreds of rows and none of them is a person doing something. There is
+    no request context there, and that one test is the whole exclusion — no flag to remember."""
+    from iopstor import db
+
+    assert db._audit("create", "posts", 1, {"title": [None, "x"]}) is None   # no request, no row, no error
+    assert db.audit_event("login", "someone@example.com") is None
+
+
+def test_ist_is_five_and_a_half_hours_ahead():
+    """Editors are in India and every admin date used to read as unlabelled UTC, so a 9.51 am stamp
+    was really 3.21 pm to the person looking at it. A fixed offset, not a named zone: India has
+    never observed daylight saving, and tzdata is not in the slim container image."""
+    from iopstor import db
+
+    assert db.ist("2026-09-11T09:51:00+00:00") == "11 Sep 2026, 15:21 IST"
+    assert db.ist("2026-09-11T20:00:00+00:00") == "12 Sep 2026, 01:30 IST"   # and it rolls the date
+    assert db.ist(None) == "—"
+    # the publish box and the list have to agree, or the editor sees two times for one instant
+    assert db.ist_input("2026-09-11T09:51:00+00:00") == "2026-09-11T15:21"
+    assert db.ist_input(None) == ""
+
+
+def test_the_publish_box_reads_as_ist():
+    """<input type="datetime-local"> posts a bare wall clock, and every parser downstream reads a
+    missing offset as UTC — so 2 pm typed in Mumbai was stored as 7.30 pm. Stamped at the form, not
+    in db.parse_dt(), which the JSON API shares and where no offset should still mean UTC."""
+    from iopstor.admin_ui import _as_ist
+
+    assert _as_ist("2026-09-11T14:00") == "2026-09-11T14:00+05:30"
+    assert _as_ist("") == ""
+    assert _as_ist("2026-09-11T14:00+05:30") == "2026-09-11T14:00+05:30"    # not stamped twice
+    assert _as_ist("2026-09-11T14:00Z") == "2026-09-11T14:00Z"
+
+
+def test_a_trashed_post_is_not_live():
+    """Deleting a post moves it to the trash instead of removing the row, so the one thing that
+    must hold is that the public site never sees it. It holds because every public read goes
+    through db.live(), which asks for status='published' and nothing else."""
+    from iopstor import db
+
+    assert not db.is_live({"status": "trash", "published_at": "2020-01-01T00:00:00+00:00"})
+    assert db.is_live({"status": "published", "published_at": "2020-01-01T00:00:00+00:00"})
+
+
+def test_every_table_has_something_to_call_a_row():
+    """The audit screen names the row a line is about. One ordered tuple stands in for a per-table
+    map, so the order is the whole logic: media carries a filename and a bucket key, a user a name
+    and an email, a term a name and a slug — and the first match has to be the readable one."""
+    from iopstor import db
+
+    assert db._label({"title": "About Us", "slug": "about"}) == "About Us"           # posts
+    assert db._label({"filename": "hero.png", "key": "2026/09/a1b2.png"}) == "hero.png"   # media
+    assert db._label({"name": "", "email": "priya@iopstor.com"}) == "priya@iopstor.com"   # users
+    assert db._label({"serial": "IOP-2231"}) == "IOP-2231"                           # warranties
+    assert db._label({"from_path": "/old-page"}) == "/old-page"                      # redirects
+    assert db._label({"hits": 3}) == ""                                              # nothing to name
+
+
+def test_only_a_change_and_a_trashed_post_can_be_put_back():
+    """Restore is offered per entry, and the rule is not "anything that was a delete". A deleted
+    post went to the trash and is still there; a deleted user, picture or category is really gone,
+    and re-creating the row would produce something half-working — a login with no Supabase account
+    behind it, a picture row pointing at a file that left the bucket."""
+    from iopstor.admin_ui import _restorable
+
+    assert _restorable({"action": "update", "table_name": "posts"})
+    assert _restorable({"action": "update", "table_name": "settings"})
+    assert _restorable({"action": "delete", "table_name": "posts"})       # the trash
+    assert not _restorable({"action": "delete", "table_name": "users"})   # really gone
+    assert not _restorable({"action": "delete", "table_name": "media"})
+    assert not _restorable({"action": "create", "table_name": "posts"})   # nothing to go back to
+    assert not _restorable({"action": "login_failed", "table_name": ""})

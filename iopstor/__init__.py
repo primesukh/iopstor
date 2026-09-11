@@ -60,6 +60,9 @@ def create_app(test_config=None):
         m = db.get_media(int(i)) if i else None
         return f"{m['url']}?download={quote(m.get('filename') or '')}" if m else ""
 
+    # filters, not globals: a date reads better piped than wrapped, and every admin screen shows
+    # times in IST now -- the editors are in India and an unlabelled UTC clock was a standing trap.
+    app.jinja_env.filters.update(ist=db.ist, ist_input=db.ist_input)
     app.jinja_env.globals.update(
         rupees=rupees,
         display_name=display_name,   # the admin sidebar's user block and the Users table say the same name

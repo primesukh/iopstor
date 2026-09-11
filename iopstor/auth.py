@@ -107,4 +107,4 @@ def delete_auth_user(user):
         db.sb().auth.admin.delete_user(user["id"])
     except (AuthApiError, AuthError):
         pass  # GoTrue user may already be gone; the CMS row is what gates access
-    db.table("users").delete().eq("id", user["id"]).execute()
+    db.delete("users", user["id"])

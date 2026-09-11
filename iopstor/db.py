@@ -4,10 +4,12 @@ import random
 import re
 import string
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from flask import current_app, g
+from flask import current_app, g, has_request_context
 from supabase import ClientOptions, create_client
+
+from .throttle import client_ip
 
 POST_SELECT = "*, post_type:post_types(*), featured_media:media(*), terms(*, taxonomy:taxonomies(*))"
 POST_SELECT_BY_TERM = POST_SELECT + ", post_terms!inner(term_id)"  # + .eq("post_terms.term_id", id)
@@ -44,13 +46,88 @@ def one(q):
     return data[0] if data else None
 
 
+# ---- the audit log -------------------------------------------------------
+# Every write in the app already funnels through insert()/update()/delete(), so the recording lives
+# in them rather than at the thirty-odd call sites: a write path added later is logged without
+# anybody remembering to log it. An after_request hook was the other candidate and it sees the
+# response but not the row, so it could never answer "what was it before".
+
+NOT_A_CHANGE = ("created_at", "updated_at",   # the moddatetime trigger moves one of these on every write
+                "serial_key")                 # GENERATED ALWAYS: it moves with serial, and cannot be written back
+# order matters: media has both filename and key, users both name and email, terms both name and slug
+LABELS = ("title", "name", "filename", "email", "serial", "from_path", "slug", "key")
+
+
+def _diff(before, after):
+    """{field: [was, now]} for the fields that actually moved. One format for create (was=None),
+    update and delete (now=None), which is what lets one template render all three and one Restore
+    reverse any of them."""
+    return {k: [before.get(k), after.get(k)] for k in set(before) | set(after)
+            if k not in NOT_A_CHANGE and before.get(k) != after.get(k)}
+
+
+def _label(row):
+    """What to call this row on the audit screen. One tuple rather than a per-table map: every table
+    here names itself with one of these columns, and the first match wins."""
+    return next((str(row[k]) for k in LABELS if row.get(k)), "")
+
+
+def _before(name, pk):
+    """The row as it stands, for the diff. Skipped off a request, where nothing will be logged."""
+    return (one(table(name).select("*").eq("id", pk)) or {}) if has_request_context() else {}
+
+
+def _audit(action, name="", row_id="", changes=None, label="", user=None):
+    """One row in audit_log. Silent outside a request context, which is exactly how `flask seed` and
+    `flask import-media` stay out of the log.
+
+    # ponytail: a failed audit write is swallowed, so the log can have a gap the log cannot report.
+    # The alternative is worse: the content write has already succeeded by here, so raising would
+    # show the editor an error for a save that did happen, and would stop the app running at all
+    # against a database where 0008 has not been applied yet. Watch the warnings instead.
+    """
+    if not has_request_context():
+        return
+    try:
+        u = user or getattr(g, "user", None) or {}
+        table("audit_log").insert({"user_id": u.get("id"), "user_email": u.get("email") or "",
+                                   "ip": client_ip(), "action": action, "table_name": name,
+                                   "row_id": str(row_id), "label": label,
+                                   "changes": changes or {}}).execute()
+    except Exception as e:   # noqa: BLE001 - see the ceiling above; nothing here may break a save
+        current_app.logger.warning("audit %s %s/%s not recorded: %s", action, name, row_id, e)
+
+
+def audit_event(action, label="", user=None):
+    """For the things that are not a row write at all -- signing in, signing out, getting the
+    password wrong. `user` is passed in because g.user is not set yet at the moment of a login."""
+    _audit(action, label=label, user=user)
+
+
 def insert(name, row):
-    return table(name).insert(row).execute().data[0]
+    created = table(name).insert(row).execute().data[0]
+    _audit("create", name, created.get("id", ""), _diff({}, created), _label(created))
+    return created
 
 
-def update(name, pk, changes):
+def update(name, pk, changes, action="update"):
+    """`action` is a label for the log, not a different write: moving a post to the trash is an
+    UPDATE, but the audit screen has to say "delete" or reading it means decoding a status pair."""
+    before = _before(name, pk)
     data = table(name).update(changes).eq("id", pk).execute().data
-    return data[0] if data else None
+    after = data[0] if data else None
+    if after:
+        _audit(action, name, pk, _diff(before, after), _label(after) or _label(before))
+    return after
+
+
+def delete(name, pk):
+    """The delete every caller should use: the filter is not optional here, and the row is written
+    to the audit log on its way out -- after it is gone, nothing else knows what row 12 was."""
+    row = _before(name, pk)
+    table(name).delete().eq("id", pk).execute()
+    _audit("delete", name, pk, _diff(row, {}), _label(row))
+    return row
 
 
 def utcnow():
@@ -64,6 +141,25 @@ def now_iso():
 def parse_dt(value):
     dt = datetime.fromisoformat(value)
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+# A fixed offset, not zoneinfo("Asia/Kolkata"): India has never observed daylight saving, so +05:30
+# is exactly right for every date there will ever be -- and it does not need tzdata, which the slim
+# container image does not ship.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def ist(value):
+    """A stored UTC timestamp as the clock the editor was actually looking at. 24-hour, because an
+    audit log is read for precision and an unlabelled am/pm is the wrong place to save four
+    characters."""
+    return f"{parse_dt(value).astimezone(IST):%d %b %Y, %H:%M} IST" if value else "\u2014"
+
+
+def ist_input(value):
+    """The same instant in the shape <input type="datetime-local"> wants. The pair with _as_ist()
+    in admin_ui: the box shows IST and reads back IST, so a stored time round-trips unchanged."""
+    return f"{parse_dt(value).astimezone(IST):%Y-%m-%dT%H:%M}" if value else ""
 
 
 def slugify(text):
@@ -99,7 +195,13 @@ def settings():
 
 def set_settings(values):
     if values:  # PostgREST rejects an empty bulk upsert
+        before = settings()
         table("settings").upsert([{"key": k, "value": v} for k, v in values.items()]).execute()
+        # one entry per key, not one for the whole form: the Settings screen posts all eleven keys
+        # every time, and "which setting did they change" is the question the log is asked.
+        for k, v in values.items():
+            if before.get(k) != v:
+                _audit("update", "settings", k, {"value": [before.get(k), v]}, k)
     uncache("settings")
 
 
@@ -216,9 +318,18 @@ def ensure_term(tax_slug, name):
 
 
 def set_post_terms(post_id, term_ids):
+    # logged against the post, not as two writes to the join table: the editor ticked a category,
+    # they did not delete four rows and insert five.
+    before = ([r["term_id"] for r in rows(table("post_terms").select("term_id").eq("post_id", post_id))]
+              if has_request_context() else [])
     table("post_terms").delete().eq("post_id", post_id).execute()
     if term_ids:
         table("post_terms").insert([{"post_id": post_id, "term_id": t} for t in term_ids]).execute()
+    if sorted(before) != sorted(term_ids):
+        # the title costs one more read, but only on a save that actually changed the categories,
+        # and without it the entry reads "12 in posts" and names nothing
+        _audit("update", "posts", post_id, {"terms": [before, list(term_ids)]},
+               _label(one(table("posts").select("title").eq("id", post_id)) or {}))
     uncache("post_index_")
 
 
@@ -240,7 +351,7 @@ def admin_counts():
     # ponytail: reads every post's type id per admin page. Swap for a counts view past a few thousand."""
     def load():
         seen = {}
-        for r in rows(table("posts").select("post_type_id").limit(5000)):
+        for r in rows(table("posts").select("post_type_id").neq("status", "trash").limit(5000)):
             seen[r["post_type_id"]] = seen.get(r["post_type_id"], 0) + 1
         out = {pt["slug"]: seen.get(pt["id"], 0) for pt in post_types()}
         out["_leads"] = table("leads").select("id", count="exact").eq("status", "new").limit(1).execute().count or 0
@@ -255,4 +366,7 @@ def get_menu(slug):
 
 def set_menu(slug, items):
     """The write side of get_menu(), so /admin/menus keeps every query in this module."""
+    before = get_menu(slug)
     table("menus").upsert({"slug": slug, "name": slug.title(), "items": items}, on_conflict="slug").execute()
+    if before != items:
+        _audit("update", "menus", slug, {"items": [before, items]}, slug)

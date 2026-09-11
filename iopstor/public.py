@@ -225,7 +225,9 @@ def resolve(path):
     if r:
         # ponytail: read-then-write loses hits under parallel visits, and nothing reads the column yet.
         # A bump_redirect(id) SQL function called via .rpc() makes it exact if it is ever reported on.
-        db.update("redirects", r["id"], {"hits": r["hits"] + 1})
+        # Not db.update(): this fires on an anonymous page view, and a hit counter is not a step
+        # anybody took, so an audit entry per visit would bury the log it was meant to fill.
+        db.table("redirects").update({"hits": r["hits"] + 1}).eq("id", r["id"]).execute()
         return redirect(r["to_url"], r["code"])
     page_type = db.post_type(slug="page")
     if not path:
