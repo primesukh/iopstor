@@ -17,18 +17,21 @@ SELECT id, at, action, table_name, label, user_email FROM public.audit_log ORDER
 ALTER TABLE public.audit_log DISABLE TRIGGER audit_log_no_change;
 
 -- 3a. Everything the suite names after itself: its users, its posts, its terms, its redirects, its
---     media, and the leads it submits (the address is inside the recorded change).
+--     media, the leads it submits (the address is inside the recorded change), and the sign-ins it
+--     gets wrong on purpose -- on those nobody is signed in, so the address is the label, and it is
+--     the local part that varies rather than the prefix.
 DELETE FROM public.audit_log
  WHERE user_email LIKE '%@zz-test.local'
     OR label LIKE 'zz-test%'
     OR label LIKE '/zz-test%'
+    OR label LIKE '%@zz-test.local'
     OR changes -> 'email' ->> 1 LIKE '%@zz-test.local';
 
--- 3b. The rest of a run is harder to name: tests/test_auth.py signs in with invented addresses like
---     a@b.c, which look like a real person getting their password wrong. Read the SELECT above,
---     find the minute the run happened in, and uncomment this with that window.
--- DELETE FROM public.audit_log
---  WHERE at >= '2026-09-11T05:03:00Z' AND at < '2026-09-11T05:04:00Z';
+-- 3b. Two addresses from runs before tests/test_auth.py was made to follow that convention. They
+--     look like a real person getting their password wrong, which is why they are named in full
+--     here rather than matched by a pattern -- and why nothing else can be caught by accident.
+DELETE FROM public.audit_log
+ WHERE action = 'login_failed' AND label IN ('a@b.c', 'who@x.y');
 
 -- 4. PUT THE GUARD BACK. Do not skip this -- without it the table is editable by anything holding
 --    the service-role key, which is the app itself.

@@ -27,12 +27,12 @@ def test_login_flow_with_mocked_gotrue(client, cleanup, monkeypatch):
     assert r.status_code == 200 and r.json["user"]["role"] == "admin" and r.json["access_token"] == "t"
 
     session["user_id"] = str(uuid.uuid4())  # GoTrue user without a CMS row
-    assert client.post("/api/admin/v1/auth/login", json={"email": "who@x.y", "password": "x"}).status_code == 403
+    assert client.post("/api/admin/v1/auth/login", json={"email": "no-cms-row@zz-test.local", "password": "x"}).status_code == 403
 
     def boom(email, password):
         raise AuthApiError("Invalid login credentials", 400, "invalid_grant")
     monkeypatch.setattr(admin_api, "login", boom)
-    assert client.post("/api/admin/v1/auth/login", json={"email": "a@b.c", "password": "bad"}).status_code == 401
+    assert client.post("/api/admin/v1/auth/login", json={"email": "bad-password@zz-test.local", "password": "bad"}).status_code == 401
     assert client.post("/api/admin/v1/auth/login", data="not json").status_code == 400
 
 

@@ -1,5 +1,7 @@
 """Offline tests run always. Integration tests (marked `live`) run against the Supabase in .env and skip otherwise.
-Everything they create is prefixed zz-test and removed by the `cleanup` fixture."""
+Everything they create is prefixed zz-test and removed by the `cleanup` fixture — **including addresses they only
+type**, like the ones a login test gets wrong on purpose. db._audit() sits out of TESTING so the audit log never
+sees any of it, but a row that cannot be picked out by name is one nothing can clean up if that guard ever moves."""
 import os
 import time
 import uuid
