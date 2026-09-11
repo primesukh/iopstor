@@ -22,8 +22,14 @@ def migrate():
     sb = db.sb()
     try:
         applied = {r["filename"] for r in sb.table("schema_migrations").select("filename").execute().data}
-    except APIError:
-        raise click.ClickException("schema_migrations not found: run migrations/0000_bootstrap.sql once in Supabase Studio's SQL editor first")
+    except APIError as e:
+        # Two very different causes reach here and the container runs this on every boot, so name both:
+        # a fresh database that never had the bootstrap pasted in, and a Supabase that is simply down.
+        raise click.ClickException(
+            f"could not read schema_migrations: {getattr(e, 'message', e)}\n\n"
+            f"If this database is new, run migrations/0000_bootstrap.sql once in Supabase Studio's SQL "
+            f"editor. If it is not, Supabase is unreachable at {current_app.config['SUPABASE_URL']} "
+            f"-- check the gateway before touching the schema.")
     for path in sorted(MIGRATIONS.glob(MIGRATION_GLOB)):
         if path.name.startswith("0000_") or path.name in applied:
             continue

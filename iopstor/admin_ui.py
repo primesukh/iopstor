@@ -51,7 +51,11 @@ def ui_required(min_role="editor"):
 
 @ui.app_context_processor
 def _globals():
-    if not has_request_context():  # CLI / tests rendering blocks outside a request
+    # app_context_processor is app-wide, not blueprint-scoped, so without the second test every public
+    # page would mint a CSRF token and answer with Set-Cookie -- which no HTTP cache stores, so the site
+    # behind the tunnel could never be cached at Cloudflare's edge. No public template reads any of
+    # these globals; /admin/canvas and /admin/preview are admin_ui routes, so the editor keeps its token.
+    if not has_request_context() or request.blueprint != ui.name:  # CLI / tests, and every public page
         return {}
     if "csrf" not in session:
         session["csrf"] = secrets.token_urlsafe(16)

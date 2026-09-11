@@ -1,0 +1,34 @@
+# Production: the CMS and its Cloudflare Tunnel, one stack, one Dokploy Compose service.
+# The tunnel is the only ingress -- `app` publishes no port and carries no Traefik label, so cloudflared,
+# which is outbound-only, is the only route in. That unreachability is what makes throttle.client_ip()'s
+# trust in CF-Connecting-IP honest (docs/TECHNICAL.md §12); the runbook is §15.
+# Every value below comes from the Dokploy service's environment. Nothing here is a secret.
+services:
+  app:
+    build: .                      # the existing Dockerfile: flask migrate && gunicorn on 8000
+    restart: unless-stopped
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?set it in Dokploy; the app refuses to boot without one}
+      SITE_URL: ${SITE_URL:?https://www.iopstor.com -- sets every canonical and the cookie Secure flag}
+      SUPABASE_URL: ${SUPABASE_URL:?Kong by service name on dokploy-network, e.g. http://...-kong-1:8000}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:?}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:?}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-media}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-dummy}
+      GUNICORN_CMD_ARGS: ${GUNICORN_CMD_ARGS:--w 30 --threads 8 --preload --access-logfile -}
+    # default reaches cloudflared; dokploy-network reaches Supabase Kong. Two networks on purpose.
+    networks: [default, dokploy-network]
+  cloudflared:
+    image: cloudflare/cloudflared:latest   # --no-autoupdate below: it only moves on a redeploy
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?from the tunnel in Cloudflare Zero Trust}
+    # Plain depends_on, not service_healthy: cloudflared retries by itself, and gating it on the app's
+    # health would hide a broken app behind a tunnel that never comes up.
+    depends_on: [app]
+    networks: [default]            # no business reaching Supabase
+networks:
+  dokploy-network:
+    external: true

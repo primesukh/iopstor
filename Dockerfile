@@ -3,7 +3,9 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 FLASK_APP=iopstor
 # gunicorn reads this itself; Dokploy's environment overrides it (production runs -w 30). The app keeps
 # nothing between requests, so the worker count is deploy config, not code -- docs/TECHNICAL.md §15.
-ENV GUNICORN_CMD_ARGS="-w 2 --threads 8 --preload"
+# --access-logfile - puts one line per request on stdout, which is the only request log there is;
+# the HEALTHCHECK below adds a /healthz line every 30s, and that is not traffic.
+ENV GUNICORN_CMD_ARGS="-w 2 --threads 8 --preload --access-logfile -"
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .

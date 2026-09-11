@@ -17,6 +17,8 @@
       "Bash(graphify path*)",
       "Bash(graphify explain*)",
       "Bash(graphify update*)",
+      "Bash(docker compose config*)",
+      "Bash(docker compose ps*)",
       "Bash(git status*)",
       "Bash(git log*)",
       "Bash(git show*)",
