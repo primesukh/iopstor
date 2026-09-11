@@ -497,9 +497,13 @@ Nothing can be edited away afterwards — not by you, not by an administrator, n
 
 **Show what changed** opens the detail: one block per thing that moved, with what it **was** and what it is **now** side by side.
 
-For a page, that is the writing itself, in plain words rather than the code behind it, and **the part that changed is marked** — what you removed struck through in red, what you added highlighted in green. A single word altered in a long page is visible at a glance.
+For a page, you get one line per thing that actually moved, and each one says **which section it was in** — *Hero section*, *Numbers section*, *Column 2, Picture section*. Nothing else is shown, so a change in a long page is one or two short lines rather than the whole page printed twice.
 
-Some changes do not show up in the words at all — swapping a picture, changing a link, turning a setting on. Those say so in a sentence instead: *"Changed a picture, link or setting in the Hero section"*, *"Added Cards"*, *"Moved the sections around"*.
+If you changed the writing, that line shows the writing, in plain words rather than the code behind it, and **the part that changed is marked** — what you removed struck through in red, what you added highlighted in green. A single word altered in a long page is visible at a glance, and a long stretch nobody touched is shortened to its two ends so the marked part is not buried.
+
+If you changed something the words cannot show — a picture, a link, a tick box, an effect — the line names the setting and both values in the words you chose them by: *"Numbers section, row 2 — Effect · was None · now Gradient across the big text"*. Inside a row of a repeating list, it tells you which row.
+
+And if a section was added, removed or moved, that is a sentence: *"Added Cards"*, *"Moved the sections around"*. A save that only made a word bold says *"Formatting changed"* — never "nothing changed", because something did.
 
 ### What it does not record
 
@@ -507,13 +511,13 @@ Looking at things. Opening a page to read it, or viewing the Leads screen, leave
 
 ### Putting something back
 
-Under that detail is **Restore**. It puts the old values back exactly as they were, and the restore itself appears in Activity as a new line, so the record stays complete. It works for anything that was changed — a page, a setting, a menu, a picture's description — and for a page that was deleted.
+Under that detail is **Restore** — one button for the whole entry, at the bottom, whatever number of lines the detail has. It puts **the whole thing** back as it was before that change, not just the line you happen to be looking at: for a page, that is the entire page. The restore itself appears in Activity as a new line, so the record stays complete. It works for anything that was changed — a page, a setting, a menu, a picture's description — and for a page that was deleted.
 
 It does not work for things that were properly removed: a person whose account was deleted, a picture deleted from the library, a category that was removed. Those lines still show you everything the record held, so you can see what was there and re-enter it, but the system will not recreate them behind your back and leave you with something half-working.
 
 ### Finding one thing
 
-The three boxes at the top narrow the list: a particular person, a particular kind of action, or a kind of thing — type `posts` to see only page changes, `settings` for settings. Leave them alone to see everything.
+The three boxes at the top narrow the list: a particular person, a particular kind of action, or a particular kind of thing. They are drop-downs of ordinary words — pick **Pages and other content** to see only content changes, **Setting** for settings. Leave them alone to see everything.
 
 ---
 
@@ -583,9 +587,15 @@ addresses. Add the rest under **Settings → Contact details → Social links**,
 fit now breaks and carries on on the next line, in the editor and on the live site, instead of
 pushing the page sideways.
 
-**Who changed this page?** Open **Activity** in the sidebar (administrators only) and type `posts` in
-the third box. Every change to every page is there with the person's name, the date and time, and what
-the page said before and after.
+**Who changed this page?** Open **Activity** in the sidebar (administrators only) and choose **Pages and
+other content** in the third box. Every change to every page is there with the person's name, the date
+and time, and — under **Show what changed** — which section and which setting moved, with the old value
+beside the new one.
+
+**The detail under a page edit used to show the whole page twice.** It does not any more. It now shows
+one short line per thing that actually changed, each naming the section it was in and, for a setting, both
+values in the words you picked them by — *Numbers section, row 2 — Effect · was None · now Gradient across
+the big text*.
 
 **I deleted a page by mistake.** It is not gone. Ask an administrator: they open the list the page was
 in, set the status filter to **trash**, and press **Restore**. It comes back as a draft with its address,

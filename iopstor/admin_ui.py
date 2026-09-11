@@ -17,7 +17,7 @@ from werkzeug.exceptions import HTTPException
 from . import db, display_name, seo
 from .admin_api import apply_post
 from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login, set_password
-from .blocks import BLOCKS, EDITOR, LAYOUTS, at_path, blocks_text, render_blocks, validate_blocks, warranty_active
+from .blocks import BLOCKS, EDITOR, LAYOUTS, _NON_TEXT_KEYS, at_path, blocks_text, render_blocks, validate_blocks, warranty_active
 from .throttle import clear as throttle_clear, client_ip, record_failure, retry_after, wait_text
 from .storage import delete_media, save_upload
 
@@ -761,7 +761,10 @@ FIELD = {"blocks": "The writing on the page", "title": "Title", "slug": "Web add
          "url_prefix": "Address starts with", "field_schema": "Its own fields",
          "has_pages": "Gets pages of its own", "in_sitemap": "Offered to search engines"}
 
-STATUS = {"draft": "Draft", "published": "Published", "trash": "Deleted"}
+# post statuses and lead statuses both live in a `status` column, and the words are the ones the
+# Posts and Leads screens already use -- an editor should never meet "in_progress" here either
+STATUS = {"draft": "Draft", "published": "Published", "trash": "Deleted",
+          "new": "New", "in_progress": "In progress", "handled": "Handled"}
 DIFF_MAX = 2000   # ponytail: word-diffing two novels on a 50-row page is real CPU; past this, plain text
 
 
@@ -776,17 +779,25 @@ def _block_name(t):
     return (EDITOR["names"].get(t) or ("", str(t), ""))[1]
 
 
+DIFF_CONTEXT = 8  # words of unchanged text kept each side of a change, so the marks are not buried
+
+
 def _word_diff(before, after):
     """The two texts, each marked up with what left and what arrived. Word-level, not character-
     level: a word is the unit somebody writing a page thinks in, and a character diff of "Better" ->
-    "Getting Better." marks up the inside of words for no reader's benefit."""
+    "Getting Better." marks up the inside of words for no reader's benefit. A long unchanged stretch
+    collapses to its two ends -- the point of the screen is the marks, not the paragraph around them."""
     a, b = before.split(), after.split()
     was, now = [], []
     for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b).get_opcodes():
         old, new = escape(" ".join(a[i1:i2])), escape(" ".join(b[j1:j2]))
         if tag == "equal":
+            run = a[i1:i2]
+            if len(run) > 2 * DIFF_CONTEXT:
+                old = Markup('%s <span class="aud-gap">\u2026</span> %s') % (
+                    escape(" ".join(run[:DIFF_CONTEXT])), escape(" ".join(run[-DIFF_CONTEXT:])))
             was.append(old)
-            now.append(new)
+            now.append(old)
             continue
         if i2 > i1:
             was.append(Markup("<del>%s</del>") % old)
@@ -796,37 +807,159 @@ def _word_diff(before, after):
 
 
 def _structural(was, now):
-    """What changed when the words did not. blocks_text() deliberately drops every picture, link and
-    setting (_NON_TEXT_KEYS), so swapping an image leaves two versions reading identically -- and
-    "nothing changed" would be a lie about a save that certainly did something."""
+    """What changed when the indices stopped lining up: a section was added, removed or moved, so
+    comparing position 3 with position 3 would be comparing two different things."""
     a, b = [x.get("type") for x in was], [x.get("type") for x in now]
     gained = Counter(b) - Counter(a)
     lost = Counter(a) - Counter(b)
-    if gained or lost:
-        said = []
-        if gained:
-            said.append("Added " + ", ".join(_block_name(t) for t in gained.elements()))
-        if lost:
-            said.append("Removed " + ", ".join(_block_name(t) for t in lost.elements()))
+    said = []
+    if gained:
+        said.append("Added " + ", ".join(_block_name(t) for t in gained.elements()))
+    if lost:
+        said.append("Removed " + ", ".join(_block_name(t) for t in lost.elements()))
+    if said:
         return "; ".join(said) + "."
-    if a != b:
-        return "Moved the sections around."
-    moved = [_block_name(t) for i, t in enumerate(b) if i < len(was) and was[i] != now[i]]
-    if moved:
-        return f"Changed a picture, link or setting in the {', '.join(moved)} section."
-    return "Nothing an editor would see."
+    return "Moved the sections around." if a != b else "Nothing an editor would see."
 
 
-def _blocks_change(was, now):
-    """(what it said, what it says, a sentence about it) for a page's content."""
+# The two diffs below split a section between them, and this is the line: blocks_text() collects a
+# value only when the key is outside _NON_TEXT_KEYS *and* the value is a string, so anything failing
+# either half is invisible to the words and belongs to the settings diff. The isinstance half is the
+# one that is easy to forget -- a checkbox is a bool and a count is a number, and neither is in the
+# set, yet neither shows up in the words either.
+def _unwritten(key, value):
+    return key in _NON_TEXT_KEYS or not isinstance(value, str)
+
+
+# The editor's own wording for a section's fields, plus the four layout keys that belong to every
+# section and so are not declared by any of them (TECHNICAL §6).
+BLOCK_FIELD = {**EDITOR["labels"], "align": "Align the content", "align_box": "Align the section",
+               "width": "Width", "tone": "Tone", "items": "Rows", "rows": "Rows",
+               "widths": "Column widths"}   # the editor's label carries a form hint; a log wants the name
+
+
+def _block_field(key):
+    return BLOCK_FIELD.get(key) or str(key).replace("_", " ").capitalize()
+
+
+def _block_value(key, v):
+    """One setting out of a section, as words. A dropdown says what the editor picked in it:
+    `gradient` is what is stored, *Gradient across the big text* is what they chose."""
+    if key in EDITOR["choices"] and v is not None:
+        return escape(dict(EDITOR["choices"][key]).get(v, v))
+    if v and key in ("media_id", "image", "file_media_id"):
+        return escape((db.get_media(v) or {}).get("filename") or f"picture {v}")
+    return _value(key, v)
+
+
+def _row(label, note="", was="", now=""):
+    return {"label": label, "note": note, "was": was, "now": now}
+
+
+def _text_row(label, was, now):
+    """One section's words, marked up. DIFF_MAX still guards it: per-section diffing bounds the
+    common case, but one rich text block can hold an entire page."""
+    if len(was.split()) > DIFF_MAX or len(now.split()) > DIFF_MAX:
+        return _row(label, "A very long section \u2014 the change is somewhere in here.", escape(was), escape(now))
+    a, b = _word_diff(was, now)
+    return _row(label, "", a, b)
+
+
+def _data_rows(scope, was, now):
+    """The settings of one section, compared key by key: which field, which row of a repeater, and
+    what the value became. Only keys the words cannot show, so nothing is reported twice."""
+    rows = []
+    for k in sorted(set(was) | set(now)):
+        a, b = was.get(k), now.get(k)
+        if a == b:
+            continue
+        if k == "cols":
+            rows += _cols_rows(scope, a or [], b or [])
+        elif isinstance(a, list) or isinstance(b, list):
+            rows += _repeater_rows(scope, k, a or [], b or [])
+        elif _unwritten(k, a) or _unwritten(k, b):
+            if isinstance(a, bool) or isinstance(b, bool):
+                a, b = bool(a), bool(b)      # a checkbox nobody ever ticked is a checkbox that is off
+            rows.append(_row(f"{scope} \u2014 {_block_field(k)}", "", _block_value(k, a), _block_value(k, b)))
+    return rows
+
+
+def _repeater_rows(scope, key, was, now):
+    """A repeater (the cards in a row, the figures in a Numbers section). Added or removed rows are
+    counted; rows that stayed put are compared one for one, because the change the client asked
+    about was two levels down inside one -- an `fx` on row 2, which "items changed" would not say."""
+    if len(was) != len(now):
+        return [_row(f"{scope} \u2014 {_block_field(key)}", "", escape(str(len(was))), escape(str(len(now))))]
+    rows = []
+    for i, (a, b) in enumerate(zip(was, now)):
+        if a == b:
+            continue
+        if isinstance(a, dict) and isinstance(b, dict):
+            rows += _data_rows(f"{scope}, row {i + 1}", a, b)
+        else:
+            rows.append(_row(f"{scope} \u2014 {_block_field(key)}, row {i + 1}", "", _value(key, a), _value(key, b)))
+    return rows
+
+
+def _cols_rows(scope, was, now):
+    """A columns section holds sections of its own, and they drift out of line exactly the way a
+    page's do -- so a column whose section types moved gets a sentence, not a row-by-row comparison
+    of things that are no longer the same thing."""
+    if len(was) != len(now):
+        return [_row(f"{scope} \u2014 Columns", "", escape(str(len(was))), escape(str(len(now))))]
+    rows = []
+    for i, (a, b) in enumerate(zip(was, now)):
+        if a == b:
+            continue
+        if [x.get("type") for x in a] != [x.get("type") for x in b]:
+            rows.append(_row(f"{scope}, column {i + 1}", _structural(a, b)))
+        else:
+            rows += _section_rows(f"Column {i + 1}, ", a, b)
+    return rows
+
+
+def _own_text(data):
+    return blocks_text([{"data": {k: v for k, v in data.items() if k != "cols"}}])
+
+
+def _section_rows(prefix, was, now):
+    """Both sides hold the same section types in the same order, so position means the same thing on
+    each: compare them one for one and name the section every row came out of."""
+    rows = []
+    for a, b in zip(was, now):
+        if a == b:
+            continue
+        here = f"{prefix}{_block_name(a.get('type'))} section"
+        d_was, d_now = a.get("data") or {}, b.get("data") or {}
+        # a columns section's words are the words of the sections inside it, and those get compared
+        # one by one further down -- diffing the outer block too would print the change twice
+        t_was, t_now = _own_text(d_was), _own_text(d_now)
+        data = _data_rows(here, d_was, d_now)
+        if t_was != t_now:
+            rows.append(_text_row(here, t_was, t_now))
+        rows += data
+        if t_was == t_now and not data:
+            # the words are the same and no setting moved: what is left is markup -- a bolded
+            # phrase, a link, a heading level. Saying "nothing changed" about a save would be a lie.
+            rows.append(_row(here, "Formatting changed \u2014 bold, a link or a heading."))
+    return rows
+
+
+def _blocks_fields(was, now):
+    """A page's content, as a list of rows saying which section and which field changed. The whole
+    page was printed twice before this; the words are only half a page edit, and the half the client
+    was actually looking at was the other one."""
     was, now = was or [], now or []
-    t_was, t_now = blocks_text(was), blocks_text(now)
-    if t_was == t_now:
-        return escape(t_was), escape(t_now), _structural(was, now)
-    if len(t_was.split()) > DIFF_MAX or len(t_now.split()) > DIFF_MAX:
-        return escape(t_was), escape(t_now), "A long page \u2014 the change is somewhere in here."
-    a, b = _word_diff(t_was, t_now)
-    return a, b, ""
+    if [x.get("type") for x in was] != [x.get("type") for x in now]:
+        # ponytail: a save that both adds a section and swaps a picture reports the section and the
+        # words, and drops the picture -- no index survives to hang a settings row on. Upgrade:
+        # difflib.SequenceMatcher on the two type lists, _section_rows() over each `equal` range.
+        rows = [_row(FIELD["blocks"], _structural(was, now))]
+        t_was, t_now = blocks_text(was), blocks_text(now)
+        if t_was != t_now:
+            rows.append(_text_row(FIELD["blocks"], t_was, t_now))
+        return rows
+    return _section_rows("", was, now) or [_row(FIELD["blocks"], "Nothing an editor would see.")]
 
 
 def _value(key, v, labels=None):
@@ -903,11 +1036,12 @@ def _present(entry, posts, people):
     labels = posts.get(str(entry["row_id"]), ("", {}))[1]
     fields = []
     for k, pair in sorted((entry["changes"] or {}).items()):
+        if k == "id" and str(pair[0] if pair[0] is not None else pair[1]) == str(entry["row_id"]):
+            continue        # the row's own id -- already what the entry is about, and a UUID on its own reads as noise
         if k == "blocks":
-            was, now, note = _blocks_change(pair[0], pair[1])
+            fields += _blocks_fields(pair[0], pair[1])       # one row per section that changed
         else:
-            was, now, note = _value(k, pair[0], labels), _value(k, pair[1], labels), ""
-        fields.append({"label": _label_of(k), "was": was, "now": now, "note": note})
+            fields.append(_row(_label_of(k), "", _value(k, pair[0], labels), _value(k, pair[1], labels)))
     return {**entry, "can_restore": _restorable(entry), "fields": fields,
             "who": display_name(person) if person else "the website",
             "sentence": _sentence(entry, posts)}
