@@ -6,7 +6,8 @@ from flask.json.provider import DefaultJSONProvider
 
 from . import config
 
-REQUIRED = ("SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_JWT_SECRET")
+REQUIRED = ("SECRET_KEY", "SITE_URL", "SUPABASE_URL", "SUPABASE_ANON_KEY",
+            "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_JWT_SECRET")
 
 
 class JSONProvider(DefaultJSONProvider):
@@ -43,7 +44,8 @@ def create_app(test_config=None):
     app.json = JSONProvider(app)
     missing = [k for k in REQUIRED if not app.config.get(k)]
     if missing:
-        raise RuntimeError(f"{', '.join(missing)} not set. IOPSTOR runs entirely on Supabase; fill .env (see .env.example)")
+        raise RuntimeError(f"{', '.join(missing)} not set. Fill .env in development (see .env.example), or the\n"
+                           "environment of the deployment in production (docs/TECHNICAL.md \u00a715)")
 
     from . import db
     from .admin_api import bp as admin_api
@@ -80,7 +82,9 @@ def create_app(test_config=None):
 
     @app.get("/healthz")
     def healthz():
-        db.table("post_types").select("id").limit(1).execute()
+        # Liveness, not readiness: the Dockerfile's HEALTHCHECK hits this every 30s, so a PostgREST call
+        # here turns a Supabase blip into a restart loop the restart cannot fix. Supabase is already
+        # gated at boot -- `flask migrate` runs before gunicorn, so a wrong SUPABASE_URL never serves.
         return {"ok": True}
 
     return app

@@ -17,7 +17,7 @@ FAKE_KEY = jwt.encode({"role": "anon"}, "y" * 32, algorithm="HS256")
 
 @pytest.fixture
 def app():
-    cfg = {"TESTING": True, "SITE_URL": "http://test"}
+    cfg = {"TESTING": True, "SITE_URL": "http://test", "SECRET_KEY": "test"}
     if not LIVE:
         cfg.update(SUPABASE_URL="http://supabase.invalid", SUPABASE_ANON_KEY=FAKE_KEY, SUPABASE_SERVICE_ROLE_KEY=FAKE_KEY, SUPABASE_JWT_SECRET=SECRET)
     app = create_app(cfg)

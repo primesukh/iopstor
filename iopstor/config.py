@@ -1,8 +1,10 @@
 """Environment → Flask config. Plain module, loaded with app.config.from_object. Everything lives in Supabase."""
 import os
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-change-me")
-SITE_URL = os.environ.get("SITE_URL", "http://localhost:5000").rstrip("/")
+# No defaults on purpose: both are in create_app()'s REQUIRED, so a deploy that forgets one refuses to
+# boot instead of signing sessions with a key printed in this repo, or publishing localhost canonicals.
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+SITE_URL = os.environ.get("SITE_URL", "").rstrip("/")
 
 SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")  # Kong gateway; http:// is fine on the LAN dev box
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")

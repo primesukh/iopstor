@@ -817,3 +817,35 @@ def test_a_losing_token_refresh_keeps_the_winners_cookie(app, monkeypatch):
         session["access_token"], session["refresh_token"] = expired, "the-winner-already-rotated-this"
         assert auth._session_token() is None
         assert session.get("refresh_token") == "the-winner-already-rotated-this"
+
+
+def test_boot_refuses_without_secret_key_or_site_url(app):
+    """A production env that forgets either one used to boot silently: SECRET_KEY fell back to a string
+    printed in this repo (and auth.py accepts a session token as a Bearer fallback), and SITE_URL fell
+    back to localhost, which both publishes localhost canonicals and computes SESSION_COOKIE_SECURE to
+    False. Empty values, not missing keys: pipenv loads .env, so an omitted key inherits a real one."""
+    import pytest
+
+    from iopstor import create_app
+
+    good = {k: app.config[k] for k in
+            ("SECRET_KEY", "SITE_URL", "SUPABASE_URL", "SUPABASE_ANON_KEY",
+             "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_JWT_SECRET")}
+    good["TESTING"] = True
+    create_app(dict(good))  # the control: all six present, no refusal
+
+    for key in ("SECRET_KEY", "SITE_URL"):
+        with pytest.raises(RuntimeError, match=key):
+            create_app({**good, key: ""})
+
+
+def test_public_pages_mint_no_session_cookie(app):
+    """The CSRF token is minted by an app_context_processor, which is app-wide, not blueprint-scoped.
+    Without the blueprint guard every public page answers with Set-Cookie, and no HTTP cache stores
+    such a response — so the site behind the Cloudflare tunnel could never be cached at the edge."""
+    from iopstor.admin_ui import _globals
+
+    with app.test_request_context("/"):
+        assert _globals() == {}                     # public: nothing minted, session untouched
+    with app.test_request_context("/admin/login"):
+        assert _globals()["csrf"]                   # admin: the editor still gets a token
