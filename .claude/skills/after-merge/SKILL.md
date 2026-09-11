@@ -1,11 +1,13 @@
 ---
 name: after-merge
-description: Use when the user says a PR was merged, or asks to "sync", "pull main", "rebuild the graph", "refresh .claude", "clean up branches" — the post-merge housekeeping for this repo.
+description: Use when the user says a PR was merged, or asks to "sync", "pull main", "refresh .claude", "clean up branches" — the post-merge housekeeping for this repo.
 ---
 
-# After a merge: pull, refresh the map, audit `.claude/`
+# After a merge: pull, audit `.claude/`
 
 Merging is the user's act. Everything after it is yours, on `main`, without a single push.
+
+The graph is **not** refreshed here — no `/graphify`, no `graphify update` (user, 2026-09-11). The audit is, and it is mandatory: every `.claude/` and `docs/` file the merged diff made untrue is brought up to date on the spot, or named as drift for the next PR. Dropping the graph step does not make this step optional — it is now the whole point of the skill.
 
 ## Steps
 
@@ -15,18 +17,13 @@ Merging is the user's act. Everything after it is yours, on `main`, without a si
    git fetch -p && git branch -d <merged-branch>     # or /clean_gone for every [gone] branch
    ```
 
-2. **Refresh the graph** — the only moment the LLM pass ever runs. Do not expect the git hooks to have done it: `post-checkout` fired when you switched to `main`, but a fast-forward `git pull` fires no hook, so after step 1 the graph is still the *old* `main`. On `main` only (`git branch --show-current` must print `main`), invoke the skill; it re-extracts every file changed since the last manifest — code with the AST (free) and prose with subagents — and re-labels the communities:
-   ```
-   /graphify . --update
-   ```
-   Two things to expect. Community labelling is a manual step in the skill (a 2–5 word name per community). And the first `--update` after a graphify upgrade re-extracts **every** prose file, because the cache is keyed on the extraction prompt — 54 files and ~400k subagent tokens the first time; run it anyway, on `main`, it is what the rule is for. The skill's report has **no** `Built from commit` line — only graphify's code-only rebuild writes that stamp, and the session hook reads it — so finish with
-   ```bash
-   PYTHONHASHSEED=0 graphify update .
-   ```
-   which re-stamps the report at `HEAD` and keeps every prose node (1390 before and after on 2026-09-09). Then confirm the stamp equals `git rev-parse --short HEAD`.
-   When you write the extraction subagents' prompts, tell each one to mint nodes **only under its own file's ID stem** and to refer to other files' entities by edge, never by node — a chunk that re-emits another file's IDs creates stubs with the wrong source file, and the next re-extraction of the real file loses to them.
+2. **Audit the written docs against what landed — mandatory, every merge, no exceptions.** Read the diff first and check *every* file below against it: `CLAUDE.md`, `.claude/docs/design.md`, `.claude/docs/requirements.md`, the six skills, `settings.json`, and `docs/TECHNICAL.md` + `docs/NON-TECHNICAL.md` if the merged PR left either behind (rule 3 says it should not have — if it did, that is the miss to name).
 
-3. **Audit `.claude/` against what landed**: `git diff --stat "$PREV"..HEAD` and `git log --oneline "$PREV"..HEAD`, then for each kind of change:
+   ```bash
+   git diff --stat "$PREV"..HEAD && git log --oneline "$PREV"..HEAD
+   ```
+
+   Then for each kind of change:
 
    | Landed | Refresh |
    |---|---|
@@ -40,17 +37,18 @@ Merging is the user's act. Everything after it is yours, on `main`, without a si
    | a command that prompted for permission more than once | `settings.json` `allow` |
    | a command that must never run unasked | `settings.json` `deny` |
    | a rule in `CLAUDE.md` that the PR had to work around | the rule |
+   | anything the merged PR changed for developers or editors and did not write down | `docs/TECHNICAL.md` / `docs/NON-TECHNICAL.md` — a rule-3 miss on that PR; fix it in the next PR that touches the area and name it |
 
    Also read the merged PR body's **Decisions worth reviewing** — those rows belong in §14.
 
-4. **Nothing drifted?** Say so, with the graph commit line, and stop.
+3. **Nothing drifted?** Say so and stop.
    **Something drifted?** Say what drifted and where it belongs, and carry it in the next PR that touches that area. Do not open a PR of your own for it, and never commit to `main`. Rows the merged PR should have carried are a rule-3 miss on the last PR — name it as that.
 
-5. **Per-machine facts** learned on the way (a CLI that appeared, a tool that stopped working) go to Claude's memory directory, not to the repo.
+4. **Per-machine facts** learned on the way (a CLI that appeared, a tool that stopped working) go to Claude's memory directory, not to the repo.
 
 ## Do not
 
-- Run `/graphify` or `graphify label` on a branch (`CLAUDE.md` rule 1). The git hooks' code-only rebuild is not that.
+- Run `/graphify`, `graphify update` or `graphify label` — on a branch **or** on `main`, and least of all here (user, 2026-09-11). The graph's code half keeps itself current through the git hooks; its prose half is refreshed only when the user asks for `/graphify`, so expect the session hook's "N commits behind" to read non-zero after a pull until the next commit or branch switch, and expect the prose nodes to be several merges old. Query the graph for the shape, confirm the detail against source.
 - Touch the database.
 - Push anything from `main`.
 - Rewrite `design.md` from scratch; it is refreshed, section by section, against the diff.
