@@ -1206,6 +1206,23 @@ drop `LOGIN_MAX_FAILURES` if it was raised. Then step 6 below, and `docker compo
 `cloudflared` beside `app`. Once it is permanent, deleting the `profiles:` line and restoring
 `${TUNNEL_TOKEN:?…}` puts the file back to one shape with nothing to remember.
 
+**Realtime needs a tenant whose name matches the one it looks up, and a fresh self-hosted stack can
+get this wrong on its own.** Supabase's Realtime container is multi-tenant even when self-hosted: it
+seeds a tenant row at boot and then resolves one per connection. On the dev instance the seeded row
+was `external_id = realtime-dev` while the running service asked for `realtime`, so **every** websocket
+was refused at the handshake with a bare `403` — `Server: Cowboy`, no body, nothing in the app's own
+logs, and the RLS policy never consulted because the connection never got as far as a channel. The
+only place it is visible is the Realtime container's log:
+
+```
+error_code=TenantNotFound [error] TenantNotFound: Tenant not found: realtime
+```
+
+So when presence stays dark and the browser console says `CHANNEL_ERROR`, check that first:
+`docker logs --tail 50 <stack>-realtime-1` and `select external_id from _realtime.tenants;`. The two
+strings must be equal. Fixing the container's tenant-name environment variable is the durable answer,
+because renaming the row alone is undone the next time the stack reseeds.
+
 **Turning on the editor's presence feature is a separate three-step job, and the path rule is the
 load-bearing one.** In the tunnel's Zero Trust dashboard add two Public Hostname rules **in this
 order**: `www.iopstor.com` path `^/realtime/` → `http://<kong-service>:8000`, then `www.iopstor.com`
