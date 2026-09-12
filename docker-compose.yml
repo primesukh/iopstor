@@ -2,6 +2,8 @@
 # The tunnel is the only ingress -- `app` publishes no port and carries no Traefik label, so cloudflared,
 # which is outbound-only, is the only route in. That unreachability is what makes throttle.client_ip()'s
 # trust in CF-Connecting-IP honest (docs/TECHNICAL.md §12); the runbook is §15.
+# The tunnel is behind a profile, so the stack also deploys before anyone has made one -- with the profile
+# off the sentence above is not true yet, and §15 says what that costs while it lasts.
 # Every value below comes from the Dokploy service's environment. Nothing here is a secret.
 services:
   app:
@@ -20,11 +22,16 @@ services:
     # default reaches cloudflared; dokploy-network reaches Supabase Kong. Two networks on purpose.
     networks: [default, dokploy-network]
   cloudflared:
+    profiles: [tunnel]                     # started only when COMPOSE_PROFILES=tunnel is in the environment;
+                                           # `app` carries no profiles: key, so it deploys either way
     image: cloudflare/cloudflared:latest   # --no-autoupdate below: it only moves on a redeploy
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?from the tunnel in Cloudflare Zero Trust}
+      # `:-` and not `:?` like the rest: until the tunnel exists there is genuinely no token, and a required
+      # marker fails the whole `docker compose config`, app included. With the profile on, an empty token
+      # is cloudflared's own error in its own log, which is where you would look anyway.
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
     # Plain depends_on, not service_healthy: cloudflared retries by itself, and gating it on the app's
     # health would hide a broken app behind a tunnel that never comes up.
     depends_on: [app]
