@@ -551,7 +551,7 @@ One stylesheet, `static/site.css`, with the design tokens at the top, then heade
 
 **`site.css` is shared three ways** — the public site, `body.admin` (through `templates/admin/base.html`) and the editor canvas iframe (`templates/admin/canvas.html` loads it, then `canvas.css`). A change to `.card`, `.btn`, `.specs` or `.lead-form` shows up in all three, which is the point: the canvas is a real render of the real theme.
 
-**Tokens.** `:root` holds the palette the design ships with — `--black`/`--black-2`/`--black-3` and `--line-dark`/`--line-dark-2` for the dark bands, `--blue`/`--blue-hover`/`--blue-tint`/`--blue-light`, `--white`/`--grey`/`--line`/`--line-2` for the light ones, `--ink`/`--ink-2`/`--muted`/`--muted-dark`/`--muted-dark-2` for text, `--green`/`--red` (plus `-bg`) for status, `--wrap` (1200px) and `--reading` (760px) for measure, and `--head`/`--body`/`--mono` for the three type stacks. Headings are Manrope 800, body is IBM Plex Sans.
+**Tokens.** `:root` holds the palette the design ships with — `--black`/`--black-2`/`--black-3` and `--line-dark`/`--line-dark-2` for the dark bands, `--blue` (`#4273b8`, the brand blue) with `--blue-hover` `#335a8f`, `--blue-tint` `#f0f4fa` and `--blue-light` `#88a8d4` — the same hue and saturation at three other lightnesses, so a change to the brand blue is four values, not one, plus the seven `rgba(66,115,184,alpha)` literals that no token could carry (tinted tiles, the hero glow, the sweep gradient) — `--white`/`--grey`/`--line`/`--line-2` for the light ones, `--ink`/`--ink-2`/`--muted`/`--muted-dark`/`--muted-dark-2` for text, `--green`/`--red` (plus `-bg`) for status, `--wrap` (1200px) and `--reading` (760px) for measure, and `--head`/`--body`/`--mono` for the three type stacks. Headings are Manrope 800, body is IBM Plex Sans.
 
 A second, shorter line under them maps the *old* token names (`--navy`, `--accent`, `--accent-2`, `--text`, `--card`, `--radius`) onto the new palette. `admin.css` and `canvas.css` still reference those in ~90 places; the aliases keep the admin rendering while it is restyled in its own PR, and are marked `ponytail:` for deletion once nothing uses them.
 
@@ -639,7 +639,7 @@ The other three shapes size from `auto` tracks that stay inside a 390px card (da
 
 **A numeric `cards` icon is a counter, not an icon.** `card-icon num` drops the tinted tile for the design's mono blue number, and the deck tightens around it (`.cards:has(.card-icon.num)`).
 
-**Favicons.** `static/favicon.svg` plus PNGs at 16/32/48/180/192/512, generated from the SVG with ImageMagick and linked from both `base.html` and `admin/base.html`.
+**Favicons.** `static/favicon.svg` plus PNGs at 16/32/48/180/192/512, generated from the SVG with **Inkscape** — `inkscape --export-type=png --export-width=N --export-height=N --export-filename=static/favicon-N.png static/favicon.svg`, once per size — and linked from both `base.html` and `admin/base.html` (only svg/16/32/180 are linked; 48/192/512 are kept for a web manifest that does not exist yet). Recolouring the mark means editing the SVG and re-running the six. **Not ImageMagick**, which these were generated with until 2026-09-12: `convert` has no usable SVG delegate here and falls back to its own MSVG rasteriser, whose antialiasing turns the ring into a blob at 16-48px and quantises the result to a 256-colour palette. Inkscape renders each size natively in RGBA; compare before replacing the tool again.
 
 ### The admin shell
 

@@ -49,7 +49,7 @@ A change can hit several rows; screenshot every row that matches.
 - **A width set with `max-width` instead of `--w-def`** — the section ignores the editor's Width control.
 - **Fonts**: Manrope / IBM Plex Sans come from Google Fonts; offline they fall back and the screenshot lies about measure. Say so if the box has no internet.
 - **Reduced motion**: the hero rotator parks on the first picture under `prefers-reduced-motion`; a screenshot with the second picture showing is fine, one with none is not.
-- **The mock is the reference, the client's decisions win over it**: white header, logo in colour, price on the Buy button (`.claude/docs/requirements.md`).
+- **The mock is the reference, the client's decisions win over it**: white header, logo in colour, price on the Buy button, and since 2026-09-12 **the brand blue is `#4273b8` while the mock is still `#008cf7`** — every side-by-side now shows two blues, and that is the decision, not a regression (`.claude/docs/requirements.md`). The logo picture in the header is the client's own file and still carries the old blue until they send a new one.
 
 ## Report
 
