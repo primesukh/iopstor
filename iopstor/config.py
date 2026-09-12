@@ -8,6 +8,10 @@ SITE_URL = os.environ.get("SITE_URL", "").rstrip("/")
 
 SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")  # Kong gateway; http:// is fine on the LAN dev box
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
+# Browser-facing Supabase origin, for the editor's realtime channel. Optional and NOT in REQUIRED:
+# empty means collaboration is simply off, which is the correct state in production until the tunnel
+# routes /realtime/ to Kong. SUPABASE_URL cannot be reused -- in production it is internal Docker DNS.
+SUPABASE_PUBLIC_URL = (os.environ.get("SUPABASE_PUBLIC_URL") or "").rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "")
 MEDIA_BUCKET = os.environ.get("MEDIA_BUCKET", "media")

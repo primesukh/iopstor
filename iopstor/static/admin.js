@@ -798,6 +798,11 @@
     select(path);
   }
 
+  /* Reassigned by initCollab(); a no-op when collaboration is off, or before the socket is up.
+     Same late-binding trick as syncBar() below, and for the same reason: canvasFull() is async, so
+     anything that touches the canvas document has to tolerate being called before it exists. */
+  var paintPeers = function () {};
+
   function bars() {                   // the "+" strips live between blocks; rebuild after any move
     var d = cdoc();
     if (!d) return;
@@ -809,6 +814,7 @@
       var list = blocksIn(box);
       for (var i = 0; i <= list.length; i++) box.insertBefore(addBar(d, pathIn(box, i)), list[i] || null);
     });
+    paintPeers();   // the one place every re-render path passes through, and renumber() has already run
   }
 
   // ---- editing on the page --------------------------------------------------
@@ -1407,6 +1413,8 @@
     f.dispatchEvent(new (W.Event || Event)("input", { bubbles: true }));
   }
 
+  var sendWhere = function () {};   // reassigned by initCollab(), like paintPeers()
+
   function rememberSelection() {
     var d = cdoc();
     if (!d) return;
@@ -1419,6 +1427,7 @@
     savedRange = r.cloneRange();
     savedField = f;
     syncBar();
+    sendWhere(f);   // no-op unless a channel is up; throttled inside, selectionchange is very chatty
   }
 
   /* Is the remembered caret still commandable? isConnected is not enough: a node from a replaced
@@ -1944,6 +1953,7 @@
 
     focusOnLoad = "0";   // land the caret in the document, the way Docs does
     canvasFull();
+    initCollab();   // canvasFull() is async, so the first paint comes through bars(), not from here
 
     // Advanced is the same data as JSON. The textarea is written when the panel opens (and on
     // submit); a hand edit is read back on blur, so whichever side was touched last wins.
@@ -1976,6 +1986,236 @@
       });
     });
     window.addEventListener("beforeunload", function (e) { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+  }
+
+  // ---- working at the same time ---------------------------------------------
+  /* Every state this feature can be in says so once, in the console. It is off far more often than it
+     is broken -- unset in tests, unset before the migration, unset in production until the tunnel
+     routes /realtime/ -- and telling those apart from the page was impossible without it. */
+  function say(msg) { if (window.console) console.info("[iopstor] editor presence: " + msg); }
+
+  /* Who else has this page open, and roughly where they are. Presence only: nothing here changes a
+     block, and nobody's typing reaches anybody else yet -- that is the shared-document work.
+
+     The socket lives in THIS document, not in the canvas iframe (unlike Sortable, which has to bind
+     to elements in there). Markers are painted into the iframe's DOM from out here, which is what
+     admin.js already does everywhere else via cdoc().
+
+     Off, silently, when SUPABASE_PUBLIC_URL is unset, when the post has no id yet, or when the
+     library did not load -- all three are the same single-player editor that existed before. */
+  function initCollab() {
+    var rt = SPEC.rt || {};
+    /* Silence was the wrong default here: "off" and "broken" looked identical from the page, and the
+       first real setup spent a round trip finding out which it was. One console line, only when
+       something is missing, naming the thing that is missing. */
+    if (!rt.url) return say("SUPABASE_PUBLIC_URL is not set, so nobody will see who else is editing. Set it and restart the server -- --debug reloads code but not .env.");
+    if (!rt.room) return say("this page has no id yet, so there is nobody to share it with until it is saved once.");
+    if (!window.supabase) return say("the realtime library did not load (static/vendor/supabase.js).");
+
+    say("joining " + rt.room + " as " + rt.me.name);
+    var client = null, token = null;
+    var chan = null, peers = {}, spot = {}, mine = { path: null, field: null, sig: sig(), at: 0 };
+    var roster = document.getElementById("ed-peers");
+
+    /* MODEL's shape as a string. data-b is POSITIONAL and renumber() rewrites it on every insert,
+       move and delete -- so the moment one editor adds a section, my "2" is their "3" and a marker
+       drawn at their path would sit on the wrong block. Comparing shape lets a marker be drawn only
+       while both sides are looking at the same document, and hidden (not moved) when they are not.
+       ponytail: goes away entirely once the document itself is shared; then there is one shape. */
+    function sig() {
+      var out = [];
+      (function walk(list) {
+        (list || []).forEach(function (b) {
+          out.push(b.type);
+          if (b.type === "columns" && b.data && b.data.cols) b.data.cols.forEach(walk);
+        });
+      })(MODEL);
+      return out.join(",");
+    }
+
+    function initials(name) {
+      var bits = String(name || "?").trim().split(/\s+/);
+      return ((bits[0] || "?")[0] + (bits.length > 1 ? bits[bits.length - 1][0] : "")).toUpperCase();
+    }
+
+    function drawRoster() {
+      if (!roster) return;
+      var list = Object.keys(peers).map(function (k) { return peers[k]; });
+      roster.textContent = "";
+      list.slice(0, 4).forEach(function (p) {
+        var a = el("span", { "class": "ed-peer", title: p.name + " has this page open" });
+        a.style.background = p.colour;
+        a.textContent = initials(p.name);
+        roster.appendChild(a);
+      });
+      if (list.length > 4) roster.appendChild(el("span", { "class": "ed-peer more", text: "+" + (list.length - 4) }));
+    }
+
+    /* Markers are attributes and a pseudo-element, never injected nodes: bindField()'s input handler
+       copies a field's innerHTML straight into MODEL, so anything appended inside a [data-f] would be
+       saved into the published page. The block edge is an inset box-shadow because hover and
+       selection both use outline, and an inset shadow adds no layout box and fights neither. */
+    paintPeers = function () {
+      var d = cdoc();
+      if (!d) return;
+      Array.prototype.forEach.call(d.querySelectorAll("[data-peer],[data-peer-at]"), function (n) {
+        n.removeAttribute("data-peer");
+        n.removeAttribute("data-peer-at");
+        n.style.removeProperty("--peer");
+      });
+      if (VIEW === "preview") return;   // a different document entirely; no [data-b] to mark
+      Object.keys(peers).forEach(function (k) {
+        var p = peers[k], w = spot[k];
+        if (!w || !w.path || w.sig !== mine.sig) return;   // different shape: say nothing rather than lie
+        var block = d.querySelector('[data-b="' + w.path + '"]');
+        if (!block) return;
+        block.setAttribute("data-peer-at", "1");
+        block.style.setProperty("--peer", p.colour);
+        var f = w.field && block.querySelector('[data-f="' + w.field + '"]');
+        if (f && f.closest("[data-b]") === block) {
+          f.setAttribute("data-peer", p.name + " is typing here");
+          f.style.setProperty("--peer", p.colour);
+        }
+      });
+    };
+
+    /* Two signals, two transports, and the split is the instance's limit rather than tidiness.
+       presence.track() is rationed to roughly FIVE EVENTS A MINUTE per client here: one per caret
+       move earned "Client presence rate limit exceeded" on the sixth and the server closed the
+       channel, so the page went dead the moment anybody typed -- and CLOSED is not a retry trigger,
+       so it stayed dead. Measured against this Supabase: six tracks three seconds apart were
+       refused; 160 broadcasts at four a second were all delivered and the channel never moved. So
+       presence carries WHO IS HERE and is sent once per join, and where the caret is goes over
+       broadcast, which is the budget built for it. */
+    var pending = null;
+    function beam() {
+      if (!chan) return;
+      mine.sig = sig();
+      chan.send({ type: "broadcast", event: "where",
+                  payload: { id: rt.me.id, path: mine.path, field: mine.field, sig: mine.sig } });
+    }
+    function nudge() {                       // selectionchange fires on every caret move
+      clearTimeout(pending);
+      pending = setTimeout(beam, 250);
+    }
+
+    sendWhere = function (f) {
+      var block = f && f.closest && f.closest("[data-b]");
+      mine.path = block ? block.getAttribute("data-b") : null;
+      mine.field = f ? f.getAttribute("data-f") : null;
+      mine.at = Date.now();
+      nudge();
+    };
+
+    /* Nothing in the editor says "I stopped editing": there is no blur handler on a field, and
+       clicking the title or the settings panel leaves the last caret position standing. So it ages
+       out on its own rather than lingering on a section nobody is in. */
+    setInterval(function () {
+      if (mine.path && Date.now() - mine.at > 60000) { mine.path = mine.field = null; beam(); }
+    }, 20000);
+
+    function readRoster() {
+      var state = chan.presenceState(), next = {};
+      Object.keys(state).forEach(function (key) {
+        var m = state[key][0];
+        if (m && m.id && m.id !== rt.me.id) next[m.id] = m;
+      });
+      peers = next;
+      Object.keys(spot).forEach(function (id) { if (!peers[id]) delete spot[id]; });
+      drawRoster();
+      paintPeers();
+    }
+
+    /* Positions are kept apart from the roster on purpose: a broadcast that arrives before the
+       presence sync would otherwise be dropped, and a latecomer has heard nobody's last position at
+       all -- which is why every peer re-sends theirs whenever somebody joins. */
+    function hearWhere(msg) {
+      var w = msg && msg.payload;
+      if (!w || !w.id || w.id === rt.me.id) return;
+      spot[w.id] = w;
+      paintPeers();
+    }
+
+    /* The client is built around a token GETTER, not a token, and that is the whole reason presence
+       works at all. supabase-js re-authorises the socket by itself -- on connect, on reconnect and
+       on every heartbeat -- and when it does it ignores whatever realtime.setAuth() was handed and
+       calls its own accessToken callback instead. That callback defaults to the GoTrue session, and
+       this client has none: the token comes from /admin/rt-token, not from a sign-in in the page. So
+       it fell back to the ANON key, pushed that to the already-joined channel, Realtime re-ran the
+       policy as `anon` against a policy written `to authenticated`, and closed the channel a tenth
+       of a second after it opened. The console read "channel SUBSCRIBED" then "channel CLOSED", the
+       roster stayed empty, and every layer underneath tested green. Proved by A/B against the live
+       instance: with the getter, two peers see each other and hold for a minute; without it, the
+       first peer is gone before the second one arrives. setAuth() stays so the first join does not
+       wait on the callback's promise, and the client is built here rather than above because a null
+       token makes supabase-js fall back to the anon key again. */
+    function join(t) {
+      token = t;
+      if (!client) client = window.supabase.createClient(rt.url, rt.key, {
+        accessToken: function () { return Promise.resolve(token); },
+        realtime: { params: { eventsPerSecond: 5 } }
+      });
+      client.realtime.setAuth(token);
+      chan = client.channel(rt.room, { config: { private: true, presence: { key: rt.me.id } } });
+      chan.on("presence", { event: "sync" }, readRoster)
+          .on("presence", { event: "join" }, function () { readRoster(); if (mine.path) nudge(); })
+          .on("presence", { event: "leave" }, readRoster)
+          .on("broadcast", { event: "where" }, hearWhere)
+          .subscribe(function (status, err) {
+            say("channel " + status + (err ? " -- " + err.message : ""));
+            // The one presence event of the session: who I am. Everything else rides broadcast.
+            if (status === "SUBSCRIBED") { tries = 0; return chan.track({ id: rt.me.id, name: rt.me.name, colour: rt.me.colour }); }
+            // CHANNEL_ERROR is what an expired JWT looks like from here. _session_token() only
+            // refreshes AFTER expiry, so reacting to the error is the only schedule that can be
+            // honoured -- asking early would hand back the same dying token.
+            if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") retry();
+            // A CLOSED we did not ask for is the server hanging up -- a restarted realtime
+            // container, a changed policy, a limit tripped -- and it used to be the end of
+            // collaboration for the life of the tab. `closing` is what separates that from the
+            // close removeChannel() makes on the way to a retry, which must not re-arm the retry.
+            if (status === "CLOSED" && !closing) retry();
+          });
+    }
+
+    /* Backs off and then gives up, and this shape is load-bearing rather than tidy: the first version
+       retried a flat two seconds forever and, with the realtime service refusing the socket, every
+       open editor quietly fetched /admin/rt-token every two seconds for as long as the tab was open.
+       An UNASKED-FOR close does reconnect now, but the close this function makes itself does not --
+       that distinction is the `closing` flag, and getting it wrong is what made the first version
+       re-arm its own retry and never terminate even once the socket was fine. */
+    var tries = 0, retrying = false, closing = false;
+    function retry() {
+      if (retrying) return;
+      if (tries >= 5) return say("giving up after " + tries + " attempts; reload the page to try again.");
+      retrying = true;
+      var wait = Math.min(2000 * Math.pow(2, tries), 30000);
+      tries += 1;
+      say("retrying in " + Math.round(wait / 1000) + "s (attempt " + tries + " of 5)");
+      setTimeout(function () {
+        fetch("/admin/rt-token", { credentials: "same-origin" }).then(function (r) {
+          // ui_required redirects a finished session to the login page and fetch follows it, so a
+          // dead session arrives as 200 HTML, never 401. Stop rather than hammer it forever.
+          if (r.redirected) throw new Error("signed out");
+          return r.json();
+        }).then(function (j) {
+          retrying = false;
+          if (!j.token) return say("no token: the session has ended, so sign in again.");
+          if (client && chan) { closing = true; client.removeChannel(chan); chan = null; closing = false; }
+          join(j.token);
+        }).catch(function () { retrying = false; tries = 5; say("cannot reach the server; presence is off until you reload."); });
+      }, wait);
+    }
+
+    fetch("/admin/rt-token", { credentials: "same-origin" })
+      .then(function (r) { return r.redirected ? null : r.json(); })
+      .then(function (j) {
+        if (j && j.token) return join(j.token);
+        say(j ? "the server sent no token, so presence is off." : "the session has ended; sign in again.");
+      })
+      .catch(function (e) { say("could not ask the server for a token -- " + e.message); });
+
+    // Realtime expires presence server-side when the socket drops, so this only makes it prompt.
+    window.addEventListener("beforeunload", function () { if (chan) chan.untrack(); });
   }
 
   // ---- the warranty form ----------------------------------------------------

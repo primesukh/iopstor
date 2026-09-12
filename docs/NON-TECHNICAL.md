@@ -308,6 +308,12 @@ sitting still.
 
 Nothing is saved until you press **Save**. If you try to leave with unsaved changes, your browser will warn you. If something required is missing, the page comes back with the problem listed at the top and your work still in place.
 
+**Seeing who else is on the page.** If a colleague has the same page open, their initials appear in a coloured circle at the top right, beside **Save**. Click into a section and they see a coloured line down the edge of it and a small label saying you are typing there — and you see the same for them. It is a nudge, not a lock: nothing stops two people typing in the same paragraph, it just means you can see that you are about to.
+
+You are still working on separate copies for now. What you type does not appear on their screen, and theirs does not appear on yours — only *where* each of you is. Working on the same copy at the same time, the way Google Docs does, is being built next.
+
+Two small things you may notice. The circles vanish on a narrow phone screen, because the bar at the top is already full — the coloured lines on the sections still show. And if either of you adds or removes a section, the coloured lines disappear until you both reload: the two copies no longer line up, and showing you a line on the wrong paragraph would be worse than showing none.
+
 **If somebody else was editing the same page.** Two people can open the same page at once, and until now the second person to press **Save** quietly wiped out the first person's work — with both of them told it had saved. That no longer happens. If a colleague saved while you were writing, your Save stops and an amber note appears above the page:
 
 > Somebody else saved this page while you were writing. Nothing of yours has been lost — it is all still on this screen. Save again to replace their version, or open the page in another tab to see what changed first.
@@ -584,10 +590,12 @@ unsure which one you are looking at, check the address at the top of the browser
 is served straight from what you save, with no waiting and nothing to rebuild. A **Draft** stays invisible,
 and a scheduled page appears by itself at the date you set.
 
-**Can two of us edit the same page at the same time?** You can both open it, but you are not yet working
-together on one copy — you each have your own, and whoever saves second is told so rather than quietly
-overwriting the first. See *If somebody else was editing the same page* in §4. Working on the same page at
-the same time, seeing each other type, is being built next.
+**Can two of us edit the same page at the same time?** You can both open it and you can now see each
+other — initials at the top right, and a coloured line down the section the other person is in. But you
+are still working on separate copies: what they type does not appear on your screen, and whoever saves
+second is told so rather than quietly overwriting the first. See *Seeing who else is on the page* and
+*If somebody else was editing the same page* in §4. Working on one shared copy, the way Google Docs
+does, is being built next.
 
 **Where did the Instagram link in the footer go?** It is still there, as an icon. The social links used to
 appear as web addresses in the *Contact* column at the bottom of the page; they now sit under the logo as a

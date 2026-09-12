@@ -8,7 +8,7 @@ from datetime import date
 from functools import wraps
 from urllib.parse import urlparse
 
-from flask import Blueprint, abort, flash, g, has_request_context, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, current_app, flash, g, has_request_context, jsonify, redirect, render_template, request, session, url_for
 from markupsafe import Markup, escape
 from postgrest import APIError
 from supabase_auth.errors import AuthError
@@ -16,7 +16,7 @@ from werkzeug.exceptions import HTTPException
 
 from . import db, display_name, seo
 from .admin_api import apply_post
-from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login, set_password
+from .auth import ROLES, _session_token, create_auth_user, current_user, delete_auth_user, login, set_password
 from .blocks import BLOCKS, EDITOR, LAYOUTS, _NON_TEXT_KEYS, at_path, blocks_text, render_blocks, validate_blocks, warranty_active
 from .throttle import clear as throttle_clear, client_ip, record_failure, retry_after, wait_text
 from .storage import delete_media, save_upload
@@ -271,6 +271,26 @@ def _new_term_ids(pt):
     return [i for i in ids if i]
 
 
+def _rt(pk):
+    """What the browser needs to join this page's realtime channel -- and deliberately no token.
+
+    The access token is fetched from /admin/rt-token at init instead, so nothing secret is ever at
+    rest in the page source, in view-source, or in a cached copy of the HTML. The anon key IS meant
+    to be public (it is the browser's key by design, and RLS with no policies means it reads nothing
+    on its own); the user's GoTrue token is the one worth keeping out.
+
+    Empty url = the whole feature is off, which is the state in production until the tunnel routes
+    /realtime/ to Kong, and in every test. Empty room = an unsaved new post: there is no stable id to
+    collaborate under yet.
+    """
+    uid = str((g.user or {}).get("id", ""))
+    return {"url": current_app.config["SUPABASE_PUBLIC_URL"], "key": current_app.config["SUPABASE_ANON_KEY"],
+            "room": f"post:{pk}" if pk else "",
+            # int(uuid), not hash(): hash() is salted per process, so thirty gunicorn workers would
+            # hand the same editor thirty different colours depending on who served the page.
+            "me": {"id": uid, "name": display_name(g.user), "colour": f"hsl({int(uid[:8], 16) % 360 if uid else 0} 62% 45%)"}}
+
+
 # Said to an editor, not about a field: it goes in its own banner, never through the field-error
 # list, which prints the key beside the message and would put a bare "_" on a non-technical screen.
 CONFLICT = ("Somebody else saved this page while you were writing. Nothing of yours has been lost — "
@@ -290,7 +310,7 @@ def _form_context(pt, post, errors=None, conflict=None):
     media = db.rows(db.table("media").select("id,filename,url,mime,alt").order("id", desc=True).limit(200))
     term_ids = {t["id"] for t in (post or {}).get("terms") or []}
     pk = (post or {}).get("id")   # .get(): a rejected save of a *new* post renders a draft dict with no id
-    return dict(pt=pt, post=post, errors=errors or {}, conflict=conflict, taxonomies=taxonomies,
+    return dict(pt=pt, post=post, errors=errors or {}, conflict=conflict, taxonomies=taxonomies, rt=_rt(pk),
                 parents=[p for p in siblings if p["id"] != pk] if pt["hierarchical"] else [],
                 taken_slugs=[s["slug"] for s in siblings if s["id"] != pk],
                 media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps((post or {}).get("blocks") or [], indent=2, ensure_ascii=False),
@@ -394,6 +414,23 @@ def restore_post(pk):
     db.update("posts", pk, {"status": "draft"}, action="restore")
     flash(f"Restored {post['title']} as a draft.")
     return redirect(url_for("admin_ui.posts", type=post["post_type"]["slug"], status="trash"))
+
+
+@ui.get("/rt-token")
+@ui_required()
+def rt_token():
+    """A fresh access token for the editor's realtime socket, which outlives the token it started with.
+
+    GET on purpose -- it changes nothing, so the route-accounting test needs no entry for it (and
+    would fail if one were added: that test asserts both directions).
+
+    Two things a caller has to know. auth._session_token() refreshes only *after* expiry, so calling
+    this early returns the same string; the browser is meant to call it when Realtime reports the
+    token dead, not on a schedule it cannot honour. And when the session itself is finished,
+    ui_required redirects to the login page before this body ever runs -- fetch() follows that, so
+    the browser sees 200 with HTML, never a 401, and has to test r.redirected.
+    """
+    return jsonify({"token": _session_token() or ""}), 200, {"Cache-Control": "no-store"}
 
 
 @ui.post("/canvas")

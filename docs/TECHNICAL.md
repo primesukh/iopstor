@@ -1042,6 +1042,39 @@ silently does nothing — the bug that once showed the layout chooser and the ca
 
 ---
 
+### 12.3 Working at the same time
+
+Two editors can now see each other on a page. **Presence only** — nobody's typing reaches anybody else yet; that is the shared-document work the plan calls PR 4.
+
+**The transport is Supabase Realtime, and Flask is not in it.** Gunicorn runs sync workers (`-w 30 --threads 8`), so the app cannot hold a WebSocket at all, and putting one behind thirty stateless processes would need a broker to fan out between them. Browsers open the socket straight to Realtime instead, which is correct across any number of workers and containers *because* the app is not involved. `iopstor/static/vendor/supabase.js` is the pinned UMD build (2.116.0), loaded by `post_form.html` — the **parent** document, not the canvas iframe. That is the opposite of the `sortable.min.js` precedent (`canvas.html`), and deliberately: Sortable binds to elements inside the iframe, while the socket, the roster and the token belong to the page, and only the *markers* are painted into the iframe's DOM from outside.
+
+**Two signals, two transports, and the split is a hard limit on the instance rather than a preference.** `presence.track()` is rationed to roughly **five events a minute per client** here. Sending one per caret move — the obvious design, and the first one built — earned `Client presence rate limit exceeded` from the server on the sixth, and the server then *closed the channel*: the roster emptied and the markers died the moment anybody typed. Measured against the dev Supabase: six tracks 250 ms apart refused; six tracks **three seconds** apart also refused (so it is a budget, not a rate); six tracks fifteen seconds apart all accepted (so it refills at about five a minute); and 160 broadcasts at four a second all delivered with the channel never moving. So **presence carries who is here and is sent exactly once per join**, and **where the caret is goes over `broadcast`**, which is the budget built for it. Positions are held in a map separate from the roster, so a broadcast that arrives before the presence sync is not thrown away, and every peer re-broadcasts its position when somebody joins, because a latecomer has heard nobody's.
+
+**`SUPABASE_PUBLIC_URL` is the on/off switch, and its absence is the off state** (§14). The browser cannot use `SUPABASE_URL` — in production that is internal Docker DNS. Empty means `initCollab()` returns immediately and the editor is exactly the single-player one that shipped before: empty in every test, empty until `0009` is applied, empty in production until the tunnel routes `^/realtime/` to Kong (§15). One switch, no feature-flag machinery, and the same state for all three reasons.
+
+**Authorisation mirrors the app's own rule rather than trusting `authenticated`.** Channels are `private: true`, so Realtime checks RLS on `realtime.messages`, which `migrations/0009_realtime_channel_policy.sql` supplies. The policy is not `to authenticated` alone: this GoTrue has signups enabled, so "holds a valid token" is a wider set than "is a CMS editor". It asks `auth.current_user()`'s question — is there a `public.users` row for this token's `sub` — but it **cannot ask it inline**, and that is the trap worth knowing: written as a bare `exists (select 1 from public.users …)` the clause is always FALSE, because the policy runs as `authenticated`, `0002` turned RLS on for `public.users`, and that table has no policies of its own, so the subquery sees an empty table and every editor is refused. (Verified on the running instance: a real admin selecting their own row over PostgREST as `authenticated` gets `[]`.) So the check goes through `public.is_cms_user()`, `SECURITY DEFINER` with `search_path` pinned to `''` and every name schema-qualified, which runs as its owner and therefore bypasses RLS — possible only because `0002` uses `ENABLE` and not `FORCE`. It returns one boolean about the caller and leaks no row, email or role. Plus `topic like 'post:%'` so the grant does not extend to every channel name somebody invents, and `extension in ('broadcast','presence')` because **presence rides `realtime.messages` too**; a broadcast-only policy makes `track()` fail silently and the roster stay empty forever.
+
+**`GET /admin/rt-token`** hands the browser a current access token. It exists because a GoTrue token lasts about an hour and an editing session does not, and the copy the page started with is not refreshed when the server rotates it. Two facts shape the client:
+
+- **`auth._session_token()` refreshes only *after* expiry** — it returns the existing token untouched while it is still valid. So there is no "refresh early" to schedule; the browser reacts to Realtime's `CHANNEL_ERROR` instead, which is the only signal that can be honoured.
+- **A finished session does not answer 401.** `ui_required` redirects to the login page before the route body runs, `fetch()` follows it, and the browser gets **200 with HTML**. Verified against a running server: `302 → /admin/login?next=…`, then `200 text/html`. The client tests `r.redirected` and stops rather than retrying forever.
+
+**The client is built around a token *getter*, not a token, and without that presence cannot work at all.** supabase-js re-authorises the socket by itself — on connect, on reconnect and on every heartbeat — and when it does it ignores whatever `realtime.setAuth()` was handed and calls its own `accessToken` callback instead. `SupabaseClient` always installs one (`realtime.accessToken = this._getAccessToken.bind(this)`), and `_getAccessToken()` is `await this._getSessionToken() ?? this.supabaseKey`. This client has no GoTrue session — the token comes from `/admin/rt-token`, not from a sign-in in the page — so that fell through to **the anon key**, which was pushed to the already-joined channel; Realtime re-ran the policy as `anon` against a policy written `to authenticated`, and closed the channel a tenth of a second after it opened. The console read `SUBSCRIBED` then `CLOSED`, the roster stayed empty, and every layer underneath tested green. `_performAuth()` is where it is decided: `this.accessToken ? this._manuallySetToken = false : …`, so the callback's mere existence cancels the manual token. The fix is to pass `accessToken: () => Promise.resolve(token)` to `createClient()` and keep `token` in the closure, which also makes the library's own reconnects use the refreshed token for free. The client is created inside `join()` rather than above it, because a null token at construction lands back on the anon key. Proved by A/B against the live instance: with the getter two peers see each other and hold; without it the first peer is gone before the second arrives.
+
+The token is **never rendered into the page**. `#editor-data`'s `rt` block carries the public Supabase URL, the anon key (a browser key by design — with RLS on and no policies it reads nothing on its own), the room name and the editor's own display identity; the token is fetched at init and lives only in memory. There is no copy at rest in the HTML, in view-source, or in a cached page.
+
+**Markers are attributes, never injected nodes — this is the rule that would otherwise ship a bug.** `bindField()`'s `input` handler copies a `[data-f]`'s `innerHTML` straight into `MODEL`, so any element appended inside an editable field would be **saved into the published page**. So "Asha is typing here" is `setAttribute("data-peer", …)` plus a `::after` in `canvas.css` (`::before` is the empty-field placeholder), and the section edge is `box-shadow: inset` — hover and selection both use `outline`, and an inset shadow adds no layout box, so all three show at once without fighting. An element's own attributes are not part of its `innerHTML`, which is what makes this safe.
+
+**`bars()` is the single repaint point.** Six paths re-render the canvas — `canvasFull`, `canvasBlock`, `canvasInsert`, `moveBlock`, `delBlock` and the Sortable drag — and `bars()` is the only function every one of them reaches, after `renumber()` has finalised `data-b`. `paint()` looks like the obvious hook and is wrong: it misses move, delete and drag. `paintPeers` is declared as a no-op and reassigned by `initCollab()`, the same late-binding `syncBar()` already uses, because `canvasFull()` is async and the iframe document does not exist when `initBlocks()` finishes.
+
+**Where a peer is shown is guarded by a structure fingerprint, because `data-b` drifts.** The path is *positional* and `renumber()` rewrites it on every insert, move and delete — so the moment one editor adds a section, their `"2"` is the other's `"3"` and a marker drawn at their path would sit on the wrong block. Each editor broadcasts the flat list of its block types alongside its position, and markers are drawn only while both lists match. The avatars are unaffected — they are per-user, not per-block — so the roster stays correct and only the *where* degrades, to nothing rather than to a lie. `# ponytail:` it disappears once the document itself is shared, because then there is only one shape.
+
+**Every state says so once, in the browser console** (`[iopstor] editor presence: …`). This feature is off far more often than it is broken — unset in tests, unset before `0009`, unset in production until the tunnel routes `^/realtime/` — and from the page those two looked identical. The first real setup lost a round trip to exactly that, so each early return names the thing that is missing, the channel's `subscribe` status is reported (a wrong RLS policy arrives as `CHANNEL_ERROR` and would otherwise be silent), and a working socket says which room it joined. **The trap that line calls out: `--debug` reloads code but not `.env`** — `pipenv` puts the file into the environment once at process start and the reloader inherits it, so a newly added `SUPABASE_PUBLIC_URL` stays invisible until the server is actually restarted.
+
+**The reconnect is capped, and `CLOSED` is not a failure.** The first version retried every two seconds forever, so with the realtime service refusing the socket each open editor fetched `/admin/rt-token` every two seconds for as long as the tab stayed open. It now backs off (2s doubling to 30s) and gives up after five attempts, and a successful `SUBSCRIBED` resets the budget. `CHANNEL_ERROR` and `TIMED_OUT` are the obvious triggers; a `CLOSED` **the client did not ask for** is the third, and it was missing — a server-side hang-up (a restarted realtime container, a changed policy, a limit tripped) ended collaboration for the life of the tab with nothing on screen saying so. A `closing` flag is what separates that from the close `removeChannel()` makes on the way to a retry; without the distinction the retry re-arms itself and the loop cannot end even once the socket recovers, which is exactly what the first version did.
+
+**What the editor gives you no event for:** there is no `blur` on a field, and nothing clears the caret position when focus leaves the iframe for the title or the settings panel. So a position ages itself out after a minute rather than marking a section nobody is in.
+
 ## 13. Tests
 
 ```
@@ -1066,6 +1099,8 @@ Everything except `test_offline.py` is marked `live` and skips when `.env` has n
 **Six are required, and the app refuses to boot without them** — `create_app()`'s `REQUIRED`, checked before a blueprint is registered. The four `SUPABASE_*` were always there; `SECRET_KEY` and `SITE_URL` joined them when production became real, and `config.py` dropped their defaults to make the check bite. **Why a refusal rather than a sensible default.** Both used to fail *silently*, which is the expensive way to fail. `SECRET_KEY` fell back to `"dev-only-change-me"`, a string printed in this repo — and `auth.py` accepts a session token as a Bearer fallback when no `Authorization` header is present, so a forged cookie is a way in. `SITE_URL` fell back to `http://localhost:5000`, which does two things at once: every canonical, sitemap `<loc>`, `robots.txt` `Sitemap:` line, RSS guid, JSON-LD `url` and OG image points at localhost, and `SESSION_COOKIE_SECURE` — computed at import from `SITE_URL.startswith("https://")`, not from the request — comes out `False`, so the admin cookie ships over the tunnel without `Secure`. Neither shows up in a smoke test; a deploy that forgets one now stops instead. `test_boot_refuses_without_secret_key_or_site_url` passes empty strings rather than omitting keys, because pipenv loads `.env` and an omitted key would inherit a real value and pass for the wrong reason.
 
 `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are the same values as `JWT_SECRET`, `ANON_KEY` and `SERVICE_ROLE_KEY` in the Supabase compose environment.
+
+**`SUPABASE_PUBLIC_URL` is optional and its absence is a feature state, not a misconfiguration.** It is the Supabase origin the *browser* uses for the editor's realtime channel (§12.3); `SUPABASE_URL` cannot be reused because in production it is an internal Docker name no browser can resolve. Deliberately **not** in `create_app()`'s `REQUIRED`: empty means collaboration is simply off, which is the correct state in every test, before `0009` is applied, and in production until the tunnel routes `^/realtime/` to Kong. In production it equals `SITE_URL` (same origin, so no CORS question); on the dev box the LAN Supabase address is already browser-reachable, so the two match there.
 
 `GUNICORN_CMD_ARGS` is read by gunicorn itself, not by the app: the Dockerfile sets `-w 2 --threads 8 --preload --access-logfile -` and Dokploy's environment raises the worker count (§15). `--access-logfile -` is the only request log there is; the `HEALTHCHECK` adds a `/healthz` line every 30 s, which is not traffic.
 
@@ -1174,6 +1209,37 @@ to `https://www.iopstor.com`, **delete the Dokploy domain** so the tunnel is the
 drop `LOGIN_MAX_FAILURES` if it was raised. Then step 6 below, and `docker compose ps` must list
 `cloudflared` beside `app`. Once it is permanent, deleting the `profiles:` line and restoring
 `${TUNNEL_TOKEN:?…}` puts the file back to one shape with nothing to remember.
+
+**Realtime needs a tenant whose name matches the one it looks up, and a fresh self-hosted stack can
+get this wrong on its own.** Supabase's Realtime container is multi-tenant even when self-hosted: it
+seeds a tenant row at boot and then resolves one per connection. On the dev instance the seeded row
+was `external_id = realtime-dev` while the running service asked for `realtime`, so **every** websocket
+was refused at the handshake with a bare `403` — `Server: Cowboy`, no body, nothing in the app's own
+logs, and the RLS policy never consulted because the connection never got as far as a channel. The
+only place it is visible is the Realtime container's log:
+
+```
+error_code=TenantNotFound [error] TenantNotFound: Tenant not found: realtime
+```
+
+So when presence stays dark and the browser console says `CHANNEL_ERROR`, check that first:
+`docker logs --tail 50 <stack>-realtime-1` and `select external_id from _realtime.tenants;`. The two
+strings must be equal. Fixing the container's tenant-name environment variable is the durable answer,
+because renaming the row alone is undone the next time the stack reseeds.
+
+**Turning on the editor's presence feature is a separate three-step job, and the path rule is the
+load-bearing one.** In the tunnel's Zero Trust dashboard add two Public Hostname rules **in this
+order**: `www.iopstor.com` path `^/realtime/` → `http://<kong-service>:8000`, then `www.iopstor.com`
+with no path → `http://app:8000`. Everything that is not `/realtime/` then reaches Flask and 404s.
+**Do not route all of Kong.** That would publish GoTrue's `/auth/v1/*` — including `signup`, which is
+enabled on these instances — and `throttle.py` sits in front of `POST /admin/login` only, not in front
+of GoTrue. Second, `cloudflared` must be on `dokploy-network` to resolve the Kong service name; it
+carries a comment saying it has no business reaching Supabase, and that comment is now wrong on
+purpose. Third, set `SUPABASE_PUBLIC_URL=https://www.iopstor.com` — same origin as `SITE_URL`, so the
+socket is same-origin and there is no CORS question. Leave it unset until the rule exists, or every
+editor's browser opens a socket that cannot connect. Verify with `curl -i https://www.iopstor.com/rest/v1/`
+returning the **Flask** 404 page and not PostgREST, and the browser console showing the websocket at
+`wss://www.iopstor.com/realtime/v1/websocket` reaching `SUBSCRIBED`.
 
 **The order of first deployment matters, and getting it wrong looks like a crash loop.** `CMD` is
 `flask migrate && exec gunicorn …`, so a database without `0000_bootstrap.sql` in it fails migrate and
@@ -1317,6 +1383,13 @@ Marked in code with `# ponytail:` comments.
   `head`. All three are Debian-essential and were confirmed present in `python:3.13-slim`
   (`docker run --rm python:3.13-slim bash -c 'which bash grep head'`); re-check it if the base image
   ever changes, because the failure mode is a container that reports itself unhealthy forever.
+- **Presence is advisory, and its *where* is best-effort.** `data-b` is positional, so a structure fingerprint hides the
+  section markers whenever two editors' block lists differ rather than drawing them on the wrong block (§12.3). A
+  caret position also ages out after a minute, because the editor raises no event when focus leaves a field. The
+  roster itself is always correct. All of this goes away when the document becomes genuinely shared.
+- **Nothing tests the websocket.** The offline suite covers the switch (`SUPABASE_PUBLIC_URL` empty ⇒ no config in
+  the page), the room naming and the colour's stability across workers; the socket, the RLS policy and the token
+  refresh are proved by hand with two browsers. A mock here would test the mock.
 - **The conflict guard covers `posts` only.** `settings` and `menus` write through `set_settings()` /
   `set_menu()`, which are not keyed by `id`, so two people on the Settings or Menus screen still overwrite
   each other silently. Same shape, same fix (§4), not yet done.

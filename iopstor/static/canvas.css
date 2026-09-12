@@ -84,3 +84,18 @@
 .fx-sweep :is(h1,h2,h3),.fx-sweep .stats strong,.stats li.fx-sweep strong{background-size:100% .3em}
 .stats li.fx-count .cr::before{content:none}
 .stats li.fx-count .cv{position:static;width:auto;height:auto;overflow:visible;clip-path:none}
+
+/* Somebody else is in this section. Attributes and pseudo-elements only -- never an injected node:
+   bindField()'s input handler copies a [data-f]'s innerHTML straight into MODEL, so a child element
+   here would be saved into the published page. --peer is set per element by admin.js.
+   box-shadow:inset, not border or outline: hover and selection above both use outline, and an inset
+   shadow adds no layout box, so all three can show at once without fighting. */
+[data-peer-at]{box-shadow:inset 3px 0 0 var(--peer,var(--blue))}
+[data-f][data-peer]{outline:2px solid var(--peer,var(--blue));outline-offset:3px;border-radius:3px}
+/* ::after, because ::before is the empty-field placeholder above. z-index 18 sits over the
+   click-to-type strips (15) and under the block toolbar (20), which is what a click is reaching for.
+   Top-right: inside a .column the toolbar moves to top-left. */
+[data-f][data-peer]::after{content:attr(data-peer);position:absolute;top:-.7rem;right:0;z-index:18;
+  background:var(--peer,var(--blue));color:#fff;border-radius:4px;padding:.1rem .35rem;
+  font:600 10px/1.5 var(--head);white-space:nowrap;pointer-events:none}
+[data-f][data-peer]{position:relative}

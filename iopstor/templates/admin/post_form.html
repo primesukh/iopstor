@@ -3,7 +3,7 @@
 {% set p = post or {} %}
 {% set meta = p.meta or {} %}{% set seo = p.seo or {} %}
 {% set can_delete = p.id and admin_user.role == 'admin' %}
-<script type="application/json" id="editor-data">{{ {"blocks": blocks, "ui": blocks_ui, "layouts": layouts, "media": media, "type": pt.slug, "pk": p.get('id'), "post_types": post_types|map(attribute='slug')|list}|tojson }}</script>
+<script type="application/json" id="editor-data">{{ {"blocks": blocks, "ui": blocks_ui, "layouts": layouts, "media": media, "type": pt.slug, "pk": p.get('id'), "post_types": post_types|map(attribute='slug')|list, "rt": rt}|tojson }}</script>
 {# One screen: a bar (back, saved status, Edit/Preview, Save), the page under a big title, and every
    setting in the panel on the right. textarea[name="blocks"] under Advanced is still the only field
    that carries the content, so the server side is unchanged. #}
@@ -25,6 +25,8 @@
       <button type="button" data-w="390">Phone</button>
     </span>
     <span class="spacer"></span>
+    {# Filled by admin.js from the realtime roster; stays empty when collaboration is off. #}
+    <span class="ed-peers" id="ed-peers" aria-live="polite"></span>
     {% if p.id and p.status == 'published' and p.path %}<a class="btn secondary" href="{{ p.path }}" target="_blank">View live</a>{% endif %}
     <button type="submit">Save</button>
   </div>
@@ -107,4 +109,8 @@
 {# Outside #post-form on purpose: a form inside a form is dropped by the parser, and the Delete
    button would have saved the post instead. form= on the button points here. #}
 {% if can_delete %}<form id="delete-post" method="post" action="{{ url_for('admin_ui.delete_post', pk=p.id) }}" onsubmit="return confirm('Delete this page? This cannot be undone.')"><input type="hidden" name="csrf" value="{{ csrf }}"></form>{% endif %}
+{# Realtime, for the presence roster. Plain <script>, like menus.html loads Sortable: it executes
+   during parsing, so window.supabase is there before the deferred admin.js runs at DOMContentLoaded.
+   Only this screen needs it, so it is not in base.html. #}
+{% if rt.url and rt.room %}<script src="{{ url_for('static', filename='vendor/supabase.js') }}"></script>{% endif %}
 {% endblock %}

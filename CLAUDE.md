@@ -38,7 +38,7 @@ iopstor/public.py        catch-all resolver (+ .md twins, /checkout), archives, 
 iopstor/cli.py           flask migrate | seed | import-media | create-admin
 iopstor/templates/       base.html post.html archive.html 404.html checkout.html _card.html (the one card macro), blocks/<type>.html (18, each a full-width <section>), admin/*.html
 iopstor/static/site.css  the whole public theme: tokens at the top, header + mega panel + footer, .cards/.card/.btn/.section, layout group (.al-* .w-* .t-*), one rule-group per block
-iopstor/static/admin.css admin-only rules layered on site.css; canvas.css = editor chrome inside the iframe; admin.js = the editor (plain JS, no build); vendor/sortable.min.js
+iopstor/static/admin.css admin-only rules layered on site.css; canvas.css = editor chrome inside the iframe; admin.js = the editor (plain JS, no build); vendor/sortable.min.js + vendor/supabase.js (presence)
 docker-compose.yml       production only: `app` (this Dockerfile) + `cloudflared` as one Dokploy Compose service; `app` has no ports and no Traefik labels, so the tunnel is the only ingress
 migrations/              0000_bootstrap.sql (run once by hand in Studio) + NNNN_name.sql applied by `flask migrate`; repair_schema_migrations.sql and purge_test_audit_rows.sql are hand-run, not steps
 tests/                   pytest: test_offline.py always; the rest are marked live and skip without the Supabase in .env
@@ -144,7 +144,8 @@ So the full order is: branch → work → three docs → `/pr` → **stop** → 
 
 ## Env keys (`.env.example`)
 
-`SECRET_KEY, SITE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, MEDIA_BUCKET, PAYMENT_PROVIDER, THROTTLE_DB, LOGIN_MAX_FAILURES, LOGIN_WINDOW`
+`SECRET_KEY, SITE_URL, SUPABASE_URL, SUPABASE_PUBLIC_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, MEDIA_BUCKET, PAYMENT_PROVIDER, THROTTLE_DB, LOGIN_MAX_FAILURES, LOGIN_WINDOW`
+**`SUPABASE_PUBLIC_URL` is optional and empty means off** — the browser-facing Supabase origin for the editor's presence channel; `SUPABASE_URL` cannot be reused because in production it is internal Docker DNS. Not in `REQUIRED`.
 **`SECRET_KEY` and `SITE_URL` have no defaults and sit in `create_app()`'s `REQUIRED`** beside the four `SUPABASE_*` — the app refuses to boot without them, because both used to fail silently: a signing key printed in this repo, and localhost canonicals plus a session cookie with no `Secure` flag.
 Development also sets `FLASK_APP=iopstor` and `FLASK_DEBUG=1`. `GUNICORN_CMD_ARGS` is container-only and gunicorn reads it itself — `-w 2 --threads 8 --preload --access-logfile -` from the Dockerfile, raised in Dokploy, never in code.
 Production: `SITE_URL=https://www.iopstor.com`, `SUPABASE_URL=http://<kong-service>:8000` (Kong's internal Docker name on `dokploy-network`), `GUNICORN_CMD_ARGS=-w 30 --threads 8 --preload --access-logfile -`, `TUNNEL_TOKEN` plus `COMPOSE_PROFILES=tunnel` for the cloudflared container (it sits behind a Compose profile, so the stack deploys before the tunnel exists — `docs/TECHNICAL.md` §15), and **no `FLASK_DEBUG`**. Set in Dokploy's environment only; `.env` and `.env.*` are both git-ignored. Runbook: `docs/TECHNICAL.md` §15.
