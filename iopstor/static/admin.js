@@ -1989,6 +1989,11 @@
   }
 
   // ---- working at the same time ---------------------------------------------
+  /* Every state this feature can be in says so once, in the console. It is off far more often than it
+     is broken -- unset in tests, unset before the migration, unset in production until the tunnel
+     routes /realtime/ -- and telling those apart from the page was impossible without it. */
+  function say(msg) { if (window.console) console.info("[iopstor] editor presence: " + msg); }
+
   /* Who else has this page open, and roughly where they are. Presence only: nothing here changes a
      block, and nobody's typing reaches anybody else yet -- that is the shared-document work.
 
@@ -2000,9 +2005,15 @@
      library did not load -- all three are the same single-player editor that existed before. */
   function initCollab() {
     var rt = SPEC.rt || {};
-    if (!rt.url || !rt.room || !window.supabase) return;
+    /* Silence was the wrong default here: "off" and "broken" looked identical from the page, and the
+       first real setup spent a round trip finding out which it was. One console line, only when
+       something is missing, naming the thing that is missing. */
+    if (!rt.url) return say("SUPABASE_PUBLIC_URL is not set, so nobody will see who else is editing. Set it and restart the server -- --debug reloads code but not .env.");
+    if (!rt.room) return say("this page has no id yet, so there is nobody to share it with until it is saved once.");
+    if (!window.supabase) return say("the realtime library did not load (static/vendor/supabase.js).");
 
     var client = window.supabase.createClient(rt.url, rt.key, { realtime: { params: { eventsPerSecondLimit: 5 } } });
+    say("joining " + rt.room + " as " + rt.me.name);
     var chan = null, peers = {}, mine = { path: null, field: null, sig: sig(), at: 0 };
     var roster = document.getElementById("ed-peers");
 
@@ -2111,7 +2122,8 @@
       chan.on("presence", { event: "sync" }, readRoster)
           .on("presence", { event: "join" }, readRoster)
           .on("presence", { event: "leave" }, readRoster)
-          .subscribe(function (status) {
+          .subscribe(function (status, err) {
+            say("channel " + status + (err ? " -- " + err.message : ""));
             if (status === "SUBSCRIBED") return push();
             // CHANNEL_ERROR is what an expired JWT looks like from here. _session_token() only
             // refreshes AFTER expiry, so reacting to the error is the only schedule that can be
