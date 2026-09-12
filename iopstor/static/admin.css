@@ -399,8 +399,11 @@
 .aud-note{margin:0 0 6px;font:400 13px/1.5 var(--body);color:var(--blue-hover)}
 .aud-ba{display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:13.5px;line-height:1.6}
 .aud-ba>div{min-width:0;word-break:break-word}
+.aud-gap{color:var(--muted);padding:0 2px}
 .aud-tag{display:inline-block;margin-right:5px;font:600 11px/1.4 var(--body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
-@media(max-width:700px){.aud-ba{grid-template-columns:1fr;gap:8px}}
+/* 1000px, not 700: below it the four-column table squeezes this cell to about 200px, and two
+   columns of that width turn "Gradient across the big text" into a four-line stack */
+@media(max-width:1000px){.aud-ba{grid-template-columns:1fr;gap:8px}}
 /* the marked-up words: struck through for what went, tinted for what arrived */
 .aud-ba del{background:var(--red-bg);color:var(--red);text-decoration:line-through;padding:0 2px;border-radius:3px}
 .aud-ba ins{background:var(--green-bg);color:var(--green);text-decoration:none;padding:0 2px;border-radius:3px}

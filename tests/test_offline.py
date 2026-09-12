@@ -1,4 +1,6 @@
 """Pure logic — no Supabase needed."""
+from copy import deepcopy
+
 from iopstor import display_name
 from iopstor.admin_ui import _password_errors
 from iopstor.blocks import at_path, blocks_md, blocks_text, col_widths, render_blocks, validate_blocks
@@ -1043,23 +1045,116 @@ def test_the_words_that_changed_are_marked_not_the_json():
     assert "&lt;script&gt;" in _word_diff("<script>", "")[0]
 
 
-def test_a_change_the_words_cannot_show_is_described_instead():
-    """blocks_text() drops every picture, link and setting (_NON_TEXT_KEYS), so swapping an image
-    leaves both versions reading identically. Saying "nothing changed" would be a lie about a save
-    that plainly did something, so the shape of the page is compared instead."""
-    from iopstor.admin_ui import _blocks_change, _structural
+def _fields(was, now):
+    """The audit screen's rows for a blocks change, as (label, note, was, now) tuples of plain str."""
+    from iopstor.admin_ui import _blocks_fields
 
+    return [(r["label"], r["note"], str(r["was"]), str(r["now"])) for r in _blocks_fields(was, now)]
+
+
+def _stats(*fx):
+    return [{"type": "stats", "data": {"heading": "By the numbers",
+                                       "items": [{"value": f"{i}", "label": "x", "fx": f} for i, f in enumerate(fx)]}}]
+
+
+def test_a_page_edit_says_which_section_and_which_setting_changed(app):
+    """The complaint that started this: a page edit rendered as two identical ninety-line walls of
+    text. This is the real entry behind that screenshot -- the effect on two rows of a Numbers
+    section -- and the whole detail it should produce is two lines naming the row and the setting."""
+    assert _fields(_stats("", "", ""), _stats("", "gradient", "sweep")) == [
+        ("Numbers section, row 2 \u2014 Effect", "", "None", "Gradient across the big text"),
+        ("Numbers section, row 3 \u2014 Effect", "", "None", "Highlighter sweep behind the headings")]
+
+
+def test_one_section_changed_is_one_section_diffed(app):
+    """The words that moved, under the name of the section they moved in -- not the whole page."""
+    page = [{"type": "hero", "data": {"heading": "Always Believe in Better"}},
+            {"type": "rich_text", "data": {"html": "<p>A paragraph nobody touched.</p>"}}]
+    changed = deepcopy(page)
+    changed[0]["data"]["heading"] = "Always Believe in Getting Better."
+    rows = _fields(page, changed)
+    assert len(rows) == 1
+    assert rows[0][0] == "Hero section"
+    assert rows[0][2] == "Always Believe in <del>Better</del>"
+    assert rows[0][3] == "Always Believe in <ins>Getting Better.</ins>"
+    assert "paragraph nobody touched" not in rows[0][2]
+
+
+def test_the_two_diffs_do_not_report_the_same_change_twice(app):
+    """blocks_text() collects a value only when the key is outside _NON_TEXT_KEYS *and* the value is
+    a string, so that is the line between the words diff and the settings diff. Both halves matter:
+    a checkbox is a bool and is in nobody's text, whichever set its key is in."""
+    from iopstor.admin_ui import _unwritten
+
+    assert _unwritten("media_id", 4) and _unwritten("fx", "rise")       # in the set
+    assert _unwritten("count_up", True) and _unwritten("limit", 6)      # not a string
+    assert not _unwritten("heading", "Storage")                         # the words already show it
+
+    # a repeater of plain strings is the case most likely to be reported twice: it must not be
+    rows = _fields([{"type": "spec_table", "data": {"rows": [{"k": "Capacity", "v": "10 TB"}]}}],
+                   [{"type": "spec_table", "data": {"rows": [{"k": "Capacity", "v": "20 TB"}]}}])
+    assert rows == [("Specification table section", "", "Capacity <del>10</del> TB", "Capacity <ins>20</ins> TB")]
+
+    # and a checkbox inside one is reported, because nothing else can show it
+    assert _fields(_stats(""), [{"type": "stats", "data": {"heading": "By the numbers",
+                                                           "items": [{"value": "0", "label": "x", "fx": "",
+                                                                      "count_up": True}]}}]) == \
+        [("Numbers section, row 1 \u2014 Count up from zero", "", "No", "Yes")]
+
+
+def test_a_change_the_words_cannot_show_is_described_instead(app):
+    """Adding, removing or moving a section breaks the one-for-one comparison -- position 3 stops
+    meaning the same thing on both sides -- so the shape gets a sentence and the words get one
+    page-wide diff. And a save that only bolded a phrase says so, rather than claiming nothing
+    happened: blocks_text() strips the tags, so both sides read identically."""
     text = [{"type": "rich_text", "data": {"html": "<p>Hello</p>"}}]
-    assert _structural(text, text + [{"type": "cards", "data": {}}]) == "Added Cards."
-    assert _structural(text + [{"type": "cards", "data": {}}], text) == "Removed Cards."
-    assert _structural([{"type": "image", "data": {"media_id": 1}}],
-                       [{"type": "image", "data": {"media_id": 2}}]) == \
-        "Changed a picture, link or setting in the Picture section."
-    assert _structural([{"type": "hero", "data": {}}, {"type": "cards", "data": {}}],
-                       [{"type": "cards", "data": {}}, {"type": "hero", "data": {}}]) == "Moved the sections around."
-    # the note rides along with the two texts, which are identical in this case
-    was, now, note = _blocks_change(text, text + [{"type": "divider", "data": {}}])
-    assert was == now and note == "Added Divider."
+    label, note, was, now = _fields(text, text + [{"type": "cards", "data": {}}])[0]
+    assert (label, note) == ("The writing on the page", "Added Cards.")
+    assert was == now == ""                        # nothing to put in a Was/Now grid
+    assert _fields(text + [{"type": "cards", "data": {}}], text)[0][1] == "Removed Cards."
+    assert _fields([{"type": "hero", "data": {}}, {"type": "cards", "data": {}}],
+                   [{"type": "cards", "data": {}}, {"type": "hero", "data": {}}])[0][1] == "Moved the sections around."
+    plain = [{"type": "rich_text", "data": {"html": "<p>Hello there</p>"}}]
+    assert _fields(plain, [{"type": "rich_text", "data": {"html": "<p>Hello <b>there</b></p>"}}]) == \
+        [("Rich text section", "Formatting changed \u2014 bold, a link or a heading.", "", "")]
+
+
+def test_a_section_inside_a_column_names_its_column(app):
+    """A column holds sections, and they drift out of line the way a page's do. Same types: compare
+    them one for one and say which column. Different types: a sentence, because position 2 in a
+    column of three is not position 2 in a column of four."""
+    def cols(inner):
+        return [{"type": "columns", "data": {"cols": inner, "heading": "Side by side"}}]
+
+    left, right = [{"type": "rich_text", "data": {"html": "<p>Left</p>"}}], [{"type": "image", "data": {"media_id": 1}}]
+    rows = _fields(cols([left, right]), cols([[{"type": "rich_text", "data": {"html": "<p>Left side</p>"}}], right]))
+    # one row, from inside the column -- the outer section must not diff its children a second time
+    assert rows == [("Column 1, Rich text section", "", "Left", "Left <ins>side</ins>")]
+    assert _fields(cols([left]), cols([left + [{"type": "image", "data": {"media_id": 2}}]])) == \
+        [("Columns section, column 1", "Added Picture.", "", "")]
+
+
+def test_a_long_unchanged_stretch_collapses_to_its_ends(app):
+    """Per-section diffing bounds the common case; one rich text block can still hold a whole page,
+    and a mark buried in two hundred unchanged words is a mark nobody finds."""
+    from iopstor.admin_ui import _word_diff
+
+    words = " ".join(f"w{i}" for i in range(40))
+    was, now = _word_diff(f"{words} old", f"{words} new")
+    assert "<del>old</del>" in was and "<ins>new</ins>" in now
+    assert "w0 w1 w2 w3 w4 w5 w6 w7" in was and "w32 w33" in was
+    assert "w20" not in was and 'class="aud-gap"' in was
+
+
+def test_the_rows_own_id_is_not_shown_as_a_field(app):
+    """Creating a person records `id`, and it is the GoTrue uuid the entry is already about. Printed
+    as a field it is a 36-character string an editor cannot use, under a heading reading "Id"."""
+    from iopstor.admin_ui import _present
+
+    uid = "7867beee-5f1b-4591-a58e-52f849ba17ef"
+    entry = {"action": "create", "table_name": "users", "row_id": uid, "label": "Test Account",
+             "user_id": None, "user_email": None, "changes": {"id": [None, uid], "name": [None, "Test Account"]}}
+    assert [f["label"] for f in _present(entry, {}, {})["fields"]] == ["Name"]
 
 
 def test_a_column_name_never_reaches_the_screen():
@@ -1079,6 +1174,7 @@ def test_a_stored_value_is_shown_as_something_a_person_reads():
 
     assert _value("status", "trash") == "Deleted"
     assert _value("status", "published") == "Published"
+    assert _value("status", "in_progress") == "In progress"   # leads share the column, and the word
     assert _value("amc", True) == "Yes"
     assert _value("amc", False) == "No"
     assert _value("expiry_date", "2027-03-14T00:00:00+00:00") == "14 Mar 2027, 05:30 IST"

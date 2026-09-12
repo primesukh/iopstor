@@ -33,15 +33,18 @@
           <div class="aud-one">
             <p class="aud-name">{{ f.label }}</p>
             {% if f.note %}<p class="aud-note">{{ f.note }}</p>{% endif %}
+            {# a row that only has something to say -- "Added Cards." -- is one line, not an empty two-column grid #}
+            {% if f.was or f.now %}
             <div class="aud-ba">
               <div><span class="aud-tag">Was</span> {{ f.was }}</div>
               <div><span class="aud-tag">Now</span> {{ f.now }}</div>
             </div>
+            {% endif %}
           </div>
           {% endfor %}
           {% if e.can_restore %}
           <form method="post" action="{{ url_for('admin_ui.audit_restore', pk=e.id, **request.args) }}"
-                onsubmit="return confirm('Put this back the way it was before this change?')">
+                onsubmit="return confirm('Put everything in this entry back the way it was before this change?')">
             <input type="hidden" name="csrf" value="{{ csrf }}">
             <button type="submit" class="secondary">Restore</button>
           </form>
