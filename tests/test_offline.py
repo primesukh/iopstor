@@ -1234,3 +1234,66 @@ class _NeverExecutes:
 
     def execute(self):
         raise AssertionError("the test suite must not write to audit_log")
+
+
+class _UpdateRecorder:
+    """Enough of a PostgREST builder to see which filters an UPDATE actually carried."""
+
+    def __init__(self, rows):
+        self.rows, self.filters, self.changes = rows, [], None
+
+    def update(self, changes):
+        self.changes = changes
+        return self
+
+    def eq(self, key, value):
+        self.filters.append((key, value))
+        return self
+
+    def execute(self):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(data=self.rows)
+
+
+def test_a_save_that_lost_the_race_writes_nothing_and_logs_nothing(monkeypatch):
+    """The conflict check has to be a filter on the UPDATE, never a comparison in Python: ~30 gunicorn
+    workers share no memory, so two saves can pass a Python compare a millisecond apart and both
+    write. This is the test that fails if somebody later "simplifies" the guard back into a compare."""
+    from unittest.mock import MagicMock
+
+    from iopstor import db
+
+    audit = MagicMock()
+    monkeypatch.setattr(db, "_audit", audit)
+    stamp = "2026-09-12T10:33:21.123456+00:00"
+
+    lost = _UpdateRecorder(rows=[])                      # PostgREST matched no row: somebody got there first
+    monkeypatch.setattr(db, "table", lambda name: lost)
+    assert db.update("posts", 7, {"title": "mine"}, if_unchanged=stamp) is None
+    assert ("id", 7) in lost.filters and ("updated_at", stamp) in lost.filters
+    # not "the audit recorder is empty" -- _audit returns early under TESTING anyway, so the claim
+    # worth pinning is that `if after:` never reached it at all.
+    audit.assert_not_called()
+
+    won = _UpdateRecorder(rows=[{"id": 7, "title": "mine"}])
+    monkeypatch.setattr(db, "table", lambda name: won)
+    assert db.update("posts", 7, {"title": "mine"}, if_unchanged=stamp) == {"id": 7, "title": "mine"}
+    assert audit.call_count == 1
+
+    plain = _UpdateRecorder(rows=[{"id": 7}])            # no token: exactly the filter it always had
+    monkeypatch.setattr(db, "table", lambda name: plain)
+    db.update("posts", 7, {"title": "mine"})
+    assert plain.filters == [("id", 7)]
+
+
+def test_the_timestamp_survives_the_query_string():
+    """PostgREST hands back "+00:00" and the guard puts it straight back into a query string, where a
+    bare "+" decodes as a space -- which would match nothing and make every single save look like a
+    conflict. ponytail: reaches into postgrest's request object, the only place the encoding is
+    visible without a network."""
+    from postgrest import SyncPostgrestClient
+
+    stamp = "2026-09-12T10:33:21.123456+00:00"
+    q = SyncPostgrestClient("http://x", headers={}).table("posts").update({"title": "x"}).eq("id", 1).eq("updated_at", stamp)
+    assert "%2B00%3A00" in str(q.request.params), str(q.request.params)

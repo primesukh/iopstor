@@ -9,6 +9,9 @@
    that carries the content, so the server side is unchanged. #}
 <form method="post" id="post-form" class="ed">
   <input type="hidden" name="csrf" value="{{ csrf }}">
+  {# The row as this form was drawn. db.update() puts it in the UPDATE's filter, so a save that lost
+     the race to another editor writes nothing instead of overwriting them. Absent on a new post. #}
+  {% if p.id %}<input type="hidden" name="updated_at" value="{{ p.updated_at or '' }}">{% endif %}
   <div class="ed-bar">
     <a class="ed-back" href="{{ url_for('admin_ui.posts', type=pt.slug) }}">&larr; {{ pt.name }}</a>
     <span class="pill {{ p.status or 'draft' }}" title="As last saved">{{ p.status or 'draft' }}</span>
@@ -26,6 +29,9 @@
     <button type="submit">Save</button>
   </div>
   <div class="ed-main">
+    {# Its own banner, not a row in the error list: that list prints the field key beside the message,
+       and this is about the page, not a field. #}
+    {% if conflict %}<div class="notice-amber">{{ conflict }}</div>{% endif %}
     {% if errors %}<div class="error"><strong>Not saved.</strong><ul>{% for k, v in errors.items() %}<li><code>{{ k }}</code>: {{ v if v is string else v|join('; ') }}</li>{% endfor %}</ul></div>{% endif %}
     <input type="text" name="title" id="post-title" class="ed-title" value="{{ p.title or '' }}" placeholder="Title" aria-label="Title" required>
     <div id="doc-toolbar" class="doc-toolbar"></div>

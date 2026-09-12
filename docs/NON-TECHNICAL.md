@@ -308,6 +308,12 @@ sitting still.
 
 Nothing is saved until you press **Save**. If you try to leave with unsaved changes, your browser will warn you. If something required is missing, the page comes back with the problem listed at the top and your work still in place.
 
+**If somebody else was editing the same page.** Two people can open the same page at once, and until now the second person to press **Save** quietly wiped out the first person's work — with both of them told it had saved. That no longer happens. If a colleague saved while you were writing, your Save stops and an amber note appears above the page:
+
+> Somebody else saved this page while you were writing. Nothing of yours has been lost — it is all still on this screen. Save again to replace their version, or open the page in another tab to see what changed first.
+
+Everything you typed is exactly where you left it. You are warned once: press **Save** a second time and your version goes through, replacing theirs. Their version is not lost either — it is in **Activity** (§11), where it can be put back. If you would rather keep their work, open the page in a second browser tab first to see what they changed, then copy across whatever you still need.
+
 > **Advanced.** At the very bottom of the right-hand panel, *Advanced* shows the page's sections as raw data. It is there for developers; you never need to open it.
 
 
@@ -577,6 +583,11 @@ unsure which one you are looking at, check the address at the top of the browser
 **Will visitors see a page the moment I press Save?** Yes, if it is set to **Published** — the live site
 is served straight from what you save, with no waiting and nothing to rebuild. A **Draft** stays invisible,
 and a scheduled page appears by itself at the date you set.
+
+**Can two of us edit the same page at the same time?** You can both open it, but you are not yet working
+together on one copy — you each have your own, and whoever saves second is told so rather than quietly
+overwriting the first. See *If somebody else was editing the same page* in §4. Working on the same page at
+the same time, seeing each other type, is being built next.
 
 **Where did the Instagram link in the footer go?** It is still there, as an icon. The social links used to
 appear as web addresses in the *Contact* column at the bottom of the page; they now sit under the logo as a

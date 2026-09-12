@@ -271,7 +271,14 @@ def _new_term_ids(pt):
     return [i for i in ids if i]
 
 
-def _form_context(pt, post, errors=None):
+# Said to an editor, not about a field: it goes in its own banner, never through the field-error
+# list, which prints the key beside the message and would put a bare "_" on a non-technical screen.
+CONFLICT = ("Somebody else saved this page while you were writing. Nothing of yours has been lost — "
+            "it is all still on this screen. Save again to replace their version, or open the page in "
+            "another tab to see what changed first.")
+
+
+def _form_context(pt, post, errors=None, conflict=None):
     # Slimmed to what the chip picker needs: the whole list is embedded in the page, so matching a
     # typed name against it costs no round trip (like taken_slugs feeds the web-address warning).
     taxonomies = [{"slug": t["slug"], "name": t["name"],
@@ -283,11 +290,24 @@ def _form_context(pt, post, errors=None):
     media = db.rows(db.table("media").select("id,filename,url,mime,alt").order("id", desc=True).limit(200))
     term_ids = {t["id"] for t in (post or {}).get("terms") or []}
     pk = (post or {}).get("id")   # .get(): a rejected save of a *new* post renders a draft dict with no id
-    return dict(pt=pt, post=post, errors=errors or {}, taxonomies=taxonomies,
+    return dict(pt=pt, post=post, errors=errors or {}, conflict=conflict, taxonomies=taxonomies,
                 parents=[p for p in siblings if p["id"] != pk] if pt["hierarchical"] else [],
                 taken_slugs=[s["slug"] for s in siblings if s["id"] != pk],
                 media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps((post or {}).get("blocks") or [], indent=2, ensure_ascii=False),
                 seo_keys=SEO_KEYS)
+
+
+def _rejected(pt, existing, b, errors=None, conflict=None):
+    """Re-render the form with what the editor just typed, so a refused save loses nothing. Shared by
+    the two ways a save can be refused -- validation, and losing the race to another editor."""
+    keep = ("title", "slug", "status", "published_at", "excerpt", "parent_id", "featured_media_id", "meta", "seo")
+    draft = {**(existing or {}), "post_type": pt, **{k: b[k] for k in keep}, "terms": [{"id": t} for t in b["terms"]], "blocks_text": request.form.get("blocks", "")}
+    if conflict:
+        # One narrow read, on this path only: the hidden field goes back fresh, so the next Save is a
+        # deliberate overwrite. Warned once, then let through -- refusing twice would strand an editor
+        # with nowhere to put the work, and there is no draft model to escape into yet.
+        draft["updated_at"] = (db.one(db.table("posts").select("updated_at").eq("id", existing["id"])) or {}).get("updated_at")
+    return render_template("admin/post_form.html", **_form_context(pt, draft, errors, conflict))
 
 
 def _save(pt, existing):
@@ -300,12 +320,16 @@ def _save(pt, existing):
     except HTTPException as e:
         payload = e.response.get_json() if e.response is not None else {"error": e.description}
         errors = payload.get("fields") or {"_": payload.get("error")}
-        keep = ("title", "slug", "status", "published_at", "excerpt", "parent_id", "featured_media_id", "meta", "seo")
-        draft = {**(existing or {}), "post_type": pt, **{k: b[k] for k in keep}, "terms": [{"id": t} for t in b["terms"]], "blocks_text": request.form.get("blocks", "")}
-        return None, render_template("admin/post_form.html", **_form_context(pt, draft, errors))
+        return None, _rejected(pt, existing, b, errors)
     if existing:
         if changes:
-            db.update("posts", existing["id"], changes)
+            # The form carries the updated_at it was drawn with; db.update() turns that into a filter
+            # on the UPDATE, so Postgres decides whether we still have the row we think we have.
+            # Returning here is before set_post_terms() on purpose: a refused save must not rewrite
+            # the categories either.
+            if db.update("posts", existing["id"], changes,
+                         if_unchanged=request.form.get("updated_at") or None) is None:
+                return None, _rejected(pt, existing, b, conflict=CONFLICT)
         pk = existing["id"]
     else:
         changes["author_id"] = g.user["id"]
