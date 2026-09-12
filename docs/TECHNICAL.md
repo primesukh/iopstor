@@ -1079,6 +1079,7 @@ both git-ignored, so a `.env.production` on a laptop cannot be committed):
 | `SECRET_KEY` | fresh random, per environment. Never the development one |
 | `GUNICORN_CMD_ARGS` | `-w 30 --threads 8 --preload --access-logfile -` (§15) |
 | `TUNNEL_TOKEN` | read by the `cloudflared` service in `docker-compose.yml`, not by the app |
+| `COMPOSE_PROFILES` | `tunnel` — read by Docker Compose, not by the app; without it `cloudflared` never starts (§15) |
 | `FLASK_DEBUG` | **unset** |
 
 The `SUPABASE_SERVICE_ROLE_KEY` bypasses RLS — `0002_enable_rls.sql` enables RLS on every table and defines
@@ -1141,6 +1142,33 @@ the compose file (`${SECRET_KEY:?...}`) is deliberate too: a missing value fails
 with a sentence saying what it wanted, rather than starting a container that refuses to boot for reasons
 you then have to read out of a log.
 
+**Deploying before the tunnel exists.** `cloudflared` carries `profiles: [tunnel]`, so `docker compose up`
+starts `app` alone until `COMPOSE_PROFILES=tunnel` is in the Dokploy environment — Compose writes that
+screen to the project's `.env` and reads the variable from there. `app` has no `profiles:` key, so nothing
+about the profile can leave the Python app out. This is also why `TUNNEL_TOKEN` is `${TUNNEL_TOKEN:-}` and
+not `:?` like every other variable: interpolation is not profile-aware, so a required marker on a service
+that is switched off still fails `docker compose config` for the whole stack, `app` included — which is
+exactly the error a first deploy without a tunnel hits.
+
+Reaching it meanwhile is a **Dokploy domain on service `app`, port 8000** — a click, not an edit, because
+`app` is already on `dokploy-network` where Traefik can see it. On a LAN host with no real name,
+`<anything>-<dashed-ip>.sslip.io` resolves to that address (the pattern the dev Supabase already uses) with
+the certificate provider left at none. `SITE_URL` must then be *exactly* the URL being browsed, scheme
+included: set `https://` while serving plain http and the failure is a login that succeeds and bounces
+straight back to `/admin/login`, because `SESSION_COOKIE_SECURE` is derived from `SITE_URL` (§14) and the
+cookie is never returned. Every canonical, sitemap `<loc>`, OG url and JSON-LD `url` carries that host too,
+so a publicly resolvable temporary domain is a publicly indexable one.
+
+Two properties are genuinely absent in that window, both acceptable while it lasts and neither once it is
+public. There is no `CF-Connecting-IP`, so every visitor is Traefik's address in one throttle bucket — ten
+failed passwords lock out every admin at once, which `LOGIN_MAX_FAILURES` raises without a code change —
+and with a non-Cloudflare path in, the header is also spoofable past the limit (§12). Switching the tunnel
+on is therefore five things, not just the token: `TUNNEL_TOKEN`, `COMPOSE_PROFILES=tunnel`, `SITE_URL` back
+to `https://www.iopstor.com`, **delete the Dokploy domain** so the tunnel is the only ingress again, and
+drop `LOGIN_MAX_FAILURES` if it was raised. Then step 6 below, and `docker compose ps` must list
+`cloudflared` beside `app`. Once it is permanent, deleting the `profiles:` line and restoring
+`${TUNNEL_TOKEN:?…}` puts the file back to one shape with nothing to remember.
+
 **The order of first deployment matters, and getting it wrong looks like a crash loop.** `CMD` is
 `flask migrate && exec gunicorn …`, so a database without `0000_bootstrap.sql` in it fails migrate and
 gunicorn never starts.
@@ -1167,7 +1195,8 @@ gunicorn never starts.
      command because the overlay address changes whenever the container is recreated.
    - **4b — a Dokploy domain on Kong**, the development pattern. Only private because the host is.
 5. Dokploy → **Compose** service → GitHub `primesukh/iopstor`, branch `main`, file `docker-compose.yml`.
-   Set the environment from §14's table plus `TUNNEL_TOKEN`. Give the stack at least 1 GB: thirty
+   Set the environment from §14's table plus `TUNNEL_TOKEN` and `COMPOSE_PROFILES=tunnel` — without the
+   second one `cloudflared` is not in the stack at all (above). Give the stack at least 1 GB: thirty
    `--preload` workers measure at 472 MB of real memory, and an OOM kill at boot is indistinguishable
    from a failed build in the log. Auto-deploy on push to `main` is a choice to make here, not a default —
    with it on, merging a PR redeploys production. Two settings on that screen decide whether this shape
