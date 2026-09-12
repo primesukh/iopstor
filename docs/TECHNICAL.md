@@ -1313,7 +1313,10 @@ Marked in code with `# ponytail:` comments.
   otherwise idle container's Dokploy graph. The bash form is 4.4 ms and still does a real GET and a real
   status check; a socket-only probe was rejected because gunicorn's listen backlog accepts TCP with every
   worker wedged. It must be **exec form with `bash` named** — the shell form runs `/bin/sh`, which is dash
-  and has no `/dev/tcp` — and it is the one place the image is assumed to carry `bash`, `grep` and `head`.
+  and has no `/dev/tcp` — and it is the one place the image is relied on to carry `bash`, `grep` and
+  `head`. All three are Debian-essential and were confirmed present in `python:3.13-slim`
+  (`docker run --rm python:3.13-slim bash -c 'which bash grep head'`); re-check it if the base image
+  ever changes, because the failure mode is a container that reports itself unhealthy forever.
 - **The conflict guard covers `posts` only.** `settings` and `menus` write through `set_settings()` /
   `set_menu()`, which are not keyed by `id`, so two people on the Settings or Menus screen still overwrite
   each other silently. Same shape, same fix (§4), not yet done.
