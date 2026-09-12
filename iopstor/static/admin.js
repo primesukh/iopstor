@@ -2124,18 +2124,29 @@
           .on("presence", { event: "leave" }, readRoster)
           .subscribe(function (status, err) {
             say("channel " + status + (err ? " -- " + err.message : ""));
-            if (status === "SUBSCRIBED") return push();
+            if (status === "SUBSCRIBED") { tries = 0; return push(); }   // a good connection clears the budget
             // CHANNEL_ERROR is what an expired JWT looks like from here. _session_token() only
             // refreshes AFTER expiry, so reacting to the error is the only schedule that can be
-            // honoured -- asking early would hand back the same dying token.
-            if (status === "CHANNEL_ERROR" || status === "CLOSED") retry();
+            // honoured -- asking early would hand back the same dying token. CLOSED is not an error:
+            // it is what removeChannel() produces, and retrying on it never terminates.
+            if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") retry();
           });
     }
 
-    var retrying = false;
+    /* Backs off and then gives up, and this shape is load-bearing rather than tidy: the first version
+       retried a flat two seconds forever and, with the realtime service refusing the socket, every
+       open editor quietly fetched /admin/rt-token every two seconds for as long as the tab was open.
+       CLOSED is deliberately NOT a retry trigger either -- it is the normal terminal state of a
+       channel, including the one removeChannel() produces below, so treating it as a failure made the
+       retry re-arm itself and the loop could never end even once the socket was fine. */
+    var tries = 0, retrying = false;
     function retry() {
       if (retrying) return;
+      if (tries >= 5) return say("giving up after " + tries + " attempts; reload the page to try again.");
       retrying = true;
+      var wait = Math.min(2000 * Math.pow(2, tries), 30000);
+      tries += 1;
+      say("retrying in " + Math.round(wait / 1000) + "s (attempt " + tries + " of 5)");
       setTimeout(function () {
         fetch("/admin/rt-token", { credentials: "same-origin" }).then(function (r) {
           // ui_required redirects a finished session to the login page and fetch follows it, so a
@@ -2144,11 +2155,11 @@
           return r.json();
         }).then(function (j) {
           retrying = false;
-          if (!j.token) return;
+          if (!j.token) return say("no token: the session has ended, so sign in again.");
           if (chan) { client.removeChannel(chan); chan = null; }
           join(j.token);
-        }).catch(function () { retrying = false; });   // offline or signed out: the roster just stops
-      }, 2000);
+        }).catch(function () { retrying = false; tries = 5; say("cannot reach the server; presence is off until you reload."); });
+      }, wait);
     }
 
     fetch("/admin/rt-token", { credentials: "same-origin" })
