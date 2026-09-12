@@ -139,6 +139,16 @@
 #canvas-wrap{flex:1;min-height:18rem;overflow:hidden}   /* also holds the scaled-down device preview */
 #canvas{display:block;width:100%;height:100%;border:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius);background:#fff}
 .ed-main>small{display:block;margin-top:.5rem}
+/* Who else has this page open. .ed-bar never wraps, so the roster is capped and the overflow becomes
+   a "+2" chip rather than pushing Save off a phone. Same circle as the sidebar's .adm-av, smaller. */
+.ed-peers{display:flex;align-items:center;flex:none}
+.ed-peer{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;
+         margin-left:-.4rem;border:2px solid var(--card);background:var(--blue);color:var(--white);
+         font:700 11px/1 var(--head);letter-spacing:.02em}
+.ed-peer.more{background:var(--muted)}
+/* Under 700 the bar is already back-link + pill + two seg groups + Save; the roster is the first
+   thing that can go, and presence is still visible on the sections themselves. */
+@media(max-width:700px){.ed-peers{display:none}}
 /* .notice-amber ships margin-top for the settings screens; in the editor it sits above the page and
    the column already has top padding, so the gap belongs underneath it instead. */
 .ed-main>.notice-amber{margin:0 0 1rem}

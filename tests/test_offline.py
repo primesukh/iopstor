@@ -1,4 +1,5 @@
 """Pure logic — no Supabase needed."""
+import json
 from copy import deepcopy
 
 from iopstor import display_name
@@ -1297,3 +1298,48 @@ def test_the_timestamp_survives_the_query_string():
     stamp = "2026-09-12T10:33:21.123456+00:00"
     q = SyncPostgrestClient("http://x", headers={}).table("posts").update({"title": "x"}).eq("id", 1).eq("updated_at", stamp)
     assert "%2B00%3A00" in str(q.request.params), str(q.request.params)
+
+
+def test_the_editor_page_carries_no_realtime_config_when_it_is_not_set_up(app):
+    """One switch turns collaboration off, and it is the absence of a setting rather than a flag:
+    unset in every test, unset until the migration is applied, unset in production until the tunnel
+    routes /realtime/ to Kong. The editor is then exactly the single-player one that shipped before."""
+    from flask import g
+
+    from iopstor import admin_ui
+
+    with app.test_request_context("/admin/posts/7"):
+        g.user = {"id": "8f14e45f-ceea-467a-9b4e-4c9d3c8b2a11", "email": "zz@zz-test.local", "name": "", "role": "admin"}
+        app.config["SUPABASE_PUBLIC_URL"] = ""
+        assert admin_ui._rt(7)["url"] == ""          # initCollab() returns on this and nothing else runs
+
+        app.config["SUPABASE_PUBLIC_URL"] = "http://supabase.invalid"
+        rt = admin_ui._rt(7)
+        assert rt["room"] == "post:7"
+        assert rt["me"]["name"] == "Zz"              # display_name() falls back to the email's local part
+        assert "token" not in json.dumps(rt), "the access token must never be rendered into the page"
+        # a post with no id yet has nothing to collaborate under, so there is no room to join
+        assert admin_ui._rt(None)["room"] == ""
+
+
+def test_the_editors_colour_is_the_same_in_every_worker():
+    """hash() is salted per process, so with thirty gunicorn workers the same editor would get a
+    different colour depending on which one served the page. The id's own digits are stable."""
+    from flask import g
+
+    from iopstor import admin_ui, create_app
+
+    app = create_app({"TESTING": True, "SITE_URL": "http://t", "SECRET_KEY": "k", "SUPABASE_URL": "http://x",
+                      "SUPABASE_ANON_KEY": "a", "SUPABASE_SERVICE_ROLE_KEY": "b", "SUPABASE_JWT_SECRET": "c" * 32})
+    uid = "8f14e45f-ceea-467a-9b4e-4c9d3c8b2a11"
+    with app.test_request_context("/admin/posts/7"):
+        g.user = {"id": uid, "email": "a@b.c", "name": "Asha Rao", "role": "editor"}
+        assert admin_ui._rt(7)["me"]["colour"] == f"hsl({int(uid[:8], 16) % 360} 62% 45%)"
+
+
+def test_the_realtime_token_route_is_a_get(app):
+    """It changes nothing, so AUDITED needs no entry -- and must not have one, because the route
+    accounting test asserts both directions and would fail on a name that is not a write route."""
+    rule = next(r for r in app.url_map.iter_rules() if r.endpoint == "admin_ui.rt_token")
+    assert not (rule.methods & {"POST", "PATCH", "PUT", "DELETE"})
+    assert "admin_ui.rt_token" not in AUDITED

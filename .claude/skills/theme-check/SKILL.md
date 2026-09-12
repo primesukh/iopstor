@@ -41,7 +41,28 @@ A change can hit several rows; screenshot every row that matches.
 | archive shapes (`pl-*`) | `/services`, `/products`, `/events`, `/datasheets`, `/case-studies`, `/partners` |
 | `post.html`, `_card.html` | one post of every type that renders differently: service, product (+ `/checkout`), blog, datasheet |
 | mega panel / mobile sheet | `/` at 1440 (hover cannot be captured — check the markup) and 390 |
-| `admin.css`, `canvas.css`, `admin.js` | needs a logged-in session; screenshot what is public, and describe the admin check the user should do |
+| `admin.css`, `canvas.css`, `admin.js` | **an admin screen CAN be shot without logging in** — see below; do that rather than describing a check for the user |
+
+## Shooting an admin screen (no login, no database write)
+
+The table above used to say this needed a logged-in session. It does not. Render the page through
+Flask with a stand-in user and screenshot the saved HTML as a `file://` page:
+
+```python
+app = create_app({...})                       # TESTING=True, SITE_URL=http://localhost:5001
+with app.test_request_context("/admin/posts/7"):
+    g.user = {"id": "...", "email": "zz@zz-test.local", "name": "", "role": "admin"}
+    html = render_template("admin/post_form.html", **ctx)   # patch db.settings/get_menu/post_types
+```
+
+Then rewrite `/static/` to `file:///…/iopstor/static/` (or inject `<base href="http://localhost:5001/">`
+so `/media/*` resolves too) and shoot it. **Nothing is written to the database** — unlike
+`tests/conftest.py`'s `make_user()`, which inserts a real row.
+
+Two extras this unlocks: inject a `<script>` at the end to put the page into a state the server does
+not render on its own (a peer roster, an open burger menu, an error banner), and shoot the **canvas**
+document separately by rendering `render_blocks(blocks, edit=True)` into `admin/canvas.html` — that
+is the only way to see the editor chrome, which lives inside an iframe.
 
 ## What to look for
 

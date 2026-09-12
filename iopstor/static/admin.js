@@ -798,6 +798,11 @@
     select(path);
   }
 
+  /* Reassigned by initCollab(); a no-op when collaboration is off, or before the socket is up.
+     Same late-binding trick as syncBar() below, and for the same reason: canvasFull() is async, so
+     anything that touches the canvas document has to tolerate being called before it exists. */
+  var paintPeers = function () {};
+
   function bars() {                   // the "+" strips live between blocks; rebuild after any move
     var d = cdoc();
     if (!d) return;
@@ -809,6 +814,7 @@
       var list = blocksIn(box);
       for (var i = 0; i <= list.length; i++) box.insertBefore(addBar(d, pathIn(box, i)), list[i] || null);
     });
+    paintPeers();   // the one place every re-render path passes through, and renumber() has already run
   }
 
   // ---- editing on the page --------------------------------------------------
@@ -1407,6 +1413,8 @@
     f.dispatchEvent(new (W.Event || Event)("input", { bubbles: true }));
   }
 
+  var sendWhere = function () {};   // reassigned by initCollab(), like paintPeers()
+
   function rememberSelection() {
     var d = cdoc();
     if (!d) return;
@@ -1419,6 +1427,7 @@
     savedRange = r.cloneRange();
     savedField = f;
     syncBar();
+    sendWhere(f);   // no-op unless a channel is up; throttled inside, selectionchange is very chatty
   }
 
   /* Is the remembered caret still commandable? isConnected is not enough: a node from a replaced
@@ -1944,6 +1953,7 @@
 
     focusOnLoad = "0";   // land the caret in the document, the way Docs does
     canvasFull();
+    initCollab();   // canvasFull() is async, so the first paint comes through bars(), not from here
 
     // Advanced is the same data as JSON. The textarea is written when the panel opens (and on
     // submit); a hand edit is read back on blur, so whichever side was touched last wins.
@@ -1976,6 +1986,166 @@
       });
     });
     window.addEventListener("beforeunload", function (e) { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+  }
+
+  // ---- working at the same time ---------------------------------------------
+  /* Who else has this page open, and roughly where they are. Presence only: nothing here changes a
+     block, and nobody's typing reaches anybody else yet -- that is the shared-document work.
+
+     The socket lives in THIS document, not in the canvas iframe (unlike Sortable, which has to bind
+     to elements in there). Markers are painted into the iframe's DOM from out here, which is what
+     admin.js already does everywhere else via cdoc().
+
+     Off, silently, when SUPABASE_PUBLIC_URL is unset, when the post has no id yet, or when the
+     library did not load -- all three are the same single-player editor that existed before. */
+  function initCollab() {
+    var rt = SPEC.rt || {};
+    if (!rt.url || !rt.room || !window.supabase) return;
+
+    var client = window.supabase.createClient(rt.url, rt.key, { realtime: { params: { eventsPerSecondLimit: 5 } } });
+    var chan = null, peers = {}, mine = { path: null, field: null, sig: sig(), at: 0 };
+    var roster = document.getElementById("ed-peers");
+
+    /* MODEL's shape as a string. data-b is POSITIONAL and renumber() rewrites it on every insert,
+       move and delete -- so the moment one editor adds a section, my "2" is their "3" and a marker
+       drawn at their path would sit on the wrong block. Comparing shape lets a marker be drawn only
+       while both sides are looking at the same document, and hidden (not moved) when they are not.
+       ponytail: goes away entirely once the document itself is shared; then there is one shape. */
+    function sig() {
+      var out = [];
+      (function walk(list) {
+        (list || []).forEach(function (b) {
+          out.push(b.type);
+          if (b.type === "columns" && b.data && b.data.cols) b.data.cols.forEach(walk);
+        });
+      })(MODEL);
+      return out.join(",");
+    }
+
+    function initials(name) {
+      var bits = String(name || "?").trim().split(/\s+/);
+      return ((bits[0] || "?")[0] + (bits.length > 1 ? bits[bits.length - 1][0] : "")).toUpperCase();
+    }
+
+    function drawRoster() {
+      if (!roster) return;
+      var list = Object.keys(peers).map(function (k) { return peers[k]; });
+      roster.textContent = "";
+      list.slice(0, 4).forEach(function (p) {
+        var a = el("span", { "class": "ed-peer", title: p.name + " has this page open" });
+        a.style.background = p.colour;
+        a.textContent = initials(p.name);
+        roster.appendChild(a);
+      });
+      if (list.length > 4) roster.appendChild(el("span", { "class": "ed-peer more", text: "+" + (list.length - 4) }));
+    }
+
+    /* Markers are attributes and a pseudo-element, never injected nodes: bindField()'s input handler
+       copies a field's innerHTML straight into MODEL, so anything appended inside a [data-f] would be
+       saved into the published page. The block edge is an inset box-shadow because hover and
+       selection both use outline, and an inset shadow adds no layout box and fights neither. */
+    paintPeers = function () {
+      var d = cdoc();
+      if (!d) return;
+      Array.prototype.forEach.call(d.querySelectorAll("[data-peer],[data-peer-at]"), function (n) {
+        n.removeAttribute("data-peer");
+        n.removeAttribute("data-peer-at");
+        n.style.removeProperty("--peer");
+      });
+      if (VIEW === "preview") return;   // a different document entirely; no [data-b] to mark
+      Object.keys(peers).forEach(function (k) {
+        var p = peers[k];
+        if (!p.path || p.sig !== mine.sig) return;   // different shape: say nothing rather than lie
+        var block = d.querySelector('[data-b="' + p.path + '"]');
+        if (!block) return;
+        block.setAttribute("data-peer-at", "1");
+        block.style.setProperty("--peer", p.colour);
+        var f = p.field && block.querySelector('[data-f="' + p.field + '"]');
+        if (f && f.closest("[data-b]") === block) {
+          f.setAttribute("data-peer", p.name + " is typing here");
+          f.style.setProperty("--peer", p.colour);
+        }
+      });
+    };
+
+    var pending = null;
+    function push() {
+      if (!chan) return;
+      mine.sig = sig();
+      chan.track({ id: rt.me.id, name: rt.me.name, colour: rt.me.colour, path: mine.path, field: mine.field, sig: mine.sig });
+    }
+    function nudge() {                       // selectionchange fires on every caret move
+      clearTimeout(pending);
+      pending = setTimeout(push, 250);
+    }
+
+    sendWhere = function (f) {
+      var block = f && f.closest && f.closest("[data-b]");
+      mine.path = block ? block.getAttribute("data-b") : null;
+      mine.field = f ? f.getAttribute("data-f") : null;
+      mine.at = Date.now();
+      nudge();
+    };
+
+    /* Nothing in the editor says "I stopped editing": there is no blur handler on a field, and
+       clicking the title or the settings panel leaves the last caret position standing. So it ages
+       out on its own rather than lingering on a section nobody is in. */
+    setInterval(function () {
+      if (mine.path && Date.now() - mine.at > 60000) { mine.path = mine.field = null; push(); }
+    }, 20000);
+
+    function readRoster() {
+      var state = chan.presenceState(), next = {};
+      Object.keys(state).forEach(function (key) {
+        var m = state[key][0];
+        if (m && m.id && m.id !== rt.me.id) next[m.id] = m;
+      });
+      peers = next;
+      drawRoster();
+      paintPeers();
+    }
+
+    function join(token) {
+      if (token) client.realtime.setAuth(token);
+      chan = client.channel(rt.room, { config: { private: true, presence: { key: rt.me.id } } });
+      chan.on("presence", { event: "sync" }, readRoster)
+          .on("presence", { event: "join" }, readRoster)
+          .on("presence", { event: "leave" }, readRoster)
+          .subscribe(function (status) {
+            if (status === "SUBSCRIBED") return push();
+            // CHANNEL_ERROR is what an expired JWT looks like from here. _session_token() only
+            // refreshes AFTER expiry, so reacting to the error is the only schedule that can be
+            // honoured -- asking early would hand back the same dying token.
+            if (status === "CHANNEL_ERROR" || status === "CLOSED") retry();
+          });
+    }
+
+    var retrying = false;
+    function retry() {
+      if (retrying) return;
+      retrying = true;
+      setTimeout(function () {
+        fetch("/admin/rt-token", { credentials: "same-origin" }).then(function (r) {
+          // ui_required redirects a finished session to the login page and fetch follows it, so a
+          // dead session arrives as 200 HTML, never 401. Stop rather than hammer it forever.
+          if (r.redirected) throw new Error("signed out");
+          return r.json();
+        }).then(function (j) {
+          retrying = false;
+          if (!j.token) return;
+          if (chan) { client.removeChannel(chan); chan = null; }
+          join(j.token);
+        }).catch(function () { retrying = false; });   // offline or signed out: the roster just stops
+      }, 2000);
+    }
+
+    fetch("/admin/rt-token", { credentials: "same-origin" })
+      .then(function (r) { return r.redirected ? null : r.json(); })
+      .then(function (j) { if (j && j.token) join(j.token); })
+      .catch(function () {});
+
+    // Realtime expires presence server-side when the socket drops, so this only makes it prompt.
+    window.addEventListener("beforeunload", function () { if (chan) chan.untrack(); });
   }
 
   // ---- the warranty form ----------------------------------------------------
