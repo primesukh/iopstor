@@ -639,7 +639,7 @@ The other three shapes size from `auto` tracks that stay inside a 390px card (da
 
 **A numeric `cards` icon is a counter, not an icon.** `card-icon num` drops the tinted tile for the design's mono blue number, and the deck tightens around it (`.cards:has(.card-icon.num)`).
 
-**Favicons.** `static/favicon.svg` plus PNGs at 16/32/48/180/192/512, generated from the SVG with ImageMagick — `convert -background none static/favicon.svg -resize NxN static/favicon-N.png`, once per size — and linked from both `base.html` and `admin/base.html` (only svg/16/32/180 are linked; 48/192/512 are kept for a web manifest that does not exist yet). Recolouring the mark means editing the SVG and re-running the six.
+**Favicons.** `static/favicon.svg` plus PNGs at 16/32/48/180/192/512, generated from the SVG with **Inkscape** — `inkscape --export-type=png --export-width=N --export-height=N --export-filename=static/favicon-N.png static/favicon.svg`, once per size — and linked from both `base.html` and `admin/base.html` (only svg/16/32/180 are linked; 48/192/512 are kept for a web manifest that does not exist yet). Recolouring the mark means editing the SVG and re-running the six. **Not ImageMagick**, which these were generated with until 2026-09-12: `convert` has no usable SVG delegate here and falls back to its own MSVG rasteriser, whose antialiasing turns the ring into a blob at 16-48px and quantises the result to a 256-colour palette. Inkscape renders each size natively in RGBA; compare before replacing the tool again.
 
 ### The admin shell
 
