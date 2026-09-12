@@ -298,7 +298,7 @@
 .drop-zone label{text-align:left}
 .tiles-m{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
 .m-tile{display:block;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--white);text-decoration:none;color:inherit}
-.m-tile.on{border-color:var(--blue);box-shadow:0 0 0 2px rgba(0,140,247,.25)}
+.m-tile.on{border-color:var(--blue);box-shadow:0 0 0 2px rgba(66,115,184,.25)}
 .m-prev{display:flex;align-items:center;justify-content:center;aspect-ratio:1;background:var(--grey)}
 .m-prev img{max-width:100%;max-height:100%;object-fit:contain}
 .m-pdf{display:flex;align-items:center;justify-content:center;width:44px;height:56px;border:2px solid var(--black);border-radius:4px;font:700 10px/1 var(--mono)}

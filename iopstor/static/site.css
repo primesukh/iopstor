@@ -5,7 +5,7 @@
 :root{
   --black:#0a0d12;--black-2:#0f131a;--black-3:#12171f;
   --line-dark:#1c2230;--line-dark-2:#2a3140;
-  --blue:#008cf7;--blue-hover:#0068c0;--blue-tint:#e8f3fe;--blue-light:#5fb4fb;
+  --blue:#4273b8;--blue-hover:#335a8f;--blue-tint:#f0f4fa;--blue-light:#88a8d4;
   --white:#fff;--grey:#edf1f6;--line:#e5e9ef;--line-2:#cfd6df;
   --ink:#111827;--ink-2:#374151;--muted:#5b6675;--muted-dark:#aeb6c2;--muted-dark-2:#7d8794;
   --green-bg:#e6f4ea;--green:#0a8a3a;--red-bg:#fdeaea;--red:#b42323;
@@ -182,7 +182,7 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 .site-footer a:hover{color:var(--white)}
 .site-footer ul{list-style:none;padding:0;margin:0}
 .site-footer li{margin:0 0 10px}
-.site-footer .q{color:var(--blue)}.site-footer .q:hover{color:var(--blue-light)}
+.site-footer .q{color:var(--blue-light)}.site-footer .q:hover{color:var(--white)}
 .site-footer .legal{border-top:1px solid var(--line-dark);margin-top:40px;padding-top:20px;font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
 /* The social profiles from Settings, under the footer brand. The glyphs are solid simple-icons
    paths, so they take fill, not the stroke the admin sprite uses — and currentColor means the
@@ -229,7 +229,7 @@ main{min-height:60vh}
 .t-dark .card{background:var(--black-3);border-color:var(--line-dark)}
 .t-dark .card p{color:var(--muted-dark)}
 .t-dark .chip{border-color:var(--line-dark-2);color:var(--muted-dark)}
-.t-dark .chip-industry{background:rgba(0,140,247,.15);color:var(--blue-light)}
+.t-dark .chip-industry{background:rgba(66,115,184,.15);color:var(--blue-light)}
 .t-dark a.card:hover{border-color:var(--blue)}
 .section-title{font-size:clamp(28px,3.5vw,40px);margin:0 0 24px}
 /* the row above a grid: eyebrow and title left, "All services →" right */
@@ -239,7 +239,7 @@ main{min-height:60vh}
 .sec-head .eyebrow{margin:0 0 10px}
 .sec-link{font:600 15px/1 var(--body);color:var(--black);text-decoration:none;white-space:nowrap}
 .sec-link:hover{color:var(--blue)}
-.band-dark .sec-link{color:var(--white)}.band-dark .sec-link:hover{color:var(--blue)}
+.band-dark .sec-link{color:var(--white)}.band-dark .sec-link:hover{color:var(--blue-light)}
 
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
 .card{background:var(--white);border:1px solid var(--line);border-radius:12px;padding:28px}
@@ -259,7 +259,7 @@ main{min-height:60vh}
 .card h3{margin:0 0 8px;font-size:20px}
 .card p{margin:0;color:var(--muted);font-size:15px;line-height:1.6}
 .card .date{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
-.card-icon{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;background:rgba(0,140,247,.12);font-size:18px;margin:0 0 14px}
+.card-icon{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;background:rgba(66,115,184,.12);font-size:18px;margin:0 0 14px}
 /* "01", "02" ... is a counter in the design, not an icon: no tile, and the deck tightens around it. */
 .card-icon.num{display:block;width:auto;height:auto;border-radius:0;background:none;font:700 12px/1 var(--mono);color:var(--blue)}
 .cards:has(.card-icon.num){gap:16px}
@@ -367,7 +367,7 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
    the first one, an editor's tone the second — so the tint that reads on white is swapped. */
 .band-dark.fx-sweep :is(h1,h2,h3),.band-dark.fx-sweep .stats strong,.stats li.fx-sweep strong,
 .t-dark.fx-sweep :is(h1,h2,h3),.t-blue.fx-sweep :is(h1,h2,h3){
-  background-image:linear-gradient(rgba(0,140,247,.35),rgba(0,140,247,.35))}
+  background-image:linear-gradient(rgba(66,115,184,.35),rgba(66,115,184,.35))}
 
 /* Figures that roll up from zero. The digits an editor typed are really in the HTML (stats.html)
    inside .cv; the counter is drawn into the empty .cr that follows it, so it rolls exactly where
@@ -399,7 +399,7 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .hero h1{margin:0 0 20px;font-size:clamp(36px,5vw,60px);line-height:1.05;max-width:var(--w,820px);text-wrap:pretty}
 .hero .lead{max-width:540px;margin-bottom:30px;text-wrap:pretty}
 .hero-media{position:relative;min-width:0;min-height:220px;display:flex;align-items:center;justify-content:center;animation:heroin .8s cubic-bezier(.2,.7,.2,1) both}
-.hero-media::before{content:"";position:absolute;inset:10% 0;border-radius:50%;background:radial-gradient(closest-side,rgba(0,140,247,.16),transparent);animation:glow 5s ease-in-out infinite}
+.hero-media::before{content:"";position:absolute;inset:10% 0;border-radius:50%;background:radial-gradient(closest-side,rgba(66,115,184,.16),transparent);animation:glow 5s ease-in-out infinite}
 .hero-media>img{position:relative;display:block;width:100%;max-width:620px;margin-inline:auto;animation:float 6s ease-in-out infinite;filter:drop-shadow(0 30px 40px rgba(10,13,18,.25))}
 /* Several pictures take turns with no JavaScript: every slide runs the same loop over the whole
    cycle, each one delayed by its own turn. --i and --n arrive inline from the block. */
@@ -551,7 +551,7 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pl-case_study .card-img{display:block;min-height:150px;margin:0 0 16px;border-radius:10px}
 .pl-case_study .card-img img{height:150px;object-fit:cover;border-radius:10px}
 .pl-case_study .chips{display:flex}
-.pl-case_study .chip-industry{background:rgba(0,140,247,.1);border-color:transparent;color:var(--blue-hover)}
+.pl-case_study .chip-industry{background:rgba(66,115,184,.1);border-color:transparent;color:var(--blue-hover)}
 .pl-partner .cards{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 /* On a page the partner list is a logo strip -- no card, no name, just the marks in a row, greyed
    back until you point at one. The archive (.arch-body) keeps the cards, which is where the names
@@ -744,7 +744,7 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pt-post .page-media img{width:auto;height:auto;max-width:100%;max-height:none;object-fit:initial}
 a.chip{text-decoration:none}
 a.chip:hover{border-color:var(--blue);color:var(--blue)}
-.chip-industry{background:rgba(0,140,247,.1);border-color:transparent;color:var(--blue-hover)}
+.chip-industry{background:rgba(66,115,184,.1);border-color:transparent;color:var(--blue-hover)}
 .meta-strip{background:var(--grey);padding:32px 0}
 /* long fields read as the article; short ones are the tiles above. white-space:pre-line keeps the
    editor's paragraph breaks without letting any markup through. */
