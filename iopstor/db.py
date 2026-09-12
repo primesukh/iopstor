@@ -123,11 +123,30 @@ def insert(name, row):
     return created
 
 
-def update(name, pk, changes, action="update"):
+def update(name, pk, changes, action="update", if_unchanged=None):
     """`action` is a label for the log, not a different write: moving a post to the trash is an
-    UPDATE, but the audit screen has to say "delete" or reading it means decoding a status pair."""
+    UPDATE, but the audit screen has to say "delete" or reading it means decoding a status pair.
+
+    `if_unchanged` is the row's `updated_at` as the caller last saw it, and it goes into the
+    UPDATE's own filter -- never into a comparison here. Postgres then decides, atomically, whether
+    this writer still has the row it thinks it has; ~30 gunicorn workers share no memory, so a
+    read-then-compare in Python would be the race it is meant to catch. No rows back means somebody
+    else saved first, and `None` is already what a vanished row returns, so nothing downstream has
+    to learn a new shape -- a conflict also writes no audit row for free, because `_audit` already
+    sits behind `if after:`. The moddatetime trigger keeps `updated_at` current (0001), which is
+    what makes it a version token nobody has to maintain.
+
+    Callers that deliberately do NOT pass it, so nobody "fixes" them later: the JSON API's
+    PATCH /posts/<id> and `flask seed --reset-content` are machine callers with no screen to warn,
+    and **`/admin/audit/<pk>/restore` is an intentional overwrite of whatever is there now** -- that
+    is the whole point of the button. The column is `updated_at` on purpose and not a parameter:
+    it is the only version token that exists today, and a second one can add the argument when it
+    has a second caller."""
     before = _before(name, pk)
-    data = table(name).update(changes).eq("id", pk).execute().data
+    q = table(name).update(changes).eq("id", pk)
+    if if_unchanged:
+        q = q.eq("updated_at", if_unchanged)
+    data = q.execute().data
     after = data[0] if data else None
     if after:
         _audit(action, name, pk, _diff(before, after), _label(after) or _label(before))
