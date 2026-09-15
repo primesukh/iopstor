@@ -2124,3 +2124,22 @@ def test_the_words_the_app_owns_are_refused_when_a_page_is_named(app, monkeypatc
     # /blog/admin, which collides with nothing, and refusing it would be a rule nobody could follow.
     changes, _ = save("post", "Admin")
     assert changes["slug"] == "admin"
+
+
+def test_every_setting_the_app_reads_is_passed_into_the_container():
+    """A key config.py reads but docker-compose.yml never passes is not a small omission: compose's
+    `environment:` is an explicit list, so the variable is simply absent inside the container and the
+    setting silently takes its default.
+
+    ADMIN_NETWORKS was shipped that way. Its default is "no restriction", so the office-only admin lock
+    read as OFF in production while the Dokploy environment screen showed the value set -- nothing in a
+    log, nothing on screen, the admin open to the whole internet. LOGIN_MAX_FAILURES and LOGIN_WINDOW
+    had the same hole, which made TECHNICAL.md's "tune it while under attack, no code change" untrue.
+
+    Every failure here is of that shape: the value looks set and is not."""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    read = set(re.findall(r'os\.environ\.get\("([A-Z_]+)"', (root / "iopstor" / "config.py").read_text()))
+    anchor = (root / "docker-compose.yml").read_text().split("x-app-env:")[1].split("\nservices:")[0]
+    passed = set(re.findall(r"^\s{2}([A-Z_]+):", anchor, re.M))
+    assert read, "no settings found -- the regex stopped matching config.py"
+    assert not (read - passed), f"config.py reads these but docker-compose.yml never passes them: {sorted(read - passed)}"
