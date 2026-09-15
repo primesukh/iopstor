@@ -1327,7 +1327,11 @@
 
   function canvasFull() {
     if (!FRAME) return;
-    if (VIEW === "preview") return renderPreview();   // whatever changed, preview is what is on screen
+    // Coalesced, not immediate: this is the one funnel every repaint reaches -- a peer's keystroke,
+    // dedupe(), setBlocks(), the structural branch -- and a preview render is a whole page off the
+    // database. setView() calls renderPreview() directly, so ENTERING preview is still instant.
+    if (VIEW === "preview") return previewSoon();   // whatever changed, preview is what is on screen
+    pvUp = false;                      // the frame is about to hold the edit canvas, not a preview
     ask("full", {}, function (html) {
       FRAME.onload = function () {
         FRAME.onload = null;
@@ -1364,6 +1368,11 @@
   }
 
   function canvasBlock(path) {        // one block's data changed in its settings popover
+    // A preview document carries no [data-b] -- render_blocks() hands it _no_fe -- so the surgery
+    // below can never find its node and the callback always fell through to canvasFull(). The !d
+    // guard does not catch it, because the preview iframe has a perfectly good document, so every
+    // peer keystroke bought a /admin/canvas round trip purely to discard it: ~6.6 a second.
+    if (VIEW === "preview") return canvasFull();
     var d = cdoc();
     if (!d || !blockAt(path)) return;
     ask("b" + path, { p: path }, function (html) {
@@ -2699,14 +2708,64 @@
       .catch(function () {});
   }
 
+  /* Preview repaints by replacing #main, not by reassigning srcdoc, and that is the difference
+     between "live" and "unusable". fitPreview() makes the iframe its own scroll container, so
+     navigating it -- which `srcdoc =` does, even to identical HTML -- throws the reader back to the
+     top of the page. A colleague typing is ~6.6 updates a second, so the page was snatched away
+     roughly that often and the words underneath were never the point.
+
+     base.html wraps every page in <main id="main">, exactly as canvas.html does, so the same surgery
+     the edit canvas has always used on one section (canvasBlock's node.replaceWith) works here on
+     the whole body. The document survives, so the scroll offset is never lost rather than saved and
+     restored, there is no blank-then-repaint flash, and wirePreview()'s listeners -- bound to the
+     document, in the capture phase -- go on working. Measured in a real browser before being relied
+     on: 600px stays 600px across two swaps and a listener still fires, where `srcdoc =` gives 0.
+
+     srcdoc remains the path for the first paint and for entering Preview, which is where the head,
+     the header, the nav and the footer are rebuilt. # ponytail: between those they are not, so a
+     Settings or Menus change made in another tab shows on the next Edit/Preview switch. The page
+     editor cannot change either, which is why this is a ceiling and not a bug. */
+  /* pvUp is what says the iframe is ALREADY showing a previewed page, and it is not optional:
+     canvas.html has a <main id="main"> of its own, so entering Preview -- when the frame still holds
+     the edit canvas -- would otherwise graft the previewed body into the canvas document and leave
+     the editor's chrome wrapped around it. First render loads, every render after that swaps. */
+  var pvUp = false, pvLast = null;
   function renderPreview() {
     if (!FRAME || VIEW !== "preview") return;
     askPreview("", function (html) {
-      FRAME.onload = function () { FRAME.onload = null; wirePreview(); };
+      var d = pvUp && cdoc(), was = d && d.getElementById("main"),
+          now = was && new DOMParser().parseFromString(html, "text/html").getElementById("main");
+      if (now) {
+        // Nothing visible changed -- a peer editing a block that renders the same, or any of the
+        // repaints that are not about the page body. Left alone this still rebuilt the document.
+        if (now.innerHTML === pvLast) return;
+        pvLast = now.innerHTML;
+        return was.replaceWith(d.importNode(now, true));
+      }
+      FRAME.onload = function () {
+        FRAME.onload = null;
+        wirePreview();
+        // Seeded from the same parser the swap branch compares against, never from the live
+        // document: a browser reserialises what it parsed (a paragraph the markup left open, an
+        // attribute quoted the other way) and the two spellings would make the next render look
+        // like a change. Both sides of the === now come out of one serialiser.
+        var m = new DOMParser().parseFromString(html, "text/html").getElementById("main");
+        pvUp = true;
+        pvLast = m ? m.innerHTML : null;
+      };
       FRAME.srcdoc = html;
     });
     var card = document.getElementById("seo-card");
-    if (card) askPreview("card", function (html) { card.innerHTML = html; });
+    if (card) askPreview("card", function (html) { if (card.innerHTML !== html) card.innerHTML = html; });
+  }
+
+  // One beat for every preview repaint, local or remote. It was already here at 500ms but wired
+  // only to the form's own input/change events and shut inside initBlocks(), so a peer's edit went
+  // straight to renderPreview() -- one full page render, 8-11 Supabase round trips, per update.
+  var pvPending = null;
+  function previewSoon() {
+    clearTimeout(pvPending);
+    pvPending = setTimeout(function () { pvPending = null; renderPreview(); }, 500);
   }
 
   function wirePreview() {
@@ -2841,12 +2900,9 @@
       dirty = false;
       AREA.value = JSON.stringify(prune(MODEL), null, 2);
     });
-    var pvPending = null;
     ["input", "change"].forEach(function (ev) {      // while Preview is up, keep it a step behind your typing
       form.addEventListener(ev, function () {
-        if (VIEW !== "preview") return;
-        clearTimeout(pvPending);
-        pvPending = setTimeout(renderPreview, 500);
+        if (VIEW === "preview") previewSoon();      // the same beat a peer's edits are on
       });
     });
     // Still worth asking on a new post, which has no draft to fall back on, and on the rare window

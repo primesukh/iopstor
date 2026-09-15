@@ -337,7 +337,7 @@ While you have changes that have not been published, an amber note sits above th
 
 If something required is missing, the page comes back with the problem listed at the top and your work still in place.
 
-**Preview keeps up with your colleague too.** If somebody else is writing while you are looking at Preview, their words appear there as they type — they used to show only when you switched back to Edit, which also meant pressing Publish from Preview could put the page live without their last paragraph. Both are fixed.
+**Preview keeps up with your colleague too, without losing your place.** If somebody else is writing while you are looking at Preview, their words appear there as they type — they used to show only when you switched back to Edit, which also meant pressing Publish from Preview could put the page live without their last paragraph. And if you have scrolled halfway down a long page to look at something, it stays where you put it while they type; it used to jump back to the top every second or so.
 
 **Seeing who else is on the page.** This works everywhere now, the live site included — it used to be switched on only on the practice site, because of how the site connects to its database, and there is nothing to turn on any more. If a colleague has the same page open, their initials appear in a coloured circle at the top right, beside the blue button. Click into a section and they see a coloured line down the edge of it and a small label saying you are typing there — and you see the same for them. It is a nudge, not a lock: nothing stops two people typing in the same paragraph, it just means you can see that you are about to.
 
