@@ -44,7 +44,8 @@
       "Bash(node --check*)",
       "Bash(node --experimental-websocket*)",
       "Bash(node tests/reconcile.mjs*)",
-      "Bash(curl -s http://127.0.0.1:5000*)"
+      "Bash(curl -s http://127.0.0.1:5000*)",
+      "Bash(ss *)"
     ],
     "deny": [
       "Bash(pipenv run flask migrate*)",
