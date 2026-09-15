@@ -16,7 +16,6 @@
       "Bash(graphify query*)",
       "Bash(graphify path*)",
       "Bash(graphify explain*)",
-      "Bash(graphify update*)",
       "Bash(docker compose config*)",
       "Bash(docker compose ps*)",
       "Bash(git status*)",
@@ -69,7 +68,8 @@
       "Edit(.env)"
     ],
     "ask": [
-      "Bash(git merge*)"
+      "Bash(git merge*)",
+      "Bash(graphify update*)"
     ]
   },
   "hooks": {

@@ -77,6 +77,7 @@ The procedures this repo repeats, as slash commands. Load the one that fits befo
 | `/migration` | the schema or a seeded row must change — write the `.sql`, never run it |
 | `/theme-check` | anything in `site.css`, a block template, `_card.html`, `admin.js` — screenshots at three widths |
 | `/after-merge` | the user says a PR is merged — pull, prune branches, audit `.claude/` (no graph rebuild) |
+| `/collab-check` | anything in the editor's shared document, presence, autosave or Preview changed — what node, a served page, the dev-server log and the draft rows can prove, and the two-browser list that only the user can |
 
 ## Workflow (non-negotiable)
 
@@ -95,6 +96,8 @@ graphify explain "apply_post"        # plain-language explanation of one node
 The graph gives the shape: which modules connect, which communities a symbol bridges, where the god nodes are (`table()`, `require_role()`, `render_blocks()`, `one()`, `apply_post()`). *Then* grep and read the actual files to confirm the detail — the graph is the map, the source is the territory. Never skip straight to grep on a question the graph can answer, and never trust the graph alone for a claim you are about to write down.
 
 **The code half of the graph maintains itself; the prose half is refreshed only when the user asks.** Git hooks installed by `graphify hook install` (`.git/hooks/post-commit`, `post-checkout`) re-extract changed code files in the background after every commit and branch switch (not after a `git pull`) — no LLM, a few seconds, log in `~/.cache/graphify-rebuild.log` — so the code nodes follow whatever branch is checked out. `.sql` files contribute nothing until `tree_sitter_sql` is installed beside graphify. The doc nodes (`CLAUDE.md`, `docs/*.md`, `.claude/docs/*.md`) and the community labels come from the LLM pass, and **that runs only when the user explicitly asks for it** — not from `/after-merge`, not on a branch, never unasked, because it costs real tokens on a shape that may still change. So the prose half can be many merges old: query it for the shape, then confirm every detail against source.
+
+**1b. Measure before you build.** Every recent PR that held up did the same thing first: it tried the claim against the real thing — the vendored bundle in a real browser, the running server, the actual rows, a node harness with the library's own logger on — before writing the code that depends on it (`git log -i --grep=measured` is the list). Reading the docs and assuming is how the `42P01`, `socketAdapter`, `view()` and `srcdoc` mistakes each cost a PR. The number goes in the commit body and the PR's Decisions row; what could not be measured here goes in the PR's Tests section as not verified. `/theme-check` and `/collab-check` are the two measured checks written down.
 
 **2. Every feature goes on its own branch and PR. Never merge without being told.**
 
@@ -143,7 +146,7 @@ So the full order is: branch → work → three docs → `/pr` → **stop** → 
 - Auth: admin API expects `Authorization: Bearer <Supabase JWT>`; the browser admin keeps the tokens in the signed session cookie and refreshes on expiry. Both verify locally with `SUPABASE_JWT_SECRET` (HS256). `users.id` = GoTrue `sub`. Browser POSTs carry a `csrf` field checked by `ui_required`.
   Roles: `editor` < `admin`. A GoTrue login without a `users` row gets 403.
 - Payments: only `PaymentGateway` subclasses in `payments.py`; `PAYMENT_PROVIDER` env selects one. `dummy` is the placeholder.
-- Ponytail mode is on for this repo: fewest files, stdlib first, mark deliberate ceilings with `# ponytail:` comments (38 in source; `/ponytail-debt` lists them). Non-trivial logic gets one small pytest test in `tests/test_offline.py` when it can run without Supabase.
+- Ponytail mode is on for this repo: fewest files, stdlib first, mark deliberate ceilings with `# ponytail:` comments (46 in `iopstor/`; `/ponytail-debt` lists them). Non-trivial logic gets one small pytest test in `tests/test_offline.py` when it can run without Supabase.
 
 ## Env keys (`.env.example`)
 

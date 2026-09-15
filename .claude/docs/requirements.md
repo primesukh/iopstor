@@ -1,4 +1,4 @@
-# IOPSTOR — client requirements (brief verbatim from 2026-09-03; decisions and status to 2026-09-10)
+# IOPSTOR — client requirements (brief verbatim from 2026-09-03; decisions and status to 2026-09-15)
 
 The brief is kept word for word. Everything under **Decisions** is dated and appended to, never rewritten; a later line overrides an earlier one. What the brief asked for versus what exists is in **Status against the brief** at the end.
 
@@ -117,6 +117,8 @@ In `website_assets/` (tracked in git since 2026-09-10 — the client's files, lo
 | 2026-09-14 | **The button says `Publish` when the page is live and `Save` when it is not**, and the right-hand panel (title, web address, status, summary, SEO) does **not** save itself — it moves only when the button is pressed |
 | 2026-09-15 | **A section the shared editor cannot hold should become a section type, not a bigger editor.** Home's panel and NAS's feature list became `points` and `definitions`; Contact Us keeps the old editor until its details can be read from Settings instead of frozen into the page; NAS's specification table and the About Us founders grid stay as they are |
 | 2026-09-15 | **Collaboration must reach Supabase through the Flask app, not through the tunnel.** *"our database is not directly exposed to the WAN its only accessable to the flask server so we need to route the webhooks for collaborative work as well just like images that we do"* — the documented plan had been to route `^/realtime/` from the Cloudflare tunnel straight to Kong; that is abandoned. The editor's channel is proxied by the app at `/admin/realtime/v1/longpoll`, exactly as every picture is proxied at `/media/<key>`, so Flask stays the only exposed service. Two decisions taken with it: `SUPABASE_PUBLIC_URL` is **deleted** rather than kept as a switch ("one path, dev exercises production"), and collaboration goes **live on deploy** rather than staying off — which makes applying `0009` and `0010` to the production database a prerequisite of the deploy, not a follow-up |
+| 2026-09-15 | **Migrations run on a deploy, never on a restart or a rebuild.** *"run migrations on a redeploy, but only on deploy and not on rebuild"* — `flask migrate` became a one-shot `migrate` service in the compose stack that the app waits on, so a crash or a host reboot never touches the schema, a rebuild of unchanged code finds nothing to apply, and a failed migration states its reason once in a container that stays put. The trade, agreed before it was built: an app container restarting during a Supabase outage now serves errors until Supabase is back, instead of refusing to boot |
+| 2026-09-15 | **Preview follows a colleague's typing without moving the reader.** *"preview should live update just like editor"* — a colleague's paragraph shows in Preview as it does in Edit, the page does not jump when it arrives, and Publish never sends the page an edit behind. Of three refresh rates offered, **two renders a second** was chosen |
 
 ## Status against the brief
 
@@ -131,7 +133,7 @@ In `website_assets/` (tracked in git since 2026-09-10 — the client's files, lo
 | Datasheet | `datasheet` type with a PDF field, `pdf` block reads it in the browser, Download button |
 | Products with payment gateway | `product` type, checkout page, `DummyGateway` placeholder; **live provider still open** |
 | WordPress-like CMS + Elementor-style building | Content types as rows, per-type fields, document editor with sections, columns, alignment/width/tone per section |
-| Easy admin for non-technical staff | Sidebar admin, plain-English section picker, live preview, `docs/NON-TECHNICAL.md` |
+| Easy admin for non-technical staff | Sidebar admin, plain-English section picker, live preview, `docs/NON-TECHNICAL.md`; two people can write in one page — one paragraph, even — at the same time and keep both sets of words, and Activity says what each of them changed |
 | Easy for AI to scrape | `llms.txt`, `llms-full.txt`, `.md` twin of every page, `/api/v1` read API |
 | SEO compatible | Server-rendered meta, canonical, Open Graph, JSON-LD per type, sitemap, robots, redirects; FAQPage JSON-LD not yet wired |
 | Backend first, UI later | Both delivered; UI followed the client's mock |
