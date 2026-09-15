@@ -3,10 +3,12 @@ Login = Supabase email/password; tokens live in the signed Flask session cookie.
 import difflib
 import json
 import secrets
+import urllib.error
+import urllib.request
 from collections import Counter
 from datetime import date
 from functools import wraps
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from flask import Blueprint, abort, current_app, flash, g, has_request_context, jsonify, redirect, render_template, request, session, url_for
 from markupsafe import Markup, escape
@@ -279,12 +281,12 @@ def _rt(pk):
     to be public (it is the browser's key by design, and RLS with no policies means it reads nothing
     on its own); the user's GoTrue token is the one worth keeping out.
 
-    Empty url = the whole feature is off, which is the state in production until the tunnel routes
-    /realtime/ to Kong, and in every test. Empty room = an unsaved new post: there is no stable id to
-    collaborate under yet.
+    No url: the browser builds its own from location.origin, because the channel comes back through
+    this app (realtime_longpoll below) rather than straight from Supabase. Empty room is the one
+    remaining off switch -- an unsaved new post has no stable id to collaborate under yet.
     """
     uid = str((g.user or {}).get("id", ""))
-    return {"url": current_app.config["SUPABASE_PUBLIC_URL"], "key": current_app.config["SUPABASE_ANON_KEY"],
+    return {"key": current_app.config["SUPABASE_ANON_KEY"],
             "room": f"post:{pk}" if pk else "",
             # int(uuid), not hash(): hash() is salted per process, so thirty gunicorn workers would
             # hand the same editor thirty different colours depending on who served the page.
@@ -538,6 +540,71 @@ def rt_token():
     the browser sees 200 with HTML, never a 401, and has to test r.redirected.
     """
     return jsonify({"token": _session_token() or ""}), 200, {"Cache-Control": "no-store"}
+
+
+RT_POLL_TIMEOUT = 40   # seconds; Phoenix holds an idle poll open for 10, so this only trips on trouble
+POLL_STATUSES = {200, 204, 403, 410, 500}   # every status the browser's LongPoll transport can read
+
+
+def _rt_upstream_query(args, anon_key):
+    """The query to forward upstream: the browser's, minus our csrf, with the apikey forced to ours.
+
+    Realtime reads the key from the QUERY STRING -- sent as a header it answers {"status":403} -- so
+    the proxy puts it there itself. Not to hide it: the anon key is a browser key by design and is in
+    the page already. It is so the proxy always presents the key WE chose, whatever the caller wrote
+    in the URL -- Kong's key-auth cannot be probed through this route, and a service-role key that
+    leaked could not be walked back in through it. csrf is ours and means nothing to Phoenix.
+    """
+    q = [(k, v) for k, v in args.items(multi=True) if k not in ("csrf", "apikey")]
+    q.append(("apikey", anon_key))
+    return urlencode(q)
+
+
+@ui.route("/realtime/v1/longpoll", methods=["GET", "POST"])
+def realtime_longpoll():
+    """The editor's realtime channel, proxied -- exactly as every picture is (public.media_file).
+
+    Supabase is LAN-only and this app is the only exposed service, so the browser cannot open a socket
+    to Realtime in production and we will not put Kong on the tunnel to let it. Phoenix's longpoll
+    transport is ordinary request/response HTTP, which is what makes this possible at all: gunicorn
+    runs gthread workers and cannot hold a websocket (design.md's 2026-09-12 row -- that reason still
+    stands, longpoll goes around it rather than refuting it).
+
+    Not @ui_required(), and both halves of that matter. It checks csrf out of request.form, and a
+    Phoenix POST is a JSON body with no form field, so every send would 400; and with no session it
+    redirects to the login page, so the transport would get 200 HTML instead of a refusal. Hence the
+    inline guard, answering 403 -- which is the one status Phoenix's LongPoll client reads as "stop".
+
+    # ponytail: one worker thread per open editor, held ~10s per poll and re-issued immediately.
+    # 30 workers x 8 threads = 240 slots, so a room full of editors is nothing, but it is a number to
+    # watch rather than an argument. A real socket needs gevent, or a broker to fan out across the
+    # thirty processes -- which is the trade design.md turned down.
+    """
+    if current_user() is None or not session.get("csrf") or request.args.get("csrf") != session["csrf"]:
+        # Phoenix's own refusal shape, and a real 403 so the transport stops instead of reconnecting.
+        return jsonify({"status": 403}), 403, {"Cache-Control": "no-store"}
+    url = (current_app.config["SUPABASE_URL"] + "/realtime/v1/longpoll?"
+           + _rt_upstream_query(request.args, current_app.config["SUPABASE_ANON_KEY"]))
+    req = urllib.request.Request(url, method=request.method,
+                                 data=request.get_data() if request.method == "POST" else None,
+                                 headers={"Content-Type": request.content_type or "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=RT_POLL_TIMEOUT) as r:
+            body, status, ctype = r.read(), r.status, r.headers.get("Content-Type", "application/json")
+    except urllib.error.HTTPError as e:   # Kong answered and said no: a dead route, a rejected key
+        body, status, ctype = e.read(), e.code, e.headers.get("Content-Type", "application/json")
+    except OSError:                       # Kong unreachable, or the poll outlived RT_POLL_TIMEOUT
+        body, status, ctype = b'{"status":500}', 500, "application/json"
+    if status not in POLL_STATUSES:
+        # 500 rather than the real code, and not 503: the LongPoll client switches on the status and
+        # THROWS "unhandled poll status" on anything it does not know, which wedges the transport for
+        # the life of the tab. 500 is the one it backs off and retries from, so a Kong 401 (a wrong
+        # anon key) or a 502 (Realtime restarting) degrades to our own CHANNEL_ERROR path instead.
+        body, status, ctype = b'{"status":500}', 500, "application/json"
+    # no-store like rt_token(): Cloudflare sits in front of this GET, and a cached poll is a lost
+    # message. Phoenix already says must-revalidate; this does not leave it to a forwarded default.
+    return current_app.response_class(body, status=status, content_type=ctype,
+                                      headers={"Cache-Control": "no-store"})
 
 
 @ui.post("/canvas")

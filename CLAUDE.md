@@ -34,7 +34,8 @@ iopstor/seo.py           site(), build_meta(), jsonld(), md_url()
 iopstor/payments.py      PaymentGateway, DummyGateway, GATEWAYS
 iopstor/throttle.py      failed-password counter shared by every worker (sqlite on tmpfs); client_ip() reads CF-Connecting-IP
 iopstor/admin_api.py     /api/admin/v1 (JWT-protected REST; apply_post() is the single validation path)
-iopstor/admin_ui.py      browser admin at /admin: session login, post form + POST /admin/canvas + /admin/preview, media, leads, warranty, menus, settings, users, /audit (the activity log + restore)
+iopstor/admin_ui.py      browser admin at /admin: session login, post form + POST /admin/canvas + /admin/preview, media, leads, warranty, menus, settings, users, /audit (the activity log + restore),
+                         /admin/realtime/v1/longpoll (the editor's Realtime channel, proxied the way /media/<key> proxies pictures -- no browser ever reaches Supabase)
 iopstor/public.py        catch-all resolver (+ .md twins, /checkout), archives, /media/<key> file proxy, sitemap/robots/llms/feed, /api/v1 public read API, leads, checkout
 iopstor/cli.py           flask migrate | seed | import-media | create-admin
 iopstor/templates/       base.html post.html archive.html 404.html checkout.html _card.html (the one card macro), blocks/<type>.html (20, each a full-width <section>), admin/*.html
@@ -146,8 +147,7 @@ So the full order is: branch → work → three docs → `/pr` → **stop** → 
 
 ## Env keys (`.env.example`)
 
-`SECRET_KEY, SITE_URL, SUPABASE_URL, SUPABASE_PUBLIC_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, MEDIA_BUCKET, PAYMENT_PROVIDER, THROTTLE_DB, LOGIN_MAX_FAILURES, LOGIN_WINDOW`
-**`SUPABASE_PUBLIC_URL` is optional and empty means off** — the browser-facing Supabase origin for the editor's presence channel; `SUPABASE_URL` cannot be reused because in production it is internal Docker DNS. Not in `REQUIRED`.
+`SECRET_KEY, SITE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, MEDIA_BUCKET, PAYMENT_PROVIDER, THROTTLE_DB, LOGIN_MAX_FAILURES, LOGIN_WINDOW`
 **`SECRET_KEY` and `SITE_URL` have no defaults and sit in `create_app()`'s `REQUIRED`** beside the four `SUPABASE_*` — the app refuses to boot without them, because both used to fail silently: a signing key printed in this repo, and localhost canonicals plus a session cookie with no `Secure` flag.
 Development also sets `FLASK_APP=iopstor` and `FLASK_DEBUG=1`. `GUNICORN_CMD_ARGS` is container-only and gunicorn reads it itself — `-w 2 --threads 8 --preload --access-logfile -` from the Dockerfile, raised in Dokploy, never in code.
 Production: `SITE_URL=https://www.iopstor.com`, `SUPABASE_URL=http://<kong-service>:8000` (Kong's internal Docker name on `dokploy-network`), `GUNICORN_CMD_ARGS=-w 30 --threads 8 --preload --access-logfile -`, `TUNNEL_TOKEN` plus `COMPOSE_PROFILES=tunnel` for the cloudflared container (it sits behind a Compose profile, so the stack deploys before the tunnel exists — `docs/TECHNICAL.md` §15), and **no `FLASK_DEBUG`**. Set in Dokploy's environment only; `.env` and `.env.*` are both git-ignored. Runbook: `docs/TECHNICAL.md` §15.

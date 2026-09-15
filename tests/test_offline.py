@@ -1030,6 +1030,7 @@ AUDITED = {
     # a route that writes nothing to the log -- it closes editing sessions that have gone quiet,
     # and each of those IS an audit row, attributed to the editor who made the changes.
     "admin_ui.autosave": "the draft write is not logged (unbounded); the sessions it flushes are",
+    "admin_ui.realtime_longpoll": "a transport, not a write: it proxies the editor's channel to Realtime",
     "admin_ui.canvas": "changes nothing, renders the page into the editor",
     "admin_ui.preview": "changes nothing, renders the unsaved form as a page",
     "admin_api.auth_refresh": "session mechanics, not a step anybody takes",
@@ -1326,26 +1327,95 @@ def test_the_timestamp_survives_the_query_string():
     assert "%2B00%3A00" in str(q.request.params), str(q.request.params)
 
 
-def test_the_editor_page_carries_no_realtime_config_when_it_is_not_set_up(app):
-    """One switch turns collaboration off, and it is the absence of a setting rather than a flag:
-    unset in every test, unset until the migration is applied, unset in production until the tunnel
-    routes /realtime/ to Kong. The editor is then exactly the single-player one that shipped before."""
+def test_the_editor_page_carries_a_room_but_never_a_token(app):
+    """The channel comes back through this app now, so there is no browser-facing Supabase origin to
+    send and no switch to turn off: the one remaining off state is a post with no id, which has
+    nothing to collaborate under. The token is the thing that must never reach the page -- the anon
+    key is meant to be public, the GoTrue session token is not."""
     from flask import g
 
     from iopstor import admin_ui
 
     with app.test_request_context("/admin/posts/7"):
         g.user = {"id": "8f14e45f-ceea-467a-9b4e-4c9d3c8b2a11", "email": "zz@zz-test.local", "name": "", "role": "admin"}
-        app.config["SUPABASE_PUBLIC_URL"] = ""
-        assert admin_ui._rt(7)["url"] == ""          # initCollab() returns on this and nothing else runs
-
-        app.config["SUPABASE_PUBLIC_URL"] = "http://supabase.invalid"
         rt = admin_ui._rt(7)
         assert rt["room"] == "post:7"
         assert rt["me"]["name"] == "Zz"              # display_name() falls back to the email's local part
+        assert "url" not in rt, "the browser builds its own origin from location.origin"
         assert "token" not in json.dumps(rt), "the access token must never be rendered into the page"
         # a post with no id yet has nothing to collaborate under, so there is no room to join
         assert admin_ui._rt(None)["room"] == ""
+
+
+def test_the_realtime_proxy_refuses_without_a_session_or_the_csrf(app, monkeypatch):
+    """It cannot use ui_required: that reads csrf out of request.form, and a Phoenix POST is a JSON
+    body with no form field, so every send would 400. It also redirects when signed out, and a
+    transport handed 200 HTML cannot tell that from a reply. 403 is the one status Phoenix's LongPoll
+    client reads as "stop", so both refusals have to be that and not a redirect."""
+    from iopstor import admin_ui
+
+    c = app.test_client()
+    r = c.get("/admin/realtime/v1/longpoll?vsn=2.0.0")
+    assert r.status_code == 403, "signed out must be a refusal, not a redirect to the login page"
+    assert r.headers["Cache-Control"] == "no-store"
+
+    with c.session_transaction() as s:
+        s["csrf"] = "right"
+    monkeypatch.setattr(admin_ui, "current_user", lambda: {"id": "u", "role": "admin"})
+    assert c.post("/admin/realtime/v1/longpoll?csrf=wrong").status_code == 403
+    assert c.post("/admin/realtime/v1/longpoll").status_code == 403, "no csrf at all is also a refusal"
+
+    # ...and the matching one gets through, or the guard would pass by refusing everything
+    class _Reply:
+        status, headers = 200, {"Content-Type": "application/json"}
+
+        def read(self):
+            return b'{"status":410,"token":"t","messages":[]}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(admin_ui.urllib.request, "urlopen", lambda *a, **k: _Reply())
+    r = c.get("/admin/realtime/v1/longpoll?csrf=right&vsn=2.0.0")
+    assert r.status_code == 200 and json.loads(r.get_data())["status"] == 410
+
+
+def test_the_realtime_proxy_pins_the_api_key_and_keeps_our_csrf_to_itself(app):
+    """Realtime reads the key from the query string -- as a header it answers {"status":403} -- so the
+    proxy puts it there itself rather than forwarding whatever the caller sent. csrf is ours and means
+    nothing to Phoenix."""
+    from werkzeug.datastructures import MultiDict
+
+    from iopstor import admin_ui
+
+    q = admin_ui._rt_upstream_query(MultiDict([("vsn", "2.0.0"), ("csrf", "s3cret"), ("apikey", "someone-elses")]), "ours")
+    assert "csrf" not in q and "someone-elses" not in q
+    assert "apikey=ours" in q and "vsn=2.0.0" in q
+
+
+def test_a_status_the_poll_transport_cannot_read_becomes_a_500(app, monkeypatch):
+    """The browser's LongPoll switches on the status and THROWS "unhandled poll status" on anything
+    outside {200,204,403,410,500}, which wedges the transport for the life of the tab. So a Kong 401
+    from a wrong anon key, or a 502 while Realtime restarts, has to arrive as the one status it knows
+    how to back off from -- and then our own CHANNEL_ERROR path takes over."""
+    import urllib.error
+
+    from iopstor import admin_ui
+
+    def boom(*a, **k):
+        raise urllib.error.HTTPError("http://kong/realtime/v1/longpoll", 401, "Unauthorized", {}, None)
+
+    monkeypatch.setattr(admin_ui.urllib.request, "urlopen", boom)
+    monkeypatch.setattr(admin_ui, "current_user", lambda: {"id": "u", "role": "admin"})
+    c = app.test_client()
+    with c.session_transaction() as s:
+        s["csrf"] = "tok"
+    r = c.get("/admin/realtime/v1/longpoll?csrf=tok&vsn=2.0.0")
+    assert r.status_code == 500, "401 would be an unhandled poll status in the browser"
+    assert json.loads(r.get_data())["status"] == 500
 
 
 def test_the_editors_colour_is_the_same_in_every_worker():
