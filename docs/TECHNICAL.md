@@ -408,7 +408,7 @@ Writes: `POST /leads` (also the target of the HTML contact form — plain form P
 
 It is post-redirect-get only when the write **succeeds**. A refused save falls through to the same render with the submitted values back in the form and a `400`, the way `new_post` / `edit_post` re-render rather than redirect — a redirect would answer a typo by making the editor retype the record. A refusal is a `(field, message)` pair, **not** a `flash()`: the form carries it as `data-refused-field` / `data-refused`, `initWarranty()` in `admin.js` puts it on that field with `setCustomValidity()` and calls `reportValidity()`, and a `<noscript>` copy says the same sentence without JS. Only a success flashes, at the top, where a confirmation belongs. `editing` is the form's contents, from `request.form` on a refusal and from the row on `?edit=`; the template keys add-vs-edit off `editing.id`, not off `editing` being truthy, so a rejected *new* record does not come back wearing an Edit heading. `?q=` and `?page=` ride through every redirect (save, delete, cancel) so a filtered list survives the round trip.
 
-`/admin/audit` is the activity log: every entry `audit_log` holds, newest first, admin-only, with `?user=` / `?action=` / `?table=` filters and the same `db.paginate(..., 50)` + `page` / `has_next` idiom as `/admin/leads`. It orders by `id DESC` rather than by `at` — ids are handed out in time order so the two agree, and the primary key then does the sorting without a second index. No `/api/admin/v1` mirror exists: nothing consumes the admin API but this browser admin.
+`/admin/audit` is the activity log: every entry `audit_log` holds, newest first, admin-only, with `?user=` / `?action=` / `?table=` filters and the same `db.paginate(..., 50)` + `page` / `has_next` idiom as `/admin/leads`. It orders by `id DESC` rather than by `at` — ids are handed out in time order so the two agree, and the primary key then does the sorting without a second index. No `/api/admin/v1` mirror exists: nothing consumes the admin API but this browser admin. It opens with a shut `<details>` from `throttle.connection()` saying where the site thinks you are connecting from, so the *From* column can be checked against what the app is actually receiving (§12).
 
 **The screen is translated in `admin_ui.py`, not in the template.** The test it is written against is that somebody who has never seen the database can read a row aloud, so the route hands the template finished rows — `who`, `sentence`, `fields` — and `audit.html` does no thinking. The translators are pure functions living above the routes and importing nothing from them, which is how the offline tests call them directly:
 
@@ -1343,6 +1343,8 @@ tests/test_admin_ui.py   browser login and post creation
 tests/test_public.py     hierarchical URLs + breadcrumbs, leads, redirects, sitemap/feed/llms, upload, checkout, seed idempotency
 ```
 
+**`test_throttle_fails_open_and_believes_only_a_proxy_we_named`** covers `client_ip()` end to end: the counter failing open, the header winning from a peer inside `TRUSTED_PROXIES`, the **rightmost** `X-Forwarded-For` entry beating a spoofed one to its left, `CF-Connecting-IP` beating `X-Forwarded-For`, and — the half that is the security property — both of them being *ignored* from a peer outside the list, including after narrowing `TRUSTED_PROXIES` so the private peer no longer qualifies. It was `test_throttle_fails_open_and_reads_cloudflares_header` until the header stopped being read unconditionally.
+
 Everything except `test_offline.py` is marked `live` and skips when `.env` has no Supabase.
 
 ---
@@ -1406,6 +1408,8 @@ pipenv run pytest
 
 - *Per request:* every cache — `post_types()`, `settings()`, `admin_counts()`, `tree()`, `get_media()` — is `db._cached()` on `flask.g`, gone at teardown. Nothing survives a request, so nothing can go stale between workers; the price is one PostgREST round trip each for `post_types` and `settings` per request (§17).
 - *Per process:* one object, the service-role Supabase client in `app.extensions`, built lazily on the first request. It is HTTP plumbing — a thread-safe `httpx` pool — holds no data, and `.table()` builds a fresh query each call.
+- *`TRUSTED_PROXIES` is wider than a proxy:* unset, it is every private range, which contains the LAN **client** as well as the LAN proxy — so somebody on the office network can still put an address that is not theirs into the throttle and the *From* column. Narrowing it to the subnet the proxy actually sits on closes it with no code change, and the app logs a warning at every boot while it is unset. It is a default rather than a `REQUIRED` key because refusing to boot would need the operator to know that subnet before they can go and look it up (§12).
+- *One hop:* `X-Forwarded-For` is read from the right, which is correct for exactly one trusted proxy. Chain two and the last entry is the inner one, not the visitor; the fix is to count back as many entries as there are hops (§12).
 - *Per container:* the login throttle's sqlite file on `/dev/shm` (§8). Two replicas would be two counters.
 - Sessions and the CSRF token are the signed cookie; `/admin/canvas` and `/admin/preview` carry everything in the POST body; uploads go to Storage under a `uuid4` key; there are no local files, threads, locks or module-level mutable state. The read-then-write spots — `unique_slug()`, `ensure_term()`, the warranty serial — sit behind `UNIQUE` constraints, so a race costs the loser a 502, never a duplicate row.
 
@@ -1498,8 +1502,13 @@ remaining hole is an insider inside `TRUSTED_PROXIES`, which narrowing it closes
 Switching the tunnel on is therefore four things, not five: `TUNNEL_TOKEN`, `COMPOSE_PROFILES=tunnel`,
 `SITE_URL` back to `https://www.iopstor.com`, and `TRUSTED_PROXIES` wide enough to include the network
 `cloudflared` is on (unset is, since the compose bridge is private). **The Dokploy domain is no longer
-deleted** — LAN access is permanent, and `SITE_URL` follows the public host while the LAN path keeps
-working, because nothing about the LAN path depends on the canonical. Then step 6 below, and
+deleted** — LAN access is permanent. But `SITE_URL` moving to `https://www.iopstor.com` is not free for
+it: `SESSION_COOKIE_SECURE` is derived from `SITE_URL` (§14), so the admin cookie then carries `Secure`
+and a browser on a **plain-http** LAN address will never send it back — a login that succeeds and bounces
+straight to `/admin/login`, the same failure as setting the scheme wrongly. Public pages over http are
+unaffected; only signing in is. So once the tunnel is live the LAN path has to be **https too** — a
+Dokploy domain with a certificate — or LAN admins sign in on the public hostname and the bare port stays
+for everything else. Decide that before switching `SITE_URL`, not after. Then step 6 below, and
 `docker compose ps` must list `cloudflared` beside `app`. Once the tunnel is permanent, deleting the
 `profiles:` line and restoring `${TUNNEL_TOKEN:?…}` puts the file back to one shape with nothing to
 remember. **Confirm it with the panel at the top of `/admin/audit`** (§12): open it once from the LAN and

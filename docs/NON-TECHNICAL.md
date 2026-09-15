@@ -716,6 +716,13 @@ typed, the time, and where it came from. If somebody gets it wrong enough times 
 is locked for a while, and that is recorded too, as *login blocked*. The lock is on where the attempts are
 coming from, never on the account, so nobody can shut you out of your own site by guessing at your password.
 
+**The addresses in Activity have changed — and there is a new folded line above the filters.** The last
+column used to show the address of the equipment between you and the site whenever you were working from
+inside the office, so several people could appear as the same address. It now shows the person, whichever
+way they reached the site. **Where the site thinks you are connecting from**, just above the filters,
+opens to say what address will be recorded against what you do and where your connection came from — for
+when an address in the log looks wrong. It only reports; there is nothing to set.
+
 **Does it record password changes?** Yes — both changing your own and an administrator setting a new
 one for somebody else. It records *that* the password was changed and whose it was. The password
 itself is never written down anywhere you or anybody else can read it.
