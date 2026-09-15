@@ -304,6 +304,23 @@ def test_a_type_without_pages_has_no_url_and_no_link(app):
     linked, bare = with_paths([row(True)])[0], with_paths([row(False)])[0]
     assert linked["path"] == "/partners/micron" and bare["path"] is None
     assert _indexable(linked) and not _indexable(bare)          # out of sitemap.xml and llms.txt
+
+    # A path the app owns is worse than no path: the page cannot load at all (Flask matches the admin
+    # blueprint first), and publishing its address tells every crawler where the CMS is.
+    def page(slug):
+        return with_paths([{**row(True), "slug": slug,
+                            "post_type": {"slug": "page", "url_prefix": "", "hierarchical": False,
+                                          "has_pages": True}}])[0]
+    assert page("admin")["path"] == "/admin" and not _indexable(page("admin"))
+    assert not _indexable(page("api")) and not _indexable(page("media"))
+    assert _indexable(page("administration"))                   # a near miss is an ordinary page
+
+    # noindex is a free-text box whose own hint reads "e.g. noindex,follow", so it has to be read as a
+    # list of tokens. startswith() passed both of the spellings below while rendering a noindex page.
+    for spelling in ("noindex", "noindex,follow", "NOINDEX", "nofollow,noindex", " noindex , follow "):
+        assert not _indexable({**linked, "seo": {"robots": spelling}}), spelling
+    for ok in ("", "index,follow", "nofollow", "noindexing"):
+        assert _indexable({**linked, "seo": {"robots": ok}}), ok
     # and a database where migration 0005 has not run yet still routes exactly as it did
     older = {**row(False), "post_type": {"slug": "partner", "url_prefix": "partners", "hierarchical": False}}
     assert with_paths([older])[0]["path"] == "/partners/micron"
@@ -2011,3 +2028,99 @@ def test_the_editor_persists_semantic_html_and_never_inner_html():
     # (Not "root.innerHTML is absent" -- the comment explaining why it must not be used says it too,
     # so that assertion would be reading prose rather than behaviour.)
     assert 'return q.getSemanticHTML().replace(/&nbsp;/g, " ");' in js
+
+
+class _FakeQ:
+    """Any PostgREST chain, remembering only which table it started from. Every builder method returns
+    self, so db.live()/db.select_posts()/.eq()/.order()/.limit() all work untouched and db.rows() can
+    answer from a canned dict instead of a network."""
+
+    def __init__(self, name):
+        self.name = name
+
+    def __getattr__(self, _):
+        return lambda *a, **k: self
+
+
+def test_no_crawler_output_can_carry_an_address_the_app_owns(app, monkeypatch):
+    """The client's rule: sitemap.xml, feed.xml, llms.txt and llms-full.txt must never publish an admin
+    or private-API address (user, 2026-09-15).
+
+    The collision is seeded deliberately -- a page slugged "admin", a post type prefixed "admin", a
+    taxonomy slugged "admin" -- because an assertion that passes on a site with none of those proves
+    nothing, and each of the three reaches the sitemap by a different route: the post's own path, the
+    archive prefix, and the term archive. Only the first passes through _indexable() at all."""
+    from iopstor import db
+
+    def pt(slug, prefix, **kw):
+        return {"id": abs(hash(slug)) % 999, "slug": slug, "name": slug.title(), "url_prefix": prefix,
+                "in_sitemap": True, "has_pages": True, "hierarchical": False, "field_schema": [], **kw}
+
+    blog, page, bad = pt("post", "blog"), pt("page", ""), pt("secret", "admin")
+
+    def post(slug, type_row, **kw):
+        return {"id": abs(hash(slug)) % 999, "slug": slug, "title": slug.title(), "excerpt": "x",
+                "blocks": [], "meta": {}, "seo": {}, "terms": [], "children": [], "parent_id": None,
+                "featured_media": None, "post_type": type_row, "updated_at": "2026-09-15T00:00:00+00:00",
+                "published_at": "2026-09-01T00:00:00+00:00", "menu_order": 0, **kw}
+
+    canned = {
+        "settings": [], "post_types": [blog, page, bad], "post_terms": [{"term_id": 1}, {"term_id": 2}],
+        "terms": [{"id": 1, "slug": "finance", "taxonomy": {"slug": "industry"}},
+                  {"id": 2, "slug": "anything", "taxonomy": {"slug": "admin"}}],
+        "posts": [post("real", blog), post("admin", page), post("api", page),
+                  post("hidden", blog, seo={"robots": "NOINDEX"}), post("buried", bad)],
+    }
+    monkeypatch.setattr(db, "table", lambda n: _FakeQ(n))
+    monkeypatch.setattr(db, "rows", lambda q: canned.get(q.name, []))
+
+    bodies = {p: app.test_client().get(p).data.decode()
+              for p in ("/sitemap.xml", "/feed.xml", "/llms.txt", "/llms-full.txt", "/robots.txt")}
+
+    for path, body in bodies.items():
+        assert "/admin" not in body, f"{path} published an admin address"
+        assert "/api/admin" not in body, f"{path} published the private API"
+        assert "/media/" not in body and "/static/" not in body, path
+        assert "Hidden" not in body, f"{path} published a noindex page"
+
+    # the ordinary page is still there -- a gate that publishes nothing passes every assertion above
+    assert "http://test/blog/real" in bodies["/sitemap.xml"] and "http://test/blog/real" in bodies["/feed.xml"]
+    assert "http://test/industry/finance" in bodies["/sitemap.xml"]      # the innocent term archive survives
+    assert "/blog/real.md" in bodies["/llms.txt"]
+
+    # the PUBLIC api stays advertised: it is read-only published content and that is what llms.txt is for
+    assert "/api/v1/posts" in bodies["/llms.txt"]
+    # and robots.txt no longer names the admin at all -- those lines were its only public mention
+    assert "Disallow" not in bodies["/robots.txt"] and "Sitemap: http://test/sitemap.xml" in bodies["/robots.txt"]
+
+
+def test_the_words_the_app_owns_are_refused_when_a_page_is_named(app, monkeypatch):
+    """reserved() is what stops the collision existing in the first place. A page slugged "admin" used
+    to save cleanly and then 404 for ever -- Flask matches the admin blueprint before public.py's
+    catch-all -- with nothing to tell the editor why."""
+    from iopstor import db
+    from iopstor.admin_api import apply_post
+    from werkzeug.exceptions import HTTPException
+
+    assert db.reserved("admin") and db.reserved("/admin/thing") and db.reserved("API/v1")
+    assert not db.reserved("administration") and not db.reserved("blog") and not db.reserved("")
+
+    page = {"id": 1, "slug": "page", "name": "Page", "url_prefix": "", "in_sitemap": True,
+            "has_pages": True, "hierarchical": False, "field_schema": []}
+    blog = {**page, "id": 2, "slug": "post", "url_prefix": "blog"}
+    monkeypatch.setattr(db, "post_types", lambda: [page, blog])
+    monkeypatch.setattr(db, "unique_slug", lambda tid, base, exclude=None: base)
+
+    def save(post_type, title):
+        with app.test_request_context("/api/admin/v1/posts"):
+            return apply_post(None, {"post_type": post_type, "title": title, "status": "draft"})
+
+    with pytest.raises(HTTPException) as e:
+        save("page", "Admin")
+    # fail() aborts with a built Response, so the status is on that rather than on exc.code
+    assert e.value.response.status_code == 400 and b"cannot be used" in e.value.response.data
+
+    # ...but only where the slug is the FIRST segment. A blog post honestly titled "Admin" is
+    # /blog/admin, which collides with nothing, and refusing it would be a rule nobody could follow.
+    changes, _ = save("post", "Admin")
+    assert changes["slug"] == "admin"

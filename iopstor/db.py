@@ -206,6 +206,24 @@ def slugify(text):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "item"
 
 
+# The first segment of a URL belongs to the app, not to content: /admin is the CMS, /api its two APIs,
+# /media the file proxy, /static and /healthz Flask's own. Flask matches a blueprint's static prefix
+# before public.py's catch-all, so a page that claims one of these is not merely wrong in the sitemap --
+# it can never load at all, which is how a page slugged "admin" used to save cleanly and then 404 for
+# ever with nothing to say why. Two readers: reserved() refuses it on save, and _indexable() keeps
+# anything that slipped in before out of every crawler-facing output.
+RESERVED_SEGMENTS = frozenset({"admin", "api", "media", "static", "healthz"})
+
+
+def reserved(value):
+    """Is this word, or the first segment of this path, one of the app's own?
+
+    Takes a bare slug ("admin"), a url_prefix ("api/v1") or a built path ("/admin/thing"), because the
+    three callers hold it in those three shapes and normalising here beats remembering at each."""
+    first = str(value or "").strip("/").split("/")[0].strip().lower()
+    return first in RESERVED_SEGMENTS
+
+
 def _cached(key, loader):
     if not hasattr(g, key):
         setattr(g, key, loader())
