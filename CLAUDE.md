@@ -21,7 +21,7 @@ Content is edited in the browser admin at `/admin` (login with a Supabase Auth a
 ## Layout
 
 ```
-iopstor/__init__.py      create_app(), /healthz (liveness only, no DB call), blueprint + CLI registration, Jinja globals rupees()/media_url/media_alt/media_download; refuses to start without SECRET_KEY, SITE_URL or any SUPABASE_* key
+iopstor/__init__.py      create_app(), /healthz (liveness only, no DB call), blueprint + CLI registration, Jinja globals rupees()/media_url/media_alt/media_download; refuses to start without SECRET_KEY, SITE_URL or any SUPABASE_* key; warns at boot while TRUSTED_PROXIES is unset
 iopstor/config.py        env → constants (module, no class)
 iopstor/db.py            supabase-py clients + query helpers: table(), one(), rows(), insert(), update(), delete(), live(), select_posts(), tree(),
                          get_draft()/save_draft()/clear_draft() + touch_session()/flush_sessions() (the working draft; the only two unaudited writes),
@@ -41,7 +41,7 @@ iopstor/cli.py           flask migrate | seed | import-media | create-admin
 iopstor/templates/       base.html post.html archive.html 404.html checkout.html _card.html (the one card macro), blocks/<type>.html (20, each a full-width <section>), admin/*.html
 iopstor/static/site.css  the whole public theme: tokens at the top, header + mega panel + footer, .cards/.card/.btn/.section, layout group (.al-* .w-* .t-*), one rule-group per block
 iopstor/static/admin.css admin-only rules layered on site.css; canvas.css = editor chrome inside the iframe; admin.js = the editor (plain JS, no build); vendor/sortable.min.js + vendor/quill.js (+ quill.core.css, the prose editor, loaded inside the canvas iframe -- and again in the parent, as the offscreen converter that turns a peer's shared text into HTML when no editor is mounted) + vendor/supabase.js (presence) + vendor/yjs.mjs & y-quill.mjs (the shared document, ES modules, loaded in the parent)
-docker-compose.yml       production only: `migrate` (one-shot `flask migrate`, gating `app`) + `app` (this Dockerfile) + `cloudflared` as one Dokploy Compose service; two ingresses on purpose — the tunnel for the public site, `app`'s published port (`mode: host`) for the LAN
+docker-compose.yml       production only: `migrate` (one-shot `flask migrate`, gating `app`) + `app` (this Dockerfile) + `cloudflared` as one Dokploy Compose service; two ingresses on purpose — the tunnel for the public site, Dokploy's Traefik (a domain attached in the UI, invisible in this file) for the LAN; `app` publishes no port
 migrations/              0000_bootstrap.sql (run once by hand in Studio) + NNNN_name.sql applied by `flask migrate`; repair_schema_migrations.sql and purge_test_audit_rows.sql are hand-run, not steps
 tests/                   pytest: test_offline.py always; the rest are marked live and skip without the Supabase in .env.
                          reconcile.mjs is a node harness for the shared editing document, run by test_offline.py and skipped when node is absent
