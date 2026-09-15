@@ -876,6 +876,55 @@
     q.forEach(function (x) { later(x[0], x[1]); });
   }
 
+  /* ---- a peer's prose, when no editor is mounted to receive it ---------------------------------
+     A rich paragraph is the one field MODEL cannot read out of the shared document. A Y.Text holds a
+     Quill delta and toString() is only the plain words, so html has always been mirrored back by a
+     mounted Quill's text-change (mountQuill) -- which is why the loop above used to skip the key.
+
+     That leaves a hole exactly where it is most visible. In Preview there is no Quill at all:
+     canvasFull() short-circuits to renderPreview() and never wires the document. So a peer's typing
+     reached the shared document, the roster and the markers, and never reached MODEL -- and MODEL is
+     what Preview renders (formBody) and what Publish submits. The words were simply missing from the
+     preview, and publishing from there sent the page an edit behind. #68 saw half of this and took
+     the writer's job away from a previewing browser so it could not SAVE a stale draft; it could
+     still show one, and Publish was never gated that way at all.
+
+     So when nothing owns the field, convert it with a Quill of our own. Not a hand-written
+     delta-to-HTML renderer: the output has to be byte-identical to the mounted editor's or the two
+     paths would disagree about the same paragraph, so it is the same vendored Quill, the same
+     QUILL_FORMATS and the same semantic(). */
+  var convQ = null;
+  function converter() {
+    if (convQ) return convQ;
+    var Q = window.Quill;                 // the PARENT's copy (post_form.html), not quillCtor()'s
+    if (!Q) return null;                  // no room on this page, so no peer and nothing to convert
+    var box = document.createElement("div");
+    // Offscreen rather than hidden: display:none is a container Quill has never been measured in,
+    // and this one has to behave exactly like the mounted editors.
+    box.style.cssText = "position:fixed;left:-99999px;top:0;width:640px;height:1px;overflow:hidden";
+    box.setAttribute("aria-hidden", "true");
+    document.body.appendChild(box);
+    convQ = new Q(box, { formats: QUILL_FORMATS, modules: { toolbar: false } });
+    return convQ;
+  }
+
+  function mirrorProse(b, path, yt) {
+    var d = cdoc(), f = d && d.querySelector('[data-b="' + path + '"] [data-f="html"]');
+    // A mounted editor owns this field: y-quill applied the delta into it with both carets intact
+    // and its text-change already wrote MODEL. __quill is set before the binding is, so a field still
+    // waiting in the bind queue counts as owned too -- which is what makes this safe during a repaint.
+    if (quillOf(f)) return;
+    var conv = converter();
+    if (!conv) return;
+    conv.setContents(yt.toDelta(), "silent");   // silent: receiving is not an edit
+    b.data.html = semantic(conv);
+    // No markDirty(): this is somebody else's edit arriving, not one of ours to stamp and rebroadcast.
+    // canvasBlock() is right in both views: a preview document has no [data-b] to replace, so it
+    // falls through to canvasFull(), which is itself the "render the preview" path. Same repaint
+    // every other field already takes.
+    canvasBlock(path);
+  }
+
   function reconcileIn(events, tx) {
     if (!YB || tx.origin === YORIGIN) return;     // our own reconcileOut, echoing back
     var shape = false, blocks = {}, texts = {};
@@ -886,7 +935,9 @@
         // and that is the whole reason the editor moved to Quill before this change could be made.
         var key = e.path[e.path.length - 1], owner = e.target.parent;
         var tid = owner && owner.get && owner.get("_id");
-        if (tid && key !== "html") texts[tid + " " + key] = 1;
+        // html is no longer excluded: mirrorProse() decides, per field, whether an editor already
+        // took it (the common case, and free) or whether nobody did and MODEL has to be caught up.
+        if (tid) texts[tid + " " + key] = 1;
         return;
       }
       var g = e.target.get, id = g && (e.target.get("_id") || (e.target.get("data") && e.target.get("data").get("_id")));
@@ -904,6 +955,7 @@
         if (!b || !m) return;
         var yt = m.get("data").get(key);
         if (!(yt instanceof Y.Text)) return;
+        if (key === "html") return mirrorProse(b, p, yt);
         b.data[key] = yt.toString();
         var d = cdoc(), f = d && d.querySelector('[data-b="' + p + '"] [data-f="' + key + '"]');
         // innerText, not textContent, and symmetric with what bindField() reads back. These fields

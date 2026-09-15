@@ -17,9 +17,11 @@ const from = js.indexOf('  /* ---- the shared document ---')
 const to = js.indexOf('  function seedFor(type) {')
 if (from < 0 || to < 0) { console.log('FAIL  cannot find the shared-document section in admin.js'); process.exit(1) }
 
-let MODEL = [], repaints = 0, sections = []
+let MODEL = [], repaints = 0, sections = [], mounted = null
 const ctx = vm.createContext({
-  window: { crypto: 1, IOPY: { Y: Yns, QuillBinding } },
+  window: { crypto: 1, IOPY: { Y: Yns, QuillBinding },
+            Quill: class { setContents (d) { this.ops = d.ops || d }
+                           getSemanticHTML () { return '<p>' + (this.ops || []).map(o => o.insert).join('') + '</p>' } } },
   // no rt.url == no channel == single player, so initShared seeds immediately rather than waiting
   // for a roster that will never arrive. The deferred path gets its own case at the bottom.
   SPEC: { rt: {} },
@@ -30,6 +32,16 @@ const ctx = vm.createContext({
   say: () => {},
   get MODEL () { return MODEL }, set MODEL (v) { MODEL = v },
   cdoc: () => null,                       // no canvas in here, so focus-wins never holds anything back
+  // Which editor, if any, owns a rich field. cdoc() is null in here so mirrorProse can never find
+  // one by itself; `mounted` is how a test says whether it is standing in Edit (an editor owns the
+  // field, y-quill has it) or in Preview (nothing is mounted, and MODEL has to be caught up).
+  quillOf: () => mounted,
+  // What converter() builds its offscreen Quill in, and the Quill itself. Not a mock of Quill's
+  // rendering -- that it matches a mounted editor byte for byte was measured in a real browser
+  // (design.md, 2026-09-15); this only has to prove the delta reaches MODEL at all.
+  document: { createElement: () => ({ style: {}, setAttribute () {} }), body: { appendChild () {} } },
+  QUILL_FORMATS: [],                      // the real list lives with the other Quill plumbing
+  semantic: q => q.getSemanticHTML().replace(/&nbsp;/g, ' '),
   canvasFull: () => { repaints += 1 },
   canvasBlock: p => { sections.push(p) },
   blockAt: p => {
@@ -205,6 +217,7 @@ editor.type(' world')               // typed during the gap, with nothing listen
 API.canWrite = () => true           // the channel subscribes and this browser is elected
 API.shareWaiting()
 ok('...and binds once the answer is knowable', API.WAITING.length === 0 && API.BINDS.length === 1)
+mounted = editor                    // from here on this browser is in Edit: an editor owns the field
 
 const para = API.YB.get(0).get('data').get('html')
 ok('...keeping what was typed while it waited: ' + JSON.stringify(para.toString()),
@@ -219,6 +232,28 @@ far.getArray('blocks').get(0).get('data').get('html').insert(0, 'Oh, ')
 Yns.applyUpdate(API.YDOC, Yns.encodeStateAsUpdate(far), 'remote')
 ok('and a peer\'s words reach this editor: ' + JSON.stringify(editor.ops[0]?.insert || ''),
    (editor.ops[0]?.insert || '').startsWith('Oh, '))
+
+/* ---- the same peer edit, with and without an editor mounted to receive it -------------------
+   A rich paragraph is the one field MODEL cannot read out of the shared document: a Y.Text holds a
+   delta and toString() is only the plain words. It has always been mirrored back by a mounted
+   Quill's text-change -- and in Preview there is no Quill at all, so a peer's typing reached the
+   shared document and never reached MODEL, which is what Preview renders and Publish submits. */
+MODEL[0].data.html = '<p>whatever MODEL was left holding</p>'
+const owned = new Yns.Doc()
+Yns.applyUpdate(owned, Yns.encodeStateAsUpdate(API.YDOC))
+owned.getArray('blocks').get(0).get('data').get('html').insert(0, 'A ')
+Yns.applyUpdate(API.YDOC, Yns.encodeStateAsUpdate(owned), 'remote')
+ok('an editor that owns the field is left to it, as before',
+   MODEL[0].data.html === '<p>whatever MODEL was left holding</p>')
+
+mounted = null                      // Preview: canvasFull() short-circuits and never wires a document
+const alone = new Yns.Doc()
+Yns.applyUpdate(alone, Yns.encodeStateAsUpdate(API.YDOC))
+alone.getArray('blocks').get(0).get('data').get('html').insert(0, 'B ')
+Yns.applyUpdate(API.YDOC, Yns.encodeStateAsUpdate(alone), 'remote')
+ok('a peer\'s prose reaches MODEL when nothing is mounted: ' + JSON.stringify(MODEL[0].data.html),
+   MODEL[0].data.html === '<p>' + para.toString() + '</p>' && para.toString().startsWith('B A '))
+mounted = editor
 
 /* canvasBlock() replaces one section's node without going through wireDoc(), so its old binding is
    left feeding an editor whose DOM is gone -- and that editor writes the delta back. */
