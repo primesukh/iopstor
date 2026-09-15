@@ -4,6 +4,20 @@
   <div><h1>Activity <small>{{ result.total }}</small></h1>
     <p class="page-sub">Everything anybody has done, newest first. All times are IST.</p></div>
 </div>
+{# The From column is only worth reading if the addresses in it are real, and which of the two ways
+   into this site you came by changes where that address is found. Closed by default: it is a check
+   you run when something looks wrong, not something to read every visit. #}
+<details class="aud-conn">
+  <summary>Where the site thinks you are connecting from</summary>
+  <p>Your address, as it will be written in the <strong>From</strong> column: <strong>{{ conn.seen }}</strong></p>
+  <p>The connection itself arrived from <strong>{{ conn.peer or 'an address the site could not read' }}</strong> —
+    {% if conn.trusted %}one of ours, so it is allowed to tell the site who the visitor is.
+    {% else %}not one of ours, so anything it claimed about somebody else was ignored.{% endif %}</p>
+  {% if conn.headers %}
+  <p class="muted">What the connection passed along on the way in:</p>
+  <ul class="aud-conn-raw">{% for k, v in conn.headers.items() %}<li>{{ k }}: {{ v }}</li>{% endfor %}</ul>
+  {% else %}<p class="muted">The connection passed nothing else along, so the address above is the visitor.</p>{% endif %}
+</details>
 <form method="get" class="filter-bar">
   <select name="user"><option value="">Anybody</option>
     <option value="-" {{ 'selected' if request.args.get('user') == '-' }}>The website (nobody signed in)</option>

@@ -1,4 +1,5 @@
 """Pure logic — no Supabase needed."""
+import ipaddress
 import json
 import pathlib
 import re
@@ -813,7 +814,7 @@ def test_throttle_counts_failures_per_key(app, tmp_path):
         assert throttle.retry_after("ip:1.2.3.4") == 0
 
 
-def test_throttle_fails_open_and_reads_cloudflares_header(app):
+def test_throttle_fails_open_and_believes_only_a_proxy_we_named(app):
     from iopstor import throttle
 
     # a counter that cannot open its file must never lock the owner out of their own site
@@ -821,15 +822,32 @@ def test_throttle_fails_open_and_reads_cloudflares_header(app):
     with app.test_request_context("/admin/login"):
         throttle.record_failure("ip:1.2.3.4")
         assert throttle.retry_after("ip:1.2.3.4") == 0
-    base = {"REMOTE_ADDR": "127.0.0.1"}
-    with app.test_request_context("/admin/login", environ_base=base, headers={"CF-Connecting-IP": "9.9.9.9"}):
-        assert throttle.client_ip() == "9.9.9.9"         # behind the tunnel: the header is the visitor
-    with app.test_request_context("/admin/login", environ_base=base):
-        assert throttle.client_ip() == "127.0.0.1"       # dev: no proxy in the way
-    with app.test_request_context("/admin/login"):
-        # never None: the key is built with an f-string, and None would put every such request in
-        # one shared bucket under the name "None"
-        assert throttle.client_ip() == "-"
+
+    def seen(peer, **headers):
+        with app.test_request_context("/admin/login", environ_base={"REMOTE_ADDR": peer} if peer else {},
+                                      headers={k.replace("_", "-"): v for k, v in headers.items()}):
+            return throttle.client_ip()
+
+    assert seen("127.0.0.1", CF_Connecting_IP="9.9.9.9") == "9.9.9.9"   # the tunnel: the header is the visitor
+    assert seen("127.0.0.1") == "127.0.0.1"                             # dev: no proxy in the way
+    # never None: the key is built with an f-string, and None would put every such request in one
+    # shared bucket under the name "None"
+    assert seen(None) == "-"
+
+    # a proxy on a network we named may say who the visitor is; X-Forwarded-For is read from the RIGHT,
+    # because a proxy appends the peer it saw and everything to its left came from the client
+    assert seen("10.0.1.7", X_Forwarded_For="203.0.113.9") == "203.0.113.9"
+    assert seen("10.0.1.7", X_Forwarded_For="1.2.3.4, 203.0.113.9") == "203.0.113.9"
+    assert seen("10.0.1.7", X_Real_IP="203.0.113.9") == "203.0.113.9"
+    assert seen("10.0.1.7", CF_Connecting_IP="9.9.9.9", X_Forwarded_For="203.0.113.9") == "9.9.9.9"
+
+    # and anybody else is taken at face value: a visitor cannot hand the throttle or the activity log
+    # an address that is not theirs, whichever header they try it with
+    assert seen("203.0.113.5", CF_Connecting_IP="1.2.3.4") == "203.0.113.5"
+    assert seen("203.0.113.5", X_Forwarded_For="1.2.3.4") == "203.0.113.5"
+    app.config["TRUSTED_PROXIES"] = (ipaddress.ip_network("172.18.0.0/16"),)
+    assert seen("10.0.1.7", CF_Connecting_IP="1.2.3.4") == "10.0.1.7"    # narrowed: the LAN is not a proxy
+    assert seen("172.18.0.4", CF_Connecting_IP="1.2.3.4") == "1.2.3.4"
 
 
 def test_a_losing_token_refresh_keeps_the_winners_cookie(app, monkeypatch):

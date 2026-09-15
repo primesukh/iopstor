@@ -762,7 +762,19 @@ The third is the one that is easy to miss: it re-checks the current password, so
 
 **Why `sqlite3` on `/dev/shm`, given the "no SQLite" rule.** The container runs ~30 workers in separate address spaces, so a module-level dict would be thirty independent counters and thirty times the ceiling. `/dev/shm` is tmpfs: RAM, shared by every process in the container, empty again after a redeploy — which is the lifetime this wants. sqlite supplies the cross-process locking, the expiry and an unbounded key space for a fraction of the code a hand-packed `mmap` table needs. `CREATE TABLE IF NOT EXISTS` runs on every connect on purpose: a fresh container has an empty `/dev/shm`, so the file builds itself the first time anyone fails a login. `CLAUDE.md`'s hard rule now carries the matching carve-out. **`# ponytail:` it is per container** — scale to two replicas and each gets its own counter, doubling the effective limit; Redis is the upgrade path.
 
-**The client address is `CF-Connecting-IP`, not `ProxyFix`.** Nothing in this app read `remote_addr` before, and behind a proxy every visitor looks like one address — the first attacker to trip the limit would have locked out the whole site. With a Cloudflare tunnel there are several hops (edge → cloudflared → app), so `ProxyFix(x_for=1)` would take the wrong entry and `x_for=N` would be a guess at the hop count. Cloudflare sets `CF-Connecting-IP` to the true client and strips any copy the client sent, and cloudflared is **outbound-only**, so nothing can reach the origin around it — that unreachability is exactly what makes trusting the header safe. `remote_addr` is the development fallback, and `"-"` the last resort, because the key is built with an f-string and a `None` would put every such request in one bucket named `"None"`. **`# ponytail:`** publish port 8000 on a network someone else is on and they can spoof the header past the limit.
+**The client address is a forwarding header from a peer we named, never from anybody.** `throttle.client_ip()` is the one place it is decided, and every consumer routes through it: both login throttles (`admin_ui.py:94`, `admin_api.py:80`), `post_sessions.ip` (`admin_ui.py:507`) and every audit row (`db.py:110`).
+
+There are **two ways into this app and they answer the question differently**. Through the Cloudflare tunnel the connection is cloudflared and the visitor is in `CF-Connecting-IP`, which the edge sets and strips off anything the client sent. On the LAN port the connection *is* the visitor, so `remote_addr` is the whole truth and no header exists. So the order is: if — and only if — the peer is inside `TRUSTED_PROXIES`, take the first of `CF-Connecting-IP`, `X-Forwarded-For`, `X-Real-IP` that has a value; otherwise `remote_addr`; and `"-"` last, because the key is built with an f-string and a `None` would put every such request in one bucket named `"None"`.
+
+**The gate is the point, not the header list.** A forwarding header is a claim by whoever opened the connection, and it is only evidence when that was a proxy we deployed. Trusting `CF-Connecting-IP` unconditionally — what this did until a LAN port existed — meant any client on a non-Cloudflare path could set it by hand, rotate it freely past `LOGIN_MAX_FAILURES` for unlimited password guesses, and write a chosen string into `audit_log.ip`, which `audit.html` renders to an admin as the authoritative *From* column with nothing marking it unverified.
+
+**`X-Forwarded-For` is read from the right.** A proxy *appends* the peer it saw, so with one trusted hop the last entry is the real connection and everything to its left came from the client. `rsplit(",", 1)[-1]` is what `ProxyFix(x_for=1)` does; the middleware itself still stays out, for the reasons in `design.md` (nothing reads `request.scheme`/`host`, every `redirect()` is relative, and the hop count it wants is a guess).
+
+`TRUSTED_PROXIES` is a comma-separated CIDR list, parsed in `config.py` **at import** so a typo refuses to boot the way a missing `SECRET_KEY` does rather than failing quietly on every login. It is read with `or`, not a `get()` default: compose passes `${TRUSTED_PROXIES:-}` and an empty string has to mean *unset* — read as "trust nothing" it would drop `CF-Connecting-IP` and put every tunnel visitor in cloudflared's bucket. Unset it is `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8,::1/128,fc00::/7`, which covers cloudflared, the LAN hop and a dev machine with no configuration at all. **`# ponytail:`** those ranges also contain the LAN *client*, so an insider who chooses to send a header is believed — naming the one subnet the proxy sits on closes it with no code change; and the rightmost-entry rule assumes one hop, so a second trusted proxy in a row would need counting back as many entries as there are hops.
+
+**Measured, 2026-09-15**, against the real WSGI stack on a socket rather than a test request context: from a trusted peer, `CF-Connecting-IP: 9.9.9.9` → `9.9.9.9`; `X-Forwarded-For: 1.2.3.4, 203.0.113.9` → `203.0.113.9` (the spoofed left entry loses); `X-Real-IP` → same; both headers → the Cloudflare one wins. With `TRUSTED_PROXIES=172.18.0.0/16` so the peer is no longer ours, the same two spoofs → `127.0.0.1`, the peer's own address. `TRUSTED_PROXIES=not-a-network` → `ValueError` at import.
+
+**`/admin/audit` opens with a shut `<details>` saying where the site thinks you are connecting from** — the value that will be written to the *From* column, the address that actually opened the connection, whether that peer is one of ours, and the raw forwarding headers it sent. `throttle.connection()` builds it, so the screen does not have to know how any of it is worked out, and it is a GET on a route that is already `@ui_required("admin")`: nothing new is exposed, nothing is audited, and `test_every_route_that_can_change_something_is_accounted_for` is untouched. It exists because "is the log recording real visitors" was otherwise a question nobody could answer without a deploy and a guess — and with two ingresses the answer differs by which one you came in on.
 
 Limits are `LOGIN_MAX_FAILURES` (10) and `LOGIN_WINDOW` (900s) in `config.py`, env-readable because a rate limit is exactly the number you tune while under attack. Cloudflare can also rate-limit `/admin/login` at the edge, which is strictly better where it applies — the flood never reaches the origin — and the two are complements, not alternatives.
 
@@ -1337,7 +1349,7 @@ Everything except `test_offline.py` is marked `live` and skips when `.env` has n
 
 ## 14. Configuration
 
-`SECRET_KEY`, `SITE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `MEDIA_BUCKET`, `PAYMENT_PROVIDER`, `THROTTLE_DB`, `LOGIN_MAX_FAILURES`, `LOGIN_WINDOW`. `FLASK_DEBUG=1` in `.env` gives the dev server the debugger and auto-reload; it must be **absent** in production, and nothing in the Dockerfile guards that.
+`SECRET_KEY`, `SITE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `MEDIA_BUCKET`, `PAYMENT_PROVIDER`, `THROTTLE_DB`, `LOGIN_MAX_FAILURES`, `LOGIN_WINDOW`, `TRUSTED_PROXIES`. `FLASK_DEBUG=1` in `.env` gives the dev server the debugger and auto-reload; it must be **absent** in production, and nothing in the Dockerfile guards that.
 
 **Six are required, and the app refuses to boot without them** — `create_app()`'s `REQUIRED`, checked before a blueprint is registered. The four `SUPABASE_*` were always there; `SECRET_KEY` and `SITE_URL` joined them when production became real, and `config.py` dropped their defaults to make the check bite. **Why a refusal rather than a sensible default.** Both used to fail *silently*, which is the expensive way to fail. `SECRET_KEY` fell back to `"dev-only-change-me"`, a string printed in this repo — and `auth.py` accepts a session token as a Bearer fallback when no `Authorization` header is present, so a forged cookie is a way in. `SITE_URL` fell back to `http://localhost:5000`, which does two things at once: every canonical, sitemap `<loc>`, `robots.txt` `Sitemap:` line, RSS guid, JSON-LD `url` and OG image points at localhost, and `SESSION_COOKIE_SECURE` — computed at import from `SITE_URL.startswith("https://")`, not from the request — comes out `False`, so the admin cookie ships over the tunnel without `Secure`. Neither shows up in a smoke test; a deploy that forgets one now stops instead. `test_boot_refuses_without_secret_key_or_site_url` passes empty strings rather than omitting keys, because pipenv loads `.env` and an omitted key would inherit a real value and pass for the wrong reason.
 
@@ -1437,12 +1449,22 @@ and the deploy path still proves the configuration, because `migrate` runs befor
 
 `app` sits on two networks on purpose: the compose-private `default`, which is how `cloudflared` reaches
 it, and the external `dokploy-network`, which is how it reaches Supabase Kong. `cloudflared` is on
-`default` only — it has no business reaching Supabase. `app` has **no `ports:` and no Traefik labels**,
-and that omission is load-bearing rather than tidy: it is the enforcement of *the tunnel is the only
-ingress*, which is what makes `throttle.client_ip()`'s unconditional trust in `CF-Connecting-IP` sound
-(§12). Publish the port or attach a domain and the login throttle becomes decorative — worse, if
-Cloudflare is bypassed the header is absent, `remote_addr` becomes the proxy's address, every visitor
-lands in one bucket, and ten failed logins lock out every admin at once. The required-variable syntax in
+`default` only — it has no business reaching Supabase.
+
+**There are two ingresses, and that is the supported shape** (user, 2026-09-15): the Cloudflare tunnel
+for the public site, and `app`'s published port for LAN access to the admin. The port is in the compose
+file rather than in a Dokploy screen so a redeploy from git cannot quietly drop it, and it is
+`mode: host` rather than the default — swarm's routing mesh NATs the source address, and every visitor
+would then arrive as one Docker address, which is one shared throttle bucket and a *From* column that
+says nothing. Under plain `docker compose` it is the ordinary publish it looks like. `LAN_PORT` moves it
+off 8000 if something else wants that.
+
+What used to carry this weight was the *absence* of a port: the tunnel being the only way in was the
+reason `CF-Connecting-IP` could be trusted from anybody. That is no longer true and no longer the
+mechanism — **`TRUSTED_PROXIES` is** (§12). It is therefore the variable to get right on this stack: set
+too wide it lets a LAN client claim somebody else's address; set to a network cloudflared is not on it
+drops the header and puts every tunnel visitor in one bucket, which is the failure the old shape had.
+The required-variable syntax in
 the compose file (`${SECRET_KEY:?...}`) is deliberate too: a missing value fails `docker compose config`
 with a sentence saying what it wanted, rather than starting a container that refuses to boot for reasons
 you then have to read out of a log.
@@ -1455,8 +1477,11 @@ not `:?` like every other variable: interpolation is not profile-aware, so a req
 that is switched off still fails `docker compose config` for the whole stack, `app` included — which is
 exactly the error a first deploy without a tunnel hits.
 
-Reaching it meanwhile is a **Dokploy domain on service `app`, port 8000** — a click, not an edit, because
-`app` is already on `dokploy-network` where Traefik can see it. On a LAN host with no real name,
+A **Dokploy domain on service `app`, port 8000** is the other way to reach it — a click, not an edit,
+because `app` is already on `dokploy-network` where Traefik can see it, and useful when the LAN wants a
+name and a certificate rather than a port number. It puts Traefik in front, so `TRUSTED_PROXIES` must
+contain `dokploy-network`'s subnet for `X-Forwarded-For` to be read (the default ranges already do).
+On a LAN host with no real name,
 `<anything>-<dashed-ip>.sslip.io` resolves to that address (the pattern the dev Supabase already uses) with
 the certificate provider left at none. `SITE_URL` must then be *exactly* the URL being browsed, scheme
 included: set `https://` while serving plain http and the failure is a login that succeeds and bounces
@@ -1464,15 +1489,21 @@ straight back to `/admin/login`, because `SESSION_COOKIE_SECURE` is derived from
 cookie is never returned. Every canonical, sitemap `<loc>`, OG url and JSON-LD `url` carries that host too,
 so a publicly resolvable temporary domain is a publicly indexable one.
 
-Two properties are genuinely absent in that window, both acceptable while it lasts and neither once it is
-public. There is no `CF-Connecting-IP`, so every visitor is Traefik's address in one throttle bucket — ten
-failed passwords lock out every admin at once, which `LOGIN_MAX_FAILURES` raises without a code change —
-and with a non-Cloudflare path in, the header is also spoofable past the limit (§12). Switching the tunnel
-on is therefore five things, not just the token: `TUNNEL_TOKEN`, `COMPOSE_PROFILES=tunnel`, `SITE_URL` back
-to `https://www.iopstor.com`, **delete the Dokploy domain** so the tunnel is the only ingress again, and
-drop `LOGIN_MAX_FAILURES` if it was raised. Then step 6 below, and `docker compose ps` must list
-`cloudflared` beside `app`. Once it is permanent, deleting the `profiles:` line and restoring
-`${TUNNEL_TOKEN:?…}` puts the file back to one shape with nothing to remember.
+Neither of the two properties that used to lapse in this window does any more, and both were about the
+client address. There is still no `CF-Connecting-IP` on a non-Cloudflare path, but there no longer needs
+to be: the connection is the visitor, so `remote_addr` is the right answer and each address gets its own
+throttle bucket. And the header is no longer spoofable past the limit from an untrusted peer (§12) — the
+remaining hole is an insider inside `TRUSTED_PROXIES`, which narrowing it closes.
+
+Switching the tunnel on is therefore four things, not five: `TUNNEL_TOKEN`, `COMPOSE_PROFILES=tunnel`,
+`SITE_URL` back to `https://www.iopstor.com`, and `TRUSTED_PROXIES` wide enough to include the network
+`cloudflared` is on (unset is, since the compose bridge is private). **The Dokploy domain is no longer
+deleted** — LAN access is permanent, and `SITE_URL` follows the public host while the LAN path keeps
+working, because nothing about the LAN path depends on the canonical. Then step 6 below, and
+`docker compose ps` must list `cloudflared` beside `app`. Once the tunnel is permanent, deleting the
+`profiles:` line and restoring `${TUNNEL_TOKEN:?…}` puts the file back to one shape with nothing to
+remember. **Confirm it with the panel at the top of `/admin/audit`** (§12): open it once from the LAN and
+once through the tunnel, and both should show a real address.
 
 **Realtime needs a tenant whose name matches the one it looks up, and a fresh self-hosted stack can
 get this wrong on its own.** Supabase's Realtime container is multi-tenant even when self-hosted: it
@@ -1562,8 +1593,10 @@ to be read, instead of scrolling past every few seconds in a container that keep
 8. Check `/healthz`, `/`, `/sitemap.xml` (every `<loc>` must read `https://www.iopstor.com`),
    `/robots.txt`, and sign in at `/admin` — the session cookie must carry `Secure`.
 
-Two rules rather than steps: **the tunnel is the only ingress** (above), and **Studio and Kong never go on
-it** — Flask is the only public service, which is the whole reason `/media/<key>` exists (§8). Worth adding
+Two rules rather than steps: **the tunnel is the only *public* ingress** — the LAN port is deliberate and
+stays, but nothing else joins them — and **Studio and Kong never go on either** — Flask is the only exposed
+service, which is the whole reason `/media/<key>` exists (§8). A third way in would be a third answer to
+"where is the visitor's address", so anything added here belongs in `TRUSTED_PROXIES` and in §12. Worth adding
 once the site is live: a Cloudflare rate-limit on `/admin/login`, which §12 argues is a complement to the
 sqlite throttle rather than a replacement, since the flood never reaches the origin. Public HTML can also
 be edge-cached now that anonymous requests carry no `Set-Cookie` (§7) — but **leave that off unless someone
