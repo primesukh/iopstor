@@ -1053,6 +1053,48 @@ SortableJS, and opens `blockFields()` over itself for everything that is not inl
 are cancelled in the capture phase: a `contact_form` block would otherwise post a real lead.
 
 
+**Prose is edited by Quill, on the blocks that can hold it without losing anything.** `quill@2.0.3`
+is vendored as its published UMD (`dist/quill.js`, 209,274 bytes → `window.Quill`) with
+`quill.core.css`, **not** the snow theme: the toolbar is this repo's own, in the parent document.
+Both load **inside the canvas iframe** — the `sortable.min.js` precedent, and the opposite of
+`supabase.js`, because Quill binds to elements in that document while the socket belongs to the page.
+`admin.js` reaches the constructor through `FRAME.contentWindow.Quill`.
+
+Quill is here because word-by-word co-editing needs each paragraph to be a CRDT *text* type, and a
+`Y.Text` needs a real editor binding — a plain HTML string is last-writer-wins however it is
+transported. **Nothing in this section is collaborative yet**; it is the surface the next PR binds to.
+
+**The gate is per block and measured, not "does it contain a table".** Quill silently drops what it
+has no blot for, and on this site's own content that is **7 of 24** `rich_text` blocks: `<dl>` on NAS
+and Contact Us, `<div>`/`<span>` on About Us, `<table>` on NAS and Testing — and the Home page, which
+loses six **classes** and not one tag, so a tag-based check waves it through and the first save strips
+the page's styling. So `quillKeeps()` pastes the block into a throwaway Quill in the canvas document,
+reads `semantic()` back, and refuses if any tag or class went missing. It is a **no-loss** test rather
+than equality: Quill wrapping a bare text node in `<p>` is fine, losing `class="eyebrow"` is not.
+`<b>`/`<strong>` and `<i>`/`<em>` are aliased, because `_html_md()` renders them identically
+(`test_quills_normalised_tags_make_no_difference_to_the_published_output`) and refusing a block over
+that would be refusing it for nothing. A refused block keeps the original `contenteditable`, gets
+`data-legacy` on its **section** — never inside a `[data-f]`, which is copied into `MODEL` and
+published — and shows a note on hover.
+
+**What a Quill field stores is `getSemanticHTML()` with the `&nbsp;` undone, and both halves are
+load-bearing.** `root.innerHTML` always wraps lists in `<ol>` with `<li data-list="bullet">` plus
+injected `<span class="ql-ui">`; the public page loads no Quill CSS, so storing it would render every
+bulleted list on www.iopstor.com as a numbered one. And `getSemanticHTML()` runs
+`replaceAll(" ", "&nbsp;")` over **every** text leaf — read out of the vendored build, not the docs —
+so without the undo every space arrives in `posts.blocks` as an entity, and `_html_md()`'s `unescape()`
+puts U+00A0 through the `.md` twins and `llms-full.txt` (`test_a_nbsp_from_quill_would_poison_the_markdown_twin`
+shows exactly that). The two halves are one expression so they cannot drift into separate functions.
+
+**The toolbar speaks to whichever engine owns the caret.** Half a page can be on each at once, so
+every command is `if (!qfmt(...)) exec(...)`: `qfmt()` returns `false` when the caret is not in a Quill
+field. `syncBar()` reads `q.getFormat()` there instead of `queryCommandState`. Five controls are
+switched **off** in a Quill field rather than inserting something the next keystroke would drop —
+picture, table, embed, divider and the `rem` size dropdown — which is the same rule the gate applies,
+enforced at insert time: those are precisely the markup Quill has no blot for. Sections that need a
+table keep the original editor and keep the buttons. The `/` inserter is hooked from Quill's
+`text-change` instead of `bindSlash()`'s `keyup`, because Quill owns the keyboard.
+
 **The page saves itself, and the button publishes.** `initAutosave()` (`admin.js`) writes the whole
 document to `POST /admin/posts/<id>/draft` 1.5 s after any change, and the big button copies that draft
 into `posts.blocks` — the only moment anything a visitor can see moves. Five things about it are
@@ -1478,6 +1520,13 @@ Marked in code with `# ponytail:` comments.
   `head`. All three are Debian-essential and were confirmed present in `python:3.13-slim`
   (`docker run --rm python:3.13-slim bash -c 'which bash grep head'`); re-check it if the base image
   ever changes, because the failure mode is a container that reports itself unhealthy forever.
+- **Seven blocks are not on the new editing surface**, and on this content they are the Home page,
+  NAS, Contact Us and About Us. They keep the original `contenteditable`, which also means the next
+  PR's co-editing will not reach them. The long-term fix is not a bigger Quill: that markup is layout
+  smuggled into prose (a spec table, a definition list, a founders grid) and belongs in block types.
+- **Quill normalises on load, so the first save of a Quill block rewrites it** even if nobody typed —
+  attribute order, whitespace — and the Activity diff reports it. Once per block, harmless, and the
+  gate guarantees no tag or class moves.
 - **The working draft is shared but not merged yet.** Two editors autosaving one page still overwrite
   each other every second or two, because the draft is one row and nothing reconciles two copies of the
   document — presence tells them somebody else is there, and that is all. The shared document is the

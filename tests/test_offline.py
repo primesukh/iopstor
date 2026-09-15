@@ -1,5 +1,6 @@
 """Pure logic — no Supabase needed."""
 import json
+import pathlib
 from copy import deepcopy
 
 import pytest
@@ -1471,3 +1472,51 @@ def test_the_autosave_route_is_not_the_one_that_publishes():
     assert 'action="publish"' in save and "clear_draft" in save and "flush_sessions" in save
     # the two other writers of posts.blocks have to clear it too, or they are silently undone
     assert "clear_draft" in inspect.getsource(admin_ui.audit_restore)
+
+
+# ---- the Quill editing surface ----------------------------------------------
+
+
+def test_quills_normalised_tags_make_no_difference_to_the_published_output():
+    """admin.js's gate treats <b>/<strong> and <i>/<em> as the same tag, so a block is not refused
+    for a difference nobody can see. That is only safe while the Markdown twin agrees, which is what
+    this pins -- if _html_md() ever stops rendering them identically, the alias becomes a silent
+    change to every .md twin and to llms-full.txt."""
+    def md(html):
+        return blocks_md([{"type": "rich_text", "data": {"html": html}}])
+
+    assert md("<p><b>x</b></p>") == md("<p><strong>x</strong></p>") == "**x**"
+    assert md("<p><i>y</i></p>") == md("<p><em>y</em></p>") == "*y*"
+
+
+def test_a_nbsp_from_quill_would_poison_the_markdown_twin():
+    """The reason admin.js's semantic() undoes &nbsp; before storing. Quill's getSemanticHTML() runs
+    replaceAll(" ", "&nbsp;") over EVERY text leaf -- verified in the vendored build, not in its
+    docs -- so without the fix every space in every Quill-edited block arrives here as U+00A0: the
+    .md twins and llms-full.txt fill with it and the public page never wraps."""
+    poisoned = blocks_md([{"type": "rich_text", "data": {"html": "<p>one&nbsp;two</p>"}}])
+    assert " " in poisoned                      # this is what shipping it would look like
+    clean = blocks_md([{"type": "rich_text", "data": {"html": "<p>one two</p>"}}])
+    assert clean == "one two" and " " not in clean
+
+
+def test_the_canvas_loads_quill_inside_the_iframe():
+    """Quill binds to elements in the canvas document, so it is loaded there -- the sortable.min.js
+    precedent, and the opposite of supabase.js, which lives in the parent because the socket does.
+    quill.core.css and not snow: the toolbar is ours, in the parent."""
+    html = (pathlib.Path(__file__).resolve().parent.parent
+            / "iopstor" / "templates" / "admin" / "canvas.html").read_text()
+    assert "vendor/quill.js" in html and "vendor/quill.core.css" in html
+    assert "quill.snow.css" not in html
+
+
+def test_the_editor_persists_semantic_html_and_never_inner_html():
+    """root.innerHTML wraps every list in <ol> with <li data-list="bullet"> plus injected
+    <span class="ql-ui">, and the public page loads no Quill CSS -- so storing it would render every
+    bulleted list on the live site as a numbered one. getSemanticHTML() emits a real <ul>."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    # One expression, asserted whole: what a Quill field stores is getSemanticHTML() with the &nbsp;
+    # undone, and the two halves cannot drift apart into different functions where one gets forgotten.
+    # (Not "root.innerHTML is absent" -- the comment explaining why it must not be used says it too,
+    # so that assertion would be reading prose rather than behaviour.)
+    assert 'return q.getSemanticHTML().replace(/&nbsp;/g, " ");' in js

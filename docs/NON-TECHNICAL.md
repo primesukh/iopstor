@@ -306,6 +306,25 @@ sitting still.
 
 **Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live on the section itself: hover it, click the **⚙** on its little dark toolbar, and a small panel opens over that section with exactly its own options — **Align the content**, **Align the section**, **Width**, **Effect** where the section has one, the picture, the button link, how many posts to list, and **+ Add** / ✕ for rows in a Cards, FAQ, Numbers or Specification section. Rows always come last in that panel, so the settings above them are never buried under a long list. Any picture field there has a **Choose file** button that uploads on the spot. The page updates as you type. Close it with **Esc**, the ✕, another press of ⚙, or by clicking anywhere else.
 
+**The writing area has been rebuilt**, and for most sections you will not notice — the same toolbar,
+the same buttons, the same typing. It is the groundwork for two people writing in the same paragraph
+at once, which is the next thing being built.
+
+A few sections are left on the old writing area because they contain layout the new one cannot hold —
+the ones with a table, a specification list or a side-by-side panel. On this site that is the **home
+page**, **NAS**, **Contact Us** and **About Us**. Hover such a section and it says so. You can still
+edit them exactly as before; they are the sections that will not get shared editing when it arrives.
+
+In a section on the **new** writing area, five buttons are switched off: **picture**, **table**,
+**embed**, the **divider**, and the **text size** dropdown. Those build the very layout that would
+push the section back onto the old area, so they are offered where they work rather than failing
+quietly. Everything else — bold, italic, headings, bullets, numbering, quotes, links, alignment and
+colour — behaves exactly as it did.
+
+One thing you may notice once per section: the first time you save a section on the new writing area,
+**Activity** may record a change even if you only fixed a typo. The new area tidies the invisible
+markup as it loads. Nothing you can see on the page changes, and it only happens once.
+
 **The page now saves itself, and the button puts it on the website.** As you type, a small line at the top right says **Saved just now** — you no longer have to remember to save, and you cannot lose an afternoon's work to a closed laptop or a browser crash. What is saved is *not* on the website yet: it is your work in progress, and only you and the other editors can see it.
 
 The blue button at the top right is what puts it on the site. It says **Publish** on a page that is live, and **Save** on one that is not — because pressing it on a page nobody can see does not publish anything to anybody.

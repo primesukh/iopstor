@@ -33,6 +33,33 @@
 [data-f]:empty::before{content:attr(data-ph);color:#94a3b8;font-style:italic;font-weight:400}
 [data-r]:hover{outline:1px dashed #cbd5e1;outline-offset:3px}
 
+/* Quill mounts INSIDE the field and brings its own box. The canvas exists to look exactly like the
+   published page, so the editor div inherits everything and contributes nothing: no padding, no
+   min-height, no font of its own. .ql-editor also ships white-space:pre-wrap, which would make the
+   canvas wrap differently from the page it is previewing. */
+[data-f] .ql-editor{padding:0;min-height:0;font:inherit;color:inherit;line-height:inherit;white-space:normal}
+[data-f] .ql-editor>*:first-child{margin-top:0}
+[data-f] .ql-editor>*:last-child{margin-bottom:0}
+/* Quill fills an empty field with <p><br></p>, so :empty never matches and the placeholder rule
+   above never fires. The text has to come from [data-ph] on the FIELD -- attr() resolves against the
+   element carrying the pseudo-element, and .ql-editor has no such attribute -- so the selector hangs
+   off the field and asks Quill's own blank class about its child. */
+[data-f]:has(.ql-editor){position:relative}
+[data-f]:has(.ql-editor.ql-blank)::before{content:attr(data-ph);color:#94a3b8;font-style:italic;
+  font-weight:400;position:absolute;pointer-events:none;left:0;top:0}
+/* Focus lands on .ql-editor inside the field, so :focus alone stops ringing the box you are typing in. */
+[data-f]:focus-within{outline:2px solid var(--blue);outline-offset:3px;border-radius:3px}
+
+/* A section the shared editor cannot hold: it carries markup Quill would drop (a table, a
+   description list, a styled div), so it keeps the original editor. Said on the BLOCK, because
+   anything put inside a [data-f] is copied into MODEL and published. */
+[data-b][data-legacy]{position:relative}
+[data-b][data-legacy]::after{content:"Two people cannot edit this section at once — it uses layout the shared editor does not handle";
+  position:absolute;top:.15rem;left:50%;transform:translateX(-50%);z-index:14;
+  background:#fff7e6;color:#6b4d0f;border:1px solid #f1dfb0;border-radius:4px;padding:.1rem .4rem;
+  font:600 10px/1.6 var(--head);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .12s}
+[data-b][data-legacy]:hover::after{opacity:1}
+
 /* A spacer is blank by definition: on the page that is the point, on the canvas it is a section an
    editor cannot see to hover, drag or delete. A faint hairline round it is enough -- [data-b]:hover
    above still gives it the blue ring and the toolbar. */
