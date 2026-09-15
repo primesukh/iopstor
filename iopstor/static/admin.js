@@ -905,7 +905,11 @@
         if (!(yt instanceof Y.Text)) return;
         b.data[key] = yt.toString();
         var d = cdoc(), f = d && d.querySelector('[data-b="' + p + '"] [data-f="' + key + '"]');
-        if (f && f.closest("[data-b]").getAttribute("data-b") === p) f.textContent = b.data[key];
+        // innerText, not textContent, and symmetric with what bindField() reads back. These fields
+        // are contentEditable="plaintext-only", so Enter makes a <br>; textContent would write a bare
+        // "\n" that innerText reads back with the break collapsed, and the next local keystroke
+        // would splice the peer's line break away again -- on every keystroke, until somebody stopped.
+        if (f && f.closest("[data-b]").getAttribute("data-b") === p) f.innerText = b.data[key];
         else canvasBlock(p);
       });
     });
@@ -2839,19 +2843,29 @@
        stamp over a panel that differs would turn a refusal into a silent overwrite. Matching panels
        mean the only thing that moved was the shared document, and that is exactly the false alarm. */
     function stampBox() { return document.querySelector('#post-form input[name="updated_at"]'); }
+    // Cached: this is read on every caret move of every peer, and walking a form with a long SEO
+    // panel each time is real work for an answer that only changes when somebody edits the panel.
+    var panelWas = null;
     function panelSig() {
-      var form = document.getElementById("post-form"), out = [];
+      var form = document.getElementById("post-form");
       if (!form || !window.FormData) return null;
+      if (panelWas !== null) return panelWas;
+      var out = [];
       new FormData(form).forEach(function (v, k) {
         if (k !== "blocks" && k !== "csrf" && k !== "updated_at") out.push(k + "\u0000" + v);
       });
-      return out.join("\u0001");
+      return (panelWas = out.join("\u0001"));
     }
+    var pform = document.getElementById("post-form");
+    if (pform) ["input", "change"].forEach(function (ev) {
+      pform.addEventListener(ev, function () { panelWas = null; });
+    });
+
     function hearStamp(w) {
       var box = stampBox();
       if (!YDOC || !box || !w.stamp || w.panel == null) return;
       if (w.stamp <= box.value || w.panel !== panelSig()) return;
-      box.value = w.stamp;
+      box.value = w.stamp;   // said once per stamp, not once per caret move of every peer
       say("adopted a newer version stamp from " + w.id + ": the page content is the same document.");
     }
 

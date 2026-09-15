@@ -1561,6 +1561,17 @@ def test_the_quill_verdict_is_read_at_mount_and_never_recomputed_there():
     assert "if (!target._rich) {" in mount
 
 
+def test_a_peers_words_are_written_back_the_same_way_they_are_read():
+    """The short fields are contentEditable="plaintext-only", so Enter makes a <br> and bindField()
+    reads them back with innerText. Writing a peer's value with textContent would put a bare newline
+    in the DOM, innerText would read it back with the break collapsed, and the next keystroke would
+    splice the peer's line break away -- on every keystroke, until one of them stopped typing."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    assert "f.innerText = b.data[key];" in js            # the write, in reconcileIn
+    assert "target[key] = rich ? f.innerHTML : f.innerText;" in js   # the read, in bindField
+    assert "f.textContent = b.data[key]" not in js
+
+
 def test_two_people_in_one_paragraph_keep_both_sets_of_words():
     """The acceptance test for this whole run of changes, run against the real Yjs: two editors type
     into one field at the same moment, neither having seen the other, and both sets of words are
