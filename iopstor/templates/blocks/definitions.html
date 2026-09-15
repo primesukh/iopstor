@@ -1,0 +1,7 @@
+{# Terms and what they mean, on ruled rows. The <div> wrapper per pair is what makes the two columns
+   line up as a grid, and it is where the repeater marker goes so the editor can add and remove rows.
+   The block's class is on an inner div, not the <section> -- see points.html. #}
+<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap"><div class="definitions">
+{%- if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif -%}
+<dl>{% for r in data['rows'] %}<div{{ fe('rows', loop.index0) }}><dt{{ fe('k') }}>{{ r.k }}</dt><dd{{ fe('v') }}>{{ r.v }}</dd></div>{% endfor %}</dl>
+</div></div></section>

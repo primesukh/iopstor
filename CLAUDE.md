@@ -37,12 +37,13 @@ iopstor/admin_api.py     /api/admin/v1 (JWT-protected REST; apply_post() is the 
 iopstor/admin_ui.py      browser admin at /admin: session login, post form + POST /admin/canvas + /admin/preview, media, leads, warranty, menus, settings, users, /audit (the activity log + restore)
 iopstor/public.py        catch-all resolver (+ .md twins, /checkout), archives, /media/<key> file proxy, sitemap/robots/llms/feed, /api/v1 public read API, leads, checkout
 iopstor/cli.py           flask migrate | seed | import-media | create-admin
-iopstor/templates/       base.html post.html archive.html 404.html checkout.html _card.html (the one card macro), blocks/<type>.html (18, each a full-width <section>), admin/*.html
+iopstor/templates/       base.html post.html archive.html 404.html checkout.html _card.html (the one card macro), blocks/<type>.html (20, each a full-width <section>), admin/*.html
 iopstor/static/site.css  the whole public theme: tokens at the top, header + mega panel + footer, .cards/.card/.btn/.section, layout group (.al-* .w-* .t-*), one rule-group per block
 iopstor/static/admin.css admin-only rules layered on site.css; canvas.css = editor chrome inside the iframe; admin.js = the editor (plain JS, no build); vendor/sortable.min.js + vendor/quill.js (+ quill.core.css, the prose editor, loaded inside the canvas iframe) + vendor/supabase.js (presence) + vendor/yjs.mjs & y-quill.mjs (the shared document, ES modules, loaded in the parent)
 docker-compose.yml       production only: `app` (this Dockerfile) + `cloudflared` as one Dokploy Compose service; `app` has no ports and no Traefik labels, so the tunnel is the only ingress
 migrations/              0000_bootstrap.sql (run once by hand in Studio) + NNNN_name.sql applied by `flask migrate`; repair_schema_migrations.sql and purge_test_audit_rows.sql are hand-run, not steps
-tests/                   pytest: test_offline.py always; the rest are marked live and skip without the Supabase in .env
+tests/                   pytest: test_offline.py always; the rest are marked live and skip without the Supabase in .env.
+                         reconcile.mjs is a node harness for the shared editing document, run by test_offline.py and skipped when node is absent
 docs/                    TECHNICAL.md + NON-TECHNICAL.md — the two docs every change keeps current
 .claude/                 docs/ (design.md, requirements.md), skills/ (the procedures below), hooks/session-start.sh, settings.json (enforced rules)
 website_assets/          the client's mock (mock-website.html), pictures, partner logos — tracked; loaded into Supabase with `flask import-media`

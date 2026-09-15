@@ -215,7 +215,9 @@ BLOCKS = {  # type: (required fields, optional fields)
 }
 ```
 
-Eighteen types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `contact_form`, `warranty_check`, `spacer`, `divider`.
+Twenty types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `definitions`, `points`, `contact_form`, `warranty_check`, `spacer`, `divider`.
+
+**`points` and `definitions` exist because the design draws sections that are not prose.** A heading, an intro, a dashed list and a button down one side of a band; a term-and-description list. Both were written as `rich_text` blocks carrying their own classes (`eyebrow`, `section-title`, `lead`, `dash`, `zfs`) — which Quill drops, so those sections could never join the shared document (§12.3). Measured against the vendored build: `Parchment.ClassAttributor(attrName, keyName)` matches classes shaped `keyName-value`, which is how `ql-align-center` works, and every class here is a bare boolean — so teaching Quill them needs a custom Blot and a clipboard matcher per class. They are block types instead, every field is an existing key, and `site.css` names the new blocks in the same rules it already had, so both pages render unchanged. `migrations/0011_sections_that_were_layout.sql` moves the two live pages across.
 
 `hero` takes either one picture or several. `image` is the single one; `images` is a repeater of
 `{media_id, alt}` and, from two rows up, becomes the design's rotator — the pictures take turns on
@@ -837,7 +839,7 @@ Blocks live in **containers**: `#main`, or one `[data-col]` of a columns block (
 
 The `⚙` panel for a Columns block manages the column *list* — `repeater()` gained two optional hooks (a row factory, a cell renderer) because a column row is an array of blocks rather than a row of fields, which is cheaper than a second ↑ ↓ ✕ splice loop. Removing a column that holds sections asks first. The sections themselves are edited on the page, like everything else.
 
-**A page is a document, not a stack.** Prose lives in `rich_text` blocks; the other seventeen types
+**A page is a document, not a stack.** Prose lives in `rich_text` blocks; the other nineteen types
 are the designed bands. Nothing about the storage changed — `posts.blocks` is the same JSONB —
 but the editing surface leads with writing:
 
@@ -1067,10 +1069,13 @@ Quill is here because word-by-word co-editing needs each paragraph to be a CRDT 
 transported. **Nothing in this section is collaborative yet**; it is the surface the next PR binds to.
 
 **The gate is per block and measured, not "does it contain a table".** Quill silently drops what it
-has no blot for, and on this site's own content that is **7 of 24** `rich_text` blocks: `<dl>` on NAS
+has no blot for. On this site's own content that was **7 of 24** `rich_text` blocks: `<dl>` on NAS
 and Contact Us, `<div>`/`<span>` on About Us, `<table>` on NAS and Testing — and the Home page, which
 loses six **classes** and not one tag, so a tag-based check waves it through and the first save strips
-the page's styling. So `quillKeeps()` pastes the block into a throwaway Quill in the canvas document,
+the page's styling. **Two of those seven are block types now** — `points` and `definitions`, §6 — which
+is the only real cure: the answer to a section Quill cannot hold is usually that it was never prose.
+Five refusals are left and all five are deliberate (Contact Us, NAS's spec panel, the About Us founders
+grid, two junk tables on a page called *Testing*). So `quillKeeps()` pastes the block into a throwaway Quill in the canvas document,
 reads `semantic()` back, and refuses if any tag or class went missing. It is a **no-loss** test rather
 than equality: Quill wrapping a bare text node in `<p>` is fine, losing `class="eyebrow"` is not.
 `<b>`/`<strong>` and `<i>`/`<em>` are aliased, because `_html_md()` renders them identically

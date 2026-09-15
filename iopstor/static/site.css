@@ -454,19 +454,26 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .t-dark .rich-text{color:var(--muted-dark)}
 .t-dark .rich-text .specs th{color:var(--muted-dark)}
 .t-dark .rich-text .foot{margin:14px 0 0;font-size:12px;color:var(--muted-dark-2)}
-.t-dark .rich-text dl.zfs>div{border-top-color:var(--line-dark)}
-.t-dark .rich-text dl.zfs dt{color:var(--white)}
-.t-dark .rich-text dl.zfs dd,.t-dark .rich-text .founders i{color:var(--muted-dark)}
+.t-dark .rich-text dl.zfs>div,.t-dark .definitions dl>div{border-top-color:var(--line-dark)}
+.t-dark .rich-text dl.zfs dt,.t-dark .definitions dl dt{color:var(--white)}
+.t-dark .rich-text dl.zfs dd,.t-dark .definitions dl dd,.t-dark .rich-text .founders i{color:var(--muted-dark)}
+.t-dark .points ul.dash{color:var(--muted-dark)}
 /* A rich_text block can carry a whole section: its eyebrow, its heading, its list and its button.
    Each needs to out-specify the element rules above -- `.rich-text h2` is (0,1,1) and would beat a
    bare `.section-title`. The dash list is the design's feature list: a blue em dash, not a bullet. */
-.rich-text .eyebrow{margin:0 0 10px}
-.rich-text .section-title{margin:0 0 18px;font-size:clamp(28px,3.5vw,40px)}
+.rich-text .eyebrow,.points .eyebrow{margin:0 0 10px}
+.rich-text .section-title,.points .section-title,.definitions .section-title{margin:0 0 18px;font-size:clamp(28px,3.5vw,40px)}
 .rich-text .page-title{margin:0 0 14px;font-size:clamp(34px,4.5vw,52px);line-height:1.05;color:var(--ink)}
-.rich-text .lead{margin:0 0 24px;max-width:none;font-size:17px;line-height:1.6}
-.rich-text ul.dash{margin:0 0 28px;padding:0;list-style:none;display:grid;gap:10px;color:var(--ink);font-size:15.5px}
-.rich-text ul.dash li{display:flex;gap:12px;margin:0}
-.rich-text ul.dash li::before{content:"\2014";flex:none;color:var(--blue);font-weight:700}
+.rich-text .lead,.points .lead{margin:0 0 24px;max-width:none;font-size:17px;line-height:1.6}
+.rich-text ul.dash,.points ul.dash{margin:0 0 28px;padding:0;list-style:none;display:grid;gap:10px;color:var(--ink);font-size:15.5px}
+.rich-text ul.dash li,.points ul.dash li{display:flex;gap:12px;margin:0}
+.rich-text ul.dash li::before,.points ul.dash li::before{content:"\2014";flex:none;color:var(--blue);font-weight:700}
+/* The same shapes as their own blocks (points, definitions) rather than as classes inside a rich_text
+   -- Quill drops a bare class, so a section written that way could never be co-edited (12.3). They
+   carry their own measure because .rich-text's is not inherited: the Width control reads --w-def. */
+.points,.definitions{--w-def:var(--reading);max-width:var(--w,var(--reading))}
+.points>*:first-child,.definitions>*:first-child{margin-top:0}
+.points .points-go{margin:0}
 /* Three more shapes the design draws inside prose, so they need no block of their own: the founder
    pair on About, the labelled contact list, and the striped box standing in for the map until an
    embed_html replaces it. Same trusted-staff HTML the dash list uses. */
@@ -476,10 +483,10 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .rich-text .founders b{display:block;font-weight:700;color:var(--black)}
 .rich-text .founders i{display:block;font-style:normal;font-size:14px;color:var(--muted)}
 /* the design's "ZFS features, in plain terms": term and description on one ruled row */
-.rich-text dl.zfs{margin:0;display:grid}
-.rich-text dl.zfs>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:16px;padding:16px 0;border-top:1px solid var(--line)}
-.rich-text dl.zfs dt{font:700 15px/1.4 var(--body);color:var(--black)}
-.rich-text dl.zfs dd{margin:0;font-size:14.5px;line-height:1.55;color:var(--muted)}
+.rich-text dl.zfs,.definitions dl{margin:0;display:grid}
+.rich-text dl.zfs>div,.definitions dl>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:16px;padding:16px 0;border-top:1px solid var(--line)}
+.rich-text dl.zfs dt,.definitions dl dt{font:700 15px/1.4 var(--body);color:var(--black)}
+.rich-text dl.zfs dd,.definitions dl dd{margin:0;font-size:14.5px;line-height:1.55;color:var(--muted)}
 .rich-text dl.contact-dl{display:grid;gap:18px;margin:0 0 32px;font-size:15.5px}
 .rich-text dl.contact-dl dt{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .rich-text dl.contact-dl dd{margin:4px 0 0;color:var(--ink-2);line-height:1.5}
