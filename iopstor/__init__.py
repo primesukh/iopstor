@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 from urllib.parse import quote
 
@@ -78,6 +79,16 @@ def create_app(test_config=None):
     if missing:
         raise RuntimeError(f"{', '.join(missing)} not set. Fill .env in development (see .env.example), or the\n"
                            "environment of the deployment in production (docs/TECHNICAL.md \u00a715)")
+    # Not in REQUIRED, and deliberately: the built-in ranges are what keep the tunnel working on a box
+    # nobody has configured yet, and refusing to boot would need the operator to know the proxy's subnet
+    # before they can find it out. But wide ranges contain the LAN client as well as the LAN proxy, so
+    # an insider inside them can hand the throttle and the audit log an address that is not theirs --
+    # that is a line in the log at every boot, not a silence (docs/TECHNICAL.md \u00a712).
+    if not os.environ.get("TRUSTED_PROXIES", "").strip():
+        app.logger.warning(
+            "TRUSTED_PROXIES is unset, so forwarding headers are believed from any private address. "
+            "Name the subnet your proxy is on to stop a client on the same network claiming somebody "
+            "else's: docker network inspect <project>_default --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'")
 
     from . import db
     from .admin_api import bp as admin_api

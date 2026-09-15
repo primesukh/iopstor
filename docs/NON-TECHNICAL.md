@@ -539,6 +539,17 @@ Each page also carries its title, description, social-sharing preview and machin
 
 Every line is a sentence. *Sukhpreet Saluja — published the blog post **Prime ABGB***. *Priya Sharma — added the picture or file **hero.png***. Beside it sits the date and time in Indian time and the internet address the person was working from.
 
+**The address in the last column is the visitor's own, not the machinery's.** There are two ways to reach
+this site — over the internet, and from inside the office network — and until now the second one recorded
+the address of the equipment in between rather than the person. Both now record the person. The site also
+refuses to take somebody's word for it: an address is only believed when it was passed on by our own
+equipment, so nobody can sign a wrong address into the record.
+
+**Where the site thinks you are connecting from** sits just above the filters, folded shut. Open it and it
+tells you the address that will be written against anything you do, where the connection reached the site
+from, and whether that was our own equipment. It is there for when an address in the log looks wrong — open
+it, and it says what the site is actually seeing. Nothing on it is a setting; it only reports.
+
 **Pages now produce two kinds of line, and the difference is worth knowing.** *Worked on the blog post **Prime ABGB*** is one person's sitting at that page — it appears about fifteen minutes after they stop, and lists the sections **they** changed. *Published the blog post **Prime ABGB*** is the moment that work went on the website. Before the editor started saving itself, those were the same act and got one line; they are not the same act any more.
 
 **A sitting is not interrupted by leaving the page.** Reload, go and look at Media, come back and carry on — it is all one line, covering everything you changed. Only fifteen minutes of genuine quiet ends a sitting and writes it up.
@@ -701,8 +712,16 @@ also meant a publish date you typed was acted on five and a half hours late. Bot
 
 **Somebody has been trying to sign in as me.** Wrong passwords are recorded. An administrator can open
 **Activity**, choose *login failed* in the middle box, and see every attempt with the email that was
-typed, the time, and where it came from. If somebody gets it wrong enough times in a row the account
-is locked for a while, and that is recorded too, as *login blocked*.
+typed, the time, and where it came from. If somebody gets it wrong enough times in a row **that address**
+is locked for a while, and that is recorded too, as *login blocked*. The lock is on where the attempts are
+coming from, never on the account, so nobody can shut you out of your own site by guessing at your password.
+
+**The addresses in Activity have changed — and there is a new folded line above the filters.** The last
+column used to show the address of the equipment between you and the site whenever you were working from
+inside the office, so several people could appear as the same address. It now shows the person, whichever
+way they reached the site. **Where the site thinks you are connecting from**, just above the filters,
+opens to say what address will be recorded against what you do and where your connection came from — for
+when an address in the log looks wrong. It only reports; there is nothing to set.
 
 **Does it record password changes?** Yes — both changing your own and an administrator setting a new
 one for somebody else. It records *that* the password was changed and whose it was. The password

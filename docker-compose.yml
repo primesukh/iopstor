@@ -1,9 +1,10 @@
 # Production: the CMS, its migrations and its Cloudflare Tunnel, one stack, one Dokploy Compose service.
-# The tunnel is the only ingress -- `app` publishes no port and carries no Traefik label, so cloudflared,
-# which is outbound-only, is the only route in. That unreachability is what makes throttle.client_ip()'s
-# trust in CF-Connecting-IP honest (docs/TECHNICAL.md §12); the runbook is §15.
-# The tunnel is behind a profile, so the stack also deploys before anyone has made one -- with the profile
-# off the sentence above is not true yet, and §15 says what that costs while it lasts.
+# TWO ingresses, on purpose: the Cloudflare tunnel for the public site, and the published port below for
+# LAN access to the admin. Each hands the app a visitor address a different way -- CF-Connecting-IP from
+# the edge, the connection itself on the LAN -- and TRUSTED_PROXIES is what decides which to believe, so
+# that is the variable to get right, not a claim that nothing else can reach this container
+# (docs/TECHNICAL.md §12); the runbook is §15.
+# The tunnel is behind a profile, so the stack also deploys before anyone has made one.
 # Every value below comes from the Dokploy service's environment. Nothing here is a secret.
 
 # One environment, two services: `migrate` runs the CLI, which goes through create_app() like any request
@@ -17,6 +18,9 @@ x-app-env: &app-env
   SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?}
   SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:?}
   MEDIA_BUCKET: ${MEDIA_BUCKET:-media}
+  # Empty means "use the built-in private ranges", not "trust nobody" -- config.py reads it with `or`.
+  # Narrow it to the one subnet cloudflared sits on to stop a LAN client claiming somebody else's address.
+  TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
   PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-dummy}
   GUNICORN_CMD_ARGS: ${GUNICORN_CMD_ARGS:--w 30 --threads 8 --preload --access-logfile -}
 services:
@@ -44,6 +48,14 @@ services:
     environment: *app-env
     # default reaches cloudflared; dokploy-network reaches Supabase Kong. Two networks on purpose.
     networks: [default, dokploy-network]
+    # The LAN way in, in the repo rather than in a Dokploy screen, so a redeploy from git cannot quietly
+    # drop it. `mode: host` and not the default: swarm's routing mesh NATs the source address, and every
+    # visitor would then arrive as one Docker address -- one shared throttle bucket and a useless From
+    # column. Under plain `docker compose` it is the ordinary publish it looks like.
+    ports:
+      - target: 8000
+        published: ${LAN_PORT:-8000}
+        mode: host
   cloudflared:
     profiles: [tunnel]                     # started only when COMPOSE_PROFILES=tunnel is in the environment;
                                            # `app` carries no profiles: key, so it deploys either way

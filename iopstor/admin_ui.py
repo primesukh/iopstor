@@ -20,7 +20,7 @@ from . import db, display_name, seo
 from .admin_api import apply_post
 from .auth import ROLES, _session_token, create_auth_user, current_user, delete_auth_user, login, set_password
 from .blocks import BLOCKS, EDITOR, LAYOUTS, _NON_TEXT_KEYS, at_path, blocks_text, render_blocks, validate_blocks, warranty_active
-from .throttle import clear as throttle_clear, client_ip, record_failure, retry_after, wait_text
+from .throttle import clear as throttle_clear, client_ip, connection, record_failure, retry_after, wait_text
 from .storage import delete_media, save_upload
 
 ui = Blueprint("admin_ui", __name__, url_prefix="/admin", template_folder="templates")
@@ -1351,7 +1351,7 @@ def audit():
     by_id = {p["id"]: p for p in people}
     result["items"] = [_present(r, posts, by_id) for r in result["items"]]
     return render_template("admin/audit.html", result=result, page=page, people=people,
-                           actions=AUDIT_ACTIONS, kinds=sorted(KIND.items()),
+                           actions=AUDIT_ACTIONS, kinds=sorted(KIND.items()), conn=connection(),
                            has_next=page * 50 < result["total"])
 
 

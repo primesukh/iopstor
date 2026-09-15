@@ -9,21 +9,68 @@ space for a fraction of the code a hand-packed mmap table would need.
 # ponytail: per container. Scale the service to two replicas and each gets its own counter, so the
 # effective limit doubles; move the keys to Redis if that day comes.
 """
+import ipaddress
 import sqlite3
 import time
 
 from flask import current_app, request
 
+# The headers a proxy uses to pass the visitor along, best first. CF-Connecting-IP is Cloudflare's and
+# carries no chain; X-Forwarded-For is a list and is read from the right (below); X-Real-IP is what a
+# plain reverse proxy sets. Only consulted when the connection came from a network in TRUSTED_PROXIES.
+FORWARDED = ("CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP")
+
+
+def _from_proxy(peer):
+    """True when this connection came from a proxy we put there ourselves, so its forwarding headers
+    are ours and not the visitor's."""
+    try:
+        addr = ipaddress.ip_address(peer)
+    except ValueError:
+        return False
+    addr = getattr(addr, "ipv4_mapped", None) or addr   # ::ffff:10.0.1.7 is 10.0.1.7
+    return any(addr in net for net in current_app.config["TRUSTED_PROXIES"])
+
 
 def client_ip():
-    """The visitor, not the tunnel. Cloudflare sets CF-Connecting-IP to the real client address and
-    strips any copy the client sent, and cloudflared is outbound-only — nothing can reach this app
-    around it — which is what makes the header trustworthy here. remote_addr is the fallback for
-    local development, where there is no proxy in the way at all.
+    """The visitor, not the hop in front of them. There are two ways into this app and each needs a
+    different answer: through the Cloudflare tunnel the address is in CF-Connecting-IP, which the edge
+    sets and which it strips off anything the client sent, and on the LAN port the connection is the
+    visitor already, so remote_addr is the whole truth.
 
-    # ponytail: trusts that header. Publish port 8000 on a network someone else is on and they can
-    # spoof it past the limit; switch to ProxyFix with the real hop count if that ever happens."""
-    return request.headers.get("CF-Connecting-IP") or request.remote_addr or "-"
+    Which is why nothing is believed until the peer is one of ours. A forwarding header is a claim by
+    whoever opened the connection; it is only evidence when that was a proxy we deployed. Take it from
+    anybody and a LAN client can set CF-Connecting-IP by hand, rotate it past LOGIN_MAX_FAILURES for
+    unlimited password guesses, and write whatever they like into the audit log's From column.
+
+    X-Forwarded-For is read from the RIGHT. A proxy appends the peer it saw, so with one trusted hop
+    the last entry is the real connection and everything before it is client-supplied.
+
+    # ponytail: one hop. Two trusted proxies in a row and the rightmost entry is the inner one, not the
+    # visitor -- count back as many entries as there are hops if that day comes. And the default ranges
+    # are all of RFC1918, so a LAN client is inside them and its own headers are believed: name the one
+    # subnet the proxy sits on in TRUSTED_PROXIES to close that, no code change."""
+    peer = request.remote_addr or ""
+    if _from_proxy(peer):
+        for h in FORWARDED:
+            if fwd := request.headers.get(h, "").rsplit(",", 1)[-1].strip():
+                return fwd
+    # never None: the key is an f-string, and None would share one bucket named "None"
+    return peer or "-"
+
+
+def connection():
+    """What this request looks like from inside, for the panel on the Activity screen.
+
+    There are two ways into this app and they produce an address from different places, so "is the log
+    recording real visitors" was a question nobody could answer without a deploy and a guess. This
+    answers it: what the log will store, who actually opened the connection, whether that peer is one
+    of ours, and what -- if anything -- the connection claimed on the way in. It lives here because
+    every one of those facts is this module's, and the screen should not have to know how they are
+    worked out."""
+    peer = request.remote_addr or ""
+    return {"seen": client_ip(), "peer": peer, "trusted": _from_proxy(peer),
+            "headers": {h: request.headers[h] for h in FORWARDED if h in request.headers}}
 
 
 def _db():
