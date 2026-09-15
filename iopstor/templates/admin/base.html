@@ -40,6 +40,7 @@
   <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></symbol>
   <symbol id="i-audit" viewBox="0 0 24 24"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/><path d="M3.5 9H7"/></symbol>
   <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  <symbol id="i-stress" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
 </svg>
 {% set ICON = {'page':'page','post':'post','service':'service','case_study':'case','event':'event',
                'partner':'partner','datasheet':'sheet','product':'product'} %}
@@ -66,6 +67,9 @@
       <a href="{{ url_for('admin_ui.settings') }}"{% if request.endpoint == 'admin_ui.settings' %} class="on" aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-settings"></use></svg>Settings</a>
       <a href="{{ url_for('admin_ui.users') }}"{% if request.endpoint == 'admin_ui.users' %} class="on" aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-users"></use></svg>Users</a>
       <a href="{{ url_for('admin_ui.audit') }}"{% if request.endpoint == 'admin_ui.audit' %} class="on" aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-audit"></use></svg>Activity</a>
+      {% endif %}
+      {% if is_owner %}
+      <a href="{{ url_for('admin_ui.stress_panel') }}"{% if request.endpoint == 'admin_ui.stress_panel' %} class="on" aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="#i-stress"></use></svg>Stress test</a>
       {% endif %}
     </nav>
     <div class="adm-foot">

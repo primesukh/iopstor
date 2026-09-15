@@ -1,0 +1,115 @@
+{% extends "admin/base.html" %}{% block title %}Stress test{% endblock %}
+{% block content %}
+<div class="adm-head">
+  <div><h1>Stress test</h1>
+    <p class="page-sub">Send a crowd of visitors and attackers at a site and watch how it holds up. This
+      tool is yours alone.</p></div>
+</div>
+
+<p class="notice-amber st-warn">This fires real traffic. Point it at another site (development at production, say) or at
+  this one — testing a site with itself uses its own resources to do the load, so the numbers read heavier
+  than real life. Attackers here are harmless: they knock on missing pages, guess warranty serials and post
+  through the contact form's spam trap, so nothing is saved and nobody is locked out.</p>
+
+{# Same panel the Activity screen opens with: what address this request is seen as, so a self-test's own
+   figures make sense. #}
+<details class="aud-conn">
+  <summary>Where the site thinks you are connecting from</summary>
+  <p>Your address: <strong>{{ conn.seen }}</strong>. The connection arrived from
+    <strong>{{ conn.peer or 'an address the site could not read' }}</strong>
+    {% if conn.trusted %}(one of ours).{% else %}(not one of ours).{% endif %}</p>
+</details>
+
+<form method="post" action="{{ url_for('admin_ui.stress_run') }}" class="st-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="st-grid">
+    <label>Visitors
+      <input type="number" name="visitors" value="20" min="0" max="{{ max_workers }}">
+      <span class="st-hint">people reading pages at once</span></label>
+    <label>Attackers
+      <input type="number" name="attackers" value="10" min="0" max="{{ max_workers }}">
+      <span class="st-hint">harmless probes at once</span></label>
+    <label>Duration
+      <input type="number" name="seconds" value="15" min="1" max="{{ max_seconds }}">
+      <span class="st-hint">seconds (up to {{ max_seconds }})</span></label>
+  </div>
+  <fieldset class="st-target">
+    <legend>Aim it at</legend>
+    <label class="st-radio"><input type="radio" name="target" value="self" checked> This site
+      <span class="st-hint">{{ here }}</span></label>
+    <label class="st-radio"><input type="radio" name="target" value="other"> Another site
+      <input type="url" name="target_url" placeholder="http://host:port" value="{{ here }}"></label>
+  </fieldset>
+  <label class="st-warranty">Warranty page to probe (optional)
+    <input type="text" name="warranty_path" value="/" placeholder="/warranty">
+    <span class="st-hint">the public page that has the serial-number check on it</span></label>
+  <p class="st-cap muted">At most {{ max_workers }} of each; the numbers are clamped to that.</p>
+  <button type="submit" class="btn">Run</button>
+</form>
+
+{% if run %}
+<div class="st-live" data-run="{{ run }}"
+     data-poll="{{ url_for('admin_ui.stress_progress', run_id='RUNID') }}"
+     data-stop="{{ url_for('admin_ui.stress_stop', run_id=run) }}">
+  <div class="adm-head st-live-head">
+    <div><h2>Run <span class="st-state" id="st-state">starting…</span></h2>
+      <p class="page-sub" id="st-meta"></p></div>
+    <form method="post" action="{{ url_for('admin_ui.stress_stop', run_id=run) }}" id="st-stopform">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit" class="btn secondary" id="st-stop">Stop</button>
+    </form>
+  </div>
+  <div class="st-meters">
+    <div class="st-meter"><span class="st-n" id="st-sent">0</span><span class="st-l">requests sent</span></div>
+    <div class="st-meter"><span class="st-n" id="st-rps">0</span><span class="st-l">per second</span></div>
+    <div class="st-meter"><span class="st-n" id="st-p95">0</span><span class="st-l">p95 ms</span></div>
+    <div class="st-meter"><span class="st-n" id="st-max">0</span><span class="st-l">slowest ms</span></div>
+    <div class="st-meter"><span class="st-n" id="st-429">0</span><span class="st-l">rate-limited (429)</span></div>
+    <div class="st-meter"><span class="st-n" id="st-err">0</span><span class="st-l">no answer</span></div>
+  </div>
+  <div class="table-card">
+    <table class="st-table">
+      <tr><th>Response</th><th>Count</th></tr>
+      <tbody id="st-status"><tr><td colspan="2" class="muted">Waiting for the first responses…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+<script>
+(function () {
+  var box = document.querySelector('.st-live');
+  if (!box) return;
+  var rid = box.dataset.run;
+  var url = box.dataset.poll.replace('RUNID', encodeURIComponent(rid));
+  var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+  var HTTP = {'200':'OK (200)','204':'No content (204)','404':'Not found (404)','413':'Too large (413)',
+              '429':'Rate-limited (429)','500':'Server error (500)','502':'Bad gateway (502)','503':'Unavailable (503)'};
+  function paint(run) {
+    var p = run.progress || {}, params = run.params || {};
+    set('st-state', {starting:'starting…',running:'running',done:'finished',error:'stopped on an error'}[run.state] || run.state);
+    set('st-meta', (params.visitors||0) + ' visitors · ' + (params.attackers||0) + ' attackers · aimed at ' +
+                   (params.target||'') + ' · ' + (p.elapsed||0) + 's elapsed');
+    set('st-sent', p.sent || 0); set('st-rps', p.req_per_sec || 0);
+    set('st-p95', p.p95_ms || 0); set('st-max', p.max_ms || 0);
+    set('st-429', p.throttled || 0); set('st-err', p.errors || 0);
+    var body = document.getElementById('st-status'), st = p.status || {}, keys = Object.keys(st).sort();
+    if (keys.length) {
+      body.innerHTML = keys.map(function (k) {
+        return '<tr><td>' + (HTTP[k] || ('HTTP ' + k)) + '</td><td>' + st[k] + '</td></tr>'; }).join('');
+    }
+    if (run.state === 'done' || run.state === 'error') {
+      var stop = document.getElementById('st-stopform'); if (stop) stop.hidden = true;
+      return; // stop polling
+    }
+    setTimeout(tick, 500);
+  }
+  function tick() {
+    fetch(url, {headers: {'Accept': 'application/json'}}).then(function (r) {
+      return r.ok ? r.json() : null; }).then(function (run) {
+      if (run) paint(run); else setTimeout(tick, 1000); // transient miss: try again
+    }).catch(function () { setTimeout(tick, 1000); });
+  }
+  tick();
+})();
+</script>
+{% endif %}
+{% endblock %}

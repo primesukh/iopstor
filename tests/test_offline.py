@@ -1100,6 +1100,10 @@ AUDITED = {
     "admin_ui.canvas": "changes nothing, renders the page into the editor",
     "admin_ui.preview": "changes nothing, renders the unsaved form as a page",
     "admin_api.auth_refresh": "session mechanics, not a step anybody takes",
+    # the stress-test panel fires HTTP at a target but writes no row of ours: attackers are
+    # non-destructive and the honeypot lead post is accepted and dropped, so nothing to record here
+    "admin_ui.stress_run": "starts a load run; changes no data of ours (see iopstor/stress.py)",
+    "admin_ui.stress_stop": "flips a stop flag in the /dev/shm progress store, no row of ours",
 }
 
 
@@ -2143,3 +2147,112 @@ def test_every_setting_the_app_reads_is_passed_into_the_container():
     passed = set(re.findall(r"^\s{2}([A-Z_]+):", anchor, re.M))
     assert read, "no settings found -- the regex stopped matching config.py"
     assert not (read - passed), f"config.py reads these but docker-compose.yml never passes them: {sorted(read - passed)}"
+
+
+# ---- stress-test engine (iopstor/stress.py) ----------------------------------------------------
+
+def test_validate_target_accepts_a_base_and_rejects_junk():
+    from iopstor import stress
+    assert stress.validate_target("http://host:5000/") == "http://host:5000"
+    assert stress.validate_target(" https://www.iopstor.com ") == "https://www.iopstor.com"
+    for bad in ("", "host:5000", "ftp://host", "http://host/a/path", "javascript:alert(1)"):
+        with pytest.raises(ValueError):
+            stress.validate_target(bad)
+
+
+def test_clamp_holds_the_ceiling_and_survives_nonsense():
+    from iopstor import stress
+    assert stress.clamp(5, 0, 200) == 5
+    assert stress.clamp(9999, 0, 200) == 200
+    assert stress.clamp(-3, 1, 300) == 1
+    assert stress.clamp("not a number", 1, 300) == 1
+
+
+def test_percentile_is_nearest_rank_in_ms():
+    from iopstor import stress
+    assert stress.percentile([], 95) == 0.0
+    # ten samples 0.01s..0.10s: p95 lands on the top sample
+    sample = [i / 100 for i in range(1, 11)]
+    assert stress.percentile(sample, 95) == 100.0
+    assert stress.percentile(sample, 50) == 50.0
+
+
+def test_progress_store_roundtrips_and_stops(tmp_path):
+    from iopstor import stress
+    db = str(tmp_path / "s.db")
+    rid = stress.create({"visitors": 2}, path=db)
+    run = stress.read(rid, path=db)
+    assert run["state"] == "starting" and run["params"]["visitors"] == 2 and run["stop"] is False
+    assert stress.read("nope", path=db) is None
+    # stop only bites a running run
+    assert stress.request_stop(rid, path=db) is False
+    stress._write(rid, "running", {"sent": 1}, db)
+    assert stress.request_stop(rid, path=db) is True
+    assert stress.read(rid, path=db)["stop"] is True
+
+
+def test_run_load_hits_a_real_server_and_the_honeypot_leaves_no_row(tmp_path):
+    """Measured, not assumed: run the engine against a throwaway stdlib server and prove requests are
+    sent, statuses tallied, real pages answer 200, and every lead post arrives with the honeypot filled
+    so nothing is stored (the accept-and-drop path public.py takes)."""
+    import http.server
+    import threading
+    import time
+    from iopstor import stress
+
+    tally = {"rows": 0, "honeypot": 0, "hits": 0}
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            tally["hits"] += 1
+            if self.path == "/sitemap.xml":
+                body = (b"<urlset><url><loc>%s/</loc></url>"
+                        b"<url><loc>%s/about</loc></url></urlset>"
+                        % (self._base(), self._base()))
+                self._send(200, body)
+            elif self.path in ("/", "/about"):
+                self._send(200, b"ok")
+            else:
+                self._send(404, b"no")
+
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(n) or b"{}")
+            if body.get("website"):
+                tally["honeypot"] += 1        # accepted and dropped, exactly like public.py
+            else:
+                tally["rows"] += 1
+            self._send(201, b"ok")
+
+        def _base(self):
+            return b"http://127.0.0.1:%d" % self.server.server_address[1]
+
+        def _send(self, code, body):
+            self.send_response(code)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    db = str(tmp_path / "run.db")
+    try:
+        rid = stress.start(base, visitors=3, attackers=3, seconds=2, path=db)
+        deadline = time.time() + 20
+        while time.time() < deadline:
+            run = stress.read(rid, path=db)
+            if run and run["state"] in ("done", "error"):
+                break
+            time.sleep(0.2)
+    finally:
+        srv.shutdown()
+
+    assert run["state"] == "done", run
+    p = run["progress"]
+    assert p["sent"] > 0 and tally["hits"] > 0
+    assert p["status"].get("200", 0) > 0           # visitors read the real pages
+    assert tally["rows"] == 0                       # the honeypot spared the target every time
