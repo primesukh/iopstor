@@ -2022,6 +2022,14 @@
   function rememberSelection() {
     var d = cdoc();
     if (!d) return;
+    /* selectionchange stopped meaning "the person at this keyboard moved their caret". y-quill
+       applies a peer's words by mutating the canvas DOM, and that fires it too -- so without this
+       the editor would record a caret it does not have, broadcast "I am typing here" for a field
+       nobody is in, and ask a Quill that has no selection to describe one. The iframe keeps its own
+       activeElement when focus moves to the toolbar in the parent document, so a toolbar click is
+       still a caret in the canvas and the bar stays live. */
+    var here = d.activeElement;
+    if (!here || !here.closest || !here.closest("[data-f]")) return;
     var sel = d.defaultView.getSelection();
     if (!sel || !sel.rangeCount) return;
     var r = sel.getRangeAt(0), host = r.startContainer;
@@ -2200,7 +2208,9 @@
     var q = qHere();
     if (!q) return false;
     q.focus();
-    var now = q.getFormat();
+    var at = q.getSelection();
+    if (!at) return false;             // focus() did not land a caret: do nothing rather than throw
+    var now = q.getFormat(at);
     q.format(name, value === undefined ? !now[name] : (now[name] === value ? false : value), "user");
     syncBar();
     return true;
@@ -2317,7 +2327,7 @@
       if (!q) return docLink();
       var r = q.getSelection(true);
       if (!r || !r.length) return alert("Select the words you want to link first.");
-      var url = prompt("Link address", q.getFormat().link || "https://");
+      var url = prompt("Link address", q.getFormat(r).link || "https://");
       if (url !== null) q.format("link", url || false, "user");
     })].concat(inserts)));
     // Quill's align is an attribute with no value for left, which is also how site.css reads it.
@@ -2338,7 +2348,15 @@
       // toolbar must go dead rather than paint a state it cannot deliver — a control that silently
       // snaps back to "Normal text" is worse than one that is visibly switched off.
       var live = !!(liveField() && savedField.hasAttribute("data-rich"));
-      var q = qHere();
+      /* Read the caret WITHOUT focusing. q.getFormat() with no argument means
+         getFormat(this.getSelection(true)) -- which focuses the editor and returns null when the
+         canvas document does not have focus, and getFormat then reads .index off that null and
+         throws. Painting a toolbar must never move the caret, and it must survive being asked while
+         the caret is somewhere else entirely: selectionchange fires in the canvas whenever y-quill
+         applies a peer's words, and at that moment the person typing may be in the title field, in
+         another pane, or in another window. A Quill field with no caret in it is simply not live. */
+      var q = qHere(), qat = q && q.getSelection();
+      if (q && !qat) live = false;
       bar.classList.toggle("tb-off", !live);
       cmds.concat([style]).forEach(function (x) { x.disabled = !live; });
       proseOnly.forEach(function (x) { x.disabled = !live || !!q; });
@@ -2349,7 +2367,7 @@
       if (HINT) HINT.innerHTML = live ? HINT_ON : "Click in the page to start editing.";
       if (!live) return;
       if (q) {                                    // Quill knows its own state; queryCommandState does not
-        var now = q.getFormat();
+        var now = q.getFormat(qat);
         bold.classList.toggle("on", !!now.bold);
         ital.classList.toggle("on", !!now.italic);
         und.classList.toggle("on", !!now.underline);

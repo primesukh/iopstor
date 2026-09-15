@@ -1,6 +1,7 @@
 """Pure logic — no Supabase needed."""
 import json
 import pathlib
+import re
 import shutil
 import subprocess
 from copy import deepcopy
@@ -1559,6 +1560,36 @@ def test_the_quill_verdict_is_read_at_mount_and_never_recomputed_there():
     assert "if (!canWrite()) { node.setAttribute(\"data-legacy\", \"1\"); return false; }" in mount
     assert mount.count("quillKeeps(") == 1          # the one writer-gated call, nowhere else
     assert "if (!target._rich) {" in mount
+
+
+def test_painting_the_toolbar_never_asks_quill_to_focus_itself():
+    """`q.getFormat()` with no argument means `getFormat(this.getSelection(true))`, which focuses the
+    editor and returns null when the canvas document has no caret -- and getFormat then reads .index
+    off that null and throws. It became reachable the moment a peer's words could mutate the canvas:
+    canvasFull()'s onload wires the document (binding Quill, whose QuillBinding calls setContents)
+    BEFORE focusBlock(), so the first paint of a shared page asked a Quill nobody was in."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    assert "var q = qHere(), qat = q && q.getSelection();" in js
+    assert "if (q && !qat) live = false;" in js
+    # Nowhere may ask for the format of "wherever the caret is": every call passes a range it has
+    # already checked. Comments are stripped first -- the prose above says `getFormat()` too, and an
+    # assertion that reads the explanation rather than the code is not an assertion.
+    code = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+    code = re.sub(r"(?m)^\s*//.*$", "", code)
+    assert re.search(r"getFormat\(\s*\)", code) is None
+
+
+def test_a_peers_words_are_not_mistaken_for_this_editors_caret():
+    """selectionchange stopped meaning "the person at this keyboard moved their caret": y-quill
+    applies a peer's words by mutating the canvas DOM and fires it too. Without the activeElement
+    test the editor records a caret it does not have and broadcasts "I am typing here" for a field
+    nobody is in. The iframe keeps its own activeElement when focus moves to the parent's toolbar,
+    so a toolbar click still counts as a caret in the canvas."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    fn = js[js.index("function rememberSelection()"):js.index("function liveField()")]
+    assert 'var here = d.activeElement;' in fn
+    assert 'if (!here || !here.closest || !here.closest("[data-f]")) return;' in fn
+    assert fn.index("d.activeElement") < fn.index("savedField = f")
 
 
 def test_a_peers_words_are_written_back_the_same_way_they_are_read():
