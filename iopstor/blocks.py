@@ -172,7 +172,12 @@ _RANK = {k: i for i, k in enumerate(_TEXT_ORDER)}
 NEVER_NESTED = ("columns", "hero")
 
 
-def validate_blocks(blocks, where="blocks", nested=False):
+def validate_blocks(blocks, where="blocks", nested=False, draft=False):
+    """draft=True checks the shape but not completeness: an unfinished page is what a working draft
+    IS. A paragraph with the caret still in it has no text, an Image section has no picture until one
+    is chosen, and neither is a reason to refuse to save somebody's work. "Required" is a rule about
+    publishing, and Publish enforces it on its own through apply_post() -- which is still the one
+    validation path, so nothing reaches posts.blocks without passing the full check."""
     if not isinstance(blocks, list):
         return [f"{where} must be a list"]
     errors = []
@@ -188,14 +193,15 @@ def validate_blocks(blocks, where="blocks", nested=False):
         if nested and b["type"] in NEVER_NESTED:
             errors.append(f"{at}: a {b['type']} section cannot go inside a column")
             continue
-        for field in spec[0]:
-            if b["data"].get(field) in (None, "", []):
-                errors.append(f"{at}.{field} required")
+        if not draft:
+            for field in spec[0]:
+                if b["data"].get(field) in (None, "", []):
+                    errors.append(f"{at}.{field} required")
         if b["type"] == "columns":
             cols = b["data"].get("cols")
             if isinstance(cols, list):
                 for c, col in enumerate(cols):
-                    errors += validate_blocks(col, f"{at}.cols[{c}]", nested=True)
+                    errors += validate_blocks(col, f"{at}.cols[{c}]", nested=True, draft=draft)
             elif cols not in (None, "", []):        # missing or empty already said "cols required"
                 errors.append(f"{at}.cols must be a list of columns")
     return errors

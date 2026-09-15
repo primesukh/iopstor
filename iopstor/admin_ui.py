@@ -467,11 +467,15 @@ def autosave(pk):
             blocks = json.loads(request.form["blocks"])
         except ValueError as e:
             return jsonify({"error": f"invalid JSON: {e}"}), 400
-        errs = validate_blocks(blocks)
+        # draft=True: the shape is checked, completeness is not. A draft is unfinished by definition
+        # -- the empty paragraph the caret is sitting in has no text, and an Image section has no
+        # picture until one is chosen -- and refusing to SAVE somebody's work because they have not
+        # finished it is the worst possible moment to enforce a publishing rule. Publish enforces it
+        # anyway, through apply_post(), which is still the one path into posts.blocks. What is still
+        # refused is a shape that is wrong rather than unfinished: an unknown type, a hero or grid
+        # nested inside a column, a cols that is not a list.
+        errs = validate_blocks(blocks, draft=True)
         if errs:
-            # Refuse rather than store: an invalid draft would be published by the next press of the
-            # button, through apply_post(), which is the one validation path and would then refuse it
-            # at the worst possible moment.
             return jsonify({"error": "these sections are not valid", "fields": {"blocks": errs}}), 400
         db.save_draft(pk, blocks, request.form.get("state", ""), g.user)
     _record_session(pk)

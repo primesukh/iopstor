@@ -1525,6 +1525,28 @@ def test_a_section_name_and_the_quill_verdict_are_not_prose():
     assert "_id" in blocks.EDITOR["scalars"] and "url" in blocks.EDITOR["scalars"]
 
 
+def test_a_draft_may_be_unfinished_but_not_misshapen():
+    """The autosave route validates with draft=True. A working draft is unfinished by definition --
+    the empty paragraph the caret sits in has no text, an Image section has no picture until one is
+    chosen -- and refusing to SAVE somebody's work because they have not finished it is the worst
+    possible moment to enforce a publishing rule. Publish enforces it anyway through apply_post().
+    What must still be refused is a shape that is wrong rather than incomplete."""
+    unfinished = [{"type": "rich_text", "data": {"html": "", "_id": "a", "_rich": True}},
+                  {"type": "image", "data": {"caption": ""}}]
+    assert blocks.validate_blocks(unfinished, draft=True) == []
+    assert len(blocks.validate_blocks(unfinished)) == 2        # publishing still asks for both
+
+    misshapen = [{"type": "nope", "data": {}},
+                 {"type": "columns", "data": {"cols": [[{"type": "hero", "data": {"heading": "x"}}]]}}]
+    assert len(blocks.validate_blocks(misshapen, draft=True)) == 2   # and draft=True reaches a column
+
+    src = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "admin_ui.py").read_text()
+    assert "validate_blocks(blocks, draft=True)" in src
+    # the publish path is untouched: apply_post() is still the one full check into posts.blocks
+    api = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "admin_api.py").read_text()
+    assert "validate_blocks(b[\"blocks\"])" in api
+
+
 def test_an_editor_who_is_not_the_writer_still_gets_an_activity_entry():
     """The autosave route carries two unrelated payloads. `blocks`/`state` are the shared document,
     and only the elected writer sends them. `was`/`now` are one person's sitting and EVERY editor
