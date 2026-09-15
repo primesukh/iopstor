@@ -676,6 +676,7 @@
   var YORIGIN = { mine: 1 };                   // our own transactions, recognised when they echo back
   var SCALARS = {};                            // blocks.py _NON_TEXT_KEYS: never a text type
   var BINDS = [];                              // live QuillBindings, destroyed when the canvas is replaced
+  var WAITING = [];                            // editors mounted before the shared text existed
   var viewChanged = function () {};            // late-bound by initCollab: tell peers who can write
   var shareOut = function () {};               // late-bound by initCollab: put a delta on the wire
   var canWrite = function () { return true; }; // single player is always the writer
@@ -949,6 +950,69 @@
     YDOC.on("update", function (delta, origin) { shareOut(delta, origin); });
   }
 
+  /* Bind this editor to the shared paragraph -- the line that makes two people in one sentence keep
+     both sets of words. The Y.Text holds a Quill DELTA, not HTML (Y.Text.toJSON() is the plain text;
+     the formatting lives in the delta), so it is filled from an editor that already has the content,
+     and filled BEFORE the binding: QuillBinding's constructor ends in setContents(type.toDelta()),
+     so binding an empty one would empty the page.
+     Binding also repairs a stale mirror for free -- that setContents is the shared truth arriving --
+     which is what makes coming back from Preview safe. */
+  function shareQuill(node, f, q, key) {
+    if (!YDOC || key !== "html" || !window.IOPY) return;
+    var id = idOf(blockAt(node.getAttribute("data-b")));
+    if (!id) return;
+    WAITING.push({ id: id, q: q, key: key });
+    shareWaiting();
+  }
+
+  /* A QUEUE, and not a decision taken once at mount time, because at mount time the answer is very
+     often "not yet" -- and the cost of treating that as "never" is silent and total. canvasFull()'s
+     onload runs wireDoc() before initCollab() has a channel, so canWrite() is false for every editor
+     on the page's first paint; the shared text is never created, nothing binds, and from then on
+     typing reaches MODEL and stops there. It does not throw and it does not warn: reconcileOut skips
+     a rich block's html by design (y-quill owns it), so the words simply never leave the browser.
+     Seen for real -- a stored draft whose html read "Prime Testing  is available only monday to
+     Friday" beside a shared text that still read "Prime Test".
+
+     So a mount that cannot bind waits, and every event that could change the answer drains the
+     queue: the document arriving, a peer's update, the roster settling, the channel subscribing. */
+  function shareWaiting() {
+    if (!YDOC || !window.IOPY) return;
+    for (var i = WAITING.length - 1; i >= 0; i -= 1) {
+      var w = WAITING[i], m = mapById(w.id), data = m && m.get("data");
+      if (!data) continue;                         // the document itself has not arrived yet
+      if (!(data.get(w.key) instanceof Y.Text)) {
+        if (!canWrite()) continue;                 // somebody else is the one to create it
+        // The shared text holds a Quill DELTA, so it is filled from the editor that already has the
+        // content -- and filled before anything binds, because QuillBinding's constructor ends in
+        // setContents(type.toDelta()) and binding an empty one would empty the page.
+        YDOC.transact(function () {
+          var t = new Y.Text();
+          data.set(w.key, t);
+          t.applyDelta(w.q.getContents().ops);
+        }, YORIGIN);
+      }
+      var yt = data.get(w.key);
+      if (!(yt instanceof Y.Text)) continue;
+      WAITING.splice(i, 1);
+      bindQuill(yt, w.q);
+    }
+  }
+
+  function bindQuill(yt, q) {
+    /* Sweep the dead first. canvasBlock() replaces ONE section's node without going through
+       wireDoc(), so that block's old binding is left observing the shared text and feeding a delta
+       into an editor whose DOM is gone -- and that editor's own observer then writes it back. Two
+       bindings on one text is a loop, not a leak. */
+    for (var i = BINDS.length - 1; i >= 0; i -= 1) {
+      var old = BINDS[i];
+      if (old.quill && old.quill.root && old.quill.root.isConnected) continue;
+      try { old.destroy(); } catch (e) { /* already gone */ }
+      BINDS.splice(i, 1);
+    }
+    BINDS.push(new window.IOPY.QuillBinding(yt, q));
+  }
+
   // Idempotent by design: called from the roster, from a timeout and from the single-player path,
   // and whichever arrives first makes the others do nothing.
   function seedDoc() {
@@ -956,6 +1020,7 @@
     stampIds(MODEL);
     YDOC.transact(function () { yList(YB, MODEL); }, YORIGIN);
     say("seeded the shared document from this page's sections.");
+    shareWaiting();
   }
 
   /* The repair for the race the seed guard cannot close: two browsers loading in the same instant
@@ -1454,30 +1519,6 @@
     return true;
   }
 
-  /* Bind this editor to the shared paragraph -- the line that makes two people in one sentence keep
-     both sets of words. The Y.Text holds a Quill DELTA, not HTML (Y.Text.toJSON() is the plain text;
-     the formatting lives in the delta), so it is filled from an editor that already has the content,
-     and filled BEFORE the binding: QuillBinding's constructor ends in setContents(type.toDelta()),
-     so binding an empty one would empty the page.
-     Binding also repairs a stale mirror for free -- that setContents is the shared truth arriving --
-     which is what makes coming back from Preview safe. */
-  function shareQuill(node, f, q, key) {
-    if (!YDOC || key !== "html" || !window.IOPY) return;
-    var m = mapById(idOf(blockAt(node.getAttribute("data-b"))));
-    if (!m) return;
-    var data = m.get("data"), yt = data.get(key);
-    if (!(yt instanceof Y.Text)) {
-      if (!canWrite()) return;                     // the writer seeds it; until then this is single-player
-      YDOC.transact(function () {
-        var t = new Y.Text();
-        data.set(key, t);
-        t.applyDelta(q.getContents().ops);
-      }, YORIGIN);
-      yt = data.get(key);
-    }
-    if (yt instanceof Y.Text) BINDS.push(new window.IOPY.QuillBinding(yt, q));
-  }
-
   function bindField(node, f) {
     var rich = f.hasAttribute("data-rich"), key = f.getAttribute("data-f");
     if (rich && mountQuill(node, f, key)) return;   // Quill drives this one end to end
@@ -1651,6 +1692,7 @@
     // The document this canvas held is gone; its bindings still observe Y types and would apply
     // deltas into dead Quill instances for the life of the tab.
     BINDS.splice(0).forEach(function (b) { try { b.destroy(); } catch (e) { /* already gone */ } });
+    WAITING.length = 0;                                    // those editors are gone with the document
     d.addEventListener("focusout", flushHeld);             // the caret left: apply what was held back
     d.addEventListener("mousedown", startColDrag, true);   // before the caret lands in the cell
     // the canvas is a real page: stop it behaving like one (contact_form would post a live lead)
@@ -2862,6 +2904,7 @@
       try { Y.applyUpdate(YDOC, b64bytes(m.u), "remote"); }
       catch (e) { return say("could not apply an update from " + m.id + " -- " + e.message); }
       dedupe();
+      shareWaiting();
     }
 
     /* A newcomer is caught up by a PEER, not by the server. The stored state is behind by the save
@@ -2870,7 +2913,10 @@
        appear at all. Proved rather than assumed: applying a bare delta to a fresh document yields
        an empty document, silently. applyUpdate is idempotent, so a redundant one costs nothing. */
     function beamState(fresh) {
-      if (!chan || !YDOC || !canWrite()) return;
+      // Anyone holding a document answers, not only the writer: the writer is elected by lowest id
+      // and that can be the NEWCOMER, who has nothing to send. applyUpdate is idempotent, so two
+      // peers answering costs one extra message and nothing else.
+      if (!chan || !YDOC || !YB.length) return;
       // Realtime reports our OWN arrival as a join. Without this the writer encodes and broadcasts
       // the whole document to an empty room every time it opens the page.
       if (!fresh.some(function (x) { return x && x.id && x.id !== rt.me.id; })) return;
@@ -2966,6 +3012,7 @@
       // Nobody else is here, so seeding cannot collide with anybody else's document. With a peer
       // present we wait instead: their state arrives on our join.
       if (!Object.keys(peers).length) seedDoc();
+      shareWaiting();          // the roster decides who creates a shared text, so it just changed
       // The writer may have just left, or just arrived. Whoever it is now owes the server a save.
       sharedChanged();
     }
@@ -3014,7 +3061,11 @@
           .subscribe(function (status, err) {
             say("channel " + status + (err ? " -- " + err.message : ""));
             // The one presence event of the session: who I am. Everything else rides broadcast.
-            if (status === "SUBSCRIBED") { tries = 0; return chan.track({ id: rt.me.id, name: rt.me.name, colour: rt.me.colour }); }
+            if (status === "SUBSCRIBED") {
+              tries = 0;
+              shareWaiting();   // canWrite() was false until this moment: there was no channel
+              return chan.track({ id: rt.me.id, name: rt.me.name, colour: rt.me.colour });
+            }
             // CHANNEL_ERROR is what an expired JWT looks like from here. _session_token() only
             // refreshes AFTER expiry, so reacting to the error is the only schedule that can be
             // honoured -- asking early would hand back the same dying token.

@@ -1547,6 +1547,26 @@ def test_a_draft_that_could_not_be_stored_does_not_report_itself_as_saved():
     assert "0010" not in shown and "post_drafts" not in shown
 
 
+def test_an_editor_that_cannot_bind_yet_waits_instead_of_giving_up():
+    """canvasFull()'s onload runs wireDoc() -- which mounts Quill -- BEFORE initCollab() has a
+    channel, so canWrite() is false for every editor on a page's first paint. Treating that as "not
+    my job" meant the shared text was never created, nothing ever bound, and from then on typing
+    reached MODEL and stopped there: no throw, no warning, because reconcileOut skips a rich block's
+    html by design. A stored draft was found whose html read "Prime Testing  is available only
+    monday to Friday" beside a shared text that still read "Prime Test"."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    share = js[js.index("function shareQuill("):js.index("function shareWaiting(")]
+    assert "WAITING.push(" in share and "return;" in share
+    # every event that can change the answer has to drain the queue, or waiting is just a slower giving up
+    assert js.count("shareWaiting();") >= 4
+    for trigger in ('say("seeded the shared document', "dedupe();", "if (!Object.keys(peers).length) seedDoc();",
+                    'if (status === "SUBSCRIBED") {'):
+        at = js.index(trigger)
+        assert "shareWaiting();" in js[at:at + 400], trigger
+    # a replaced section's binding must go, or two bindings feed one text and write to each other
+    assert "old.quill.root.isConnected" in js
+
+
 def test_a_second_browser_does_not_seed_a_second_document():
     """Two browsers that each seed from the same blocks give Yjs two independent histories, and
     merging them shows every section twice. With no stored state -- every load before 0010 is
@@ -1613,7 +1633,7 @@ def test_the_quill_verdict_is_read_at_mount_and_never_recomputed_there():
     and a peer that builds a shared text type where another has a plain string is a split no merge
     repairs. Only the elected writer decides, and the answer is stored."""
     js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
-    mount = js[js.index("function mountQuill("):js.index("function shareQuill(")]
+    mount = js[js.index("function mountQuill("):js.index("function bindField(")]
     assert "if (!canWrite()) { node.setAttribute(\"data-legacy\", \"1\"); return false; }" in mount
     assert mount.count("quillKeeps(") == 1          # the one writer-gated call, nowhere else
     assert "if (!target._rich) {" in mount

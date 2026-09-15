@@ -5,6 +5,7 @@
    static/admin.js -- so this cannot drift into testing a copy. The stubs are the smallest set that
    lets that section move: MODEL, and the three canvas calls it dispatches to. */
 import * as Yns from '../iopstor/static/vendor/yjs.mjs'
+import { QuillBinding } from '../iopstor/static/vendor/y-quill.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import url from 'node:url'
@@ -18,7 +19,7 @@ if (from < 0 || to < 0) { console.log('FAIL  cannot find the shared-document sec
 
 let MODEL = [], repaints = 0, sections = []
 const ctx = vm.createContext({
-  window: { crypto: 1, IOPY: { Y: Yns } },
+  window: { crypto: 1, IOPY: { Y: Yns, QuillBinding } },
   // no rt.url == no channel == single player, so initShared seeds immediately rather than waiting
   // for a roster that will never arrive. The deferred path gets its own case at the bottom.
   SPEC: { rt: {} },
@@ -39,7 +40,9 @@ const ctx = vm.createContext({
 })
 vm.runInContext(js.slice(from, to) + `
 this.API = { stampIds, reconcileOut, initShared, pathOfId, idOf, eachBlock, yState, SCALARS,
-             seedDoc, dedupe, fromY,
+             seedDoc, dedupe, fromY, shareQuill, shareWaiting,
+             set canWrite (v) { canWrite = v },
+             get BINDS () { return BINDS }, get WAITING () { return WAITING },
              get YB () { return YB }, get YDOC () { return YDOC } };`, ctx)
 const API = ctx.API
 ;['url', 'media_id', 'align', 'tone', '_id', '_rich', 'widths', 'fx'].forEach(k => { API.SCALARS[k] = 1 })
@@ -151,6 +154,76 @@ ok('...and a document that loads one is repaired to one section per name',
 const before = API.YB.length
 API.seedDoc(); API.seedDoc()
 ok('seeding a document that already has one does nothing', API.YB.length === before)
+
+/* ---- when the editor actually binds to the shared text -------------------------------------
+   The smallest Quill that QuillBinding will accept. Not a mock of Quill's behaviour -- the BINDING
+   is real, and so is the Y.Text; this only has to hold a delta and emit editor-change the way Quill
+   does, because the fault being tested is about WHEN binding happens, not what it does. */
+function fakeQuill (text) {
+  const listeners = []
+  const q = {
+    ops: text ? [{ insert: text }] : [],
+    root: { isConnected: true },
+    getModule: () => null,
+    getSelection: () => null,
+    getContents () { return { ops: this.ops.slice() } },
+    setContents (delta) { this.ops = (delta.ops || delta).slice(); return delta },
+    updateContents (delta) {                       // honour the retain, or an insert at 0 lands at the end
+      let text = this.ops[0]?.insert || '', at = 0
+      for (const op of (delta.ops || delta)) {
+        if (op.retain !== undefined) at += op.retain
+        else if (op.insert !== undefined) { text = text.slice(0, at) + op.insert + text.slice(at); at += op.insert.length }
+        else if (op.delete !== undefined) text = text.slice(0, at) + text.slice(at + op.delete)
+      }
+      this.ops = text ? [{ insert: text }] : []
+      return delta
+    },
+    on (ev, fn) { listeners.push([ev, fn]) },
+    off (ev, fn) { const i = listeners.findIndex(l => l[1] === fn); if (i > -1) listeners.splice(i, 1) },
+    // somebody typing: what Quill emits, with source "user"
+    type (more) {
+      const at = this.ops[0]?.insert?.length || 0
+      this.ops = [{ insert: (this.ops[0]?.insert || '') + more }]
+      const delta = { ops: at ? [{ retain: at }, { insert: more }] : [{ insert: more }] }
+      listeners.filter(l => l[0] === 'editor-change').forEach(l => l[1]('text-change', delta, null, 'user'))
+    }
+  }
+  return q
+}
+
+MODEL = [{ type: 'rich_text', data: { _id: 'para', _rich: true, html: '<p>Hello</p>' } }]
+API.canWrite = () => false          // exactly the state of the page's FIRST paint: no channel yet
+API.initShared('')
+API.seedDoc()
+const editor = fakeQuill('Hello')
+API.shareQuill({ getAttribute: () => '0' }, null, editor, 'html')
+ok('an editor mounted before there is a channel is queued, not abandoned',
+   API.WAITING.length === 1 && API.BINDS.length === 0)
+
+editor.type(' world')               // typed during the gap, with nothing listening
+API.canWrite = () => true           // the channel subscribes and this browser is elected
+API.shareWaiting()
+ok('...and binds once the answer is knowable', API.WAITING.length === 0 && API.BINDS.length === 1)
+
+const para = API.YB.get(0).get('data').get('html')
+ok('...keeping what was typed while it waited: ' + JSON.stringify(para.toString()),
+   para instanceof Yns.Text && para.toString() === 'Hello world')
+
+editor.type('!')
+ok('typing now reaches the shared document', para.toString() === 'Hello world!')
+
+const far = new Yns.Doc()
+Yns.applyUpdate(far, Yns.encodeStateAsUpdate(API.YDOC))
+far.getArray('blocks').get(0).get('data').get('html').insert(0, 'Oh, ')
+Yns.applyUpdate(API.YDOC, Yns.encodeStateAsUpdate(far), 'remote')
+ok('and a peer\'s words reach this editor: ' + JSON.stringify(editor.ops[0]?.insert || ''),
+   (editor.ops[0]?.insert || '').startsWith('Oh, '))
+
+/* canvasBlock() replaces one section's node without going through wireDoc(), so its old binding is
+   left feeding an editor whose DOM is gone -- and that editor writes the delta back. */
+editor.root.isConnected = false
+API.shareQuill({ getAttribute: () => '0' }, null, fakeQuill(para.toString()), 'html')
+ok('a replaced section does not leave a second binding on the same text', API.BINDS.length === 1)
 
 console.log(bad ? bad + ' FAILED' : 'all passed')
 process.exit(bad ? 1 : 0)
