@@ -124,7 +124,15 @@
 {# Realtime, for the presence roster. Plain <script>, like menus.html loads Sortable: it executes
    during parsing, so window.supabase is there before the deferred admin.js runs at DOMContentLoaded.
    Only this screen needs it, so it is not in base.html. #}
-{% if rt.room %}<script src="{{ url_for('static', filename='vendor/supabase.js') }}"></script>{% endif %}
+{% if rt.room %}<script src="{{ url_for('static', filename='vendor/supabase.js') }}"></script>
+{# Quill again, and in the PARENT this time -- canvas.html already loads it inside the iframe for the
+   editors themselves. This copy never edits anything: it is the offscreen converter that turns a
+   peer's shared text into HTML when no editor is mounted to do it (admin.js, mirrorProse). It has to
+   be here rather than in the frame because the frame in Preview is the previewed page, which loads
+   no Quill at all -- which is exactly when the converter is needed. Same file, so same version and
+   byte-identical output; loaded only when there is a room, since with nobody to receive from there
+   is nothing to convert. #}
+<script src="{{ url_for('static', filename='vendor/quill.js') }}"></script>{% endif %}
 {# Yjs and its Quill binding: the shared document, so two people in one paragraph keep both sets of
    words. A module, because that is what these two ship as -- and a module script is deferred like
    admin.js, so window.IOPY is set before DOMContentLoaded runs initBlocks(). No import map and no
