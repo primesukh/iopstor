@@ -1082,13 +1082,14 @@
     var box = document.getElementById("ed-saved"), pk = SPEC.pk;
     if (!pk) return;                       // a new post has no row to hang a draft on until it is created
     var timer = null, inFlight = 0, savedAt = 0, sent = null,
-        // The document as this person found it, diffed by the server against what we send back; that
-        // pair is their entry in the activity log. Unpruned, like the draft itself -- see saveable().
-        was = JSON.stringify(MODEL),
-        // Which sections THIS person has typed in. Everybody holds the same document now, so a plain
-        // before/after would credit all of it to whoever saved last; `mine` is what narrows the entry
-        // to the work that was actually theirs. Quill says which is which: text-change reports
-        // source "user" for local input and something else for what y-quill applies from a peer.
+        // Each section THIS person has touched, and what it looked like the moment they first
+        // touched it. Both halves matter. Which sections, because everybody holds the same document
+        // now and a plain before/after would credit the whole room's writing to whoever saved last.
+        // And FROM WHEN, because a baseline taken at page load spans everything a peer did to that
+        // section in the meantime -- a real entry read "WAS <p></p> NOW <the whole sentence>" for
+        // somebody who had added one word to what a colleague wrote while they had the page open.
+        // Quill is what can tell local from remote: text-change reports source "user" for input and
+        // the binding object for a delta y-quill just applied from a peer.
         mine = {}, shared = false,
         idle = null;
 
@@ -1112,23 +1113,29 @@
        not content" is true. */
     function saveable() { return JSON.stringify(MODEL); }
 
-    /* This person's sitting: the document as they found it, with only THEIR OWN sections moved on.
-       Everybody's work is on screen at once now, so a plain before/after would put the whole room's
-       writing into one person's activity entry. Built up from `was` rather than from what is on
-       screen, so a section somebody else deleted does not read as this person deleting it. */
+    /* This person's sitting, as a [before, after] pair: ONLY the sections they touched, each against
+       what it looked like when they first touched it.
+
+       Both sides are built here, from one ordered list, because the two halves have to describe the
+       same document -- sending a whole-page `was` beside a narrowed `now` is what made an entry claim
+       a colleague's sentence. Sections nobody here touched are left out of both sides rather than
+       repeated on each: the payload is smaller, and _section_rows() on the server names a row by its
+       section TYPE rather than by its position, so dropping them costs no context. */
     function sitting(now) {
-      if (!YDOC) return now;               // single player: the whole document IS their work
-      var base = JSON.parse(was), fresh = {}, out = [];
-      JSON.parse(now).forEach(function (b) { if (idOf(b)) fresh[idOf(b)] = b; });
-      base.forEach(function (b) {
+      if (!YDOC) return [was, now];        // single player: the whole document IS their work
+      var fresh = {}, order = [], seen = {}, wasOut = [], nowOut = [];
+      JSON.parse(now).forEach(function (b) {
         var id = idOf(b);
-        if (!id || !mine[id]) return out.push(b);        // not mine: exactly as I found it
-        if (fresh[id]) out.push(fresh[id]);              // mine, still here: as I left it
-      });                                                 // mine and gone: I removed it, and that shows
-      Object.keys(fresh).forEach(function (id) {          // sections I added
-        if (mine[id] && !base.some(function (x) { return idOf(x) === id; })) out.push(fresh[id]);
+        if (id) { fresh[id] = b; if (!seen[id]) { seen[id] = 1; order.push(id); } }
       });
-      return JSON.stringify(out);
+      // a section they deleted is in `mine` but no longer on screen, and has to keep its place
+      Object.keys(mine).forEach(function (id) { if (!seen[id]) { seen[id] = 1; order.push(id); } });
+      order.forEach(function (id) {
+        if (!mine[id]) return;                       // somebody else's: silent on both sides
+        wasOut.push(mine[id]);                       // as it was when I first put a hand on it
+        if (fresh[id]) nowOut.push(fresh[id]);       // still here; absent = I removed it
+      });
+      return [JSON.stringify(wasOut), JSON.stringify(nowOut)];
     }
 
     function body(now, close) {
@@ -1139,8 +1146,9 @@
       // peer's own, which is what keeps the activity log per person. The server tests for the field
       // being present, not for it being truthy.
       if (canWrite()) { f.append("blocks", now); f.append("state", yState()); }
-      f.append("was", was);
-      f.append("now", sitting(now));
+      var pair = sitting(now);
+      f.append("was", pair[0]);
+      f.append("now", pair[1]);
       if (close) f.append("close", "1");
       return f;
     }
@@ -1187,7 +1195,14 @@
     // Somebody else typed. Nothing of mine changed, so this is not my sitting and dirty stays as it
     // was -- but if I am the writer, the draft on the server is now behind and only I can move it.
     sharedChanged = function () { if (canWrite()) { shared = true; clearTimeout(timer); timer = setTimeout(save, 1500); } };
-    touched = function (id) { if (id) mine[id] = 1; };
+    /* The snapshot lives HERE rather than at the call sites, because the one call that matters most
+       is a deletion: the section has to be captured while it is still in MODEL. Called once per
+       section per sitting -- after that the baseline is fixed, which is the whole point. */
+    touched = function (id) {
+      if (!id || mine[id]) return;
+      var p = pathOfId(id), b = p && blockAt(p);
+      mine[id] = b ? JSON.parse(JSON.stringify(b)) : { type: "rich_text", data: { _id: id } };
+    };
 
     nudgeSave = function () {
       clearTimeout(timer);
@@ -1195,21 +1210,29 @@
       clearTimeout(idle);
       // Fifteen minutes after the last change, this sitting is over: close the session so the
       // activity log gets its entry without waiting for the tab to be shut.
-      idle = setTimeout(function () { closeSession(); }, 15 * 60 * 1000);
+      // Fifteen minutes with no activity is the only thing that ENDS a sitting. Leaving the page
+      // does not: see the pagehide handler.
+      idle = setTimeout(function () { closeSession(true); }, 15 * 60 * 1000);
     };
 
-    function closeSession() {
+    /* `end` is what separates "I am leaving the page" from "this sitting is over", and they are not
+       the same thing. A reload or a trip to another screen used to close the sitting outright, so one
+       person doing twenty minutes' work across three visits got three entries instead of the one the
+       client asked for ("no activity for 15 mins"). Now leaving only FLUSHES what is pending; the
+       sitting is closed by the idle timer above, or by flush_sessions()' backstop when the next
+       person touches the page -- which is also what records a tab that was closed and never came
+       back. touch_session() merges each visit into the open session, so the entry covers all of it. */
+    function closeSession(end) {
       clearTimeout(timer);
-      var now = saveable();
-      if (sitting(now) === was) return;    // opened the page and read it: not a sitting to write up
+      var now = saveable(), pair = sitting(now);
+      if (pair[0] === pair[1]) return;     // opened the page and read it: not a sitting to write up
 
-      if (!navigator.sendBeacon) { fetch("/admin/posts/" + pk + "/draft", { method: "POST", body: body(now, true), credentials: "same-origin", keepalive: true }).catch(function () {}); return; }
+      if (!navigator.sendBeacon) { fetch("/admin/posts/" + pk + "/draft", { method: "POST", body: body(now, end), credentials: "same-origin", keepalive: true }).catch(function () {}); return; }
       // sendBeacon, not fetch: an ordinary request is cancelled when the page goes away. FormData
       // and not JSON because ui_required reads the csrf field out of request.form.
-      navigator.sendBeacon("/admin/posts/" + pk + "/draft", body(now, true));
-      was = now;                           // a new sitting starts from here if they keep typing
+      navigator.sendBeacon("/admin/posts/" + pk + "/draft", body(now, end));
     }
-    window.addEventListener("pagehide", closeSession);
+    window.addEventListener("pagehide", function () { closeSession(false); });
 
     // The button tells the truth about what pressing it does, and the status dropdown can change
     // that without a reload.
@@ -1352,7 +1375,8 @@
     var r = listAt(at);
     if (!r.arr) return;
     r.arr.splice(r.i, 0, { type: "rich_text", data: { html: "" } });
-    markDirty();
+    markDirty();                    // mints the _id, so the section has a name to be touched by
+    touched(rootIdOf(at));
     canvasInsert(at, true);
   }
 
@@ -1549,6 +1573,7 @@
     var r = listAt(path), to = r.i + dir, d = cdoc();
     if (!r.arr || to < 0 || to >= r.arr.length) return;
     closePanel();
+    touched(rootIdOf(path));
     r.arr.splice(to, 0, r.arr.splice(r.i, 1)[0]);
     var box = d && boxFor(path);
     if (box) {
@@ -1571,6 +1596,7 @@
     eachBlock([copy], function (b) { if (b && b.data) delete b.data._id; });
     r.arr.splice(r.i + 1, 0, copy);
     markDirty();
+    touched(rootIdOf(siblingPath(path, r.i + 1)));
     canvasInsert(siblingPath(path, r.i + 1));
   }
 
@@ -1579,6 +1605,7 @@
     var r = listAt(path);
     if (!r.arr || !r.arr[r.i]) return;
     if (!confirm("Remove this " + nameFor(r.arr[r.i].type) + " section?")) return;
+    touched(rootIdOf(path));        // while it is still here: the snapshot IS what was removed
     r.arr.splice(r.i, 1);
     var d = cdoc(), node = d && d.querySelector('[data-b="' + path + '"]');
     if (node) node.remove();
@@ -2527,6 +2554,7 @@
     // split actually left text behind. The caret then lands on the section itself.
     if (tail || !isNested(path)) ins.push({ type: "rich_text", data: { html: tail } });
     if (!r.arr) return;
+    touched(rootIdOf(path));                     // the paragraph being split is changed either way
     if (head) {
       r.arr[r.i].data.html = head;
       r.arr.splice.apply(r.arr, [r.i + 1, 0].concat(ins));
@@ -2535,7 +2563,8 @@
       r.arr.splice.apply(r.arr, [r.i, 1].concat(ins));
       focusOnLoad = siblingPath(path, r.i + ins.length - 1);
     }
-    markDirty();
+    markDirty();                                 // mints an _id for each section just inserted
+    ins.forEach(function (_, n) { touched(rootIdOf(siblingPath(path, r.i + (head ? 1 : 0) + n))); });
     canvasFull();
   }
 
