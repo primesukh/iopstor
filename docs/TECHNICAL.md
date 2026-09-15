@@ -482,6 +482,12 @@ Every picture and PDF on the site, the admin included. Supabase sits on the LAN 
 so a browser cannot fetch an object out of the Storage bucket: it asks Flask, and Flask asks Storage with
 the service-role key it already holds (`storage.fetch()`).
 
+**This is a pattern, not a one-off, and it now has a second member**: `/admin/realtime/v1/longpoll`
+(`admin_ui.realtime_longpoll()`, §12.3) carries the page editor's collaboration channel through the app
+for the same reason and with the same shape — the browser addresses Flask, Flask addresses Kong, and
+Supabase is never on the tunnel. The differences are that the realtime proxy is behind the admin session
+rather than public, and that it forwards a query string and a body rather than looking up a bucket key.
+
 The URL **is** the bucket key — `/media/2026/09/<uuid>.png` — so the route needs no database read at all.
 The extension is looked up in `storage.EXT` (the reverse of `ALLOWED`), which both names the `Content-Type`
 and whitelists what is servable: anything else 404s before Storage is touched, as does a key containing
@@ -1266,11 +1272,13 @@ That makes the route's own validation wrong in one specific way, so `validate_bl
 
 #### Presence
 
-**The transport is Supabase Realtime, and Flask is not in it.** Gunicorn runs sync workers (`-w 30 --threads 8`), so the app cannot hold a WebSocket at all, and putting one behind thirty stateless processes would need a broker to fan out between them. Browsers open the socket straight to Realtime instead, which is correct across any number of workers and containers *because* the app is not involved. `iopstor/static/vendor/supabase.js` is the pinned UMD build (2.116.0), loaded by `post_form.html` — the **parent** document, not the canvas iframe. That is the opposite of the `sortable.min.js` precedent (`canvas.html`), and deliberately: Sortable binds to elements inside the iframe, while the socket, the roster and the token belong to the page, and only the *markers* are painted into the iframe's DOM from outside.
+**The transport is Supabase Realtime, reached through this app.** Gunicorn runs gthread workers (`-w 30 --threads 8`), so the app cannot hold a WebSocket at all, and putting one behind thirty stateless processes would need a broker to fan out between them. That reason still stands — so the browser does not use a WebSocket. Realtime is Phoenix, Phoenix ships a **longpoll** transport, and longpoll is ordinary request/response HTTP, which a gthread worker proxies exactly the way it proxies a picture. `admin_ui.realtime_longpoll()` forwards `/admin/realtime/v1/longpoll` to Kong; Realtime still does all the fan-out, so the answer is as correct across thirty workers as a direct socket would be. **This is what lets Supabase stay off the tunnel entirely** (§15): the browser talks only to Flask, the same rule that put every picture behind `/media/<key>` (§8). `iopstor/static/vendor/supabase.js` is the pinned UMD build (2.116.0), loaded by `post_form.html` — the **parent** document, not the canvas iframe. That is the opposite of the `sortable.min.js` precedent (`canvas.html`), and deliberately: Sortable binds to elements inside the iframe, while the socket, the roster and the token belong to the page, and only the *markers* are painted into the iframe's DOM from outside.
 
 **Two signals, two transports, and the split is a hard limit on the instance rather than a preference.** `presence.track()` is rationed to roughly **five events a minute per client** here. Sending one per caret move — the obvious design, and the first one built — earned `Client presence rate limit exceeded` from the server on the sixth, and the server then *closed the channel*: the roster emptied and the markers died the moment anybody typed. Measured against the dev Supabase: six tracks 250 ms apart refused; six tracks **three seconds** apart also refused (so it is a budget, not a rate); six tracks fifteen seconds apart all accepted (so it refills at about five a minute); and 160 broadcasts at four a second all delivered with the channel never moving. So **presence carries who is here and is sent exactly once per join**, and **where the caret is goes over `broadcast`**, which is the budget built for it. Positions are held in a map separate from the roster, so a broadcast that arrives before the presence sync is not thrown away, and every peer re-broadcasts its position when somebody joins, because a latecomer has heard nobody's.
 
-**`SUPABASE_PUBLIC_URL` is the on/off switch, and its absence is the off state** (§14). The browser cannot use `SUPABASE_URL` — in production that is internal Docker DNS. Empty means `initCollab()` returns immediately and the editor is exactly the single-player one that shipped before: empty in every test, empty until `0009` is applied, empty in production until the tunnel routes `^/realtime/` to Kong (§15). One switch, no feature-flag machinery, and the same state for all three reasons.
+**There is no on/off switch any more, and the transport is chosen by handing supabase-js its own LongPoll class.** The library ships a complete longpoll implementation but does not expose it through `createClient` — `_initializeOptions` drops `longPollFallbackMs` — so `join()` fetches it off the socket (`realtime.socketAdapter.socket.getLongPollTransport()`, one level deeper than it looks) and passes it straight back in as `transport`. Three consequences, each verified against the vendored 2.116.0 bundle rather than assumed: the socket then selects its **JSON** encoder by itself, which is required because the default `vsn=2.0.0` binary serializer cannot ride inside a JSON longpoll envelope; the base URL `<origin>/admin` becomes `/admin/realtime/v1/websocket` and LongPoll rewrites that to `/admin/realtime/v1/longpoll`, so no URL is built by hand; and the origin comes from `location.origin`, never from `SITE_URL`, because it has to match the origin the session cookie was set on. **This is minified vendor internals and a bundle upgrade could move it** — if `getLongPollTransport` disappears, the fallback is `vsn:"1.0.0"` plus `replaceTransport()`, which binds the JSON serializer explicitly and arrives at the same place. The only off state left is a post with no id, which has no room to join.
+
+**The proxy answers in the transport's own vocabulary, and that is load-bearing.** Its status switch handles exactly `{200, 204, 403, 410, 500}` and **throws** `unhandled poll status` on anything else, wedging the transport for the life of the tab. So the route refuses with **403** (which LongPoll reads as "stop") rather than `ui_required`'s redirect to the login page, and it collapses every upstream failure — a Kong 401 from a wrong anon key, a 502 while Realtime restarts, an unreachable gateway — to **500**, the one status it knows how to back off from, which then surfaces through our own `CHANNEL_ERROR` path. `ui_required` is also unusable for a second reason: it reads `csrf` out of `request.form`, and a Phoenix POST is a JSON body, so every send would 400. The csrf token rides the query string instead, alongside `eventsPerSecond`. The apikey is pinned server-side, which is **not** about hiding it — the anon key is a browser key by design and is still in `#editor-data`. It means the proxy always presents the key *we* chose: a caller cannot probe Kong's key-auth through it, and a service-role key that leaked somewhere could not be walked in through this route by a signed-in editor.
 
 **Authorisation mirrors the app's own rule rather than trusting `authenticated`.** Channels are `private: true`, so Realtime checks RLS on `realtime.messages`, which `migrations/0009_realtime_channel_policy.sql` supplies. The policy is not `to authenticated` alone: this GoTrue has signups enabled, so "holds a valid token" is a wider set than "is a CMS editor". It asks `auth.current_user()`'s question — is there a `public.users` row for this token's `sub` — but it **cannot ask it inline**, and that is the trap worth knowing: written as a bare `exists (select 1 from public.users …)` the clause is always FALSE, because the policy runs as `authenticated`, `0002` turned RLS on for `public.users`, and that table has no policies of its own, so the subquery sees an empty table and every editor is refused. (Verified on the running instance: a real admin selecting their own row over PostgREST as `authenticated` gets `[]`.) So the check goes through `public.is_cms_user()`, `SECURITY DEFINER` with `search_path` pinned to `''` and every name schema-qualified, which runs as its owner and therefore bypasses RLS — possible only because `0002` uses `ENABLE` and not `FORCE`. It returns one boolean about the caller and leaks no row, email or role. Plus `topic like 'post:%'` so the grant does not extend to every channel name somebody invents, and `extension in ('broadcast','presence')` because **presence rides `realtime.messages` too**; a broadcast-only policy makes `track()` fail silently and the roster stay empty forever.
 
@@ -1289,7 +1297,7 @@ The token is **never rendered into the page**. `#editor-data`'s `rt` block carri
 
 **A peer's position is carried as the section's `_id`, not as `data-b`.** The path is *positional* and `renumber()` rewrites it on every insert, move and delete — so the moment one editor adds a section, their `"2"` is the other's `"3"` and a marker drawn at their path sits on the wrong block. A name resolves wherever the section has since moved to. The structure fingerprint that used to guard this remains as the fallback for a peer that has not sent a name yet (an older tab mid-deploy); with one shared document there is one shape, so it now agrees rather than arbitrating.
 
-**Every state says so once, in the browser console** (`[iopstor] editor presence: …`). This feature is off far more often than it is broken — unset in tests, unset before `0009`, unset in production until the tunnel routes `^/realtime/` — and from the page those two looked identical. The first real setup lost a round trip to exactly that, so each early return names the thing that is missing, the channel's `subscribe` status is reported (a wrong RLS policy arrives as `CHANNEL_ERROR` and would otherwise be silent), and a working socket says which room it joined. **The trap that line calls out: `--debug` reloads code but not `.env`** — `pipenv` puts the file into the environment once at process start and the reloader inherits it, so a newly added `SUPABASE_PUBLIC_URL` stays invisible until the server is actually restarted.
+**Every state says so once, in the browser console** (`[iopstor] editor presence: …`). The feature used to be off far more often than it was broken, and from the page the two looked identical; the first real setup lost a round trip to exactly that. Now that there is no switch, what remains is: an unsaved post (no room to join), a library that did not load, and the channel's `subscribe` status — which is reported because a missing or wrong RLS policy arrives as `CHANNEL_ERROR` and would otherwise be silent. A working channel says which room it joined.
 
 **The reconnect is capped, and `CLOSED` is not a failure.** The first version retried every two seconds forever, so with the realtime service refusing the socket each open editor fetched `/admin/rt-token` every two seconds for as long as the tab stayed open. It now backs off (2s doubling to 30s) and gives up after five attempts, and a successful `SUBSCRIBED` resets the budget. `CHANNEL_ERROR` and `TIMED_OUT` are the obvious triggers; a `CLOSED` **the client did not ask for** is the third, and it was missing — a server-side hang-up (a restarted realtime container, a changed policy, a limit tripped) ended collaboration for the life of the tab with nothing on screen saying so. A `closing` flag is what separates that from the close `removeChannel()` makes on the way to a retry; without the distinction the retry re-arms itself and the loop cannot end even once the socket recovers, which is exactly what the first version did.
 
@@ -1323,7 +1331,7 @@ Everything except `test_offline.py` is marked `live` and skips when `.env` has n
 
 `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are the same values as `JWT_SECRET`, `ANON_KEY` and `SERVICE_ROLE_KEY` in the Supabase compose environment.
 
-**`SUPABASE_PUBLIC_URL` is optional and its absence is a feature state, not a misconfiguration.** It is the Supabase origin the *browser* uses for the editor's realtime channel (§12.3); `SUPABASE_URL` cannot be reused because in production it is an internal Docker name no browser can resolve. Deliberately **not** in `create_app()`'s `REQUIRED`: empty means collaboration is simply off, which is the correct state in every test, before `0009` is applied, and in production until the tunnel routes `^/realtime/` to Kong. In production it equals `SITE_URL` (same origin, so no CORS question); on the dev box the LAN Supabase address is already browser-reachable, so the two match there.
+**There is no browser-facing Supabase variable, and that is the point.** The editor's realtime channel comes back through this app (§12.3), so the browser builds its own origin from `location.origin` and never learns where Supabase is. `SUPABASE_PUBLIC_URL` existed for exactly this and was deleted when the proxy landed: one transport, one path, and development exercises the same route production does. Collaboration is no longer switchable by environment — the only off state is a post that has never been saved.
 
 `GUNICORN_CMD_ARGS` is read by gunicorn itself, not by the app: the Dockerfile sets `-w 2 --threads 8 --preload --access-logfile -` and Dokploy's environment raises the worker count (§15). `--access-logfile -` is the only request log there is; the `HEALTHCHECK` adds a `/healthz` line every 30 s, which is not traffic.
 
@@ -1471,19 +1479,22 @@ So when presence stays dark and the browser console says `CHANNEL_ERROR`, check 
 strings must be equal. Fixing the container's tenant-name environment variable is the durable answer,
 because renaming the row alone is undone the next time the stack reseeds.
 
-**Turning on the editor's presence feature is a separate three-step job, and the path rule is the
-load-bearing one.** In the tunnel's Zero Trust dashboard add two Public Hostname rules **in this
-order**: `www.iopstor.com` path `^/realtime/` → `http://<kong-service>:8000`, then `www.iopstor.com`
-with no path → `http://app:8000`. Everything that is not `/realtime/` then reaches Flask and 404s.
-**Do not route all of Kong.** That would publish GoTrue's `/auth/v1/*` — including `signup`, which is
-enabled on these instances — and `throttle.py` sits in front of `POST /admin/login` only, not in front
-of GoTrue. Second, `cloudflared` must be on `dokploy-network` to resolve the Kong service name; it
-carries a comment saying it has no business reaching Supabase, and that comment is now wrong on
-purpose. Third, set `SUPABASE_PUBLIC_URL=https://www.iopstor.com` — same origin as `SITE_URL`, so the
-socket is same-origin and there is no CORS question. Leave it unset until the rule exists, or every
-editor's browser opens a socket that cannot connect. Verify with `curl -i https://www.iopstor.com/rest/v1/`
-returning the **Flask** 404 page and not PostgREST, and the browser console showing the websocket at
-`wss://www.iopstor.com/realtime/v1/websocket` reaching `SUBSCRIBED`.
+**The editor's collaboration needs nothing from the tunnel, and that is a deliberate reversal.** An
+earlier version of this section told you to add a second Public Hostname rule sending `^/realtime/`
+straight to Kong, move `cloudflared` onto `dokploy-network`, and set `SUPABASE_PUBLIC_URL`. **Do none
+of that.** The channel is proxied by Flask instead (§12.3), so there is one ingress rule, one exposed
+service, and `cloudflared` stays on `default` with no route to Supabase at all. The rule two
+paragraphs down — *Studio and Kong never go on it* — now has no exception, which is worth more than
+the round trip a direct socket would have saved: routing all of Kong would have published GoTrue's
+`/auth/v1/*` including `signup`, which is enabled on these instances and which `throttle.py` does not
+sit in front of.
+
+What collaboration **does** need in production is the database half: `0009_realtime_channel_policy.sql`
+and `0010` applied, and the realtime container restarted afterwards because it caches authorisation
+per tenant. Verify with `curl -i https://www.iopstor.com/rest/v1/` returning the **Flask** 404 page and
+not PostgREST (nothing of Supabase is reachable), and, signed in as an editor, the browser's network
+tab showing polls to `/admin/realtime/v1/longpoll` — no WebSocket anywhere — with the console
+reaching `SUBSCRIBED`.
 
 **The order of first deployment matters, and getting it wrong fails the deploy.** A database without
 `0000_bootstrap.sql` in it fails the `migrate` service, which exits 1 with `cli.py`'s message naming both
@@ -1664,9 +1675,24 @@ Shared editing (§12.3), all of them named in `admin.js`:
   section markers whenever two editors' block lists differ rather than drawing them on the wrong block (§12.3). A
   caret position also ages out after a minute, because the editor raises no event when focus leaves a field. The
   roster itself is always correct. All of this goes away when the document becomes genuinely shared.
-- **Nothing tests the websocket.** The offline suite covers the switch (`SUPABASE_PUBLIC_URL` empty ⇒ no config in
-  the page), the room naming and the colour's stability across workers; the socket, the RLS policy and the token
-  refresh are proved by hand with two browsers. A mock here would test the mock.
+- **Nothing tests the channel end to end.** The offline suite covers the room naming, the colour's stability across
+  workers, and the proxy's own edges — that it refuses without a session or the csrf, pins the apikey, and turns a
+  status the browser cannot read into one it can. The transport selection, the RLS policy and the token refresh are
+  proved by hand with two browsers. A mock here would test the mock.
+- **One worker thread per open editor, and a request rate that tracks messages rather than time.** Idle, that is one
+  poll per editor every 10 s (Phoenix's window). Busy, a poll returns the instant a message arrives and is re-issued
+  at once, so each message costs its sender a POST and every peer a returning poll plus a fresh one — two people
+  typing is several requests a second. Concurrency stays at one thread per editor (8 of 240 slots at `-w 30
+  --threads 8`), so the pressure is the request count, not the slots. It scales with editors, which nothing else in
+  the app does. A websocket would cost far less and needs gevent or a broker to fan out across the thirty
+  processes (§12.3).
+- **Successful polls are filtered out of the access log** (`_QuietPolls` in `__init__.py`, installed on `werkzeug`
+  and `gunicorn.access`). Left in, they drown every other line, and each one writes the query string — apikey and
+  the Phoenix session `token`, a live credential — into a file that gets copied and kept. Non-2xx still prints, so
+  a refusal or a failure is still visible; drop the filter to watch the transport itself.
+- **The transport is selected through minified vendor internals.** `realtime.socketAdapter.socket.getLongPollTransport()`
+  is not part of supabase-js's public API, so a bundle upgrade can move it and collaboration would break quietly.
+  The fallback is written down in §12.3; check it when bumping `vendor/supabase.js`.
 - **The conflict guard covers `posts` only.** `settings` and `menus` write through `set_settings()` /
   `set_menu()`, which are not keyed by `id`, so two people on the Settings or Menus screen still overwrite
   each other silently. Same shape, same fix (§4), not yet done.

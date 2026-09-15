@@ -337,7 +337,7 @@ While you have changes that have not been published, an amber note sits above th
 
 If something required is missing, the page comes back with the problem listed at the top and your work still in place.
 
-**Seeing who else is on the page.** If a colleague has the same page open, their initials appear in a coloured circle at the top right, beside the blue button. Click into a section and they see a coloured line down the edge of it and a small label saying you are typing there — and you see the same for them. It is a nudge, not a lock: nothing stops two people typing in the same paragraph, it just means you can see that you are about to.
+**Seeing who else is on the page.** This works everywhere now, the live site included — it used to be switched on only on the practice site, because of how the site connects to its database, and there is nothing to turn on any more. If a colleague has the same page open, their initials appear in a coloured circle at the top right, beside the blue button. Click into a section and they see a coloured line down the edge of it and a small label saying you are typing there — and you see the same for them. It is a nudge, not a lock: nothing stops two people typing in the same paragraph, it just means you can see that you are about to.
 
 **You are writing in the same document.** What you type appears on their screen and theirs appears on yours, within about a second. You can both be in the **same paragraph**, in the same sentence, and both sets of words are kept — nobody's typing replaces anybody else's, the way it works in Google Docs. Add a section, remove one, change a picture, and it turns up on their screen too.
 

@@ -955,7 +955,7 @@
        seed waits until the roster says we are alone; if a peer is here, their state arrives on our
        join and this becomes a no-op. The timeout is the backstop for a peer that never answers --
        an editor with a document nobody is sharing beats an editor with no document at all. */
-    if (!(SPEC.rt && SPEC.rt.url && SPEC.rt.room) || !window.supabase) return seedDoc();
+    if (!(SPEC.rt && SPEC.rt.room) || !window.supabase) return seedDoc();
     setTimeout(seedDoc, 4000);
   }
 
@@ -2816,14 +2816,14 @@
      to elements in there). Markers are painted into the iframe's DOM from out here, which is what
      admin.js already does everywhere else via cdoc().
 
-     Off, silently, when SUPABASE_PUBLIC_URL is unset, when the post has no id yet, or when the
-     library did not load -- all three are the same single-player editor that existed before. */
+     Off, silently, when the post has no id yet or when the library did not load -- both are the same
+     single-player editor that existed before. There is no environment switch any more: the channel
+     comes back through this app, so there is nothing to configure and nothing to leave unset. */
   function initCollab() {
     var rt = SPEC.rt || {};
     /* Silence was the wrong default here: "off" and "broken" looked identical from the page, and the
        first real setup spent a round trip finding out which it was. One console line, only when
        something is missing, naming the thing that is missing. */
-    if (!rt.url) return say("SUPABASE_PUBLIC_URL is not set, so nobody will see who else is editing. Set it and restart the server -- --debug reloads code but not .env.");
     if (!rt.room) return say("this page has no id yet, so there is nobody to share it with until it is saved once.");
     if (!window.supabase) return say("the realtime library did not load (static/vendor/supabase.js).");
 
@@ -2906,8 +2906,21 @@
        presence carries WHO IS HERE and is sent once per join, and where the caret is goes over
        broadcast, which is the budget built for it. */
     var pending = null;
+    /* `chan` exists the moment channel() is called, but it cannot carry anything until the socket is
+       OPEN *and* the channel has joined -- and in that window chan.send() does NOT throw: supabase-js
+       quietly falls back to POSTing /realtime/v1/api/broadcast over REST. Against Supabase directly
+       that worked, which is why nothing ever noticed; through our proxy that path is
+       /admin/realtime/v1/api/broadcast, which Flask 404s, and the symptom is the worst kind --
+       messages "sent", roster empty, no error anywhere.
+
+       Both halves are needed and the second is easy to miss: LongPoll reports OPEN as soon as its
+       first poll returns, which is before the join reply arrives. This is the library's own canPush()
+       -- `socket.isConnected() && isJoined()` -- written against the public channel state enum rather
+       than reaching into channelAdapter for it. */
+    function canSend() { return !!(chan && chan.state === "joined" && client && client.realtime.isConnected()); }
+
     function beam() {
-      if (!chan) return;
+      if (!canSend()) return;
       mine.sig = sig();
       chan.send({ type: "broadcast", event: "where",
                   payload: { id: rt.me.id, path: mine.path, bid: mine.bid, field: mine.field,
@@ -2923,17 +2936,23 @@
        Base64 in a broadcast payload on the channel #65 already opened. No new server: y-websocket
        and y-webrtc both want one, and gunicorn runs sync workers that cannot hold a socket. */
     var outbox = [], flushing = null;
+    // Nothing is spliced until the send is actually going to happen: an un-OPEN socket leaves the
+    // deltas in the outbox to go out merged with the next batch, rather than dropping them into the
+    // REST fallback described above. Called again on SUBSCRIBED so a typist who stopped mid-connect
+    // does not have their last batch wait for the next keystroke.
+    function flushOutbox() {
+      flushing = null;
+      if (!canSend() || !outbox.length) return;
+      chan.send({ type: "broadcast", event: "doc",
+                  payload: { id: rt.me.id, u: bytesB64(Y.mergeUpdates(outbox.splice(0))) } });
+    }
     shareOut = function (delta, origin) {
       if (!chan || origin === "remote") return;   // what a peer just sent us is not ours to send back
       outbox.push(delta);
       if (flushing) return;
       // doc.on("update") fires once per transaction, and a fast typist is eight to ten a second
       // against a channel budget counted in events per second. One merged delta per tick instead.
-      flushing = setTimeout(function () {
-        flushing = null;
-        chan.send({ type: "broadcast", event: "doc",
-                    payload: { id: rt.me.id, u: bytesB64(Y.mergeUpdates(outbox.splice(0))) } });
-      }, 150);
+      flushing = setTimeout(flushOutbox, 150);
     };
 
     function hearDoc(msg) {
@@ -2954,7 +2973,7 @@
       // Anyone holding a document answers, not only the writer: the writer is elected by lowest id
       // and that can be the NEWCOMER, who has nothing to send. applyUpdate is idempotent, so two
       // peers answering costs one extra message and nothing else.
-      if (!chan || !YDOC || !YB.length) return;
+      if (!canSend() || !YDOC || !YB.length) return;
       // Realtime reports our OWN arrival as a join. Without this the writer encodes and broadcasts
       // the whole document to an empty room every time it opens the page.
       if (!fresh.some(function (x) { return x && x.id && x.id !== rt.me.id; })) return;
@@ -3079,12 +3098,41 @@
        first peer is gone before the second one arrives. setAuth() stays so the first join does not
        wait on the callback's promise, and the client is built here rather than above because a null
        token makes supabase-js fall back to the anon key again. */
+    /* The channel comes back through our own server, not from Supabase directly: Supabase is LAN-only
+       in production and Flask is the only exposed service, exactly as it is for every picture. That
+       means longpoll rather than a websocket, because a gthread worker can proxy request/response and
+       cannot hold a socket.
+
+       Nothing here is hand-written protocol: supabase-js ships a complete LongPoll transport, it is
+       simply not reachable through createClient's options (longPollFallbackMs is dropped by
+       _initializeOptions), so it is fetched off the socket and handed back in as `transport`. Three
+       things that are load-bearing and were each verified against the vendored 2.116.0 bundle before
+       being relied on, because this is minified internals and a vendor bump could move any of them:
+         - the class lives at realtime.socketAdapter.SOCKET.getLongPollTransport(), one level deeper
+           than it looks; socketAdapter itself does not have it
+         - passing it as `transport` makes the socket choose its JSON encoder by itself -- the default
+           vsn=2.0.0 binary serializer cannot ride inside a JSON longpoll envelope
+         - the base URL is turned into the poll URL by the library: `<origin>/admin` becomes
+           /admin/realtime/v1/websocket and LongPoll rewrites that to /admin/realtime/v1/longpoll
+       If a future bundle moves getLongPollTransport, the fallback is vsn:"1.0.0" plus
+       replaceTransport(), which binds the JSON serializer explicitly and reaches the same place.
+
+       location.origin, not a URL from the server: it is the only value certain to match the origin
+       the session cookie was set on. Against a SITE_URL of localhost, a browser sitting on 127.0.0.1
+       would send every poll cross-origin, with no cookie, and be refused. */
     function join(t) {
       token = t;
-      if (!client) client = window.supabase.createClient(rt.url, rt.key, {
-        accessToken: function () { return Promise.resolve(token); },
-        realtime: { params: { eventsPerSecond: 5 } }
-      });
+      if (!client) {
+        var base = location.origin + "/admin";
+        var probe = window.supabase.createClient(base, rt.key);
+        var LongPoll = probe.realtime.socketAdapter.socket.getLongPollTransport();
+        client = window.supabase.createClient(base, rt.key, {
+          accessToken: function () { return Promise.resolve(token); },
+          // csrf rides the query string on every poll and every send, because ui_required's usual
+          // form field cannot reach a JSON-bodied Phoenix POST. eventsPerSecond travels the same way.
+          realtime: { transport: LongPoll, params: { eventsPerSecond: 5, csrf: csrf() } }
+        });
+      }
       client.realtime.setAuth(token);
       chan = client.channel(rt.room, { config: { private: true, presence: { key: rt.me.id } } });
       chan.on("presence", { event: "sync" }, readRoster)
@@ -3102,6 +3150,7 @@
             if (status === "SUBSCRIBED") {
               tries = 0;
               shareWaiting();   // canWrite() was false until this moment: there was no channel
+              flushOutbox();    // and canSend() was false, so anything typed while connecting waited
               return chan.track({ id: rt.me.id, name: rt.me.name, colour: rt.me.colour });
             }
             // CHANNEL_ERROR is what an expired JWT looks like from here. _session_token() only
