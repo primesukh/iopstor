@@ -19,6 +19,13 @@ def fail(msg, code=400, **fields):
     abort(make_response(jsonify(error=msg, **({"fields": fields} if fields else {})), code))
 
 
+def _taken(word):
+    """The refusal an editor reads when they pick one of the app's own words. A sentence, like every
+    other message here, and it names the word rather than the rule -- nobody outside this file knows
+    what a reserved segment is."""
+    return f"\u201c{word}\u201d is part of the website\u2019s own address and cannot be used here. Pick another word."
+
+
 @bp.errorhandler(HTTPException)
 def _http_error(e):
     if e.response is not None:  # raised via fail()
@@ -151,7 +158,10 @@ def create_post_type():
     slug = db.slugify(b.get("slug") or b["name"])
     if db.post_type(slug=slug):
         fail("slug already exists", 409, slug=slug)
-    row = {"slug": slug, "name": b["name"], "url_prefix": (b["url_prefix"] if b.get("url_prefix") is not None else slug).strip("/"), **pick(b, PT_FIELDS)}
+    prefix = (b["url_prefix"] if b.get("url_prefix") is not None else slug).strip("/")
+    if db.reserved(prefix):
+        fail("validation failed", url_prefix=_taken(prefix.strip("/").split("/")[0]))
+    row = {"slug": slug, "name": b["name"], "url_prefix": prefix, **pick(b, PT_FIELDS)}
     pt = db.insert("post_types", row)
     db.uncache("post_types")
     return jsonify(pt), 201
@@ -171,6 +181,8 @@ def update_post_type(slug):
     changes = pick(b, PT_FIELDS)
     if "url_prefix" in b:
         changes["url_prefix"] = (b["url_prefix"] or "").strip("/")
+        if db.reserved(changes["url_prefix"]):
+            fail("validation failed", url_prefix=_taken(changes["url_prefix"].split("/")[0]))
     db.uncache("post_types")
     return jsonify(db.update("post_types", pt["id"], changes) if changes else pt)
 
@@ -259,6 +271,12 @@ def apply_post(existing, b):
         # sentence, like every other field: the browser form prints fields[k] straight out.
         if free != wanted and not create:
             fail("slug already in use", 409, slug=f"\u201c{wanted}\u201d is already in use \u2014 try \u201c{free}\u201d")
+        # Only when this slug would be the FIRST segment of the URL. A type with a url_prefix already
+        # shields it -- a blog post honestly titled "Admin" is /blog/admin and refusing that would be
+        # a rule nobody could make sense of.
+        pt_row = db.post_type(id=type_id) if type_id else None
+        if pt_row is not None and not pt_row["url_prefix"] and db.reserved(free):
+            fail("validation failed", slug=_taken(free))
         changes["slug"] = free
     status = changes.get("status", existing["status"] if existing else "draft")
     published_at = changes["published_at"] if "published_at" in changes else (existing["published_at"] if existing else None)
@@ -367,6 +385,11 @@ def create_taxonomy():
     slug = db.slugify(b.get("slug") or b["name"])
     if db.one(db.table("taxonomies").select("id").eq("slug", slug)):
         fail("slug already exists", 409, slug=slug)
+    # A taxonomy's slug is the first segment of every one of its term archives (/<taxonomy>/<term>),
+    # so it is the third and last way an editor can name a URL the app already owns. update_taxonomy()
+    # takes only "name", so there is no rename path to guard.
+    if db.reserved(slug):
+        fail("validation failed", slug=_taken(slug))
     return jsonify(db.insert("taxonomies", {"slug": slug, "name": b["name"]})), 201
 
 

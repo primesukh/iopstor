@@ -187,7 +187,15 @@ Resulting scheme:
 /media/<bucket key>     an uploaded picture or PDF, served by the app (§8)
 ```
 
-`/media/` is a **reserved first segment**, the way `checkout` and `index` are reserved slugs. Its route is
+`/media/` is a **reserved first segment** — one of five in `db.RESERVED_SEGMENTS` (`admin`, `api`,
+`media`, `static`, `healthz`), which is now enforced rather than merely noted. Flask matches a
+blueprint's static prefix before `public.py`'s catch-all, so a page that claims one of these **cannot
+load at all**: a page slugged `admin` used to save cleanly and then 404 for ever with nothing to say
+why. `db.reserved()` refuses a new one at save time — a post's slug only when its type has no
+`url_prefix`, since a blog post honestly titled "Admin" is `/blog/admin` and collides with nothing; a
+post type's `url_prefix` and a taxonomy's slug always, because those are always the first segment.
+`checkout` and `index` are a different thing: taken by routing order, not owned by a blueprint, and
+still only `# ponytail:` comments. Its route is
 declared literally, so Werkzeug ranks it above the catch-all — but a `post_types.url_prefix` of `media`
 would be unreachable, and so would a hierarchical page whose top-level slug is `media`.
 
@@ -574,7 +582,45 @@ Everything is server-rendered from `seo.py` + `public.py`; keep it there.
 - `build_meta()` — title, description, canonical, Open Graph, robots
 - `jsonld()` — structured data driven by `post_types.jsonld_type` plus BreadcrumbList from the resolver's crumbs
 - `md_url()` — the one place the `.md` twin's address is spelled (§8)
-- `_indexable()` — a post whose `seo.robots` starts with `noindex` is kept out of the sitemap, `llms.txt` and its `.md` twin
+- `_indexable()` — **the one gate for everything a crawler reads** (`public.py`), below
+
+**Nothing a crawler reads may carry an address the app owns** (client, 2026-09-15). `_indexable()` asks
+three things: has this post a path, is that path ours to publish (`db.reserved()`), and is it not
+`noindex`. `CLAUDE.md` has called it "the one gate" for a while; this is the change that made the
+sentence true, because four surfaces were quietly skipping it:
+
+| Surface | Before | Now |
+|---|---|---|
+| `sitemap.xml`, `llms.txt`, `llms-full.txt`, post `.md` twins | `_indexable()` | unchanged route, but the gate now also asks `db.reserved(path)` |
+| `feed.xml` | `db.live()` only — a `noindex` post was in the RSS | `_indexable()` |
+| archive `.md` twins, *Related pages* inside a post's twin | `_md_list()` filtered on `path` alone | `_md_list()` filters on `_indexable()` |
+| a post type's archive URL, a term archive | never seen by `_indexable()` — neither is a post | `db.reserved()` in the sitemap's two non-post loops |
+
+`_kids()` is deliberately **not** filtered: it feeds the rendered HTML page as well, and `noindex`
+means do not index, not do not link. Only the Markdown twin — the crawler's copy — drops them.
+
+**`noindex` is read as a token list, not a prefix.** `_noindex()` lowercases and splits on commas,
+because `.startswith("noindex")` let `NOINDEX` and `nofollow,noindex` — both spellings the form's own
+hint invites — render a `noindex` page that stayed in the sitemap, which is the single failure that
+field exists to prevent.
+
+**`/api/v1` stays advertised in `llms.txt` on purpose.** It is the read-only public API: published
+content, no auth, no writes, the same rows the pages already show. Pointing AI crawlers at it is what
+`llms.txt` is for. Only `/api/admin/v1` is private, and it sits behind `ADMIN_NETWORKS` and a token.
+
+**`robots.txt` no longer names the admin.** It carried `Disallow: /admin` and `Disallow: /api/admin`,
+which protected nothing once `/admin` began answering 404 outside `ADMIN_NETWORKS` — while `robots.txt`
+is world-readable and the first file a scanner fetches, which made those two lines the only public
+statement that this site has an admin at all (user, 2026-09-15). `robots_extra` still appends whatever
+the client types, unfiltered: an admin who writes `Allow: /admin` there undoes this, which is accepted
+rather than policed.
+
+**Measured, 2026-09-15**, against the live development database on a real server: all five crawler
+endpoints answer with content (sitemap 60 `<loc>`s, llms-full 19 KB) and **zero** occurrences of
+`/admin` or `/api/admin` between them. The offline guard seeds the collision deliberately — a page
+slugged `admin`, a post type prefixed `admin`, a taxonomy slugged `admin` — because an assertion that
+passes on a site containing none of those proves nothing; removing any one of the three gates makes
+`test_no_crawler_output_can_carry_an_address_the_app_owns` fail, which was checked one gate at a time.
 
 `base.html`'s `<head>` also carries the favicon (`static/favicon.svg`, the black square with the blue bar and white ring) and the two web fonts. The fonts come from Google Fonts on a `<link>`, which is the one external request the public site makes; `admin/canvas.html` repeats that link because it is a standalone document, and without it the editor canvas would preview the page in a different typeface from the page itself.
 

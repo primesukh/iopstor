@@ -92,9 +92,14 @@ def _md_doc(front, parts):
 
 
 def _md_list(posts):
-    """Live posts as one Markdown list, each line pointing at its own .md twin."""
+    """Live posts as one Markdown list, each line pointing at its own .md twin.
+
+    _indexable(), not just `path`: this renders an archive's twin AND the "Related pages" list inside a
+    post's twin, both of which a crawler reads, so a noindex page linked from here would be handed the
+    very address it asked to be left out of. The HTML page keeps listing it -- _kids() is untouched --
+    because noindex means do not index, not do not link."""
     return "\n".join(f"- [{p['title']}]({md_url(p['path'])})" + (f": {p['excerpt']}" if p.get("excerpt") else "")
-                     for p in posts if p.get("path"))
+                     for p in posts if _indexable(p))
 
 
 def _md_page(title, path, parts):
@@ -217,7 +222,8 @@ def resolve(path):
         return redirect("/" + path.rstrip("/"), 301)
     # The Markdown twin is the same page, resolved the same way: strip the suffix and every branch
     # below — pages, posts, both kinds of archive, redirects, 404 — comes along.
-    # ponytail: "index" is a reserved slug (the home page's twin), like "checkout" further down.
+    # ponytail: "index" is taken by routing order (the home page's twin), like "checkout" further
+    # down. Neither is in db.RESERVED_SEGMENTS, which is about segments the app owns outright.
     if path.endswith(".md"):
         path = "" if path == "index.md" else path[:-3]
     full = "/" + path
@@ -278,9 +284,24 @@ def resolve(path):
 
 # ---- crawler endpoints -----------------------------------------------------
 
+def _noindex(seo_field):
+    """Does this SEO robots value say noindex? `robots` is a free-text box whose own hint reads
+    "e.g. noindex,follow", so an editor writes `NOINDEX` or `nofollow,noindex` as readily as the
+    expected spelling -- and a plain startswith() let both of those render a noindex page that stayed
+    in the sitemap, which is the failure the field exists to prevent."""
+    return "noindex" in {t.strip() for t in str(seo_field or "").lower().split(",")}
+
+
 def _indexable(post):
-    # No URL, nothing to point a crawler at. This one test gates both the sitemap and llms.txt.
-    return bool(post.get("path")) and not (post.get("seo") or {}).get("robots", "").startswith("noindex")
+    """The one gate. Everything a crawler can read comes through here: sitemap.xml, llms.txt,
+    llms-full.txt, the feed, every .md twin and the lists inside them.
+
+    Three questions, and the third is the one that is easy to miss. A path we do not own is worse than
+    no path: /admin and /api belong to the app, so a page an editor slugged "admin" cannot load at all,
+    and publishing its address tells every crawler where the CMS lives. reserved() refuses new ones at
+    save time; this keeps any that predate that rule out of everything a crawler reads."""
+    path = post.get("path")
+    return bool(path) and not db.reserved(path) and not _noindex((post.get("seo") or {}).get("robots"))
 
 
 def _live_term_ids():
@@ -325,15 +346,17 @@ def sitemap():
     urls = {base + "/": None}
     types = [t for t in db.post_types() if t["in_sitemap"]]
     for t in types:
-        if t["url_prefix"]:
+        if t["url_prefix"] and not db.reserved(t["url_prefix"]):
             urls[f"{base}/{t['url_prefix']}"] = None
     posts = db.rows(db.live(db.select_posts()).in_("post_type_id", [t["id"] for t in types]).order("id").limit(5000))  # ponytail: single sitemap, <5000 urls
     for p in db.with_paths(posts):
         if _indexable(p):
             urls[base + p["path"]] = p["updated_at"]
     live_terms = _live_term_ids()
+    # The archive prefixes above and the term archives here are the two URL sources that are not posts,
+    # so _indexable() never sees them and each needs the reserved test itself.
     for term in db.rows(db.table("terms").select("slug, id, taxonomy:taxonomies(slug)")):
-        if term["id"] in live_terms:
+        if term["id"] in live_terms and not db.reserved(term["taxonomy"]["slug"]):
             urls[f"{base}/{term['taxonomy']['slug']}/{term['slug']}"] = None
     body = "".join(f"<url><loc>{escape(u)}</loc>{f'<lastmod>{m[:10]}</lastmod>' if m else ''}</url>" for u, m in urls.items())
     return Response(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>', mimetype="application/xml")
@@ -342,7 +365,12 @@ def sitemap():
 @pub.get("/robots.txt")
 def robots():
     s = seo.site()
-    lines = ["User-agent: *", "Allow: /", "Disallow: /admin", "Disallow: /api/admin", s["robots_extra"], f"Sitemap: {s['url']}/sitemap.xml"]
+    # No Disallow naming the admin. It protected nothing -- /admin answers 404 to anything outside
+    # ADMIN_NETWORKS, so there is no page for a crawler to index -- while robots.txt is world-readable
+    # and the first file a scanner fetches, which made those two lines the only public statement that
+    # this site has an admin at all (user, 2026-09-15). robots_extra still appends whatever the client
+    # wants by hand.
+    lines = ["User-agent: *", "Allow: /", s["robots_extra"], f"Sitemap: {s['url']}/sitemap.xml"]
     return Response("\n".join(l for l in lines if l) + "\n", mimetype="text/plain")
 
 
@@ -391,6 +419,7 @@ def feed():
     s = seo.site()
     blog = db.post_type(slug="post")
     posts = db.with_paths(db.rows(db.live(db.select_posts()).eq("post_type_id", blog["id"]).order("published_at", desc=True).limit(20))) if blog else []
+    posts = [p for p in posts if _indexable(p)]   # the feed is a crawler surface like any other
     items = "".join(
         f"<item><title>{escape(p['title'])}</title><link>{s['url']}{p['path']}</link><guid>{s['url']}{p['path']}</guid>"
         f"<pubDate>{db.parse_dt(p['published_at']).strftime('%a, %d %b %Y %H:%M:%S +0000')}</pubDate><description>{escape(p['excerpt'])}</description></item>"

@@ -120,7 +120,7 @@ The sections available:
 | Group | What it is for |
 |---|---|
 | **Publish** | Draft or published, and the date (see §5). The small grey or green label in the top bar shows what is *saved* — it changes when you press Save, not before. |
-| **Web address** | Made from the title automatically. If another page of the same kind already uses that address, three random letters are added so yours still works — `testing-shc` — and the note under the box tells you so. **Edit** if you really need to change it; it asks first, because changing it breaks existing links. |
+| **Web address** | Made from the title automatically. If another page of the same kind already uses that address, three random letters are added so yours still works — `testing-shc` — and the note under the box tells you so. **Edit** if you really need to change it; it asks first, because changing it breaks existing links. A handful of words — `admin`, `api`, `media`, `static`, `healthz` — belong to the website itself and cannot be used; if you pick one, Save says so and asks for another. Only where the word would be the *start* of the address: a blog post called "Admin" is fine, because blog posts sit under `/blog/`. |
 | **Summary** | A sentence or two. Shown in lists, and under the page in Google results. |
 | **Featured image** | The picture used in lists and when the page is shared. **Choose file** uploads on the spot. |
 | **Organise** | The parent page (for services) and any categories or tags — see below. It only appears for types that have one or the other. Nothing here asks you to number your pages — lists show the newest first on their own. |
@@ -651,6 +651,11 @@ paragraph, the way Google Docs does (§4).
 completely separate copy: content does not travel between the two in either direction, so a page you want
 customers to see has to be written on the live site at `https://www.iopstor.com/admin`. If you are ever
 unsure which one you are looking at, check the address at the top of the browser.
+
+**Save says a word "is part of the website's own address".** A few words are used by the system itself
+— `admin`, `api`, `media`, `static`, `healthz` — so a page cannot take one as its address: it would
+never open, because the website would go looking for its own admin panel instead. Pick another word;
+nothing else about the page is lost, only the address box needs changing.
 
 **Will visitors see a page the moment I press Publish?** Yes, if it is set to **Published** — the live
 site is served straight from it, with no waiting and nothing to rebuild. A **Draft** stays invisible, and

@@ -59,12 +59,20 @@ def test_sitemap_feed_llms_and_public_api(client, editor_headers):
         r = client.get(path)
         assert r.status_code == 200, path
         assert b"zz-test-secret-draft" not in r.data and b"Secret Draft" not in r.data, path
+        # nothing a crawler reads may carry an address the app owns (user, 2026-09-15). The offline
+        # suite seeds the collision deliberately; here the point is that a real, seeded database
+        # produces none of these by accident either.
+        assert b"/admin" not in r.data and b"/api/admin" not in r.data, path
     assert b"<loc>http://test/blog/zz-test-public-post</loc>" in client.get("/sitemap.xml").data
     assert b"<loc>http://test/industry/finance</loc>" in client.get("/sitemap.xml").data
     assert b"http://test/blog/zz-test-public-post" in client.get("/feed.xml").data
     full = client.get("/llms-full.txt").data
     assert b"## zz-test Public Post" in full and b"Because." in full
-    assert b"Sitemap: http://test/sitemap.xml" in client.get("/robots.txt").data
+    robots = client.get("/robots.txt").data
+    assert b"Sitemap: http://test/sitemap.xml" in robots
+    # robots.txt used to Disallow /admin, which was the only public statement that an admin exists --
+    # and it protected nothing once /admin began answering 404 outside ADMIN_NETWORKS.
+    assert b"Disallow" not in robots
     # every page also answers as Markdown, and llms.txt points at those twins
     assert b"http://test/blog/zz-test-public-post.md" in client.get("/llms.txt").data
     md = client.get("/blog/zz-test-public-post.md")
