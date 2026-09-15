@@ -935,7 +935,17 @@
     Y = window.IOPY.Y;
     YDOC = new Y.Doc();
     YB = YDOC.getArray("blocks");
+    /* Attached before anything below can return, and that ordering is the whole lesson: everything
+       after this point has an early exit in it, and while this line sat at the END of the function a
+       page with a stored state -- which is every page after its first save -- returned before
+       `update` was ever hooked up. Not one keystroke was broadcast to anybody. Nothing threw: the
+       editor worked, the draft saved, the peer markers moved, and the words stayed in the browser.
+       Safe this early because shareOut is a no-op until initCollab has a channel, which is also why
+       loading the state below cannot put the whole document on the wire. */
+    YDOC.on("update", function (delta, origin) { shareOut(delta, origin); });
     if (state) { try { Y.applyUpdate(YDOC, b64bytes(state)); } catch (e) { say("stored state unreadable: " + e.message); } }
+    // After the state, not before: loading it is not somebody else's edit arriving, and reconcileIn
+    // would answer it with a full repaint of a canvas that does not exist yet.
     YB.observeDeep(reconcileIn);
     if (YB.length) return void (MODEL = fromY());   // the stored document wins over what this page drew
     /* No stored document. Seeding one from `blocks` is only safe if NOBODY ELSE already has one:
@@ -947,7 +957,6 @@
        an editor with a document nobody is sharing beats an editor with no document at all. */
     if (!(SPEC.rt && SPEC.rt.url && SPEC.rt.room) || !window.supabase) return seedDoc();
     setTimeout(seedDoc, 4000);
-    YDOC.on("update", function (delta, origin) { shareOut(delta, origin); });
   }
 
   /* Bind this editor to the shared paragraph -- the line that makes two people in one sentence keep

@@ -42,6 +42,7 @@ vm.runInContext(js.slice(from, to) + `
 this.API = { stampIds, reconcileOut, initShared, pathOfId, idOf, eachBlock, yState, SCALARS,
              seedDoc, dedupe, fromY, shareQuill, shareWaiting,
              set canWrite (v) { canWrite = v },
+             set shareOut (v) { shareOut = v },
              get BINDS () { return BINDS }, get WAITING () { return WAITING },
              get YB () { return YB }, get YDOC () { return YDOC } };`, ctx)
 const API = ctx.API
@@ -224,6 +225,31 @@ ok('and a peer\'s words reach this editor: ' + JSON.stringify(editor.ops[0]?.ins
 editor.root.isConnected = false
 API.shareQuill({ getAttribute: () => '0' }, null, fakeQuill(para.toString()), 'html')
 ok('a replaced section does not leave a second binding on the same text', API.BINDS.length === 1)
+
+/* ---- the document actually reaches the wire ------------------------------------------------
+   The check that would have caught the worst of these: initShared grew early exits above the line
+   that hooks up `update`, so a page WITH a stored state -- every page after its first save -- never
+   broadcast a keystroke. Nothing threw. Asserted behaviourally, on the exact path that broke:
+   a document restored from stored state, then edited. */
+const sent = []
+MODEL = [{ type: 'rich_text', data: { _id: 'wire', _rich: true, html: '<p>x</p>' } }]
+API.initShared('')
+API.seedDoc()
+const savedState = API.yState()
+
+MODEL = [{ type: 'rich_text', data: { _id: 'wire', _rich: true, html: '<p>x</p>' } }]
+API.initShared(savedState)                 // the path that was silent
+API.shareOut = (delta, origin) => sent.push(origin)
+ok('a document restored from stored state still has its sections', API.YB.length === 1)
+
+API.YB.get(0).get('data').set('align', 'center')
+ok('...and a local edit reaches the wire', sent.length === 1)
+
+sent.length = 0
+Yns.applyUpdate(API.YDOC, Yns.encodeStateAsUpdate(new Yns.Doc()), 'remote')
+API.YB.get(0).get('data').set('tone', 'dark')
+ok('...while what a peer sent is not echoed back to them',
+   sent.filter(o => o === 'remote').length === 0 && sent.length === 1)
 
 console.log(bad ? bad + ' FAILED' : 'all passed')
 process.exit(bad ? 1 : 0)
