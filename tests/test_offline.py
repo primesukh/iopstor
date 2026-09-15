@@ -1,10 +1,13 @@
 """Pure logic — no Supabase needed."""
 import json
 import pathlib
+import shutil
+import subprocess
 from copy import deepcopy
 
 import pytest
 
+from iopstor import blocks
 from iopstor import display_name
 from iopstor.admin_ui import _password_errors
 from iopstor.blocks import at_path, blocks_md, blocks_text, col_widths, render_blocks, validate_blocks
@@ -1508,6 +1511,67 @@ def test_the_canvas_loads_quill_inside_the_iframe():
             / "iopstor" / "templates" / "admin" / "canvas.html").read_text()
     assert "vendor/quill.js" in html and "vendor/quill.core.css" in html
     assert "quill.snow.css" not in html
+
+
+def test_a_section_name_and_the_quill_verdict_are_not_prose():
+    """_id and _rich ride in a block's data so they travel with it through posts.blocks, and
+    blocks_text() walks every string in data -- so without this a uuid lands in llms-full.txt, in
+    the .md twins' source and in admin search results, which is nonsense an editor would see."""
+    assert "_id" in blocks._NON_TEXT_KEYS and "_rich" in blocks._NON_TEXT_KEYS
+    stamped = [{"type": "rich_text", "data": {"_id": "0b9d-uuid-here", "_rich": True, "html": "<p>Real words</p>"}}]
+    assert blocks.blocks_text(stamped) == "Real words"
+    # and the editor is told the same set, so the browser and the server agree about what is prose
+    assert "_id" in blocks.EDITOR["scalars"] and "url" in blocks.EDITOR["scalars"]
+
+
+def test_an_editor_who_is_not_the_writer_still_gets_an_activity_entry():
+    """The autosave route carries two unrelated payloads. `blocks`/`state` are the shared document,
+    and only the elected writer sends them. `was`/`now` are one person's sitting and EVERY editor
+    sends their own -- so the document half has to be optional, or the activity log would credit all
+    of everybody's work to whoever happened to be elected."""
+    src = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "admin_ui.py").read_text()
+    body = src[src.index("def autosave("):src.index("def _record_session(")]
+    # Presence of the field, not truthiness: .get("blocks") or "[]" reads a missing field as an
+    # empty page, so a non-writer's autosave would wipe the draft every second and a half.
+    assert 'if "blocks" in request.form:' in body
+    assert 'request.form.get("blocks") or "[]"' not in body
+    # _record_session is outside that branch: everybody's sitting is recorded.
+    assert body.index("_record_session(pk)") > body.index("db.save_draft(")
+
+
+def test_the_draft_is_stored_unpruned_and_publish_still_prunes():
+    """prune() drops an empty paragraph and rebuilds a columns block as a fresh object, so a block
+    an editor still has the caret in loses its _id and every later section answers to a different
+    one -- and a remote edit is then applied to the wrong section. The draft is the live document;
+    the submit still prunes, because that is where an empty paragraph really is not content."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    assert "function saveable() { return JSON.stringify(MODEL); }" in js
+    assert "AREA.value = JSON.stringify(prune(MODEL), null, 2);" in js
+
+
+def test_the_quill_verdict_is_read_at_mount_and_never_recomputed_there():
+    """mountQuill runs once per peer per repaint. A "work it out if it is missing" fallback there is
+    the per-peer gate again: three browsers opening one page all reach it at once and can disagree,
+    and a peer that builds a shared text type where another has a plain string is a split no merge
+    repairs. Only the elected writer decides, and the answer is stored."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    mount = js[js.index("function mountQuill("):js.index("function shareQuill(")]
+    assert "if (!canWrite()) { node.setAttribute(\"data-legacy\", \"1\"); return false; }" in mount
+    assert mount.count("quillKeeps(") == 1          # the one writer-gated call, nowhere else
+    assert "if (!target._rich) {" in mount
+
+
+def test_two_people_in_one_paragraph_keep_both_sets_of_words():
+    """The acceptance test for this whole run of changes, run against the real Yjs: two editors type
+    into one field at the same moment, neither having seen the other, and both sets of words are
+    there afterwards. tests/reconcile.mjs cuts the shared-document section straight out of admin.js,
+    so it cannot drift into testing a copy of the logic."""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    if shutil.which("node") is None:
+        pytest.skip("node is not installed; the shared document cannot be exercised here")
+    r = subprocess.run(["node", "tests/reconcile.mjs"], cwd=root, capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "two people in one paragraph keep both sets of words" in r.stdout
 
 
 def test_the_editor_persists_semantic_html_and_never_inner_html():

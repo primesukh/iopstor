@@ -39,7 +39,7 @@ iopstor/public.py        catch-all resolver (+ .md twins, /checkout), archives, 
 iopstor/cli.py           flask migrate | seed | import-media | create-admin
 iopstor/templates/       base.html post.html archive.html 404.html checkout.html _card.html (the one card macro), blocks/<type>.html (18, each a full-width <section>), admin/*.html
 iopstor/static/site.css  the whole public theme: tokens at the top, header + mega panel + footer, .cards/.card/.btn/.section, layout group (.al-* .w-* .t-*), one rule-group per block
-iopstor/static/admin.css admin-only rules layered on site.css; canvas.css = editor chrome inside the iframe; admin.js = the editor (plain JS, no build); vendor/sortable.min.js + vendor/quill.js (+ quill.core.css, the prose editor, loaded inside the canvas iframe) + vendor/supabase.js (presence, loaded in the parent)
+iopstor/static/admin.css admin-only rules layered on site.css; canvas.css = editor chrome inside the iframe; admin.js = the editor (plain JS, no build); vendor/sortable.min.js + vendor/quill.js (+ quill.core.css, the prose editor, loaded inside the canvas iframe) + vendor/supabase.js (presence) + vendor/yjs.mjs & y-quill.mjs (the shared document, ES modules, loaded in the parent)
 docker-compose.yml       production only: `app` (this Dockerfile) + `cloudflared` as one Dokploy Compose service; `app` has no ports and no Traefik labels, so the tunnel is the only ingress
 migrations/              0000_bootstrap.sql (run once by hand in Studio) + NNNN_name.sql applied by `flask migrate`; repair_schema_migrations.sql and purge_test_audit_rows.sql are hand-run, not steps
 tests/                   pytest: test_offline.py always; the rest are marked live and skip without the Supabase in .env

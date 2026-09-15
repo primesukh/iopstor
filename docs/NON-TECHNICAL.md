@@ -307,8 +307,8 @@ sitting still.
 **Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live on the section itself: hover it, click the **⚙** on its little dark toolbar, and a small panel opens over that section with exactly its own options — **Align the content**, **Align the section**, **Width**, **Effect** where the section has one, the picture, the button link, how many posts to list, and **+ Add** / ✕ for rows in a Cards, FAQ, Numbers or Specification section. Rows always come last in that panel, so the settings above them are never buried under a long list. Any picture field there has a **Choose file** button that uploads on the spot. The page updates as you type. Close it with **Esc**, the ✕, another press of ⚙, or by clicking anywhere else.
 
 **The writing area has been rebuilt**, and for most sections you will not notice — the same toolbar,
-the same buttons, the same typing. It is the groundwork for two people writing in the same paragraph
-at once, which is the next thing being built.
+the same buttons, the same typing. It is what lets two people write in the same paragraph at once
+(*Seeing who else is on the page*, below).
 
 A few sections are left on the old writing area because they contain layout the new one cannot hold —
 the ones with a table, a specification list or a side-by-side panel. On this site that is the **home
@@ -337,9 +337,16 @@ If something required is missing, the page comes back with the problem listed at
 
 **Seeing who else is on the page.** If a colleague has the same page open, their initials appear in a coloured circle at the top right, beside the blue button. Click into a section and they see a coloured line down the edge of it and a small label saying you are typing there — and you see the same for them. It is a nudge, not a lock: nothing stops two people typing in the same paragraph, it just means you can see that you are about to.
 
-You are still working on separate copies for now. What you type does not appear on their screen, and theirs does not appear on yours — only *where* each of you is. That also means that while you are both on the same page, whichever of you typed most recently is what gets saved. Working on the same copy at the same time, the way Google Docs does, so that both people's words are kept, is being built next.
+**You are writing in the same document.** What you type appears on their screen and theirs appears on yours, within about a second. You can both be in the **same paragraph**, in the same sentence, and both sets of words are kept — nobody's typing replaces anybody else's, the way it works in Google Docs. Add a section, remove one, change a picture, and it turns up on their screen too.
 
-Two small things you may notice. The circles vanish on a narrow phone screen, because the bar at the top is already full — the coloured lines on the sections still show. And if either of you adds or removes a section, the coloured lines disappear until you both reload: the two copies no longer line up, and showing you a line on the wrong paragraph would be worse than showing none.
+**Activity still says who did what.** Everybody's writing is on one screen now, but the log is not one entry for the room: each person gets their own line listing only the sections *they* changed (§11).
+
+**The sections that cannot do this yet, and what happens instead.** Two kinds:
+
+- The few sections still on the old writing area — on this site the **home page**, **NAS**, **Contact Us** and **About Us** — say so when you hover them. Two of you can still type in one of those, and it will not scramble under your fingers: while you are typing, nothing moves, and their version arrives when you click away. But only one of the two versions survives, so it is worth agreeing who has it.
+- Inside a **Cards**, **FAQ**, **Numbers** or **Specification** section, the rows are shared as a group rather than row by row. Two people in two different rows of the *same* section will lose one side. Two people in two different sections are fine.
+
+Two smaller things you may notice. The circles vanish on a narrow phone screen, because the bar at the top is already full — the coloured lines on the sections still show. And if somebody else adds or removes a section while you are typing, the page redraws and your cursor goes back to the top; your words are not affected.
 
 **If somebody else published the same page.** Two people can open the same page at once, and there was a time when the second person to save quietly wiped out the first person's work — with both of them told it had saved. That no longer happens. If a colleague published while you were writing, your press of the button stops and an amber note appears above the page:
 
@@ -612,8 +619,10 @@ couple of seconds, so a crashed browser or a closed laptop no longer costs you a
 you are still working on can reach a visitor by accident. **Activity** follows the same split: one line
 per person per sitting saying what they changed, and a separate line for the moment it went live.
 
-**Still to come:** one shared copy of a page, so two people typing at once keep both sets of words —
-and a live payment provider.
+Two people can now write on one page at the same time and keep both sets of words, in the same
+paragraph, the way Google Docs does (§4).
+
+**Still to come:** a live payment provider.
 
 ---
 
@@ -646,13 +655,12 @@ Because they are two different things now. *Worked on* is one person's sitting a
 about fifteen minutes after they stop, listing the sections they changed. *Published* is the moment that
 work went on the website. See §11.
 
-**Can two of us edit the same page at the same time?** You can both open it and you can now see each
-other — initials at the top right, and a coloured line down the section the other person is in. But you
-are still working on separate copies: what they type does not appear on your screen, so while you are
-both typing, whoever typed most recently is what gets saved. If a colleague *publishes* while you are
-writing, you are told rather than quietly overwritten. See *Seeing who else is on the page* and *If
-somebody else published the same page* in §4. Working on one shared copy, the way Google Docs does, so
-that both people's words are kept, is being built next.
+**Can two of us edit the same page at the same time?** Yes, properly. You see each other — initials at
+the top right, a coloured line down the section the other person is in — and you write in the same
+document: what they type appears on your screen, and you can both be in the same paragraph without
+either of you losing a word. A few sections are still one-at-a-time and say so when you hover them, and
+the rows inside a Cards, FAQ, Numbers or Specification section are shared as a group rather than one by
+one. See *Seeing who else is on the page* in §4.
 
 **Where did the Instagram link in the footer go?** It is still there, as an icon. The social links used to
 appear as web addresses in the *Contact* column at the bottom of the page; they now sit under the logo as a

@@ -149,9 +149,16 @@ def layout(name):
     """Expand a LAYOUTS entry into real blocks. Unknown name -> a blank page."""
     return [{"type": t, "data": deepcopy(EDITOR["seed"].get(t) or {})} for t in LAYOUTS.get(name, [])]
 
+# Keys whose value is never prose. Two jobs, and the second is why the underscore pair is here:
+# blocks_text() skips them (a uuid in llms-full.txt and admin search would be nonsense), and the
+# editor sends the set to the browser as EDITOR["scalars"] to decide which fields become a shared
+# text type and which stay plain values. _id names a section for as long as it exists so two
+# browsers can talk about the same one without counting positions; _rich is the Quill gate's
+# verdict, stored rather than recomputed so every editor of a page agrees about it.
 _NON_TEXT_KEYS = {"url", "cta_url", "cta2_url", "button_url", "link_url", "icon", "image", "media_id", "file_media_id",
                   "post_type", "term", "limit", "kind", "top_level", "dark", "type", "widths", "align", "align_box", "width",
-                  "tone", "fx", "count_up", "height"}
+                  "tone", "fx", "count_up", "height", "_id", "_rich"}
+EDITOR["scalars"] = sorted(_NON_TEXT_KEYS)
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
 _TEXT_ORDER = ("eyebrow", "heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company",
                "value", "label", "k", "v", "caption", "alt", "cta_label", "cta2_label", "button_label", "link_label",
