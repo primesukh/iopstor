@@ -939,8 +939,113 @@
     return Array.isArray(arr) ? arr[+row.getAttribute("data-i")] : null;
   }
 
+  /* ---- Quill, on the blocks it can hold without losing anything ---------------
+     Prose is edited by Quill so that two people can later type in the same paragraph and keep both
+     sets of words -- a plain HTML string is last-writer-wins however it is transported, and only a
+     real text CRDT fixes that. Quill is the binding a CRDT needs.
+
+     It does NOT take every block, and the rule is measured rather than guessed. Quill silently drops
+     what it has no blot for, and on this site's own content that is 7 of 24 rich_text blocks:
+     <dl>/<dt>/<dd> on NAS and Contact Us, <div>/<span> on About Us, <table> on NAS and Testing, and
+     -- the dangerous one -- the Home page, which loses six CLASSES and not a single tag, so a
+     "does it contain a table?" check would wave it straight through and the first save would strip
+     the page's styling. So the gate is per block and empirical: paste it into a throwaway Quill,
+     read it back, and refuse if any tag or class went missing. Those blocks keep the editor they
+     have always had. */
+  var QUILL_FORMATS = ["bold", "italic", "underline", "strike", "link", "header", "list",
+                       "blockquote", "align", "color", "background", "image"];
+
+  function quillCtor() { var w = FRAME && FRAME.contentWindow; return w && w.Quill; }
+  function quillOf(f) { return f && f.__quill ? f.__quill : null; }
+
+  function semantic(q) {
+    /* getSemanticHTML(), never root.innerHTML: innerHTML wraps every list in <ol> with
+       <li data-list="bullet"> plus injected <span class="ql-ui">, and the public page loads no Quill
+       CSS -- so every bulleted list on the live site would render numbered.
+       Then undo the &nbsp;: getSemanticHTML does replaceAll(" ", "&nbsp;") on EVERY text leaf
+       (verified in the vendored build, not in the docs). Left alone, _html_md()'s unescape() puts
+       U+00A0 through the .md twins and the public page never wraps. A real non-breaking space is
+       emitted as the character, not the entity, so this does not touch one. */
+    return q.getSemanticHTML().replace(/&nbsp;/g, " ");
+  }
+
+  // Quill rewrites <b> as <strong> and <i> as <em>, which _html_md() has always treated as the same
+  // thing. Without this the gate refuses a block for a difference nobody can see.
+  var SAME_TAG = { b: "strong", i: "em" };
+
+  function marks(html) {                 // every tag and class the markup carries, as one flat list
+    var out = [], seen = {};
+    (html.match(/<([a-zA-Z][\w-]*)/g) || []).forEach(function (m) {
+      var t = m.slice(1).toLowerCase();
+      t = SAME_TAG[t] || t;
+      if (!seen["<" + t]) { seen["<" + t] = 1; out.push("<" + t); }
+    });
+    (html.match(/class="([^"]*)"/g) || []).forEach(function (m) {
+      m.slice(7, -1).split(/\s+/).forEach(function (c) {
+        if (c && !seen["." + c]) { seen["." + c] = 1; out.push("." + c); }
+      });
+    });
+    return out;
+  }
+
+  function quillKeeps(Q, d, html) {
+    if (!html) return true;              // an empty paragraph is what Quill is for
+    var probe = d.createElement("div");
+    probe.style.cssText = "position:absolute;left:-9999px;top:0";
+    d.body.appendChild(probe);
+    try {
+      var q = new Q(probe, { formats: QUILL_FORMATS, modules: { toolbar: false } });
+      q.clipboard.dangerouslyPasteHTML(html, "silent");
+      var after = marks(semantic(q));
+      // A no-loss test, not an equality test: Quill wrapping a bare text node in <p> is fine, and
+      // losing <dl> or class="eyebrow" is not.
+      return marks(html).every(function (m) { return after.indexOf(m) > -1; });
+    } catch (e) {
+      return false;                      // it threw on this markup: that is a refusal too
+    } finally {
+      if (probe.parentNode) probe.parentNode.removeChild(probe);
+    }
+  }
+
+  function mountQuill(node, f, key) {
+    var Q = quillCtor(), d = f.ownerDocument, target = dataFor(node, f);
+    if (!Q || !target) return false;
+    if (!quillKeeps(Q, d, target[key] || "")) {
+      // Said on the block, not the field: [data-f]::after is the peer label, and anything put INSIDE
+      // a [data-f] is copied into MODEL by the legacy input handler and published.
+      node.setAttribute("data-legacy", "1");
+      return false;
+    }
+    var q = new Q(f, { formats: QUILL_FORMATS, modules: { toolbar: false } });
+    q.clipboard.dangerouslyPasteHTML(target[key] || "", "silent");   // silent: mounting is not an edit
+    f.__quill = q;
+    q.on("text-change", function (delta, old, source) {
+      var t = dataFor(node, f);
+      if (!t) return;
+      t[key] = semantic(q);
+      if (source !== "user") return;        // Quill's own normalising is not somebody typing
+      markDirty();
+      // The "/" inserter. The legacy path gets it from bindSlash()'s keyup, but Quill owns the
+      // keyboard, so the hook is the content itself: a line that now reads exactly "/" opens the
+      // chooser, on the line's own DOM node, which is what openSlash() measures and rewrites.
+      if (slashBox) return;
+      var r = q.getSelection(), ln = r && q.getLine(r.index)[0];
+      if (ln && ln.domNode && (ln.domNode.textContent || "").trim() === "/") openSlash(node, f, ln.domNode);
+    });
+    // rememberSelection() already sets savedField/savedRange from the document's own
+    // selectionchange -- the caret is inside f, so its closest("[data-f]") is still f. This handler
+    // only does the two things that are not selection state.
+    q.on("selection-change", function (range) {
+      if (!range) return;
+      select(node.getAttribute("data-b"));
+      syncBar();
+    });
+    return true;
+  }
+
   function bindField(node, f) {
     var rich = f.hasAttribute("data-rich"), key = f.getAttribute("data-f");
+    if (rich && mountQuill(node, f, key)) return;   // Quill drives this one end to end
     setEditable(f, rich);
     f.addEventListener("input", function () {
       var target = dataFor(node, f);
@@ -1687,6 +1792,23 @@
       a && function () { savedRange = rangeOn(a); exec("unlink"); });
   }
 
+  /* One toolbar, two engines. Half a page can be on each at once -- Quill where it round-trips
+     cleanly, the original contenteditable where it does not -- so every command tries Quill first
+     and falls back to execCommand. `qfmt` with no value toggles, which is what a B or I button
+     wants; an explicit value sets. Returns false when the caret is not in a Quill field, which is
+     what makes `if (!qfmt(...)) exec(...)` read the way it does. */
+  function qHere() { return quillOf(liveField()); }
+
+  function qfmt(name, value) {
+    var q = qHere();
+    if (!q) return false;
+    q.focus();
+    var now = q.getFormat();
+    q.format(name, value === undefined ? !now[name] : (now[name] === value ? false : value), "user");
+    syncBar();
+    return true;
+  }
+
   function buildToolbar() {
     var bar = document.getElementById("doc-toolbar");
     if (!bar) return;
@@ -1696,6 +1818,11 @@
        the four insert buttons and the colour swatches were all left enabled and silently doing
        nothing. `free` opts out the three that genuinely need no caret. */
     var cmds = [];
+    /* Controls that build markup Quill has no blot for. The gate that let Quill take a block in the
+       first place is precisely "it contains none of this", so they are switched off while the caret
+       is in a Quill field rather than inserting something the next keystroke would silently drop.
+       Sections that need a table or an embed keep the original editor, and keep these. */
+    var proseOnly = [];
     function b(label, title, fn, cls, free) {
       var x = el("button", { type: "button", "class": "tb" + (cls ? " " + cls : ""), title: title, text: label });
       hold(x);
@@ -1721,7 +1848,9 @@
     // the select — anything that resets the value there wipes the pick before change reads it.
     style.addEventListener("blur", function () { syncBar(); });   // dismissed without picking: show the caret's style again
     style.addEventListener("change", function () {
-      if (style.value) applyLevel(style.value);
+      if (!style.value) return;
+      // Quill's header format is a number, or false for body text.
+      if (!qfmt("header", style.value === "p" ? false : +style.value.slice(1))) applyLevel(style.value);
     });
 
     var size = el("select", { "class": "tb-style tb-size", title: "Text size" });
@@ -1732,14 +1861,16 @@
       if (size.value) setSize(size.value);
     });
 
-    var bold = b("B", "Bold", function () { exec("bold"); }, "tb-b"),
-        ital = b("I", "Italic", function () { exec("italic"); }, "tb-i"),
-        und = b("U", "Underline", function () { exec("underline"); }, "tb-u"),
-        strike = b("S", "Strikethrough", function () { exec("strikeThrough"); }, "tb-s");
+    var bold = b("B", "Bold", function () { if (!qfmt("bold")) exec("bold"); }, "tb-b"),
+        ital = b("I", "Italic", function () { if (!qfmt("italic")) exec("italic"); }, "tb-i"),
+        und = b("U", "Underline", function () { if (!qfmt("underline")) exec("underline"); }, "tb-u"),
+        strike = b("S", "Strikethrough", function () { if (!qfmt("strike")) exec("strikeThrough"); }, "tb-s");
 
     function colour(cmd, title, initial) {
       var i = el("input", { type: "color", "class": "tb-colour", title: title, value: initial });
-      i.addEventListener("input", function () { exec(cmd, i.value); });   // no hold(): it would block the picker
+      i.addEventListener("input", function () {          // no hold(): it would block the picker
+        if (!qfmt(cmd === "foreColor" ? "color" : "background", i.value)) exec(cmd, i.value);
+      });
       cmds.push(i);
       return i;
     }
@@ -1759,26 +1890,43 @@
       });
     }
 
-    bar.appendChild(group([b("↶", "Undo", function () { exec("undo"); }, "", true),
-                           b("↷", "Redo", function () { exec("redo"); }, "", true)]));
+    bar.appendChild(group([b("↶", "Undo", function () { var q = qHere(); if (q) q.history.undo(); else exec("undo"); }, "", true),
+                           b("↷", "Redo", function () { var q = qHere(); if (q) q.history.redo(); else exec("redo"); }, "", true)]));
     bar.appendChild(group([style, size]));
-    bar.appendChild(group([bold, ital, und, strike, b("Tx", "Remove formatting", function () { exec("removeFormat"); })]));
+    bar.appendChild(group([bold, ital, und, strike, b("Tx", "Remove formatting", function () {
+      var q = qHere();
+      if (!q) return exec("removeFormat");
+      var r = q.getSelection(true);
+      if (r) q.removeFormat(r.index, r.length, "user");
+    })]));
     // formatBlock only ever wraps, so quote needs its own way back out: outdent is what unwraps a
     // blockquote in both engines.
     var quote = b("❝", "Quote", function () {
+      if (qfmt("blockquote")) return;
       if (caretBlock("blockquote")) exec("outdent"); else exec("formatBlock", "<blockquote>");
     });
-    bar.appendChild(group([b("•", "Bulleted list", function () { exec("insertUnorderedList"); }),
-                           b("1.", "Numbered list", function () { exec("insertOrderedList"); }),
+    var divider = b("—", "Divider", function () { exec("insertHTML", "<hr><p><br></p>"); });
+    proseOnly.push(divider);
+    bar.appendChild(group([b("•", "Bulleted list", function () { if (!qfmt("list", "bullet")) exec("insertUnorderedList"); }),
+                           b("1.", "Numbered list", function () { if (!qfmt("list", "ordered")) exec("insertOrderedList"); }),
                            quote,
-                           b("—", "Divider", function () { exec("insertHTML", "<hr><p><br></p>"); })]));
-    bar.appendChild(group([b("🔗", "Add a link", docLink),
-                           b("🖼", "Insert a picture", pictureDialog),
-                           b("▦", "Insert a table", tableDialog),
-                           b("</>", "Embed code from another service", embedDialog)]));
-    var align = { left: b("⇤", "Align left", function () { exec("justifyLeft"); }),
-                  center: b("↔", "Centre", function () { exec("justifyCenter"); }),
-                  right: b("⇥", "Align right", function () { exec("justifyRight"); }) };
+                           divider]));
+    var inserts = [b("🖼", "Insert a picture", pictureDialog),
+                   b("▦", "Insert a table", tableDialog),
+                   b("</>", "Embed code from another service", embedDialog)];
+    inserts.forEach(function (x) { proseOnly.push(x); });
+    bar.appendChild(group([b("🔗", "Add a link", function () {
+      var q = qHere();
+      if (!q) return docLink();
+      var r = q.getSelection(true);
+      if (!r || !r.length) return alert("Select the words you want to link first.");
+      var url = prompt("Link address", q.getFormat().link || "https://");
+      if (url !== null) q.format("link", url || false, "user");
+    })].concat(inserts)));
+    // Quill's align is an attribute with no value for left, which is also how site.css reads it.
+    var align = { left: b("⇤", "Align left", function () { if (!qfmt("align", false)) exec("justifyLeft"); }),
+                  center: b("↔", "Centre", function () { if (!qfmt("align", "center")) exec("justifyCenter"); }),
+                  right: b("⇥", "Align right", function () { if (!qfmt("align", "right")) exec("justifyRight"); }) };
     bar.appendChild(group([align.left, align.center, align.right,
                            colour("foreColor", "Text colour", "#1f2937"),
                            colour("hiliteColor", "Highlight", "#fef08a")]));
@@ -1793,13 +1941,29 @@
       // toolbar must go dead rather than paint a state it cannot deliver — a control that silently
       // snaps back to "Normal text" is worse than one that is visibly switched off.
       var live = !!(liveField() && savedField.hasAttribute("data-rich"));
+      var q = qHere();
       bar.classList.toggle("tb-off", !live);
       cmds.concat([style]).forEach(function (x) { x.disabled = !live; });
+      proseOnly.forEach(function (x) { x.disabled = !live || !!q; });
       // Size belongs to body text. A heading's size IS its level, so offering both there invites an
       // H2 that looks like an H4 — the outline Google reads and the one a reader sees disagreeing.
-      size.disabled = !live || /^H[1-6]$/.test((caretBlock() || {}).tagName || "");
+      // It is also off in a Quill field: a rem size is an inline style Quill has no format for.
+      size.disabled = !live || !!q || /^H[1-6]$/.test((caretBlock() || {}).tagName || "");
       if (HINT) HINT.innerHTML = live ? HINT_ON : "Click in the page to start editing.";
       if (!live) return;
+      if (q) {                                    // Quill knows its own state; queryCommandState does not
+        var now = q.getFormat();
+        bold.classList.toggle("on", !!now.bold);
+        ital.classList.toggle("on", !!now.italic);
+        und.classList.toggle("on", !!now.underline);
+        strike.classList.toggle("on", !!now.strike);
+        quote.classList.toggle("on", !!now.blockquote);
+        Object.keys(align).forEach(function (k) {
+          align[k].classList.toggle("on", k === (now.align || "left"));
+        });
+        style.value = now.header ? "h" + now.header : "p";
+        return;
+      }
       try {
         bold.classList.toggle("on", d.queryCommandState("bold"));
         ital.classList.toggle("on", d.queryCommandState("italic"));

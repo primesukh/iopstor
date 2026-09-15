@@ -12,7 +12,12 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@500;700;800&display=swap">
 <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='canvas.css') }}">
+{# Quill's own minimal stylesheet -- core, not snow: the toolbar is ours, in the parent document. #}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/quill.core.css') }}">
 <script src="{{ url_for('static', filename='vendor/sortable.min.js') }}"></script>
+{# Inside the iframe, like Sortable and unlike supabase.js: Quill binds to elements in THIS document
+   and admin.js reaches the constructor through the frame's own window. #}
+<script src="{{ url_for('static', filename='vendor/quill.js') }}"></script>
 </head>
 <body class="iop-canvas">
 <main id="main">
