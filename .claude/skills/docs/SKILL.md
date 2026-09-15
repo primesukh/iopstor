@@ -20,15 +20,21 @@ A feature is not finished until all three say so, in the same PR. `TECHNICAL.md`
 | New block type | §6 (count + shape), §16 table | §4 *Adding a section* list | §5 |
 | Schema / migration | §3 table, §10 | only if editors see a new field | §3, §2 (migrations line) |
 | Admin screen or control | §8 `/admin` routes, §12 admin shell / §12.1 editor | the screen's own § + Quick answers | §10, §7 admin row |
+| The editor itself — `admin.js`, the canvas, Quill, the shared document, presence, autosave | §12.1, §12.3 *Working at the same time*, §17 for any new ceiling | §4 *Writing* and *Seeing who else is on the page* + Quick answers | §10 editor paragraph, §15 |
+| Preview | §12.2 | §4 *Checking how it looks* | §10 Preview paragraph |
+| Activity wording, or what is and is not recorded | §8 `/admin/audit`; §4 if a write path changed | §11 *Activity* | §10 Activity paragraph |
+| A test, a harness, a suite rule | §13 | — | §13 |
 | Public URL / endpoint | §5 or §8 | §10 if it is about being found | §7 |
 | Theme | §12 (the decision, the CSS rule that carries it) | only if a visitor notices | §9 if it is a rule an agent could undo |
 | CLI command | §2 module map, §15 | — | §2, §11 |
 | A `# ponytail:` ceiling | §17 | — | §15 if an agent will trip on it |
-| Client decision | — | §12 | `requirements.md` decisions table (dated) |
+| Client decision | — | *Where the project stands*, if it moves the status | `requirements.md` decisions table (dated), the ask quoted |
 | Workflow / tooling / `.claude/` | §18 | — | §16 + `CLAUDE.md` |
-| Deployment / hosting / env key | §14 (the key and what breaks without it), §15 (the runbook step) | §12 only if the address or the live/practice split changes | §1 platform table, §14 row + `CLAUDE.md` Env keys |
+| Deployment / hosting / env key | §14 (the key and what breaks without it), §15 (the runbook step) | *Where the project stands* only if the address or the live/practice split changes | §1 platform table, §14 row + `CLAUDE.md` Env keys |
 
 **NON-TECHNICAL.md's sections are referred to by name here, not by number, on purpose:** its two closing sections are *Where the project stands* and *Quick answers*, and inserting a screen's section ahead of them renumbers both (audit log, 2026-09-11). TECHNICAL.md and design.md numbers *are* stable — add inside the right §, never renumber. If you do move a NON-TECHNICAL heading, `grep -rn "NON-TECHNICAL" .claude/ docs/ CLAUDE.md` and fix what points at it.
+
+**An applied migration's header comment is never rewritten, even once it is false.** `0009` still says the browsers talk to Supabase without Flask in the middle; PR #72 made that untrue and left the file alone — an applied file is history. The supersession is a dated `design.md` §14 row that names the file.
 
 A change can match several rows; apply every row that matches. A client decision about the header is a dated `requirements.md` row **and** a `design.md` §9 rule an agent could undo **and** a TECHNICAL.md §12 paragraph.
 
@@ -54,3 +60,5 @@ grep -n "<the feature's word>" docs/TECHNICAL.md docs/NON-TECHNICAL.md .claude/d
 ```
 
 Each file should hit, or the PR body must say which audience is unaffected and why.
+
+If `/after-merge` reported drift in this area, this PR carries it: fix it here and list it in the PR body's **Docs** section as drift, by file (PRs #65, #66, #67 did). Do not open a PR of its own for it.

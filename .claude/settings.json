@@ -16,7 +16,6 @@
       "Bash(graphify query*)",
       "Bash(graphify path*)",
       "Bash(graphify explain*)",
-      "Bash(graphify update*)",
       "Bash(docker compose config*)",
       "Bash(docker compose ps*)",
       "Bash(git status*)",
@@ -45,7 +44,8 @@
       "Bash(node --check*)",
       "Bash(node --experimental-websocket*)",
       "Bash(node tests/reconcile.mjs*)",
-      "Bash(curl -s http://127.0.0.1:5000*)"
+      "Bash(curl -s http://127.0.0.1:5000*)",
+      "Bash(ss *)"
     ],
     "deny": [
       "Bash(pipenv run flask migrate*)",
@@ -69,7 +69,8 @@
       "Edit(.env)"
     ],
     "ask": [
-      "Bash(git merge*)"
+      "Bash(git merge*)",
+      "Bash(graphify update*)"
     ]
   },
   "hooks": {

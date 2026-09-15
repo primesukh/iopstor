@@ -10,17 +10,19 @@ The PR is the hand-off. It is opened by you and merged by the user, never by you
 ## Pre-flight (every line must be true before `git push`)
 
 - On a `feat/ | fix/ | docs/ | chore/` branch, not `main`: `git branch --show-current`
-- `pipenv run pytest -q` was run in this session. Record the count. A failure that also fails on `main` is reported as such **after checking** (`git stash; git checkout main; pytest <test>; git checkout -; git stash pop`), never assumed.
+- `pipenv run pytest -q` was run in this session. Record the count. Two live tests, `test_browser_admin_login_and_create_post` and `test_upload_checkout_seed`, have failed on the seeded dev database since 2026-09-10 and are named as the standing pair. Any other failure — and those two whenever the change touches `iopstor/` — is reported as pre-existing only **after checking on `main`** (`git stash; git checkout main; pytest <test>; git checkout -; git stash pop`), never assumed. `node tests/reconcile.mjs` runs inside the offline suite when node is present; run it on its own too when `admin.js`'s shared-document section changed (`/collab-check`).
 - `/docs` is done: `docs/TECHNICAL.md`, `docs/NON-TECHNICAL.md`, `.claude/docs/design.md` — or the body says which audience is genuinely unaffected and why.
 - A new `migrations/NNNN_*.sql` exists → it was **not** applied by you, and the body has a **Needs applying** section naming it.
 - `Pipfile` changed → `requirements.txt` and `requirements-dev.txt` were regenerated from the lock.
 - Theme or admin change → `/theme-check` screenshots were looked at.
 - Nothing staged from `.env` or `graphify-out/`: `git status --short`. (`website_assets/` is tracked since 2026-09-10 — staging it is normal now.)
-- No Claude or Anthropic authorship anywhere: `git log origin/main..HEAD --format=%B | grep -iE 'claude|anthropic'` prints nothing. (`settings.json` sets `includeCoAuthoredBy: false`; check anyway.)
+- No Claude or Anthropic authorship anywhere: `git log origin/main..HEAD --format=%B | grep -iE 'co-authored-by|anthropic|generated with'` prints nothing. (`settings.json` sets `includeCoAuthoredBy: false`; check anyway.) The rule is about *authorship* — a trailer, an email, a "generated with" line — not about naming `CLAUDE.md` or `.claude/` in a body, which 34 lines on `main` already do; the old grep for the bare word flagged every one of them.
 
 ## Commit style
 
-`type(scope): a sentence in plain words about what changed for whom`, as the history does — `fix(theme): the services list stacks on a phone instead of running off it`, `feat(admin): a warranty register, and a serial-number check for visitors`. Body: the why, the trap avoided, the decision the reviewer should question. One commit per coherent change; do not squash a migration into the code that reads it unless they cannot be separated.
+`type(scope): a sentence in plain words about what changed for whom`, as the history does — `fix(theme): the services list stacks on a phone instead of running off it`, `feat(admin): a warranty register, and a serial-number check for visitors`. Body: the why, the trap avoided, the decision the reviewer should question, and the measurement with its number ("measured in a real browser: 600px held across two swaps, `srcdoc` gave 0"). Scopes the history uses: `admin`, `theme`, `blocks`, `db`, `auth`, `media`, `seo`, `deploy`, `migration`, `tests`, and `claude`/`agent` for `.claude/` itself; `docs(<scope>)` for a docs-only commit. One commit per coherent change; do not squash a migration into the code that reads it unless they cannot be separated.
+
+A change that turned out wrong once it was seen in the browser is **reverted, not fixed forward**: `git revert` with a body saying what was seen and why the first judgement was off, and the doc rows the original added come out with it. Three on 2026-09-10 — one had been judged against a stylesheet with an unbalanced brace, one did not hold against the dark footer, one put a header on the wrong side of the wire.
 
 ## Push and open
 
@@ -54,16 +56,20 @@ What a reader of the site or the admin gets. Tables for URL/behaviour maps.
 The mechanism, one paragraph per moving part, naming the function or template a reviewer opens.
 
 ## Decisions worth reviewing
-- Each non-obvious choice as one bullet: what, and why the alternative lost.
+- Each non-obvious choice as one bullet: what, and why the alternative lost. A measurement belongs in its row: the number, and where it was taken.
+- What was deliberately **not** built, so the reviewer does not ask for it as an oversight.
 
 ## Needs applying            (only if a migration or a seed change is in the PR)
 `migrations/NNNN_name.sql` — **not applied**; apply before the branch is used. Say what happens to the app before it is applied (the code tolerates the gap, or does not).
 
 ## Tests
-`N passed` (+ any pre-existing failure, verified on main). What was checked by hand, on which port.
+`N passed` (+ the standing pair, verified on main when iopstor/ changed). New tests by name and what each pins.
+What was checked by hand, on which port, with the number that was measured.
+**Not verified, and why** — a two-browser check, a Docker daemon this machine cannot reach — as its own line, so the reviewer knows what to try before merging.
 
 ## Docs
 Which sections of TECHNICAL.md, NON-TECHNICAL.md and .claude/docs/design.md changed — or which audience is unaffected and why.
+Drift carried from the last /after-merge, listed by file, as drift.
 ```
 
 ## Then stop
@@ -78,3 +84,5 @@ Report the PR URL, the test line, and anything that needs applying. Do not merge
 | "Tests fail but not because of me" | Prove it on `main` before writing that sentence |
 | Running `flask migrate` to "make the tests pass" | Denied by `settings.json`, and it is the one hard rule. Hand the file over |
 | Editing the PR with `gh pr edit` | Prints a GraphQL error and changes nothing; use the `gh api` PATCH |
+| "Looks right" from one headless screenshot | Two runs of one page differ by ~150k pixels; before and after go in one document (`/theme-check`) |
+| A Tests section with no "not verified" line | Every collaboration PR needed two browsers it did not have; say what the reviewer must try |

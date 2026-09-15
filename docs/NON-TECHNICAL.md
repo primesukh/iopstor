@@ -347,7 +347,7 @@ If something required is missing, the page comes back with the problem listed at
 
 **The sections that cannot do this yet, and what happens instead.** Two kinds:
 
-- The few sections still on the old writing area — on this site the **home page**, **NAS**, **Contact Us** and **About Us** — say so when you hover them. Two of you can still type in one of those, and it will not scramble under your fingers: while you are typing, nothing moves, and their version arrives when you click away. But only one of the two versions survives, so it is worth agreeing who has it.
+- The few sections still on the old writing area — on this site **NAS**'s specification table, **Contact Us** and **About Us**'s founders panel — say so when you hover them. Two of you can still type in one of those, and it will not scramble under your fingers: while you are typing, nothing moves, and their version arrives when you click away. But only one of the two versions survives, so it is worth agreeing who has it.
 - Inside a **Cards**, **FAQ**, **Numbers**, **Specification**, **Definitions** or **Key points** section, the rows are shared as a group rather than row by row. Two people in two different rows of the *same* section will lose one side. Two people in two different sections are fine. Everything *outside* the rows — the heading, the small label above it, the intro — is shared word by word like any other writing.
 
 Two smaller things you may notice. The circles vanish on a narrow phone screen, because the bar at the top is already full — the coloured lines on the sections still show. And if somebody else adds or removes a section while you are typing, the page redraws and your cursor goes back to the top; your words are not affected.

@@ -17,7 +17,7 @@ The graph is **not** refreshed here — no `/graphify`, no `graphify update` (us
    git fetch -p && git branch -d <merged-branch>     # or /clean_gone for every [gone] branch
    ```
 
-2. **Audit the written docs against what landed — mandatory, every merge, no exceptions.** Read the diff first and check *every* file below against it: `CLAUDE.md`, `.claude/docs/design.md`, `.claude/docs/requirements.md`, the six skills, `settings.json`, and `docs/TECHNICAL.md` + `docs/NON-TECHNICAL.md` if the merged PR left either behind (rule 3 says it should not have — if it did, that is the miss to name).
+2. **Audit the written docs against what landed — mandatory, every merge, no exceptions.** Read the diff first and check *every* file below against it: `CLAUDE.md`, `.claude/docs/design.md`, `.claude/docs/requirements.md`, the seven skills, `settings.json`, and `docs/TECHNICAL.md` + `docs/NON-TECHNICAL.md` if the merged PR left either behind (rule 3 says it should not have — if it did, that is the miss to name).
 
    ```bash
    git diff --stat "$PREV"..HEAD && git log --oneline "$PREV"..HEAD
@@ -34,6 +34,9 @@ The graph is **not** refreshed here — no `/graphify`, no `graphify update` (us
    | admin screen or editor behaviour | `design.md` §10 |
    | a decision with a why | `design.md` §14 row, dated; a client decision → `requirements.md` table |
    | a procedure that was repeated or got a step wrong | the skill that owns it, or a new one if none does |
+   | a check the PR did by hand that a skill should have listed | `/theme-check`, `/collab-check`, or the skill that owns the area |
+   | a measurement in the PR body (a number, a browser or database finding) that reached no doc | `design.md` §14 row — most PRs write their own; #70 missed the count of refused blocks in §0 and §15 |
+   | the PR body's Docs section says it carried drift from the last audit | check it landed in the diff; a claim is not a change |
    | a command that prompted for permission more than once | `settings.json` `allow` |
    | a command that must never run unasked | `settings.json` `deny` |
    | a rule in `CLAUDE.md` that the PR had to work around | the rule |
