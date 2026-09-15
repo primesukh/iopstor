@@ -33,10 +33,11 @@ def _from_proxy(peer):
 
 
 def client_ip():
-    """The visitor, not the hop in front of them. There are two ways into this app and each needs a
-    different answer: through the Cloudflare tunnel the address is in CF-Connecting-IP, which the edge
-    sets and which it strips off anything the client sent, and on the LAN port the connection is the
-    visitor already, so remote_addr is the whole truth.
+    """The visitor, not the hop in front of them. There are two ways into this app and each puts the
+    address somewhere different: through the Cloudflare tunnel it is in CF-Connecting-IP, which the edge
+    sets and which it strips off anything the client sent, and through Dokploy's Traefik -- what a domain
+    attached in the Dokploy UI puts in front of this container -- it is the last X-Forwarded-For entry.
+    remote_addr is the answer only when nothing is in front at all, which here is development.
 
     Which is why nothing is believed until the peer is one of ours. A forwarding header is a claim by
     whoever opened the connection; it is only evidence when that was a proxy we deployed. Take it from
@@ -48,8 +49,9 @@ def client_ip():
 
     # ponytail: one hop. Two trusted proxies in a row and the rightmost entry is the inner one, not the
     # visitor -- count back as many entries as there are hops if that day comes. And the default ranges
-    # are all of RFC1918, so a LAN client is inside them and its own headers are believed: name the one
-    # subnet the proxy sits on in TRUSTED_PROXIES to close that, no code change."""
+    # are all of RFC1918, which is wider than the proxies actually are: set TRUSTED_PROXIES to
+    # dokploy-network's own subnet (10.0.1.0/24 on this deployment, where Traefik is 10.0.1.7) so that a
+    # client on the office LAN falls outside it and cannot claim an address that is not theirs."""
     peer = request.remote_addr or ""
     if _from_proxy(peer):
         for h in FORWARDED:

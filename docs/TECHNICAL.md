@@ -764,7 +764,7 @@ The third is the one that is easy to miss: it re-checks the current password, so
 
 **The client address is a forwarding header from a peer we named, never from anybody.** `throttle.client_ip()` is the one place it is decided, and every consumer routes through it: both login throttles (`admin_ui.py:94`, `admin_api.py:80`), `post_sessions.ip` (`admin_ui.py:507`) and every audit row (`db.py:110`).
 
-There are **two ways into this app and they answer the question differently**. Through the Cloudflare tunnel the connection is cloudflared and the visitor is in `CF-Connecting-IP`, which the edge sets and strips off anything the client sent. On the LAN port the connection *is* the visitor, so `remote_addr` is the whole truth and no header exists. So the order is: if — and only if — the peer is inside `TRUSTED_PROXIES`, take the first of `CF-Connecting-IP`, `X-Forwarded-For`, `X-Real-IP` that has a value; otherwise `remote_addr`; and `"-"` last, because the key is built with an f-string and a `None` would put every such request in one bucket named `"None"`.
+There are **two ways into this app and they put the address in different places**. Through the Cloudflare tunnel the connection is cloudflared and the visitor is in `CF-Connecting-IP`, which the edge sets and strips off anything the client sent. On the LAN it is **Dokploy's own Traefik** — a domain attached in the Dokploy UI puts it in front of this container whether or not anyone configured it — and the visitor is the last `X-Forwarded-For` entry. `remote_addr` is the answer only when nothing is in front at all, which here means development. So the order is: if — and only if — the peer is inside `TRUSTED_PROXIES`, take the first of `CF-Connecting-IP`, `X-Forwarded-For`, `X-Real-IP` that has a value; otherwise `remote_addr`; and `"-"` last, because the key is built with an f-string and a `None` would put every such request in one bucket named `"None"`.
 
 **The gate is the point, not the header list.** A forwarding header is a claim by whoever opened the connection, and it is only evidence when that was a proxy we deployed. Trusting `CF-Connecting-IP` unconditionally — what this did until a LAN port existed — meant any client on a non-Cloudflare path could set it by hand, rotate it freely past `LOGIN_MAX_FAILURES` for unlimited password guesses, and write a chosen string into `audit_log.ip`, which `audit.html` renders to an admin as the authoritative *From* column with nothing marking it unverified.
 
@@ -773,6 +773,8 @@ There are **two ways into this app and they answer the question differently**. T
 `TRUSTED_PROXIES` is a comma-separated CIDR list, parsed in `config.py` **at import** so a typo refuses to boot the way a missing `SECRET_KEY` does rather than failing quietly on every login. It is read with `or`, not a `get()` default: compose passes `${TRUSTED_PROXIES:-}` and an empty string has to mean *unset* — read as "trust nothing" it would drop `CF-Connecting-IP` and put every tunnel visitor in cloudflared's bucket. Unset it is `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8,::1/128,fc00::/7`, which covers cloudflared, the LAN hop and a dev machine with no configuration at all. **`# ponytail:`** those ranges also contain the LAN *client*, so an insider who chooses to send a header is believed — naming the one subnet the proxy sits on closes it with no code change; and the rightmost-entry rule assumes one hop, so a second trusted proxy in a row would need counting back as many entries as there are hops.
 
 **Measured, 2026-09-15**, against the real WSGI stack on a socket rather than a test request context: from a trusted peer, `CF-Connecting-IP: 9.9.9.9` → `9.9.9.9`; `X-Forwarded-For: 1.2.3.4, 203.0.113.9` → `203.0.113.9` (the spoofed left entry loses); `X-Real-IP` → same; both headers → the Cloudflare one wins. With `TRUSTED_PROXIES=172.18.0.0/16` so the peer is no longer ours, the same two spoofs → `127.0.0.1`, the peer's own address. `TRUSTED_PROXIES=not-a-network` → `ValueError` at import.
+
+**Measured on the deployment, 2026-09-15.** `docker network inspect dokploy-network` puts `dokploy-traefik` at **`10.0.1.7`** on a **`10.0.1.0/24`** overlay, beside `iopstor-backend-nq5xy9-app-1` at `10.0.1.32` and Supabase's Kong at `10.0.1.8`. So the address that started this — every audit row reading `10.0.1.7` — was Traefik, and `10.0.1.0/24` is the value `TRUSTED_PROXIES` should hold: it excludes the office LAN, so no client there can forge a header, and unlike pinning `10.0.1.7/32` it survives a container recreate moving Traefik's address (which would otherwise silently stop `X-Forwarded-For` being read and put every visitor back in one bucket). The container names show plain `docker compose`, not a swarm stack, so the compose `default` network is an ordinary bridge and cloudflared's subnet joins the list when the tunnel goes on.
 
 **`/admin/audit` opens with a shut `<details>` saying where the site thinks you are connecting from** — the value that will be written to the *From* column, the address that actually opened the connection, whether that peer is one of ours, and the raw forwarding headers it sent. `throttle.connection()` builds it, so the screen does not have to know how any of it is worked out, and it is a GET on a route that is already `@ui_required("admin")`: nothing new is exposed, nothing is audited, and `test_every_route_that_can_change_something_is_accounted_for` is untouched. It exists because "is the log recording real visitors" was otherwise a question nobody could answer without a deploy and a guess — and with two ingresses the answer differs by which one you came in on.
 
@@ -1456,12 +1458,12 @@ it, and the external `dokploy-network`, which is how it reaches Supabase Kong. `
 `default` only — it has no business reaching Supabase.
 
 **There are two ingresses, and that is the supported shape** (user, 2026-09-15): the Cloudflare tunnel
-for the public site, and `app`'s published port for LAN access to the admin. The port is in the compose
-file rather than in a Dokploy screen so a redeploy from git cannot quietly drop it, and it is
-`mode: host` rather than the default — swarm's routing mesh NATs the source address, and every visitor
-would then arrive as one Docker address, which is one shared throttle bucket and a *From* column that
-says nothing. Under plain `docker compose` it is the ordinary publish it looks like. `LAN_PORT` moves it
-off 8000 if something else wants that.
+for the public site, and **Dokploy's own Traefik** for LAN access to the admin. Traefik is in the path
+because a domain is attached to service `app` in the Dokploy UI — it needs no `ports:` line and no
+Traefik label in this file, which is why it is easy to believe nothing is in front when something is.
+`app` still publishes no port, but the reason has changed: it is no longer what makes a header
+trustworthy (`TRUSTED_PROXIES` is), it is that Traefik already serves the LAN and a second way in would
+be exposure for nothing.
 
 What used to carry this weight was the *absence* of a port: the tunnel being the only way in was the
 reason `CF-Connecting-IP` could be trusted from anybody. That is no longer true and no longer the
@@ -1481,10 +1483,13 @@ not `:?` like every other variable: interpolation is not profile-aware, so a req
 that is switched off still fails `docker compose config` for the whole stack, `app` included — which is
 exactly the error a first deploy without a tunnel hits.
 
-A **Dokploy domain on service `app`, port 8000** is the other way to reach it — a click, not an edit,
-because `app` is already on `dokploy-network` where Traefik can see it, and useful when the LAN wants a
-name and a certificate rather than a port number. It puts Traefik in front, so `TRUSTED_PROXIES` must
-contain `dokploy-network`'s subnet for `X-Forwarded-For` to be read (the default ranges already do).
+A **Dokploy domain on service `app`, port 8000** is how that happens — a click, not an edit, because
+`app` is already on `dokploy-network` where Traefik can see it. **This is the step that puts Traefik in
+the path**, and it leaves no trace in this repo: no `ports:` line, no Traefik label, nothing in
+`docker-compose.yml` at all. That is exactly why `10.0.1.7` was a mystery worth measuring rather than
+guessing — the file says the tunnel is the only way in, and the file cannot see a domain added in a UI.
+`TRUSTED_PROXIES` must contain `dokploy-network`'s subnet for `X-Forwarded-For` to be read; the default
+ranges already do, and `10.0.1.0/24` is the tighter value this deployment wants.
 On a LAN host with no real name,
 `<anything>-<dashed-ip>.sslip.io` resolves to that address (the pattern the dev Supabase already uses) with
 the certificate provider left at none. `SITE_URL` must then be *exactly* the URL being browsed, scheme
