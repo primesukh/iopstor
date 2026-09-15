@@ -21,15 +21,37 @@ from flask import current_app, request
 FORWARDED = ("CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP")
 
 
+def _in(addr, nets):
+    """Is this address inside any of these networks? False for anything unparseable, which is the safe
+    answer for both callers: an unreadable address is not a proxy we trust and not an office we let in."""
+    try:
+        ip = ipaddress.ip_address(addr)
+    except ValueError:
+        return False
+    ip = getattr(ip, "ipv4_mapped", None) or ip   # ::ffff:10.0.1.7 is 10.0.1.7
+    return any(ip in net for net in nets)
+
+
 def _from_proxy(peer):
     """True when this connection came from a proxy we put there ourselves, so its forwarding headers
     are ours and not the visitor's."""
-    try:
-        addr = ipaddress.ip_address(peer)
-    except ValueError:
-        return False
-    addr = getattr(addr, "ipv4_mapped", None) or addr   # ::ffff:10.0.1.7 is 10.0.1.7
-    return any(addr in net for net in current_app.config["TRUSTED_PROXIES"])
+    return _in(peer, current_app.config["TRUSTED_PROXIES"])
+
+
+def from_office():
+    """True when this request may reach the admin at all -- the door in front of the password, so that a
+    stolen session or a guessed password is worth nothing from outside the building.
+
+    It tests the address client_ip() resolved, never remote_addr: behind Traefik every request has the
+    same remote_addr, so a remote_addr test would let everybody in or nobody. Which means this guard is
+    only as good as TRUSTED_PROXIES -- if that stops matching the real proxy, client_ip() returns the
+    proxy's own address, that address is not in the office, and EVERY editor is locked out. That is the
+    failure to look for first if the admin goes dark, and the refusal is logged with both addresses so
+    the container log can say which it was.
+
+    Empty ADMIN_NETWORKS means no restriction: development, and any deploy that has not set it."""
+    nets = current_app.config["ADMIN_NETWORKS"]
+    return True if not nets else _in(client_ip(), nets)
 
 
 def client_ip():

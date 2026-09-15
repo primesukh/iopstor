@@ -1,5 +1,5 @@
 """Admin REST API at /api/admin/v1 for the future admin UI. Bearer JWT from Supabase Auth; roles editor < admin."""
-from flask import Blueprint, abort, g, jsonify, make_response, request
+from flask import Blueprint, abort, current_app, g, jsonify, make_response, request
 from postgrest import APIError
 from supabase_auth.errors import AuthApiError, AuthError
 from werkzeug.exceptions import HTTPException
@@ -8,7 +8,7 @@ from . import db
 from .auth import ROLES, create_auth_user, current_user, delete_auth_user, login, logout, refresh, require_role
 from .blocks import BLOCKS, validate_blocks
 from .storage import delete_media, save_upload
-from .throttle import clear as throttle_clear, client_ip, record_failure, retry_after
+from .throttle import clear as throttle_clear, client_ip, from_office, record_failure, retry_after
 
 bp = Blueprint("admin_api", __name__, url_prefix="/api/admin/v1")
 
@@ -17,6 +17,25 @@ bp = Blueprint("admin_api", __name__, url_prefix="/api/admin/v1")
 
 def fail(msg, code=400, **fields):
     abort(make_response(jsonify(error=msg, **({"fields": fields} if fields else {})), code))
+
+
+@bp.before_request
+def _office_only():
+    """The admin does not exist outside the office. A 404 rather than a 403: /admin is a well-known path,
+    and a refusal that says "you are not allowed" also says "there is something here, keep trying" --
+    from the public internet that is an invitation to come back with a password list.
+
+    A blueprint before_request rather than a check inside require_role(), because the login form itself has to be
+    unreachable too: guarding only the routes that require a session would leave the one door that takes
+    a password wide open. It also covers every route added later without anyone remembering to.
+
+    Both addresses go in the log line, because the way this breaks is TRUSTED_PROXIES drifting from the
+    real proxy -- then client_ip() is the proxy's own address, nobody is in the office, and the admin
+    goes dark for everyone with nothing on screen to say why."""
+    if not from_office():
+        current_app.logger.warning("admin refused: %s is outside ADMIN_NETWORKS (connection from %s)",
+                                   client_ip(), request.remote_addr)
+        abort(404)
 
 
 @bp.errorhandler(HTTPException)

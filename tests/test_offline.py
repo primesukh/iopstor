@@ -814,6 +814,37 @@ def test_throttle_counts_failures_per_key(app, tmp_path):
         assert throttle.retry_after("ip:1.2.3.4") == 0
 
 
+def test_the_admin_does_not_exist_outside_the_office(app):
+    """The door in front of the password: /admin and /api/admin/v1 answer 404 from anywhere that is not
+    in ADMIN_NETWORKS, including the login form, which is the one route that takes a password."""
+    app.config["TESTING"] = False        # the throttle stays out of TESTING; this guard never does
+    app.config["ADMIN_NETWORKS"] = (ipaddress.ip_network("192.168.0.0/16"),)
+    app.config["TRUSTED_PROXIES"] = (ipaddress.ip_network("10.0.1.0/24"),)   # Traefik, as deployed
+    c = app.test_client()
+
+    def get(path, peer, **headers):
+        return c.get(path, environ_base={"REMOTE_ADDR": peer},
+                     headers={k.replace("_", "-"): v for k, v in headers.items()})
+
+    # from the office, through Traefik: the login form is served
+    assert get("/admin/login", "10.0.1.7", X_Forwarded_For="192.168.5.20").status_code == 200
+    # from anywhere else, through the same Traefik: nothing is here -- not even a refusal that admits it
+    assert get("/admin/login", "10.0.1.7", X_Forwarded_For="203.0.113.9").status_code == 404
+    assert get("/admin/", "10.0.1.7", X_Forwarded_For="203.0.113.9").status_code == 404
+    # the JSON API is the same power as the screens, so it is behind the same door
+    assert get("/api/admin/v1/posts", "10.0.1.7", X_Forwarded_For="203.0.113.9").status_code == 404
+    # ... and through the tunnel, where the visitor's address is a public one Cloudflare vouched for
+    app.config["TRUSTED_PROXIES"] = (ipaddress.ip_network("172.18.0.0/16"),)
+    assert get("/admin/login", "172.18.0.4", CF_Connecting_IP="203.0.113.9").status_code == 404
+
+    # the public site is untouched by any of it -- that is the whole point of the split
+    assert get("/sitemap.xml", "10.0.1.7", X_Forwarded_For="203.0.113.9").status_code == 200
+
+    # and an empty ADMIN_NETWORKS is no restriction at all: development, and any deploy that has not set it
+    app.config["ADMIN_NETWORKS"] = ()
+    assert get("/admin/login", "10.0.1.7", X_Forwarded_For="203.0.113.9").status_code == 200
+
+
 def test_throttle_fails_open_and_believes_only_a_proxy_we_named(app):
     from iopstor import throttle
 

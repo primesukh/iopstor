@@ -408,6 +408,8 @@ Writes: `POST /leads` (also the target of the HTML contact form — plain form P
 
 It is post-redirect-get only when the write **succeeds**. A refused save falls through to the same render with the submitted values back in the form and a `400`, the way `new_post` / `edit_post` re-render rather than redirect — a redirect would answer a typo by making the editor retype the record. A refusal is a `(field, message)` pair, **not** a `flash()`: the form carries it as `data-refused-field` / `data-refused`, `initWarranty()` in `admin.js` puts it on that field with `setCustomValidity()` and calls `reportValidity()`, and a `<noscript>` copy says the same sentence without JS. Only a success flashes, at the top, where a confirmation belongs. `editing` is the form's contents, from `request.form` on a refusal and from the row on `?edit=`; the template keys add-vs-edit off `editing.id`, not off `editing` being truthy, so a rejected *new* record does not come back wearing an Edit heading. `?q=` and `?page=` ride through every redirect (save, delete, cancel) so a filtered list survives the round trip.
 
+**Every `/admin` and `/api/admin/v1` route sits behind a `before_request` that answers 404 when `ADMIN_NETWORKS` is set and the caller is outside it** (§12) — the login form and the token endpoint included, because those are the two that take a password.
+
 `/admin/audit` is the activity log: every entry `audit_log` holds, newest first, admin-only, with `?user=` / `?action=` / `?table=` filters and the same `db.paginate(..., 50)` + `page` / `has_next` idiom as `/admin/leads`. It orders by `id DESC` rather than by `at` — ids are handed out in time order so the two agree, and the primary key then does the sorting without a second index. No `/api/admin/v1` mirror exists: nothing consumes the admin API but this browser admin. It opens with a shut `<details>` from `throttle.connection()` saying where the site thinks you are connecting from, so the *From* column can be checked against what the app is actually receiving (§12).
 
 **The screen is translated in `admin_ui.py`, not in the template.** The test it is written against is that somebody who has never seen the database can read a row aloud, so the route hands the template finished rows — `who`, `sentence`, `fields` — and `audit.html` does no thinking. The translators are pure functions living above the routes and importing nothing from them, which is how the offline tests call them directly:
@@ -745,6 +747,21 @@ The invite form is `autocomplete="off"` and its *Temporary password* is `autocom
 - **`POST /admin/users/<pk>/password`** (`@ui_required("admin")`) takes one field, like the invite form, and refuses your own row: `/admin/account` is where you change yours and it asks for the current one, so a self-reset here would walk around that check for the one account whose session is already open. No `login()` — the admin does not become that user. It sits inside the same `{% if u.id != admin_user.id %}` as *Remove*, in a native `<details>`, so it is hidden on your own row for free and costs no JavaScript.
 - `_password_errors(new, confirm=None)` is the shared validator: eight characters minimum (matching the invite form's `minlength`; GoTrue's own floor is six), and a mismatch check that `confirm=None` skips for the admin's one-field form.
 - **Neither path ends that user's other sessions** — GoTrue's admin API has no sign-out-everywhere. Marked `# ponytail:` on `set_password()`.
+
+**The admin does not exist outside the office.** `ADMIN_NETWORKS` is a CIDR list, and when it is non-empty a `before_request` on **both** admin blueprints — `admin_ui` (`/admin`) and `admin_api` (`/api/admin/v1`) — answers `404` to any request whose resolved client address is outside it (client, 2026-09-15: staff reach the admin from the office premises only). The public site is untouched: it is a different blueprint and never consulted.
+
+Four things about the shape:
+
+- **It tests `client_ip()`, not `remote_addr`.** Behind Traefik every request has the same `remote_addr`, so a `remote_addr` test would admit everybody or nobody. That makes this guard exactly as good as `TRUSTED_PROXIES` — see the lockout below.
+- **A blueprint `before_request`, not a check inside `ui_required()`.** The login form is the one route that takes a password and requires no session, so guarding only the authenticated routes would leave the door that matters open. It also covers every route added later without anyone remembering to.
+- **404, not 403.** `/admin` is a well-known path; a refusal saying "not allowed" also says "something is here, keep trying", which from the public internet is an invitation to return with a password list. The API's own `HTTPException` handler turns it into `{"error": "not found"}`, the same answer a missing row gets.
+- **Empty means unrestricted**, which is what development and any deploy that has not set it want. This is a `.split(",")` on `""` → `()`, not the `or`-a-default that `TRUSTED_PROXIES` uses, because here "set nothing" genuinely means "restrict nothing".
+
+**It is a layer, not the lock.** The password, the roles and the throttle are all still there and still do their jobs; this only decides who may knock. It also does nothing about somebody already inside the building, which is what the roles are for.
+
+**The lockout to know about before it happens.** If `TRUSTED_PROXIES` stops matching the real proxy — Traefik recreated onto a different address, a tunnel added whose bridge is not in the list — then `client_ip()` returns the *proxy's* address, that address is not in `ADMIN_NETWORKS`, and **every editor is locked out with a 404 and nothing on screen to say why**. Verified deliberately: with `TRUSTED_PROXIES=10.9.9.0/24` and a request through a proxy at `127.0.0.1`, `/admin/login` answers 404 to an office address. The refusal logs both addresses (`admin refused: <resolved> is outside ADMIN_NETWORKS (connection from <peer>)`), so the container log names which of the two went wrong. **The recovery is to clear `ADMIN_NETWORKS` in Dokploy and redeploy**, which restores the admin immediately; fix `TRUSTED_PROXIES`, then set it again.
+
+**Cloudflare should also be told**, once the tunnel is live: a WAF or ingress rule refusing `/admin*` at the edge means the flood never reaches the origin at all. The same complement-not-replacement argument as the login rate limit below — the app-side guard is the one that is in this repo and tested, so it stays either way.
 
 **Failed passwords are counted, and the counter is a sqlite file on tmpfs** (`iopstor/throttle.py`). Three endpoints verify a password and two of them are anonymous, so all three are behind it:
 
@@ -1353,7 +1370,7 @@ Everything except `test_offline.py` is marked `live` and skips when `.env` has n
 
 ## 14. Configuration
 
-`SECRET_KEY`, `SITE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `MEDIA_BUCKET`, `PAYMENT_PROVIDER`, `THROTTLE_DB`, `LOGIN_MAX_FAILURES`, `LOGIN_WINDOW`, `TRUSTED_PROXIES`. `FLASK_DEBUG=1` in `.env` gives the dev server the debugger and auto-reload; it must be **absent** in production, and nothing in the Dockerfile guards that.
+`SECRET_KEY`, `SITE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `MEDIA_BUCKET`, `PAYMENT_PROVIDER`, `THROTTLE_DB`, `LOGIN_MAX_FAILURES`, `LOGIN_WINDOW`, `TRUSTED_PROXIES`, `ADMIN_NETWORKS`. `FLASK_DEBUG=1` in `.env` gives the dev server the debugger and auto-reload; it must be **absent** in production, and nothing in the Dockerfile guards that.
 
 **Six are required, and the app refuses to boot without them** — `create_app()`'s `REQUIRED`, checked before a blueprint is registered. The four `SUPABASE_*` were always there; `SECRET_KEY` and `SITE_URL` joined them when production became real, and `config.py` dropped their defaults to make the check bite. **Why a refusal rather than a sensible default.** Both used to fail *silently*, which is the expensive way to fail. `SECRET_KEY` fell back to `"dev-only-change-me"`, a string printed in this repo — and `auth.py` accepts a session token as a Bearer fallback when no `Authorization` header is present, so a forged cookie is a way in. `SITE_URL` fell back to `http://localhost:5000`, which does two things at once: every canonical, sitemap `<loc>`, `robots.txt` `Sitemap:` line, RSS guid, JSON-LD `url` and OG image points at localhost, and `SESSION_COOKIE_SECURE` — computed at import from `SITE_URL.startswith("https://")`, not from the request — comes out `False`, so the admin cookie ships over the tunnel without `Secure`. Neither shows up in a smoke test; a deploy that forgets one now stops instead. `test_boot_refuses_without_secret_key_or_site_url` passes empty strings rather than omitting keys, because pipenv loads `.env` and an omitted key would inherit a real value and pass for the wrong reason.
 
@@ -1503,6 +1520,13 @@ client address. There is still no `CF-Connecting-IP` on a non-Cloudflare path, b
 to be: the connection is the visitor, so `remote_addr` is the right answer and each address gets its own
 throttle bucket. And the header is no longer spoofable past the limit from an untrusted peer (§12) — the
 remaining hole is an insider inside `TRUSTED_PROXIES`, which narrowing it closes.
+
+**`ADMIN_NETWORKS` becomes load-bearing the moment the tunnel is live**, because that is when the site
+is reachable by people who are not in the building. Set it to the office range (`192.168.0.0/16` on this
+deployment, client 2026-09-15) *before* switching the tunnel on, not after, and confirm from a phone on
+mobile data that `/admin/login` answers 404 while `/` still loads. If the admin goes dark for everyone,
+the cause is `TRUSTED_PROXIES`, not this (§12): clear `ADMIN_NETWORKS`, redeploy, fix the proxy list,
+set it again.
 
 Switching the tunnel on is therefore four things, not five: `TUNNEL_TOKEN`, `COMPOSE_PROFILES=tunnel`,
 `SITE_URL` back to `https://www.iopstor.com`, and `TRUSTED_PROXIES` wide enough to include the network

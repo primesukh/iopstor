@@ -145,6 +145,7 @@ So the full order is: branch → work → three docs → `/pr` → **stop** → 
 - SEO output (meta, canonical, Open Graph, JSON-LD, sitemap, robots, llms.txt, llms-full.txt, `.md` twins, RSS) is server-rendered from `seo.py` + `public.py`; keep it there. `_indexable()` is the one gate for sitemap, llms and twins.
 - Auth: admin API expects `Authorization: Bearer <Supabase JWT>`; the browser admin keeps the tokens in the signed session cookie and refreshes on expiry. Both verify locally with `SUPABASE_JWT_SECRET` (HS256). `users.id` = GoTrue `sub`. Browser POSTs carry a `csrf` field checked by `ui_required`.
   Roles: `editor` < `admin`. A GoTrue login without a `users` row gets 403.
+  **`ADMIN_NETWORKS` puts the whole admin behind the office network**: set, a `before_request` on both admin blueprints 404s anyone outside it, login form included. It tests `client_ip()`, so a wrong `TRUSTED_PROXIES` locks out every editor — clearing `ADMIN_NETWORKS` is the recovery (`docs/TECHNICAL.md` §12).
 - Payments: only `PaymentGateway` subclasses in `payments.py`; `PAYMENT_PROVIDER` env selects one. `dummy` is the placeholder.
 - Ponytail mode is on for this repo: fewest files, stdlib first, mark deliberate ceilings with `# ponytail:` comments (46 in `iopstor/`; `/ponytail-debt` lists them). Non-trivial logic gets one small pytest test in `tests/test_offline.py` when it can run without Supabase.
 

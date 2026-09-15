@@ -20,7 +20,7 @@ from . import db, display_name, seo
 from .admin_api import apply_post
 from .auth import ROLES, _session_token, create_auth_user, current_user, delete_auth_user, login, set_password
 from .blocks import BLOCKS, EDITOR, LAYOUTS, _NON_TEXT_KEYS, at_path, blocks_text, render_blocks, validate_blocks, warranty_active
-from .throttle import clear as throttle_clear, client_ip, connection, record_failure, retry_after, wait_text
+from .throttle import clear as throttle_clear, client_ip, connection, from_office, record_failure, retry_after, wait_text
 from .storage import delete_media, save_upload
 
 ui = Blueprint("admin_ui", __name__, url_prefix="/admin", template_folder="templates")
@@ -51,6 +51,25 @@ def ui_required(min_role="editor"):
             return fn(*args, **kwargs)
         return wrapper
     return deco
+
+
+@ui.before_request
+def _office_only():
+    """The admin does not exist outside the office. A 404 rather than a 403: /admin is a well-known path,
+    and a refusal that says "you are not allowed" also says "there is something here, keep trying" --
+    from the public internet that is an invitation to come back with a password list.
+
+    A blueprint before_request rather than a check inside ui_required(), because the login form itself has to be
+    unreachable too: guarding only the routes that require a session would leave the one door that takes
+    a password wide open. It also covers every route added later without anyone remembering to.
+
+    Both addresses go in the log line, because the way this breaks is TRUSTED_PROXIES drifting from the
+    real proxy -- then client_ip() is the proxy's own address, nobody is in the office, and the admin
+    goes dark for everyone with nothing on screen to say why."""
+    if not from_office():
+        current_app.logger.warning("admin refused: %s is outside ADMIN_NETWORKS (connection from %s)",
+                                   client_ip(), request.remote_addr)
+        abort(404)
 
 
 @ui.app_context_processor
