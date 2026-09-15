@@ -107,6 +107,8 @@ The sections available:
 | **Stats** | Big numbers with labels — "5 PB / in a single rack" |
 | **Testimonial** | A customer quote with their name, role and company |
 | **Spec table** | A two-column table of specifications |
+| **Definitions** | Terms down one side, what each one means down the other — like the ZFS list on the NAS page |
+| **Key points** | A heading, a short intro and a dashed list of points, with an optional button — the shape used down one side of the home page |
 | **Post list** | Automatically pulls in the latest Services, Case Studies or Blog posts. You do not maintain this by hand — new items appear on their own |
 | **Contact form** | An enquiry form. Choose *contact*, *quote* or *career* |
 | **Embed HTML** | For dropping in code from another service, like a map or a video |
@@ -311,8 +313,8 @@ the same buttons, the same typing. It is what lets two people write in the same 
 (*Seeing who else is on the page*, below).
 
 A few sections are left on the old writing area because they contain layout the new one cannot hold —
-the ones with a table, a specification list or a side-by-side panel. On this site that is the **home
-page**, **NAS**, **Contact Us** and **About Us**. Hover such a section and it says so. You can still
+the ones with a table or a side-by-side panel. On this site that is **Contact Us**, part of **NAS**
+and part of **About Us**. Hover such a section and it says so. You can still
 edit them exactly as before; they are the sections that will not get shared editing when it arrives.
 
 In a section on the **new** writing area, five buttons are switched off: **picture**, **table**,
@@ -344,7 +346,7 @@ If something required is missing, the page comes back with the problem listed at
 **The sections that cannot do this yet, and what happens instead.** Two kinds:
 
 - The few sections still on the old writing area — on this site the **home page**, **NAS**, **Contact Us** and **About Us** — say so when you hover them. Two of you can still type in one of those, and it will not scramble under your fingers: while you are typing, nothing moves, and their version arrives when you click away. But only one of the two versions survives, so it is worth agreeing who has it.
-- Inside a **Cards**, **FAQ**, **Numbers** or **Specification** section, the rows are shared as a group rather than row by row. Two people in two different rows of the *same* section will lose one side. Two people in two different sections are fine.
+- Inside a **Cards**, **FAQ**, **Numbers**, **Specification**, **Definitions** or **Key points** section, the rows are shared as a group rather than row by row. Two people in two different rows of the *same* section will lose one side. Two people in two different sections are fine. Everything *outside* the rows — the heading, the small label above it, the intro — is shared word by word like any other writing.
 
 Two smaller things you may notice. The circles vanish on a narrow phone screen, because the bar at the top is already full — the coloured lines on the sections still show. And if somebody else adds or removes a section while you are typing, the page redraws and your cursor goes back to the top; your words are not affected.
 
@@ -663,7 +665,7 @@ work went on the website. See §11.
 the top right, a coloured line down the section the other person is in — and you write in the same
 document: what they type appears on your screen, and you can both be in the same paragraph without
 either of you losing a word. A few sections are still one-at-a-time and say so when you hover them, and
-the rows inside a Cards, FAQ, Numbers or Specification section are shared as a group rather than one by
+the rows inside a Cards, FAQ, Numbers, Specification, Definitions or Key points section are shared as a group rather than one by
 one. See *Seeing who else is on the page* in §4.
 
 **Where did the Instagram link in the footer go?** It is still there, as an icon. The social links used to

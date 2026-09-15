@@ -150,6 +150,13 @@ WHY_NAS = [
     ("Save energy, save costs", "Efficient power usage means lower electricity bills and longer hardware life."),
     ("Supported by real humans", "No bots, no endless tickets. Our support team is real, friendly and ready to help."),
 ]
+# The four ZFS selling points the home page leads with, above a link to the full list below.
+ZFS_POINTS = [
+    "Unlimited snapshots and clones: go back to yesterday, last week or last month",
+    "RAID-Z: instantaneous build, no write hole, multiple-disk failure tolerance",
+    "RAM / SSD / NVMe read-write cache, compression and de-duplication",
+    "Hardware agnostic: replace any component from any vendor",
+]
 # ZFS basic features, from the All-Flash and Hybrid Array flyer.
 ZFS_FEATURES = [
     ("Zettabyte File System", "A file system and logical volume manager with features found in no other. Robust, scalable and easy to administer."),
@@ -251,20 +258,16 @@ def home_blocks(media=lambda name: None):
         {"type": "columns", "data": {"cols": [
             [{"type": "image", "data": {"media_id": media(RACK_IMAGE), "alt": "IOPStor 2U rackmount"}}]
             if media(RACK_IMAGE) else [],
-            [{"type": "rich_text", "data": {"html":
-                '<p class="eyebrow">Built on ZFS</p>'
-                '<h2 class="section-title">The file system trusted by Fortune 500 companies, '
-                'universities and data centres</h2>'
-                '<p class="lead">ZFS never compromises on data safety. Every IOPStor appliance '
-                'inherits it: end-to-end checksums, self-healing pools, and snapshots that recover '
-                'deleted or corrupt data and protect against ransomware.</p>'
-                '<ul class="dash">'
-                '<li>Unlimited snapshots and clones: go back to yesterday, last week or last month</li>'
-                '<li>RAID-Z: instantaneous build, no write hole, multiple-disk failure tolerance</li>'
-                '<li>RAM / SSD / NVMe read-write cache, compression and de-duplication</li>'
-                '<li>Hardware agnostic: replace any component from any vendor</li>'
-                '</ul>'
-                '<p><a class="btn dark" href="/services/storage/nas">All ZFS features</a></p>'}}]]}},
+            # a `points` block, not a rich_text carrying its own classes: Quill drops a bare class,
+            # so written the old way this section could never be co-edited (TECHNICAL 12.3)
+            [{"type": "points", "data": {
+                "eyebrow": "Built on ZFS",
+                "heading": "The file system trusted by Fortune 500 companies, universities and data centres",
+                "subheading": "ZFS never compromises on data safety. Every IOPStor appliance inherits it: "
+                              "end-to-end checksums, self-healing pools, and snapshots that recover deleted "
+                              "or corrupt data and protect against ransomware.",
+                "items": [{"text": t} for t in ZFS_POINTS],
+                "button_label": "All ZFS features", "button_url": "/services/storage/nas"}}]]}},
         {"type": "post_list", "data": {"tone": "grey", "post_type": "product", "limit": 6, "eyebrow": "Appliances",
                                        "heading": "Sized from 5 users upward",
                                        "link_label": "All appliances", "link_url": "/products"}},
@@ -335,10 +338,8 @@ def run_seed():
                 # the design sets the ZFS list as a description list with the configuration panel
                 # beside it, not as a second deck of cards
                 {"type": "columns", "data": {"cols": [
-                    [{"type": "rich_text", "data": {"html":
-                        '<h2 class="section-title">ZFS features, in plain terms</h2><dl class="zfs">'
-                        + "".join(f"<div><dt>{t}</dt><dd>{d}</dd></div>" for t, d in ZFS_FEATURES)
-                        + '</dl>'}}],
+                    [{"type": "definitions", "data": {"heading": "ZFS features, in plain terms",
+                                                      "rows": [{"k": t, "v": d} for t, d in ZFS_FEATURES]}}],
                     [{"type": "rich_text", "data": {"tone": "dark", "html":
                         '<p class="eyebrow">Configuration \u00b7 IOPStor Classic</p>'
                         '<h3>Model IOP4MB</h3>'

@@ -1529,6 +1529,74 @@ def _blk(name, html, kind="rich_text"):
     return {"type": kind, "data": {"_id": name, "html": html}}
 
 
+def test_every_block_type_has_a_template_that_renders(app):
+    """The gap /new-block names in bold: nothing asserts a template exists. The two metadata tests
+    check names, seeds and the markdown branch, and test_render_blocks_uses_template renders only
+    hero and stats -- so a missing or throwing template is a 500 on the public page that the suite
+    would pass straight over. render_blocks() swallows the error when edit=True, which is exactly how
+    it stayed hidden, so this renders BOTH ways."""
+    # A request context, not just an app one: warranty_check reads request.args at render time, and
+    # that is exactly the kind of thing a template-existence check has to survive.
+    # post_list is left out because it queries at render time in BOTH modes -- render_blocks()
+    # computes its `extra` before looking at `edit` -- and this file has to run with no Supabase.
+    with app.test_request_context("/"):
+        for t, seed in blocks.EDITOR["seed"].items():
+            if t == "post_list":
+                continue
+            for edit in (False, True):
+                html = str(blocks.render_blocks([{"type": t, "data": deepcopy(seed)}], edit=edit))
+                assert "not finished yet" not in html, f"{t} (edit={edit}) threw: {html[:200]}"
+                assert html.lstrip().startswith("<section"), f"{t} did not render a section"
+
+
+def test_the_two_sections_that_were_layout_are_block_types_now():
+    """Home's ZFS panel and NAS's feature list were rich_text blocks carrying their own classes, which
+    Quill drops -- so they could never be co-edited. Every field is an EXISTING key, which is what
+    keeps labels, widgets, _TEXT_ORDER and _NON_TEXT_KEYS out of this change entirely."""
+    known = set(blocks._TEXT_ORDER) | blocks._NON_TEXT_KEYS
+    for t in ("points", "definitions"):
+        required, optional = blocks.BLOCKS[t]
+        assert set(required + optional) <= known, f"{t} introduces a key nothing knows how to read"
+        assert t not in blocks.NEVER_NESTED          # both of the real ones live inside a column
+        assert blocks.validate_blocks([{"type": t, "data": blocks.EDITOR["seed"][t]}]) == []
+
+    # the intro is `subheading`, not `text`: EDITOR["labels"] is keyed by the bare field name with no
+    # per-block override, so `text` would label the intro and the repeater rows identically
+    assert "subheading" in blocks.BLOCKS["points"][1] and "text" not in blocks.BLOCKS["points"][1]
+    assert blocks.EDITOR["items"]["points"] == ["text"]
+    assert blocks.EDITOR["items"]["definitions"] == blocks.EDITOR["items"]["spec_table"]
+
+
+def test_a_definition_list_reaches_the_markdown_twin_as_a_list():
+    """_html_md() is regex with no <dt>/<dd> case, so as HTML these ran term and description together
+    into one line in every .md twin. A block type gets a branch of its own."""
+    md = blocks.blocks_md([{"type": "definitions", "data": {
+        "heading": "In plain terms", "rows": [{"k": "RaidZ", "v": "No write hole."}]}}])
+    assert "## In plain terms" in md and "**RaidZ**" in md and "No write hole." in md
+
+    pts = blocks.blocks_md([{"type": "points", "data": {
+        "eyebrow": "Why", "heading": "It matters", "subheading": "Because.",
+        "items": [{"text": "First"}, {"text": "Second"}],
+        "button_label": "Read on", "button_url": "/x"}}])
+    assert "## It matters" in pts and "- First" in pts and "- Second" in pts and "[Read on](/x)" in pts
+
+
+def test_the_content_migration_moves_the_drafts_and_the_gate_verdict_too():
+    """0011 rewrites two pages' blocks -- and two more things without which the change does not stick.
+    post_drafts.state is a CRDT document carrying the OLD section ids, and initShared() loads it in
+    preference to blocks, so a stale draft puts the old shape straight back. And data._rich is the
+    Quill gate's stored verdict, which mountQuill() reads and never recalculates, so a block that
+    already carries one is deaf to the gate accepting more."""
+    sql = (pathlib.Path(__file__).resolve().parent.parent
+           / "migrations" / "0011_sections_that_were_layout.sql").read_text()
+    assert "update public.posts" in sql and "update public.post_drafts" in sql
+    assert "state  = ''" in sql                      # the draft's shared document is cleared
+    assert "#- '{data,_rich}'" in sql                # the stored verdict is stripped
+    # matched by content, never by id: production has its own ids
+    assert "<ul class=\"dash\">" in sql and "<dl class=\"zfs\">" in sql
+    assert "where id = " in sql and "p.id" in sql and "1158" not in sql and "id = 32" not in sql
+
+
 def test_a_page_edit_is_reported_section_by_section_even_when_a_section_was_added():
     """_blocks_fields() used to compare the two block-TYPE lists, so adding a section threw the whole
     page into one word diff labelled "The writing on the page" -- and every other section's

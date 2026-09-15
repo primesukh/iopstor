@@ -33,6 +33,15 @@ BLOCKS = {  # type: (required fields, optional fields)
     "post_list": (["post_type"], ["heading", "eyebrow", "term", "limit", "top_level",
                                   "link_label", "link_url"]),  # queried at render time; top_level=true → parents only
     "spec_table": (["rows"], ["heading"]),  # rows: [{k, v}]
+    # A term and its description on a ruled row -- the design's "ZFS features, in plain terms".
+    # Deliberately spec_table's shape: same repeater, same labels, only the markup differs. Values are
+    # ESCAPED, so this is for prose and not for a list carrying links (see Contact Us, which is not
+    # this block and is built from Settings instead).
+    "definitions": (["rows"], ["heading"]),  # rows: [{k, v}]
+    # A heading, a short intro and a dashed list of points, with an optional button: the shape the
+    # design draws down one side of a two-column band. It was written as a rich_text carrying its own
+    # classes, which Quill cannot hold without dropping them -- section 12.3.
+    "points": (["items"], ["eyebrow", "heading", "subheading", "button_label", "button_url"]),  # items: [{text}]
     "contact_form": (["kind"], ["heading"]),  # kind: contact | quote | career → POST /api/v1/leads
     # file_media_id, not media_id: EDITOR["labels"] is keyed by bare field name and media_id already reads "Image".
     # ponytail: the viewer is a fixed height in site.css; add a "height" field if editors ask for one.
@@ -59,7 +68,8 @@ EDITOR = {
                 "count_up": "checkbox", "fx": "choice", "height": "choice"},
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
     "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label", "fx", "count_up"],
-              "spec_table": ["k", "v"], "gallery": ["media_id", "alt"], "hero": ["media_id", "alt"],
+              "spec_table": ["k", "v"], "definitions": ["k", "v"], "points": ["text"],
+              "gallery": ["media_id", "alt"], "hero": ["media_id", "alt"],
               "columns": []},  # a column is a list of blocks, not a row of fields: the panel only adds/moves/removes it
     # friendlier labels; anything missing is the key with underscores as spaces
     "labels": {"q": "Question", "a": "Answer", "k": "Label", "v": "Value", "html": "Content", "kind": "Form type",
@@ -82,13 +92,16 @@ EDITOR = {
     # order the section picker offers them in, commonest first (Jinja's tojson sorts dict keys,
     # so BLOCKS' own order does not survive the trip to the browser)
     "order": ["hero", "rich_text", "cards", "columns", "spacer", "divider", "cta", "faq", "stats",
-              "testimonial", "spec_table", "image", "gallery", "pdf", "post_list", "contact_form",
+              "testimonial", "points", "spec_table", "definitions", "image", "gallery", "pdf",
+              "post_list", "contact_form",
               "warranty_check", "embed_html"],
     # the visual inserter: icon, plain-English name, one line on what the visitor sees
     "names": {
         "hero": ("\U0001F3D4", "Hero", "The big opening band: headline, one line of text, one button."),
         "rich_text": ("\u00B6", "Rich text", "Words, headings and lists \u2014 type into it like a Word document."),
         "cards": ("\u25A4", "Cards", "A row of boxes, each with a title, a line of text and an optional link."),
+        "points": ("\u2014", "Key points", "A heading, a short intro and a dashed list of points, with an optional button."),
+        "definitions": ("\u2637", "Definitions", "Terms down one side, what each one means down the other."),
         "columns": ("\u25A5", "Columns", "Two or more columns side by side, each holding its own sections."),
         "cta": ("\U0001F4E3", "Call to action", "A coloured band that asks the visitor to do one thing."),
         "faq": ("\u2753", "Questions & answers", "Questions that open to reveal the answer. Google shows these too."),
@@ -124,6 +137,12 @@ EDITOR = {
         "testimonial": {"quote": "What a customer said about working with you.", "author": "Their name",
                         "role": "Job title", "company": "Company"},
         "spec_table": {"heading": "Specifications", "rows": [{"k": "Capacity", "v": "Up to 5 PB"}, {"k": "Interface", "v": "NFS, SMB, S3"}]},
+        "definitions": {"heading": "In plain terms", "rows": [{"k": "First term", "v": "What it means, in a sentence."},
+                                                              {"k": "Second term", "v": "What it means, in a sentence."}]},
+        "points": {"eyebrow": "Why it matters", "heading": "The thing this section is about",
+                   "subheading": "One or two lines setting the list up.",
+                   "items": [{"text": "The first point, in a line."}, {"text": "The second point, in a line."},
+                             {"text": "The third point, in a line."}]},
         "contact_form": {"kind": "contact", "heading": "Get in touch"},
         "warranty_check": {"heading": "Check your warranty"},
         "post_list": {"post_type": "post", "heading": "Latest"},
@@ -447,6 +466,15 @@ def blocks_md(blocks, h1=True):
         elif t == "testimonial":
             who = ", ".join(x for x in (d.get("author"), d.get("role"), d.get("company")) if x)
             out.append(f"> {d.get('quote', '')}" + (f"\n>\n> — {who}" if who else ""))
+        elif t == "definitions":
+            # Markdown has no definition list, and the regex converter has no <dt>/<dd> case either --
+            # which is why these ran together as prose in the .md twins for as long as they were HTML.
+            rows = [r for r in d.get("rows") or [] if isinstance(r, dict)]
+            out += [head] + [f"**{r.get('k', '')}**  \n{r.get('v', '')}" for r in rows]
+        elif t == "points":
+            out += [d.get("eyebrow") or "", head, d.get("subheading") or "",
+                    "\n".join(f"- {i.get('text', '')}" for i in d.get("items") or [] if isinstance(i, dict)),
+                    _md_link(d.get("button_label"), d.get("button_url")) if d.get("button_label") else ""]
         elif t == "spec_table":
             rows = [r for r in d.get("rows") or [] if isinstance(r, dict)]
             table = "\n".join(f"| {r.get('k', '')} | {r.get('v', '')} |" for r in rows)
