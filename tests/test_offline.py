@@ -1525,6 +1525,93 @@ def test_a_section_name_and_the_quill_verdict_are_not_prose():
     assert "_id" in blocks.EDITOR["scalars"] and "url" in blocks.EDITOR["scalars"]
 
 
+def _blk(name, html, kind="rich_text"):
+    return {"type": kind, "data": {"_id": name, "html": html}}
+
+
+def test_a_page_edit_is_reported_section_by_section_even_when_a_section_was_added():
+    """_blocks_fields() used to compare the two block-TYPE lists, so adding a section threw the whole
+    page into one word diff labelled "The writing on the page" -- and every other section's
+    field-by-field report was lost with it. Rare when one person edited at a time; the common case
+    once two do, because somebody is always adding a section. Sections carry a stable _id now, so
+    they can be paired by name: exact rather than heuristic, and it survives a move."""
+    from iopstor.admin_ui import _blocks_fields
+
+    rows = _blocks_fields([_blk("a", "<p>One</p>"), _blk("b", "<p>Two</p>")],
+                          [_blk("a", "<p>One changed</p>"), _blk("b", "<p>Two</p>"), _blk("c", "<p>New</p>")])
+    assert any(r["note"].startswith("Added") for r in rows)          # the new section is named
+    words = [r for r in rows if r["label"] == "Rich text section"]    # and so is what changed in `a`
+    assert len(words) == 1 and "changed" in str(words[0]["now"])
+    assert not any("Two" in str(r.get("now", "")) for r in rows)     # `b` did not move, so it is silent
+
+    moved = _blocks_fields([_blk("a", "<p>One</p>"), _blk("b", "<p>Two</p>")],
+                           [_blk("b", "<p>Two</p>"), _blk("a", "<p>One</p>")])
+    assert [r["note"] for r in moved] == ["Moved the sections around."]
+
+
+def test_a_page_edit_from_before_sections_had_names_still_renders():
+    """Everything saved before _id existed -- most of the archive -- has no name to pair by, so the
+    positional path has to stay. A row whose sections are unnamed must not crash or silently report
+    nothing, and two blocks sharing a name (a duplicate that predates the fix) must not pair either."""
+    from iopstor.admin_ui import _blocks_fields
+
+    old_was = [{"type": "rich_text", "data": {"html": "<p>One</p>"}}]
+    old_now = [{"type": "rich_text", "data": {"html": "<p>One changed</p>"}},
+               {"type": "divider", "data": {}}]
+    rows = _blocks_fields(old_was, old_now)
+    assert rows and any("Added" in r["note"] for r in rows)
+
+    twins = _blocks_fields([_blk("same", "<p>A</p>"), _blk("same", "<p>B</p>")],
+                           [_blk("same", "<p>A</p>"), _blk("same", "<p>C</p>")])
+    assert twins   # falls back rather than pairing two sections that answer to one name
+
+
+def test_one_sitting_is_one_entry_however_many_times_they_reloaded():
+    """A sitting ends after fifteen minutes with no activity -- the client's rule -- and not when
+    somebody reloads or walks to another screen. But each visit starts with a fresh baseline, so
+    without merging the second visit's `was` replaces the first's and the entry covers only what
+    they did after coming back."""
+    from iopstor.db import _merge_changes
+
+    visit1 = {"blocks": [[_blk("a", "<p>One</p>")], [_blk("a", "<p>One edited</p>")]]}
+    visit2 = {"blocks": [[_blk("a", "<p>One edited</p>"), _blk("b", "<p>Two</p>")],
+                         [_blk("a", "<p>One edited</p>"), _blk("b", "<p>Two edited</p>")]]}
+    was, now = _merge_changes(visit1, visit2)["blocks"]
+    assert [b["data"]["html"] for b in was] == ["<p>One</p>", "<p>Two</p>"]        # earliest each
+    assert [b["data"]["html"] for b in now] == ["<p>One edited</p>", "<p>Two edited</p>"]   # latest
+
+    # nothing to merge by, and nothing to merge with: the later visit stands on its own
+    unnamed = {"blocks": [[{"type": "rich_text", "data": {}}], []]}
+    assert _merge_changes(unnamed, visit2) == visit2
+    assert _merge_changes(None, visit2) == visit2
+
+
+def test_an_entry_covers_only_this_editors_own_sections_from_when_they_touched_them():
+    """Two faults in one function. `sitting()` sent a whole-page `was` beside a narrowed `now`, so the
+    two halves described different documents and an entry claimed a colleague's sentence -- a real row
+    read WAS '<p></p>' NOW '<p>Good Hello Afternoon</p>...' for somebody who had added one word to it.
+    And `touched()` fired only from the two TYPING handlers, so a section this person deleted, moved,
+    or added without typing into never appeared in their entry at all."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    sit = js[js.index("function sitting(now)"):js.index("function body(now, close)")]
+    assert "return [JSON.stringify(wasOut), JSON.stringify(nowOut)];" in sit   # both sides, together
+    assert "wasOut.push(mine[id]);" in sit          # the snapshot, not the page-load document
+    assert "if (!mine[id]) return;" in sit          # somebody else's section: silent on both sides
+
+    # the snapshot is taken in touched() itself, so a deletion is captured while it is still in MODEL
+    at = js.index("touched = function (id) {")
+    tch = js[at:js.index("nudgeSave = function ()", at)]
+    assert "if (!id || mine[id]) return;" in tch and "JSON.parse(JSON.stringify(b))" in tch
+    assert 'touched(rootIdOf(path));        // while it is still here' in js
+    for site in ("function delBlock(", "function moveBlock(", "function dupBlock(", "function addParagraph("):
+        at = js.index(site)
+        assert "touched(" in js[at:at + 700], site
+
+    # leaving the page flushes, it does not end the sitting; only the idle timer does
+    assert 'window.addEventListener("pagehide", function () { closeSession(false); });' in js
+    assert "closeSession(true); }, 15 * 60 * 1000)" in js
+
+
 def test_a_draft_that_could_not_be_stored_does_not_report_itself_as_saved():
     """0010 may not be applied, and the editor has to run when it is not -- but silently is the one
     way it must not, because the page then serves the PUBLISHED version back on the next reload and

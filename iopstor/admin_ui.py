@@ -1118,15 +1118,44 @@ def _section_rows(prefix, was, now):
     return rows
 
 
+def _by_id(blocks):
+    """Sections keyed by the name they carry. None when any of them has no name, or two share one --
+    content saved before _id existed, which is most of the archive."""
+    out = {}
+    for b in blocks or []:
+        name = (b.get("data") or {}).get("_id")
+        if not name or name in out:
+            return None
+        out[name] = b
+    return out
+
+
 def _blocks_fields(was, now):
     """A page's content, as a list of rows saying which section and which field changed. The whole
     page was printed twice before this; the words are only half a page edit, and the half the client
     was actually looking at was the other one."""
     was, now = was or [], now or []
+    wmap, nmap = _by_id(was), _by_id(now)
+    if wmap is not None and nmap is not None:
+        # Aligned by NAME, not by position. Every section has carried a stable _id since the
+        # document became shared, so adding one no longer costs the field-by-field report on all the
+        # others -- which used to collapse to a single page-wide word diff labelled "The writing on
+        # the page". Rare when one person edited at a time; the common case once two people do, since
+        # somebody is always adding a section.
+        pairs = [(wmap[k], nmap[k]) for k in nmap if k in wmap]
+        gained = [nmap[k] for k in nmap if k not in wmap]
+        lost = [wmap[k] for k in wmap if k not in nmap]
+        rows = _section_rows("", [a for a, _ in pairs], [b for _, b in pairs])
+        if gained or lost:
+            rows.insert(0, _row(FIELD["blocks"], _structural(lost, gained)))
+        elif [k for k in wmap if k in nmap] != [k for k in nmap if k in wmap]:
+            rows.insert(0, _row(FIELD["blocks"], "Moved the sections around."))
+        return rows or [_row(FIELD["blocks"], "Nothing an editor would see.")]
+    # No names to align by. Positions are all there is, so a change of shape means one page-wide diff.
     if [x.get("type") for x in was] != [x.get("type") for x in now]:
         # ponytail: a save that both adds a section and swaps a picture reports the section and the
-        # words, and drops the picture -- no index survives to hang a settings row on. Upgrade:
-        # difflib.SequenceMatcher on the two type lists, _section_rows() over each `equal` range.
+        # words, and drops the picture -- no index survives to hang a settings row on. Only reachable
+        # for content that predates _id; anything saved by the current editor takes the branch above.
         rows = [_row(FIELD["blocks"], _structural(was, now))]
         t_was, t_now = blocks_text(was), blocks_text(now)
         if t_was != t_now:

@@ -435,14 +435,53 @@ def open_sessions(post_id):
     return _tolerate_0010(lambda: rows(table("post_sessions").select("*").eq("post_id", post_id)), []) or []
 
 
+def _merge_changes(old, new):
+    """One person, one sitting, more than one visit to the page. Keep the EARLIEST `was` for each
+    section and the LATEST `now`, matched by the section's own name.
+
+    A sitting ends after fifteen minutes with no activity -- the rule the client asked for -- and not
+    when somebody reloads or wanders off to another screen and comes back. But each visit starts with
+    a fresh baseline, so without merging here the second visit's `was` would replace the first's and
+    the entry would cover only whatever they did after returning. Sections with no name cannot be
+    matched, so the later visit simply stands on its own."""
+    if not old or "blocks" not in (old or {}) or "blocks" not in (new or {}):
+        return new
+    was_old, now_old = old["blocks"]
+    was_new, now_new = new["blocks"]
+
+    def name(b):
+        return ((b or {}).get("data") or {}).get("_id")
+
+    def first_win(*lists):
+        seen, out = set(), []
+        for bs in lists:
+            for b in bs or []:
+                if name(b) and name(b) not in seen:
+                    seen.add(name(b))
+                    out.append(b)
+        return out
+
+    if not all(name(b) for bs in (was_old, now_old, was_new, now_new) for b in bs or []):
+        return new
+    return {**new, "blocks": [first_win(was_old, was_new),     # as they first found each section
+                              first_win(now_new, now_old)]}    # as they have left it
+
+
 def touch_session(post_id, user, changes, ip=""):
     """What THIS editor has changed since they opened the page, kept until their session is closed.
     Not audited for the same reason save_draft() is not; flush_sessions() is where it becomes a log
     entry. `changes` is already {field: [was, now]} -- the shape audit_log.changes uses -- so the
-    Activity screen renders it with no new code."""
-    return _tolerate_0010(lambda: table("post_sessions").upsert(
-        {"post_id": post_id, "user_id": user["id"], "user_email": user.get("email") or "",
-         "ip": ip, "changes": changes}, on_conflict="post_id,user_id").execute().data)
+    Activity screen renders it with no new code. Merged into whatever this person's open session
+    already holds, so one sitting is one entry however many times they reloaded."""
+    def go():
+        prev = one(table("post_sessions").select("changes")
+                   .eq("post_id", post_id).eq("user_id", user["id"]))
+        table("post_sessions").upsert(
+            {"post_id": post_id, "user_id": user["id"], "user_email": user.get("email") or "",
+             "ip": ip, "changes": _merge_changes((prev or {}).get("changes"), changes)},
+            on_conflict="post_id,user_id").execute()
+        return True
+    return _tolerate_0010(go, default=False)
 
 
 def flush_sessions(post_id, idle_minutes=15, user_id=None):
