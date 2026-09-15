@@ -58,7 +58,7 @@ Dependency direction: `public.py` and `admin_ui.py` both import from `admin_api.
 
 ## 3. Data model
 
-Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_warranty.sql` and `0004_warranty_date_check.sql`, and `audit_log` from `0008_audit_log.sql`.
+Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_warranty.sql` and `0004_warranty_date_check.sql`, `audit_log` from `0008_audit_log.sql`, and `post_drafts` + `post_sessions` from `0010_working_draft.sql`.
 
 | Table | Purpose | Notable columns |
 |---|---|---|
@@ -70,6 +70,8 @@ Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_w
 | `leads` | Form submissions | `kind`, contact fields, `data` (JSONB), `status` |
 | `warranties` | The warranty register, looked up by serial number | `serial`, `serial_key` (generated), `customer_name`, `email`, `purchase_date`, `expiry_date`, `amc`, `remarks`, `remarks_public` |
 | `payments` | Orders | `provider`, `provider_ref`, `amount`, `currency`, `status`, `raw` |
+| `post_drafts` | The unpublished edits of one page. `posts.blocks` stays the **published** content | `post_id` (PK, cascades), `blocks` (JSONB), `state` (base64 CRDT, empty until the shared-document PR), `updated_at`, `updated_by` |
+| `post_sessions` | One person's open sitting on one page, so the log can still say what each editor changed | `(post_id, user_id)` PK, `user_email`, `ip`, `changes` (`{field: [was, now]}`), `started_at`, `updated_at` |
 | `menus` | Header/footer nav | `items` (JSONB, one level of `children`) |
 | `settings` | Key/value site config | `key`, `value` (JSONB) |
 | `redirects` | Legacy URL mapping | `from_path` (unique), `to_url`, `code`, `hits` |
@@ -133,6 +135,34 @@ Three hard rules:
 - **Never write to `audit_log` through `insert()`** — it would recurse. `_audit()` uses `table("audit_log")` directly.
 
 ---
+
+**The working draft, and the only two writes in the app that are not audited.** `get_draft()` /
+`save_draft()` / `clear_draft()` and `touch_session()` / `flush_sessions()` / `open_sessions()` sit
+beside the post helpers and never touch `posts.blocks`.
+
+`save_draft()` and `touch_session()` are upserts on their own key (the `on_conflict=` shape
+`set_menu()` and `set_settings()` already use, because neither table is keyed by `id`) and **neither
+writes an `audit_log` row**. That is a deliberate departure from "every write is audited", and the
+reason is a ceiling that already existed: `audit_log` has no retention job and `_diff()` stores the
+whole `blocks` array on *both* sides of every row, so routing an autosave through `db.update()` would
+add a full copy of the page every second or two, per editor, without bound. The per-person record is
+not lost, it is deferred — `flush_sessions()` writes **one** row per person per sitting (§12.1).
+
+`flush_sessions(post_id, idle_minutes=15, user_id=None)` writes those rows and deletes the sessions.
+Two details are load-bearing. It passes `user=` and `ip=` from the **session row**, not from the
+current request, because with no scheduler here a stale session is closed inside whoever next touches
+the page — usually a different editor — and taking either from that request would record the wrong
+person; `_audit()` already took `user` for exactly this shape of reason (a login is logged before
+`g.user` exists) and now takes `ip` too. And a session with an empty `changes` writes nothing: opening
+a page and reading it is not an edit, though the row is still cleared.
+
+**`_tolerate_0010()` is how the app runs before the migration is applied**, and the error code in it
+is not the one you would guess. PostgREST answers from its schema cache and never reaches Postgres, so
+a missing table is **`PGRST205`**, not Postgres's `42P01` — measured against the dev Supabase, where
+assuming `42P01` made the editor raise instead of falling back. Both are accepted, since a function or
+a view would reach Postgres and report the other. Anything else still raises: a permission error
+swallowed there would look like "autosave is simply off". Guarded by
+`test_the_app_runs_before_the_draft_migration_is_applied`.
 
 ## 5. URL scheme and the resolver
 
@@ -402,8 +432,27 @@ When the words are identical, no setting moved and the two blocks still differ, 
 
 The template renders the Was/Now grid **only when a row has one** (`{% if f.was or f.now %}`), so a row that is just a sentence is one line. **Restore stays one button per entry, after all the rows**: it writes the whole `blocks` array back, not the field you are looking at, and a button per row would promise otherwise.
 
+**`POST /admin/posts/<id>/draft`** is the editor saving itself, every ~1.5 s. It writes the working
+draft and never `posts.blocks`, runs `validate_blocks()` first (an invalid draft would otherwise be
+refused by `apply_post()` at the worst possible moment — the press of the button), and answers JSON
+with `Cache-Control: no-store`. It carries `blocks`, `state`, and the session's `was` / `now` /
+`close`; `navigator.sendBeacon()` posts the same `FormData` with `close=1` on `pagehide`, which is
+why the body is form-encoded rather than JSON — `ui_required` reads `csrf` out of `request.form`.
+Like every admin `fetch()`, the caller must test `r.redirected`: a finished session is a 302 to the
+login page that `fetch()` follows, arriving as 200 HTML rather than a 401.
+
+**`POST /admin/posts/<id>/draft/discard`** throws the unpublished edits away and is logged with
+`db.audit_event("discard", …)` — no row of ours changes in a way `db.py` can see, and a deletion
+nobody recorded is exactly the gap the log exists to close.
+
 **What is deliberately not recorded**, each because recording it would make the log worse rather than better:
 
+- **The autosave itself** — and only the autosave. `audit_log` has no retention job and holds a whole
+  `blocks` array on both sides of every row, so a row every second or two per editor would grow
+  without bound. Note what this is *not*: `POST /admin/posts/<id>/draft` is not a route that writes
+  nothing to the log. It closes editing sessions that have gone quiet, and each of those **is** an
+  audit row, attributed to the editor who made the changes rather than to whoever happened to trigger
+  the flush. The `AUDITED` entry says exactly that, because the route-accounting test cannot.
 - **Reads.** Opening a page, viewing Leads. A working day is roughly fifty lines of looking per line of doing, and the change somebody came to find would be buried.
 - **Session and token mechanics** — the CSRF token, the cookie, and the GoTrue refresh rotation `_session_token()` performs on *every* admin request including GETs. A session staying alive is not a step anybody takes; logging it would add a line per page load. This covers `POST /auth/refresh` and the re-login inside `account()` after a password change, where the password change itself is the event.
 - **Refusals other than a blocked login.** A rejected save or a permission refusal changed nothing and the person simply tried again. A *blocked* login is the line that shows an attack, and is recorded — **once, at the crossing**. `throttle.record_failure()` returns `True` only for the attempt that reaches `LOGIN_MAX_FAILURES`; logging from `retry_after()` instead would write a row on every attempt for the whole window, handing anyone hammering a locked login the ability to fill the audit log at will (`test_a_lockout_is_recorded_once_not_on_every_blocked_attempt`).
@@ -413,6 +462,13 @@ The template renders the Was/Now grid **only when a row has one** (`{% if f.was 
 - **Anything under `TESTING`.** The live suite writes to the real database; without this the client's Activity screen fills with `zz-test` rows that the append-only trigger forbids anyone to remove. See §3.
 
 **`POST /admin/audit/<id>/restore`** writes the "was" half of an entry back — `{k: pair[0] for k, pair in changes.items()}` — and because the restore goes through the ordinary write helpers it is itself logged, as `action="restore"`. One stored format, four writers, because not every entry's fields are columns of the table it names: `settings` and `menus` are keyed by their own column rather than `id`, so they need `set_settings()` / `set_menu()`; a `posts` entry whose one field is `terms` came from `set_post_terms()` and goes back the same way (`posts` has no `terms` column — `db.update()` would 400 on it); everything else takes `db.update()`. Two refusals are flashes rather than 502s: a `settings` entry whose "was" half is `None` (the key did not exist, and `settings.value` is `NOT NULL`), and blocks that no longer validate. `blocks` is re-run through `validate_blocks()` first, because a block type can have been renamed or dropped since the version was saved, and a failure is a `flash()` rather than a 502.
+
+**Restore also clears the working draft** when it puts a `posts` entry's `blocks` back, and without
+that line it would appear not to have worked at all: `posts.blocks` goes back, then the editor opens
+and loads the draft — which is still the version that was just undone — and its next autosave writes
+that straight over the restore. `flask seed --reset-content` carries the same line for the same
+reason. Restore keeps its two existing carve-outs: it deliberately does **not** pass `if_unchanged`
+(an intentional overwrite is the whole point of the button), and `_restorable()` below is unchanged.
 
 **What is restorable is not what it first looks like** (`_restorable()`). An `update` always is. A `delete` is only for `posts`, because that is a move to the trash and the row is still there. Every other delete is real, and re-creating the row would be a lie: a deleted user's GoTrue account is gone so the row would come back unable to log in, a deleted media row would point at a bucket object already removed, `warranties.serial_key` is `GENERATED ALWAYS` and refuses to be written back, and a deleted taxonomy's terms cascaded away. Those entries still *show* the whole row they removed, which is what makes them evidence. `POST /admin/posts/<id>/restore` is the same undo reached from the Posts list's trash filter, and it comes back as a **draft** — the page has been off the site for a while and whoever restores it should be the one to decide it goes live again.
 
@@ -997,6 +1053,45 @@ SortableJS, and opens `blockFields()` over itself for everything that is not inl
 are cancelled in the capture phase: a `contact_form` block would otherwise post a real lead.
 
 
+**The page saves itself, and the button publishes.** `initAutosave()` (`admin.js`) writes the whole
+document to `POST /admin/posts/<id>/draft` 1.5 s after any change, and the big button copies that draft
+into `posts.blocks` — the only moment anything a visitor can see moves. Five things about it are
+deliberate:
+
+- **It hangs off `markDirty()`**, the single funnel all thirteen mutation sites already reach, rather
+  than off thirteen new calls. `nudgeSave` is a no-op reassigned by `initAutosave()`, the same
+  late-binding shape `syncBar()` and `paintPeers()` use, because `markDirty()` can run before there is
+  anywhere to save to — and on `/posts/new` there is no row yet, so autosave stays off until the post
+  has been created once.
+- **It serialises `prune(MODEL)`**, the serialiser the form *submit* uses, not the shallower
+  `MODEL.filter(written)` that Preview sends. The draft has to be the same bytes Publish would store,
+  or publishing would change the page by itself.
+- **The button says `Publish` only when the page's status is `published`**, and `Save` otherwise —
+  pressing it on a Draft-status page publishes nothing to anybody. It is server-rendered from
+  `p.status` and relabelled by a `change` listener on the status `<select>`, so it does not start
+  lying the moment somebody flips the dropdown. The route and the server code are identical either
+  way; only the word changes.
+- **`.ed-saved` is new UI, not a rename.** Nothing rendered saved-or-unsaved state before this —
+  `dirty` had exactly two consumers, the submit reset and the `beforeunload` guard — and with no Save
+  to press, the absence would read as "nothing is happening". It ages itself (*Saved just now* →
+  *Saved 3 minutes ago*) on a 30 s tick, and hides under the same `max-width:700px` rule as the
+  presence roster, because `.ed-bar` never wraps.
+- **A successful autosave clears `dirty`**, so the leave-this-page warning now fires only for work
+  that genuinely is not on the server — a new post, or the gap between a keystroke and its save.
+
+**Sessions: what the log says now that Save is gone.** Every autosave also carries `was` (the document
+as this editor found it) and `now`, which `_record_session()` stores on `post_sessions`; fifteen
+minutes after their last change — or on `pagehide`, via `sendBeacon` with `close=1` — that becomes one
+`audit_log` row with `action="edit"`, attributed to them. The browser is the only place that can know
+which blocks *this* person touched, which is why both halves come from the client rather than being
+diffed on the server. Today the editor is single-player so `now` is simply the current document; once
+the document is shared this has to become *`was` with only my touched blocks updated*, or one editor's
+entry claims everybody's work. `# ponytail:` in `initAutosave()` says so.
+
+There is **no scheduler** — no cron, thirty stateless workers — so the idle timer and the beacon are
+optimisations and the real backstop is `db.flush_sessions()` being called by whoever next touches the
+page: an autosave, a publish, or opening the editor. A crashed tab still gets its entry.
+
 ### 12.2 Preview
 
 The canvas is honest about content but silent about everything around it, and a **draft cannot be
@@ -1383,6 +1478,17 @@ Marked in code with `# ponytail:` comments.
   `head`. All three are Debian-essential and were confirmed present in `python:3.13-slim`
   (`docker run --rm python:3.13-slim bash -c 'which bash grep head'`); re-check it if the base image
   ever changes, because the failure mode is a container that reports itself unhealthy forever.
+- **The working draft is shared but not merged yet.** Two editors autosaving one page still overwrite
+  each other every second or two, because the draft is one row and nothing reconciles two copies of the
+  document — presence tells them somebody else is there, and that is all. The shared document is the
+  next PR; until then autosave is best understood as per-editor crash recovery.
+- **A session on a page nobody ever reopens stays pending.** With no scheduler, stale sessions are
+  closed by whoever next touches the page; if nobody ever does, the `post_sessions` row sits there and
+  its `audit_log` entry is never written. The row is not lost and a sweep command could close it, but
+  there is none. Marked `# ponytail:` in `db.flush_sessions()`.
+- **The session diff is whole-document.** Correct while only one person can edit at a time, and wrong
+  the moment the document is shared — one editor's entry would claim everybody's work. Named in
+  `initAutosave()` as the thing the shared-document PR has to narrow.
 - **Presence is advisory, and its *where* is best-effort.** `data-b` is positional, so a structure fingerprint hides the
   section markers whenever two editors' block lists differ rather than drawing them on the wrong block (§12.3). A
   caret position also ages out after a minute, because the editor raises no event when focus leaves a field. The

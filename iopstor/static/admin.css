@@ -139,6 +139,17 @@
 #canvas-wrap{flex:1;min-height:18rem;overflow:hidden}   /* also holds the scaled-down device preview */
 #canvas{display:block;width:100%;height:100%;border:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius);background:#fff}
 .ed-main>small{display:block;margin-top:.5rem}
+/* "Saved just now". The editor writes itself to a working draft continuously, so the bar has to say
+   so -- before this there was nothing on screen that reported saved-or-not at all, and with no Save
+   to press the absence would read as "nothing is happening". Fixed-ish width so the buttons beside
+   it do not jump every time the wording changes. */
+.ed-saved{flex:none;color:var(--muted);font-size:12px;white-space:nowrap;min-width:6.5rem;text-align:right}
+.ed-saved.bad{color:#b45309;font-weight:600}
+/* An inline "Throw them away" inside the amber note: a button because it posts, a link because that
+   is what it is. `.admin button` at :69 paints every button as a solid blue pill, so this has to
+   out-specify it -- `.linky` alone lost and rendered a full-size blue button inside the sentence. */
+.admin button.linky{background:0;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;cursor:pointer;border-radius:0}
+.admin button.linky:hover{background:0;color:inherit;text-decoration:none}
 /* Who else has this page open. .ed-bar never wraps, so the roster is capped and the overflow becomes
    a "+2" chip rather than pushing Save off a phone. Same circle as the sidebar's .adm-av, smaller. */
 .ed-peers{display:flex;align-items:center;flex:none}
@@ -148,7 +159,7 @@
 .ed-peer.more{background:var(--muted)}
 /* Under 700 the bar is already back-link + pill + two seg groups + Save; the roster is the first
    thing that can go, and presence is still visible on the sections themselves. */
-@media(max-width:700px){.ed-peers{display:none}}
+@media(max-width:700px){.ed-peers,.ed-saved{display:none}}
 /* .notice-amber ships margin-top for the settings screens; in the editor it sits above the page and
    the column already has top padding, so the gap belongs underneath it instead. */
 .ed-main>.notice-amber{margin:0 0 1rem}

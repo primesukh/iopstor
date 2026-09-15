@@ -301,6 +301,9 @@ def _post(pt, title, *, slug=None, parent=None, blocks=None, meta=None, terms=()
         if featured:
             changes["featured_media_id"] = featured
         db.update("posts", post["id"], changes)
+        # Same reason the audit Restore does it: leaving the working draft behind would mean the
+        # editor still opens the version this just overwrote, and saves it back over the reset.
+        db.clear_draft(post["id"])
     if post is None:
         post = db.insert("posts", {
             "post_type_id": pt["id"], "slug": slug, "title": title, "parent_id": parent["id"] if parent else None, "excerpt": excerpt,

@@ -7,6 +7,7 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 
 from flask import current_app, g, has_request_context
+from postgrest import APIError
 from supabase import ClientOptions, create_client
 
 from .throttle import client_ip
@@ -77,9 +78,13 @@ def _before(name, pk):
     return (one(table(name).select("*").eq("id", pk)) or {}) if has_request_context() else {}
 
 
-def _audit(action, name="", row_id="", changes=None, label="", user=None, system=False):
+def _audit(action, name="", row_id="", changes=None, label="", user=None, system=False, ip=None):
     """One row in audit_log. Silent outside a request context, which is exactly how `flask seed` and
     `flask import-media` stay out of the log -- they write content, reproducibly and with no actor.
+
+    `ip` is passed in for the same reason `user` is: a finished editing session (flush_sessions())
+    is written inside whatever request happened to notice it had gone stale, which is usually another
+    editor's. Taking either from the current request would record the wrong person.
 
     `system=True` is the one exception, for `flask create-admin`: creating a credential that can sign
     in and change anything is not content, and a log that cannot say where an admin account came from
@@ -102,7 +107,7 @@ def _audit(action, name="", row_id="", changes=None, label="", user=None, system
     try:
         u = user or (getattr(g, "user", None) if has_request_context() else None) or {}
         table("audit_log").insert({"user_id": u.get("id"), "user_email": u.get("email") or "",
-                                   "ip": client_ip() if has_request_context() else "command line",
+                                   "ip": ip if ip is not None else (client_ip() if has_request_context() else "command line"),
                                    "action": action, "table_name": name,
                                    "row_id": str(row_id), "label": label,
                                    "changes": changes or {}}).execute()
@@ -110,11 +115,13 @@ def _audit(action, name="", row_id="", changes=None, label="", user=None, system
         current_app.logger.warning("audit %s %s/%s not recorded: %s", action, name, row_id, e)
 
 
-def audit_event(action, label="", user=None, system=False):
+def audit_event(action, label="", user=None, system=False, name="", row_id="", changes=None):
     """For the things that are not a row write at all -- signing in, signing out, getting the
-    password wrong, being locked out. `user` is passed in because g.user is not set yet at the
-    moment of a login."""
-    _audit(action, label=label, user=user, system=system)
+    password wrong, being locked out, throwing away unpublished edits. `user` is passed in because
+    g.user is not set yet at the moment of a login; `name`/`row_id` because an act that changed no
+    row of ours can still be ABOUT one, and without them the Activity screen cannot name the page
+    (_post_context() looks the post up by row_id)."""
+    _audit(action, name=name, row_id=row_id, changes=changes, label=label, user=user, system=system)
 
 
 def insert(name, row):
@@ -363,6 +370,97 @@ def set_post_terms(post_id, term_ids):
         _audit("update", "posts", post_id, {"terms": [before, list(term_ids)]},
                _label(one(table("posts").select("title").eq("id", post_id)) or {}))
     uncache("post_index_")
+
+
+# ---- the working draft, and who changed what --------------------------------
+"""posts.blocks is the PUBLISHED content and nothing here touches it. The editor saves itself into
+post_drafts every second or two; Publish is what copies a draft across through the ordinary audited
+update() and then clears it. See migrations/0010 for why these are tables and not columns."""
+
+# PGRST205 is what actually comes back, not Postgres's own 42P01: PostgREST answers from its schema
+# cache and never reaches the table, so it reports "could not find the table in the schema cache".
+# Measured against the dev Supabase before this file was applied. 42P01 is kept for the paths that do
+# reach Postgres (a function, a view), so the check does not depend on which layer refuses first.
+NO_SUCH_TABLE = ("PGRST205", "42P01")
+
+
+def _tolerate_0010(fn, default=None):
+    """0010 may not be applied yet, and the app has to run against a database where it is not --
+    /migration step 8. Without a draft table the editor loads posts.blocks and no session is ever
+    opened, which is exactly how the editor behaved before this feature existed. Anything other than
+    a missing table still raises: a permission error or a broken query is a real fault, and
+    swallowing it here would turn "autosave is off" into an invisible bug."""
+    try:
+        return fn()
+    except APIError as e:
+        if (getattr(e, "code", "") or "") not in NO_SUCH_TABLE:
+            raise
+        return default
+
+
+def get_draft(post_id):
+    return _tolerate_0010(lambda: one(table("post_drafts").select("*").eq("post_id", post_id)))
+
+
+def save_draft(post_id, blocks, state, user):
+    """The autosave. **Deliberately not audited**, and one of only two writes in this module that are
+    not -- see touch_session() for the other half of the deal.
+
+    audit_log has no retention job and _diff() stores the whole blocks array on both sides of every
+    write, so routing an autosave through update() would add a full copy of the page every couple of
+    seconds, per editor, for ever. The per-person record is not lost, it is deferred: touch_session()
+    accumulates what each editor changed and flush_sessions() writes ONE row per person per sitting.
+    Publish and Discard are audited normally."""
+    return _tolerate_0010(lambda: table("post_drafts").upsert(
+        {"post_id": post_id, "blocks": blocks, "state": state,
+         "updated_by": (user or {}).get("id"), "updated_by_email": (user or {}).get("email") or ""},
+        on_conflict="post_id").execute().data)
+
+
+def clear_draft(post_id):
+    """Publish, Discard and Restore all end here. Every caller that writes posts.blocks must, or the
+    editor reopens the draft and the write looks as though it never happened."""
+    return _tolerate_0010(lambda: table("post_drafts").delete().eq("post_id", post_id).execute())
+
+
+def open_sessions(post_id):
+    return _tolerate_0010(lambda: rows(table("post_sessions").select("*").eq("post_id", post_id)), []) or []
+
+
+def touch_session(post_id, user, changes, ip=""):
+    """What THIS editor has changed since they opened the page, kept until their session is closed.
+    Not audited for the same reason save_draft() is not; flush_sessions() is where it becomes a log
+    entry. `changes` is already {field: [was, now]} -- the shape audit_log.changes uses -- so the
+    Activity screen renders it with no new code."""
+    return _tolerate_0010(lambda: table("post_sessions").upsert(
+        {"post_id": post_id, "user_id": user["id"], "user_email": user.get("email") or "",
+         "ip": ip, "changes": changes}, on_conflict="post_id,user_id").execute().data)
+
+
+def flush_sessions(post_id, idle_minutes=15, user_id=None):
+    """Close finished editing sessions on this page, one audit row each, attributed to the editor who
+    made them rather than to whoever is making this request.
+
+    There is no scheduler here -- no cron, and thirty stateless gunicorn workers -- so stale sessions
+    are closed opportunistically by whoever next touches the page: an autosave, a publish, or just
+    opening the editor. That backstop is what makes the browser's own idle timer and its
+    beforeunload beacon optimisations rather than load-bearing; a crashed tab still gets its record.
+
+    # ponytail: a session on a page nobody ever reopens stays pending. The row is still there and a
+    # sweep command can close it later; a scheduler is not worth it for a page nobody is reading.
+    """
+    q = table("post_sessions").select("*").eq("post_id", post_id)
+    q = q.eq("user_id", user_id) if user_id else q.lt("updated_at", (utcnow() - timedelta(minutes=idle_minutes)).isoformat())
+    done = _tolerate_0010(lambda: rows(q), []) or []
+    if not done:
+        return 0
+    label = _label(one(table("posts").select("title").eq("id", post_id)) or {})
+    for sess in done:
+        if sess.get("changes"):   # opened the page, changed nothing: nothing to say
+            _audit("edit", "posts", post_id, sess["changes"], label,
+                   user={"id": sess["user_id"], "email": sess["user_email"]}, ip=sess.get("ip") or "")
+    table("post_sessions").delete().eq("post_id", post_id).in_("user_id", [s["user_id"] for s in done]).execute()
+    return len(done)
 
 
 def paginate(q, page, per_page, transform=lambda x: x):

@@ -2,6 +2,8 @@
 import json
 from copy import deepcopy
 
+import pytest
+
 from iopstor import display_name
 from iopstor.admin_ui import _password_errors
 from iopstor.blocks import at_path, blocks_md, blocks_text, col_widths, render_blocks, validate_blocks
@@ -995,6 +997,7 @@ AUDITED = {
     "admin_ui.warranty_delete": "db.delete", "admin_ui.menus": "db.set_menu",
     "admin_ui.settings": "db.set_settings", "admin_ui.users": "db.insert",
     "admin_ui.user_delete": "db.delete", "admin_ui.audit_restore": "the helper it writes through",
+    "admin_ui.discard_draft": "audit_event discard -- no row of ours moves, but throwing work away is an act",
     "public_api.api_create_lead": "db.insert, with no signed-in user",
     "public_api.api_checkout": "db.insert", "public_api.api_webhook": "db.update",
     # no row of ours changes, so db.py cannot see it: an explicit db.audit_event()
@@ -1004,6 +1007,12 @@ AUDITED = {
     "admin_api.auth_login": "audit_event login / login_failed / login_blocked",
     "admin_api.auth_logout": "audit_event logout",
     # deliberately not recorded -- see TECHNICAL.md §8
+    # The autosave is the one write in the app that is not logged, and the reason is a ceiling:
+    # audit_log has no retention job and _diff() stores the whole blocks array on BOTH sides of
+    # every row, so a row every second or two per editor would grow without bound. Note it is not
+    # a route that writes nothing to the log -- it closes editing sessions that have gone quiet,
+    # and each of those IS an audit row, attributed to the editor who made the changes.
+    "admin_ui.autosave": "the draft write is not logged (unbounded); the sessions it flushes are",
     "admin_ui.canvas": "changes nothing, renders the page into the editor",
     "admin_ui.preview": "changes nothing, renders the unsaved form as a page",
     "admin_api.auth_refresh": "session mechanics, not a step anybody takes",
@@ -1343,3 +1352,122 @@ def test_the_realtime_token_route_is_a_get(app):
     rule = next(r for r in app.url_map.iter_rules() if r.endpoint == "admin_ui.rt_token")
     assert not (rule.methods & {"POST", "PATCH", "PUT", "DELETE"})
     assert "admin_ui.rt_token" not in AUDITED
+
+
+# ---- the working draft -------------------------------------------------------
+
+
+class _SessionRecorder:
+    """Enough of a PostgREST builder to watch flush_sessions() pick rows and delete them again."""
+
+    def __init__(self, rows):
+        self.rows, self.filters, self.deleted, self.stale = rows, [], False, None
+
+    def select(self, *a, **k):
+        return self
+
+    def delete(self):
+        self.deleted = True
+        return self
+
+    def eq(self, key, value):
+        self.filters.append((key, value))
+        return self
+
+    def lt(self, key, value):
+        self.stale = (key, value)
+        return self
+
+    def in_(self, key, values):
+        self.filters.append((key, tuple(values)))
+        return self
+
+    def execute(self):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(data=self.rows)
+
+
+def test_a_finished_session_is_logged_against_its_own_editor(monkeypatch):
+    """The load-bearing one. There is no scheduler here, so a session that has gone quiet is written
+    up inside whatever request happens to notice -- usually a DIFFERENT editor's autosave. If the
+    log took the actor or the address from that request it would record the wrong person, which is
+    worse than recording nobody."""
+    from unittest.mock import MagicMock
+
+    from iopstor import db
+
+    audit = MagicMock()
+    monkeypatch.setattr(db, "_audit", audit)
+    monkeypatch.setattr(db, "one", lambda q: {"title": "Prime ABGB"})
+    sess = {"post_id": 9, "user_id": "u-priya", "user_email": "priya@example.com", "ip": "10.0.0.7",
+            "changes": {"blocks": [[], [{"type": "rich_text"}]]}}
+    rec = _SessionRecorder([sess])
+    monkeypatch.setattr(db, "table", lambda name: rec)
+
+    assert db.flush_sessions(9) == 1
+    action, name, row_id, changes, label = audit.call_args.args
+    assert (action, name, row_id, label) == ("edit", "posts", 9, "Prime ABGB")
+    assert changes == sess["changes"]
+    assert audit.call_args.kwargs["user"] == {"id": "u-priya", "email": "priya@example.com"}
+    assert audit.call_args.kwargs["ip"] == "10.0.0.7"      # theirs, not the caller's
+    assert rec.deleted and ("user_id", ("u-priya",)) in rec.filters
+    assert rec.stale and rec.stale[0] == "updated_at"      # stale only, not everybody still typing
+
+
+def test_a_session_with_nothing_in_it_writes_no_entry(monkeypatch):
+    """Opening a page and closing it again is not an edit. The row is still cleared."""
+    from unittest.mock import MagicMock
+
+    from iopstor import db
+
+    audit = MagicMock()
+    monkeypatch.setattr(db, "_audit", audit)
+    monkeypatch.setattr(db, "one", lambda q: {"title": "Prime ABGB"})
+    rec = _SessionRecorder([{"post_id": 9, "user_id": "u", "user_email": "e", "ip": "", "changes": {}}])
+    monkeypatch.setattr(db, "table", lambda name: rec)
+
+    assert db.flush_sessions(9) == 1
+    audit.assert_not_called()
+    assert rec.deleted
+
+
+def test_the_app_runs_before_the_draft_migration_is_applied(monkeypatch):
+    """/migration step 8: the code tolerates the gap, and the code it tolerates it by is not the one
+    you would guess. PostgREST answers from its schema cache and never reaches Postgres, so a missing
+    table is **PGRST205**, not 42P01 -- measured against the dev Supabase before 0010 was applied,
+    where assuming 42P01 meant the editor raised instead of falling back. Anything else still
+    raises: a permission error swallowed here would look like "autosave is simply off"."""
+    from postgrest import APIError
+
+    from iopstor import db
+
+    def missing(name):
+        raise APIError({"code": "PGRST205", "message": "Could not find the table 'public.post_drafts' in the schema cache"})
+
+    monkeypatch.setattr(db, "table", missing)
+    assert db.get_draft(3) is None
+    assert db.open_sessions(3) == []
+
+    def broken(name):
+        raise APIError({"code": "42501", "message": "permission denied"})
+
+    monkeypatch.setattr(db, "table", broken)
+    with pytest.raises(APIError):
+        db.get_draft(3)
+
+
+def test_the_autosave_route_is_not_the_one_that_publishes():
+    """Two properties the rest of the feature leans on: the autosave never touches posts.blocks (it
+    is the working draft or nothing), and Publish clears the draft afterwards -- otherwise the editor
+    reopens the version that was just published and every save looks like it did nothing."""
+    import inspect
+
+    from iopstor import admin_ui
+
+    autosave = inspect.getsource(admin_ui.autosave)
+    assert "save_draft" in autosave and 'db.update("posts"' not in autosave
+    save = inspect.getsource(admin_ui._save)
+    assert 'action="publish"' in save and "clear_draft" in save and "flush_sessions" in save
+    # the two other writers of posts.blocks have to clear it too, or they are silently undone
+    assert "clear_draft" in inspect.getsource(admin_ui.audit_restore)

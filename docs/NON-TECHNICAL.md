@@ -306,19 +306,27 @@ sitting still.
 
 **Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live on the section itself: hover it, click the **⚙** on its little dark toolbar, and a small panel opens over that section with exactly its own options — **Align the content**, **Align the section**, **Width**, **Effect** where the section has one, the picture, the button link, how many posts to list, and **+ Add** / ✕ for rows in a Cards, FAQ, Numbers or Specification section. Rows always come last in that panel, so the settings above them are never buried under a long list. Any picture field there has a **Choose file** button that uploads on the spot. The page updates as you type. Close it with **Esc**, the ✕, another press of ⚙, or by clicking anywhere else.
 
-Nothing is saved until you press **Save**. If you try to leave with unsaved changes, your browser will warn you. If something required is missing, the page comes back with the problem listed at the top and your work still in place.
+**The page now saves itself, and the button puts it on the website.** As you type, a small line at the top right says **Saved just now** — you no longer have to remember to save, and you cannot lose an afternoon's work to a closed laptop or a browser crash. What is saved is *not* on the website yet: it is your work in progress, and only you and the other editors can see it.
 
-**Seeing who else is on the page.** If a colleague has the same page open, their initials appear in a coloured circle at the top right, beside **Save**. Click into a section and they see a coloured line down the edge of it and a small label saying you are typing there — and you see the same for them. It is a nudge, not a lock: nothing stops two people typing in the same paragraph, it just means you can see that you are about to.
+The blue button at the top right is what puts it on the site. It says **Publish** on a page that is live, and **Save** on one that is not — because pressing it on a page nobody can see does not publish anything to anybody.
 
-You are still working on separate copies for now. What you type does not appear on their screen, and theirs does not appear on yours — only *where* each of you is. Working on the same copy at the same time, the way Google Docs does, is being built next.
+**These are two different things, and they are easy to mix up.** *Status* (in the right-hand panel: Draft, Published, Scheduled) decides **who is allowed to see the page at all** — see §5. **Publish** decides **which version** those people see. A page whose status is Draft is invisible to the public whatever you press; a page that is live keeps showing the last published version until you press the button again.
+
+While you have changes that have not been published, an amber note sits above the page saying so, with a **Throw them away** link that puts the page back to the version on the site. That link only discards the unpublished work — it never touches what visitors can see.
+
+If something required is missing, the page comes back with the problem listed at the top and your work still in place.
+
+**Seeing who else is on the page.** If a colleague has the same page open, their initials appear in a coloured circle at the top right, beside the blue button. Click into a section and they see a coloured line down the edge of it and a small label saying you are typing there — and you see the same for them. It is a nudge, not a lock: nothing stops two people typing in the same paragraph, it just means you can see that you are about to.
+
+You are still working on separate copies for now. What you type does not appear on their screen, and theirs does not appear on yours — only *where* each of you is. That also means that while you are both on the same page, whichever of you typed most recently is what gets saved. Working on the same copy at the same time, the way Google Docs does, so that both people's words are kept, is being built next.
 
 Two small things you may notice. The circles vanish on a narrow phone screen, because the bar at the top is already full — the coloured lines on the sections still show. And if either of you adds or removes a section, the coloured lines disappear until you both reload: the two copies no longer line up, and showing you a line on the wrong paragraph would be worse than showing none.
 
-**If somebody else was editing the same page.** Two people can open the same page at once, and until now the second person to press **Save** quietly wiped out the first person's work — with both of them told it had saved. That no longer happens. If a colleague saved while you were writing, your Save stops and an amber note appears above the page:
+**If somebody else published the same page.** Two people can open the same page at once, and there was a time when the second person to save quietly wiped out the first person's work — with both of them told it had saved. That no longer happens. If a colleague published while you were writing, your press of the button stops and an amber note appears above the page:
 
 > Somebody else saved this page while you were writing. Nothing of yours has been lost — it is all still on this screen. Save again to replace their version, or open the page in another tab to see what changed first.
 
-Everything you typed is exactly where you left it. You are warned once: press **Save** a second time and your version goes through, replacing theirs. Their version is not lost either — it is in **Activity** (§11), where it can be put back. If you would rather keep their work, open the page in a second browser tab first to see what they changed, then copy across whatever you still need.
+Everything you typed is exactly where you left it. You are warned once: press the button a second time and your version goes through, replacing theirs. Their version is not lost either — it is in **Activity** (§11), where it can be put back. If you would rather keep their work, open the page in a second browser tab first to see what they changed, then copy across whatever you still need.
 
 > **Advanced.** At the very bottom of the right-hand panel, *Advanced* shows the page's sections as raw data. It is there for developers; you never need to open it.
 
@@ -499,7 +507,11 @@ Each page also carries its title, description, social-sharing preview and machin
 
 **Activity**, at the bottom of the sidebar, is the record of everything anybody has done in the admin panel — and it is only visible to administrators.
 
-Every line is a sentence. *Sukhpreet Saluja — edited the blog post **Prime ABGB***. *Priya Sharma — added the picture or file **hero.png***. Beside it sits the date and time in Indian time and the internet address the person was working from.
+Every line is a sentence. *Sukhpreet Saluja — published the blog post **Prime ABGB***. *Priya Sharma — added the picture or file **hero.png***. Beside it sits the date and time in Indian time and the internet address the person was working from.
+
+**Pages now produce two kinds of line, and the difference is worth knowing.** *Worked on the blog post **Prime ABGB*** is one person's sitting at that page — it appears about fifteen minutes after they stop, and lists the sections **they** changed. *Published the blog post **Prime ABGB*** is the moment that work went on the website. Before the editor started saving itself, those were the same act and got one line; they are not the same act any more.
+
+Two consequences. There is **one line per person per sitting**, not one per keystroke — an afternoon of editing is a line, not a hundred. And typing that is never published leaves no line of its own content; if somebody throws unpublished changes away, that *act* is recorded (*threw away unpublished changes to…*) even though the words are not.
 
 Each kind of thing is called what you call it. A page says **page**, a service says **service**, a datasheet says **datasheet** — not the name the database uses for them. So it covers, and says so in plain words: every page, blog post, service, case study, event, technology partner, datasheet and product; pictures and files added, renamed or removed; enquiries arriving and being moved along; warranty records; settings; menus; people added, changed or removed; **passwords changed**, both your own and one an administrator sets for somebody else; signing in, signing out, wrong passwords, and being locked out after too many of them.
 
@@ -575,7 +587,14 @@ while the site was being built. They do not share anything. A page written on th
 appear on the live one, and vice versa — so anything the live site needs is written on the live site.
 Your sign-in is per site too: the password you use on one is not the password on the other.
 
-**Still to come:** a live payment provider.
+**Pages now save themselves.** The blue button at the top right has become **Publish** — the separate,
+deliberate step that puts your work on the website. Everything you type is saved by itself within a
+couple of seconds, so a crashed browser or a closed laptop no longer costs you an afternoon, and nothing
+you are still working on can reach a visitor by accident. **Activity** follows the same split: one line
+per person per sitting saying what they changed, and a separate line for the moment it went live.
+
+**Still to come:** one shared copy of a page, so two people typing at once keep both sets of words —
+and a live payment provider.
 
 ---
 
@@ -586,16 +605,35 @@ completely separate copy: content does not travel between the two in either dire
 customers to see has to be written on the live site at `https://www.iopstor.com/admin`. If you are ever
 unsure which one you are looking at, check the address at the top of the browser.
 
-**Will visitors see a page the moment I press Save?** Yes, if it is set to **Published** — the live site
-is served straight from what you save, with no waiting and nothing to rebuild. A **Draft** stays invisible,
-and a scheduled page appears by itself at the date you set.
+**Will visitors see a page the moment I press Publish?** Yes, if it is set to **Published** — the live
+site is served straight from it, with no waiting and nothing to rebuild. A **Draft** stays invisible, and
+a scheduled page appears by itself at the date you set.
+
+**The Save button says Publish now. What happened?** The page saves itself as you type, so there is
+nothing left for a Save button to do — the line at the top right tells you it is saved. The blue button
+is now the separate step that puts your work on the website. It still says **Save** on a page that is not
+live, because pressing it there publishes nothing to anybody.
+
+**I typed something and it is not on the site.** Your work is saved, but saving and publishing are two
+different things now. Look for the amber note above the page — *changes on this page have not been
+published yet* — and press the blue button. See §4.
+
+**Is my work safe if my browser crashes?** Yes. Everything you type is saved by itself within a couple of
+seconds, and it is waiting for you when you open the page again. What crashing costs you is at most the
+last sentence.
+
+**Activity has a line saying I "worked on" a page and another saying somebody "published" it. Why two?**
+Because they are two different things now. *Worked on* is one person's sitting at the page, written up
+about fifteen minutes after they stop, listing the sections they changed. *Published* is the moment that
+work went on the website. See §11.
 
 **Can two of us edit the same page at the same time?** You can both open it and you can now see each
 other — initials at the top right, and a coloured line down the section the other person is in. But you
-are still working on separate copies: what they type does not appear on your screen, and whoever saves
-second is told so rather than quietly overwriting the first. See *Seeing who else is on the page* and
-*If somebody else was editing the same page* in §4. Working on one shared copy, the way Google Docs
-does, is being built next.
+are still working on separate copies: what they type does not appear on your screen, so while you are
+both typing, whoever typed most recently is what gets saved. If a colleague *publishes* while you are
+writing, you are told rather than quietly overwritten. See *Seeing who else is on the page* and *If
+somebody else published the same page* in §4. Working on one shared copy, the way Google Docs does, so
+that both people's words are kept, is being built next.
 
 **Where did the Instagram link in the footer go?** It is still there, as an icon. The social links used to
 appear as web addresses in the *Contact* column at the bottom of the page; they now sit under the logo as a

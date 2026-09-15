@@ -310,10 +310,16 @@ def _form_context(pt, post, errors=None, conflict=None):
     media = db.rows(db.table("media").select("id,filename,url,mime,alt").order("id", desc=True).limit(200))
     term_ids = {t["id"] for t in (post or {}).get("terms") or []}
     pk = (post or {}).get("id")   # .get(): a rejected save of a *new* post renders a draft dict with no id
+    # The editor opens the unpublished work if there is any, the live page if there is not. This is
+    # the ONLY reader that changes: render_blocks(), the .md twins, llms-full.txt, the JSON API, the
+    # sitemap and the feed all go on reading posts.blocks, which is what keeps a draft off the site.
+    draft = db.get_draft(pk) if pk else None
+    content = draft["blocks"] if draft else ((post or {}).get("blocks") or [])
     return dict(pt=pt, post=post, errors=errors or {}, conflict=conflict, taxonomies=taxonomies, rt=_rt(pk),
+                has_draft=bool(draft),
                 parents=[p for p in siblings if p["id"] != pk] if pt["hierarchical"] else [],
                 taken_slugs=[s["slug"] for s in siblings if s["id"] != pk],
-                media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps((post or {}).get("blocks") or [], indent=2, ensure_ascii=False),
+                media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps(content, indent=2, ensure_ascii=False),
                 seo_keys=SEO_KEYS)
 
 
@@ -347,7 +353,15 @@ def _save(pt, existing):
             # on the UPDATE, so Postgres decides whether we still have the row we think we have.
             # Returning here is before set_post_terms() on purpose: a refused save must not rewrite
             # the categories either.
-            if db.update("posts", existing["id"], changes,
+            # action="publish", not "update": the write is identical, the word is not. This is the
+            # one moment the page changes for a visitor, and Activity is read by people who need to
+            # see that rather than a list of saves.
+            #
+            # Deliberately NOT recorded here: the other editors whose work is in this publish. It
+            # would need either a second audit row or an `extra` argument on the shared update(),
+            # and it would say less than what is already written -- flush_sessions() gives each of
+            # them their own entry naming the sections they changed.
+            if db.update("posts", existing["id"], changes, action="publish",
                          if_unchanged=request.form.get("updated_at") or None) is None:
                 return None, _rejected(pt, existing, b, conflict=CONFLICT)
         pk = existing["id"]
@@ -356,6 +370,11 @@ def _save(pt, existing):
         pk = db.insert("posts", changes)["id"]
     if term_ids is not None:
         db.set_post_terms(pk, term_ids)
+    # The draft has been published, so there is nothing unpublished left to reopen -- and any
+    # session that has gone quiet is written up while we are here, which is the backstop that means
+    # a crashed tab still gets its Activity entry.
+    db.flush_sessions(pk)
+    db.clear_draft(pk)
     db.uncache(f"post_index_{pt['id']}")
     return pk, None
 
@@ -414,6 +433,74 @@ def restore_post(pk):
     db.update("posts", pk, {"status": "draft"}, action="restore")
     flash(f"Restored {post['title']} as a draft.")
     return redirect(url_for("admin_ui.posts", type=post["post_type"]["slug"], status="trash"))
+
+
+@ui.post("/posts/<int:pk>/draft")
+@ui_required()
+def autosave(pk):
+    """The editor saving itself. Writes the working draft, never posts.blocks -- so nothing a
+    visitor can see moves until somebody presses Publish.
+
+    AUDITED: the autosave itself is deliberately not logged (audit_log has no retention job and
+    holds the whole blocks array per write, so a row every second or two per editor would grow
+    without bound). It is NOT a route that writes nothing to the log, though: it closes editing
+    sessions that have gone quiet, and each of those is an audit row. That distinction is the whole
+    reason this route exists rather than a bare upsert -- see db.flush_sessions().
+
+    Answers JSON, and the caller has to test r.redirected first: a finished session is a 302 to the
+    login page that fetch() follows, arriving as 200 HTML rather than a 401.
+    """
+    db.get_post(pk) or abort(404)
+    db.flush_sessions(pk)   # the backstop: whoever touches the page closes anybody's stale session
+    try:
+        blocks = json.loads(request.form.get("blocks") or "[]")
+    except ValueError as e:
+        return jsonify({"error": f"invalid JSON: {e}"}), 400
+    errs = validate_blocks(blocks)
+    if errs:
+        # Refuse rather than store: an invalid draft would be published by the next press of the
+        # button, through apply_post(), which is the one validation path and would then refuse it
+        # at the worst possible moment.
+        return jsonify({"error": "these sections are not valid", "fields": {"blocks": errs}}), 400
+    db.save_draft(pk, blocks, request.form.get("state", ""), g.user)
+    _record_session(pk)
+    if request.form.get("close"):
+        db.flush_sessions(pk, user_id=g.user["id"])
+    return jsonify({"at": db.now_iso()}), 200, {"Cache-Control": "no-store"}
+
+
+def _record_session(pk):
+    """What THIS editor has changed since they opened the page. The browser sends both halves because
+    it is the only place that knows which blocks the local person touched -- once the document is
+    shared, the copy on screen contains everybody's work and a plain before/after here would credit
+    all of it to whoever saved last."""
+    was, now = request.form.get("was"), request.form.get("now")
+    if was is None or now is None:
+        return
+    try:
+        before, after = json.loads(was), json.loads(now)
+    except ValueError:
+        return
+    if before != after:
+        db.touch_session(pk, g.user, {"blocks": [before, after]}, client_ip())
+
+
+@ui.post("/posts/<int:pk>/draft/discard")
+@ui_required()
+def discard_draft(pk):
+    """Throw away the unpublished edits and go back to what is on the site.
+
+    AUDITED: audit_event, because no row of ours changes in a way db.py can see -- the draft is
+    deleted, and a deletion nobody recorded is exactly the gap the log exists to close. Unlike the
+    autosave this is a deliberate destructive act, so it is logged even though its content is not.
+    """
+    post = db.get_post(pk) or abort(404)
+    if db.get_draft(pk):
+        db.flush_sessions(pk, user_id=g.user["id"])   # their work is going; record it before it does
+        db.clear_draft(pk)
+        db.audit_event("discard", label=post.get("title") or "", name="posts", row_id=pk)
+        flash("Unpublished changes discarded.")
+    return redirect(url_for("admin_ui.edit_post", pk=pk))
 
 
 @ui.get("/rt-token")
@@ -784,6 +871,11 @@ def user_delete(pk):
 
 # {kind} is the thing, {name} is what it is called. A missing action falls through to the last line.
 VERB = {"create": "added the {kind} {name}", "update": "edited the {kind} {name}",
+        # "edit" is one person's sitting on a page, written up once they stop; "publish" is the
+        # moment that work goes on the website. Two words for what used to be one, because with
+        # autosave those are no longer the same act -- see TECHNICAL.md §12.1.
+        "edit": "worked on the {kind} {name}", "publish": "published the {kind} {name}",
+        "discard": "threw away unpublished changes to the {kind} {name}",
         "delete": "deleted the {kind} {name}", "restore": "put the {kind} {name} back",
         "login": "signed in", "logout": "signed out",
         "login_failed": "tried to sign in as {name} and got the password wrong",
@@ -1173,5 +1265,10 @@ def audit_restore(pk):
             db.set_menu(row_id, old.get("items") or [])
         else:
             db.update(name, row_id, old, action="restore")
+        if name == "posts" and "blocks" in old:
+            # Without this the restore appears not to have happened at all: posts.blocks goes back,
+            # then the editor opens and loads the WORKING DRAFT, which is still the version that was
+            # just undone -- and its next autosave writes that straight over the restore.
+            db.clear_draft(int(row_id))
         flash(f"Put {entry['label'] or name} back the way it was.")
     return redirect(url_for("admin_ui.audit", **{k: v for k, v in request.args.items()}))
