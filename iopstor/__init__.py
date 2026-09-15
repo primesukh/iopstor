@@ -86,8 +86,11 @@ def create_app(test_config=None):
     @app.get("/healthz")
     def healthz():
         # Liveness, not readiness: the Dockerfile's HEALTHCHECK hits this every 30s, so a PostgREST call
-        # here turns a Supabase blip into a restart loop the restart cannot fix. Supabase is already
-        # gated at boot -- `flask migrate` runs before gunicorn, so a wrong SUPABASE_URL never serves.
+        # here turns a Supabase blip into a restart loop the restart cannot fix. Supabase is gated at
+        # deploy time instead -- the compose stack's `migrate` service must exit 0 before this container
+        # is started, so a wrong SUPABASE_URL fails the deploy rather than serving. A restart while
+        # Supabase is merely down does now start gunicorn: it answers 500s, logs them, and is right again
+        # the moment Supabase is, which a container that will not boot never manages.
         return {"ok": True}
 
     return app

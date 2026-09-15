@@ -329,6 +329,18 @@ def test_only_numbered_files_are_migrations():
     assert "repair_schema_migrations.sql" not in steps
 
 
+def test_migrations_run_once_per_deploy_not_once_per_container():
+    """Migrate is the compose stack's one-shot service, not the app's CMD. Put it back in CMD and every
+    crash restart re-runs it; drop the gate and a deploy serves new code against an old schema. Both
+    halves break silently, and only in production, which is the one place nothing here can be tried."""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    cmd = [ln for ln in (root / "Dockerfile").read_text().splitlines() if ln.startswith("CMD")]
+    assert len(cmd) == 1 and "migrate" not in cmd[0], cmd     # the CMD line only; comments stay free
+    compose = (root / "docker-compose.yml").read_text()
+    assert "command: flask migrate" in compose
+    assert "condition: service_completed_successfully" in compose
+
+
 def test_pdf_block_renders_the_browser_viewer(app, monkeypatch):
     """The PDF section is an iframe at the file plus a download button — no viewer library, and a way
     in for the mobile browsers that will not render a framed PDF. The button saves the file under the
