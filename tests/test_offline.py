@@ -1396,6 +1396,28 @@ def test_the_realtime_proxy_pins_the_api_key_and_keeps_our_csrf_to_itself(app):
     assert "apikey=ours" in q and "vsn=2.0.0" in q
 
 
+def test_the_access_log_keeps_the_polls_out_but_not_their_failures(app):
+    """A longpoll is one request per message plus one every ten seconds per editor, and the whole
+    query string lands in the log line -- including the Phoenix session token, which is a live
+    credential. So successful polls are filtered out of the access log. Failures are not: a 403 or a
+    500 is exactly what somebody reading the log is looking for."""
+    import logging
+
+    from iopstor import _quiet_polls
+
+    def line(msg):
+        return _quiet_polls.filter(logging.LogRecord("werkzeug", logging.INFO, "", 0, msg, None, None))
+
+    poll = '"GET /admin/realtime/v1/longpoll?apikey=eyJ0eXAi&csrf=abc&token=SFMyNTY.gQ HTTP/1.1" 200 -'
+    assert not line(poll), "a successful poll must not reach the log"
+    assert not line('127.0.0.1 - - [15/Sep/2026 15:08:35] ' + poll.replace("200 -", "204 -"))
+    assert line(poll.replace('" 200 -', '" 403 -')), "a refusal must still print"
+    assert line(poll.replace('" 200 -', '" 500 -')), "so must a failure"
+    # and nothing else is touched, including a page whose own URL mentions the route
+    assert line('"POST /admin/posts/1158/draft HTTP/1.1" 200 -')
+    assert line('"GET /admin/posts?q=/admin/realtime/v1/longpoll?x HTTP/1.1" 200 -')
+
+
 def test_a_status_the_poll_transport_cannot_read_becomes_a_500(app, monkeypatch):
     """The browser's LongPoll switches on the status and THROWS "unhandled poll status" on anything
     outside {200,204,403,410,500}, which wedges the transport for the life of the tab. So a Kong 401

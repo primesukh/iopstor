@@ -1679,10 +1679,17 @@ Shared editing (§12.3), all of them named in `admin.js`:
   workers, and the proxy's own edges — that it refuses without a session or the csrf, pins the apikey, and turns a
   status the browser cannot read into one it can. The transport selection, the RLS policy and the token refresh are
   proved by hand with two browsers. A mock here would test the mock.
-- **One worker thread per open editor.** A longpoll is held ~10 s and re-issued at once, so an editor with the page
-  open occupies a request slot continuously. At `-w 30 --threads 8` that is 8 of 240 slots for eight editors —
-  nothing — but it scales with editors rather than with traffic, which nothing else in the app does. A websocket
-  would cost less, and needs gevent or a broker to fan out across the thirty processes (§12.3).
+- **One worker thread per open editor, and a request rate that tracks messages rather than time.** Idle, that is one
+  poll per editor every 10 s (Phoenix's window). Busy, a poll returns the instant a message arrives and is re-issued
+  at once, so each message costs its sender a POST and every peer a returning poll plus a fresh one — two people
+  typing is several requests a second. Concurrency stays at one thread per editor (8 of 240 slots at `-w 30
+  --threads 8`), so the pressure is the request count, not the slots. It scales with editors, which nothing else in
+  the app does. A websocket would cost far less and needs gevent or a broker to fan out across the thirty
+  processes (§12.3).
+- **Successful polls are filtered out of the access log** (`_QuietPolls` in `__init__.py`, installed on `werkzeug`
+  and `gunicorn.access`). Left in, they drown every other line, and each one writes the query string — apikey and
+  the Phoenix session `token`, a live credential — into a file that gets copied and kept. Non-2xx still prints, so
+  a refusal or a failure is still visible; drop the filter to watch the transport itself.
 - **The transport is selected through minified vendor internals.** `realtime.socketAdapter.socket.getLongPollTransport()`
   is not part of supabase-js's public API, so a bundle upgrade can move it and collaboration would break quietly.
   The fallback is written down in §12.3; check it when bumping `vendor/supabase.js`.

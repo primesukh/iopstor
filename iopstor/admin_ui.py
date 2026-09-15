@@ -575,10 +575,13 @@ def realtime_longpoll():
     redirects to the login page, so the transport would get 200 HTML instead of a refusal. Hence the
     inline guard, answering 403 -- which is the one status Phoenix's LongPoll client reads as "stop".
 
-    # ponytail: one worker thread per open editor, held ~10s per poll and re-issued immediately.
-    # 30 workers x 8 threads = 240 slots, so a room full of editors is nothing, but it is a number to
-    # watch rather than an argument. A real socket needs gevent, or a broker to fan out across the
-    # thirty processes -- which is the trade design.md turned down.
+    # ponytail: one worker thread per open editor, and the REQUEST RATE TRACKS MESSAGES, NOT TIME.
+    # Idle that is one poll per editor per 10s (Phoenix's window). Busy it is one POST per message
+    # sent plus, for every peer, a poll that returns at once and is immediately re-issued -- two
+    # people typing is several requests a second, which is what the access-log filter in
+    # __init__.py exists for. Concurrency is still one thread per editor, so 30x8 = 240 slots is
+    # not the pressure; the request count is. A real socket needs gevent, or a broker to fan out
+    # across the thirty processes -- which is the trade design.md turned down.
     """
     if current_user() is None or not session.get("csrf") or request.args.get("csrf") != session["csrf"]:
         # Phoenix's own refusal shape, and a real 403 so the transport stops instead of reconnecting.

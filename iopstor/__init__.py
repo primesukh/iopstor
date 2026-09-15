@@ -1,3 +1,4 @@
+import logging
 import re
 from urllib.parse import quote
 
@@ -8,6 +9,31 @@ from . import config
 
 REQUIRED = ("SECRET_KEY", "SITE_URL", "SUPABASE_URL", "SUPABASE_ANON_KEY",
             "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_JWT_SECRET")
+
+# A successful editor poll, in either access-log format: werkzeug's `" 200 -"` and gunicorn's
+# `" 200 1234"`. Anchored on the quoted request line so it cannot match a URL an editor typed.
+_POLL_OK = re.compile(r'"(?:GET|POST) /admin/realtime/v1/longpoll\?[^"]*" 2\d\d')
+
+
+class _QuietPolls(logging.Filter):
+    """Keep successful realtime polls out of the access log. Two reasons, and the second is the real one.
+
+    Volume: a longpoll is one request per message *plus* one every ten seconds per open editor, so two
+    people typing generate several lines a second and every other line in the log drowns.
+
+    Secrets: each line carries the whole query string, which is where this transport puts both the
+    apikey and the Phoenix session `token` -- a live credential for that poll session. An access log
+    is copied, shipped and kept; a session token should not be sitting in it on every poll.
+
+    Only 2xx is dropped. A 403, a 500 or a refused poll still prints, because those are the lines
+    anybody would be reading the log for. Drop this filter to watch the transport itself.
+    """
+
+    def filter(self, record):
+        return not _POLL_OK.search(record.getMessage())
+
+
+_quiet_polls = _QuietPolls()   # one instance: create_app() runs per test too, and filters stack
 
 
 class JSONProvider(DefaultJSONProvider):
@@ -42,6 +68,12 @@ def create_app(test_config=None):
     app.config.from_object(config)
     app.config.from_mapping(test_config or {})
     app.json = JSONProvider(app)
+    # werkzeug writes the dev server's access log, gunicorn.access the container's. Neither exists
+    # yet as a configured logger, and neither needs to: addFilter on the name is enough.
+    for _name in ("werkzeug", "gunicorn.access"):
+        _log = logging.getLogger(_name)
+        if _quiet_polls not in _log.filters:
+            _log.addFilter(_quiet_polls)
     missing = [k for k in REQUIRED if not app.config.get(k)]
     if missing:
         raise RuntimeError(f"{', '.join(missing)} not set. Fill .env in development (see .env.example), or the\n"
