@@ -19,6 +19,9 @@ if (from < 0 || to < 0) { console.log('FAIL  cannot find the shared-document sec
 let MODEL = [], repaints = 0, sections = []
 const ctx = vm.createContext({
   window: { crypto: 1, IOPY: { Y: Yns } },
+  // no rt.url == no channel == single player, so initShared seeds immediately rather than waiting
+  // for a roster that will never arrive. The deferred path gets its own case at the bottom.
+  SPEC: { rt: {} },
   crypto: { randomUUID: () => 'id-' + Math.random().toString(36).slice(2, 12) },
   console, setTimeout, clearTimeout,
   atob: s => Buffer.from(s, 'base64').toString('binary'),
@@ -36,6 +39,7 @@ const ctx = vm.createContext({
 })
 vm.runInContext(js.slice(from, to) + `
 this.API = { stampIds, reconcileOut, initShared, pathOfId, idOf, eachBlock, yState, SCALARS,
+             seedDoc, dedupe, fromY,
              get YB () { return YB }, get YDOC () { return YDOC } };`, ctx)
 const API = ctx.API
 ;['url', 'media_id', 'align', 'tone', '_id', '_rich', 'widths', 'fx'].forEach(k => { API.SCALARS[k] = 1 })
@@ -120,6 +124,33 @@ const restored = new Yns.Doc()
 Yns.applyUpdate(restored, Buffer.from(API.yState(), 'base64'))
 ok('the stored state restores the same document',
    JSON.stringify(restored.getArray('blocks').toJSON()) === JSON.stringify(API.YB.toJSON()))
+
+/* Two browsers that each seed a document from the same blocks give Yjs two independent histories,
+   and merging them shows every section twice -- which is what a page with no stored state does on
+   every single load. Seeding waits for the roster; this is the repair for the instant where both
+   see an empty one. */
+const twinA = new Yns.Doc(), twinB = new Yns.Doc()
+const shared = [{ type: 'rich_text', data: { _id: 'same-name', _rich: true, html: '<p>One</p>' } }]
+for (const [doc, mark] of [[twinA, 'A'], [twinB, 'B']]) {
+  const bm = new Yns.Map(); doc.getArray('blocks').insert(0, [bm])
+  bm.set('type', shared[0].type)
+  bm.set('data', new Yns.Map())
+  bm.get('data').set('_id', 'same-name'); bm.get('data').set('_rich', true); bm.get('data').set('seededBy', mark)
+}
+Yns.applyUpdate(twinA, Yns.encodeStateAsUpdate(twinB))
+ok('two independent seeds really do duplicate -- this is the fault, not a theory',
+   twinA.getArray('blocks').length === 2)
+
+MODEL = []
+API.initShared(Buffer.from(Yns.encodeStateAsUpdate(twinA)).toString('base64'))
+ok('...and a document that loads one is repaired to one section per name',
+   (API.dedupe(), API.YB.length === 1 && API.YB.get(0).get('data').get('_id') === 'same-name'))
+
+/* seedDoc is called from the roster, from a timeout and from the single-player path, so it has to
+   be safe to call at any of them more than once. */
+const before = API.YB.length
+API.seedDoc(); API.seedDoc()
+ok('seeding a document that already has one does nothing', API.YB.length === before)
 
 console.log(bad ? bad + ' FAILED' : 'all passed')
 process.exit(bad ? 1 : 0)

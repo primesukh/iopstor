@@ -935,10 +935,47 @@
     YDOC = new Y.Doc();
     YB = YDOC.getArray("blocks");
     if (state) { try { Y.applyUpdate(YDOC, b64bytes(state)); } catch (e) { say("stored state unreadable: " + e.message); } }
-    if (YB.length) MODEL = fromY();                // what the server held wins over what this page drew
-    else { stampIds(MODEL); YDOC.transact(function () { yList(YB, MODEL); }, YORIGIN); }
     YB.observeDeep(reconcileIn);
+    if (YB.length) return void (MODEL = fromY());   // the stored document wins over what this page drew
+    /* No stored document. Seeding one from `blocks` is only safe if NOBODY ELSE already has one:
+       two browsers that each seed give Yjs two independent histories of the same page, and merging
+       them shows every section twice. (Seen for real, and it is not a rare race -- with no stored
+       state, which is every page load before 0010 is applied, it happens every single time.) So the
+       seed waits until the roster says we are alone; if a peer is here, their state arrives on our
+       join and this becomes a no-op. The timeout is the backstop for a peer that never answers --
+       an editor with a document nobody is sharing beats an editor with no document at all. */
+    if (!(SPEC.rt && SPEC.rt.url && SPEC.rt.room) || !window.supabase) return seedDoc();
+    setTimeout(seedDoc, 4000);
     YDOC.on("update", function (delta, origin) { shareOut(delta, origin); });
+  }
+
+  // Idempotent by design: called from the roster, from a timeout and from the single-player path,
+  // and whichever arrives first makes the others do nothing.
+  function seedDoc() {
+    if (!YDOC || YB.length) return;
+    stampIds(MODEL);
+    YDOC.transact(function () { yList(YB, MODEL); }, YORIGIN);
+    say("seeded the shared document from this page's sections.");
+  }
+
+  /* The repair for the race the seed guard cannot close: two browsers loading in the same instant
+     both see an empty roster and both seed. One _id must name one section, so a later copy of a name
+     we already have is deleted. Cheap, because it only runs when a peer's update actually arrives. */
+  function dedupe() {
+    if (!YDOC) return;
+    var seen = {}, dead = [];
+    for (var i = 0; i < YB.length; i += 1) {
+      var d = YB.get(i).get("data"), id = d && d.get("_id");
+      if (!id) continue;
+      if (seen[id]) dead.push(i); else seen[id] = 1;
+    }
+    if (!dead.length) return;
+    say("removed " + dead.length + " duplicated section(s): two browsers had seeded this page.");
+    YDOC.transact(function () {
+      for (var k = dead.length - 1; k >= 0; k -= 1) YB.delete(dead[k], 1);
+    }, YORIGIN);
+    MODEL = fromY();
+    canvasFull();
   }
 
   function b64bytes(s) {
@@ -1050,8 +1087,18 @@
           if (r.redirected) throw new Error("your sign-in has ended — open this page again in a new tab");
           return r.json().then(function (j) { return r.ok ? j : Promise.reject(new Error(j.error || "could not save")); });
         })
-        .then(function () {
+        .then(function (j) {
           if (mine !== inFlight) return;   // a newer save already answered
+          /* The server tolerates the working-draft tables not existing yet, because the editor has
+             to run before that migration is applied -- but it says so, and so do we. Reporting
+             "Saved just now" over work with nowhere to go is how typing appears to vanish on the
+             next reload: the page is served the PUBLISHED version back, because there is no draft.
+             No table names on an editor's screen; the console gets the developer half. */
+          if (j && j.stored === false) {
+            sent = null;
+            say("the working-draft tables are missing -- apply migrations/0010_working_draft.sql. Nothing is being saved.");
+            return show("Not saved — this site is not set up to keep drafts yet. Tell a developer.", true);
+          }
           savedAt = Date.now();
           dirty = false;                   // it is safe to leave: the work is on the server
           showAge();
@@ -2813,7 +2860,8 @@
       var m = msg && msg.payload;
       if (!m || !m.u || m.id === rt.me.id || !YDOC) return;
       try { Y.applyUpdate(YDOC, b64bytes(m.u), "remote"); }
-      catch (e) { say("could not apply an update from " + m.id + " -- " + e.message); }
+      catch (e) { return say("could not apply an update from " + m.id + " -- " + e.message); }
+      dedupe();
     }
 
     /* A newcomer is caught up by a PEER, not by the server. The stored state is behind by the save
@@ -2915,6 +2963,9 @@
       Object.keys(spot).forEach(function (id) { if (!peers[id]) delete spot[id]; });
       drawRoster();
       paintPeers();
+      // Nobody else is here, so seeding cannot collide with anybody else's document. With a peer
+      // present we wait instead: their state arrives on our join.
+      if (!Object.keys(peers).length) seedDoc();
       // The writer may have just left, or just arrived. Whoever it is now owes the server a save.
       sharedChanged();
     }

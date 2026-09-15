@@ -1525,6 +1525,41 @@ def test_a_section_name_and_the_quill_verdict_are_not_prose():
     assert "_id" in blocks.EDITOR["scalars"] and "url" in blocks.EDITOR["scalars"]
 
 
+def test_a_draft_that_could_not_be_stored_does_not_report_itself_as_saved():
+    """0010 may not be applied, and the editor has to run when it is not -- but silently is the one
+    way it must not, because the page then serves the PUBLISHED version back on the next reload and
+    the editor's work appears to vanish. save_draft() returns False, the route passes it on, and the
+    editor says so in words an editor can act on (no table names: the console gets that half)."""
+    src = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "db.py").read_text()
+    body = src[src.index("def save_draft("):src.index("def clear_draft(")]
+    assert "return _tolerate_0010(store, default=False)" in body
+
+    route = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "admin_ui.py").read_text()
+    assert '"stored": stored' in route
+    assert "stored = db.save_draft(" in route
+
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    assert "if (j && j.stored === false) {" in js
+    told = js[js.index("if (j && j.stored === false) {"):js.index("savedAt = Date.now();")]
+    assert "Tell a developer." in told and "0010_working_draft.sql" in told
+    # the sentence an editor reads names no table, column or migration -- that is the console's job
+    shown = told[told.index('show("'):told.index('", true)')]
+    assert "0010" not in shown and "post_drafts" not in shown
+
+
+def test_a_second_browser_does_not_seed_a_second_document():
+    """Two browsers that each seed from the same blocks give Yjs two independent histories, and
+    merging them shows every section twice. With no stored state -- every load before 0010 is
+    applied -- that is not a rare race, it happens every time. So the seed waits for the roster to
+    say we are alone, and dedupe() repairs the instant where both saw an empty one."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    seed = js[js.index("function initShared("):js.index("function seedDoc(")]
+    assert "setTimeout(seedDoc, 4000);" in seed          # backstop, not the normal path
+    assert "return seedDoc();" in seed                    # single player seeds at once
+    assert "if (!Object.keys(peers).length) seedDoc();" in js    # the roster is what releases it
+    assert "dedupe();" in js and "function dedupe()" in js
+
+
 def test_a_draft_may_be_unfinished_but_not_misshapen():
     """The autosave route validates with draft=True. A working draft is unfinished by definition --
     the empty paragraph the caret sits in has no text, an Image section has no picture until one is

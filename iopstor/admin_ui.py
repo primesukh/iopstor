@@ -454,6 +454,7 @@ def autosave(pk):
     login page that fetch() follows, arriving as 200 HTML rather than a 401.
     """
     db.get_post(pk) or abort(404)
+    stored = True           # nothing to store is not a failure; nowhere to store it is -- see below
     db.flush_sessions(pk)   # the backstop: whoever touches the page closes anybody's stale session
     # Two unrelated payloads share this route, and only one of them is per-person. `blocks`/`state`
     # are the DOCUMENT, and once it is shared exactly one browser -- the elected writer -- sends
@@ -477,11 +478,15 @@ def autosave(pk):
         errs = validate_blocks(blocks, draft=True)
         if errs:
             return jsonify({"error": "these sections are not valid", "fields": {"blocks": errs}}), 400
-        db.save_draft(pk, blocks, request.form.get("state", ""), g.user)
+        # False means 0010 is not applied, so there is nowhere to put this. Answering 200 and
+        # saying nothing let the editor report "Saved just now" over work that went nowhere -- and
+        # then a reload silently served the published version back, which is what it looks like from
+        # the outside: typing that vanishes. Tolerating the missing table is right; hiding it is not.
+        stored = db.save_draft(pk, blocks, request.form.get("state", ""), g.user)
     _record_session(pk)
     if request.form.get("close"):
         db.flush_sessions(pk, user_id=g.user["id"])
-    return jsonify({"at": db.now_iso()}), 200, {"Cache-Control": "no-store"}
+    return jsonify({"at": db.now_iso(), "stored": stored}), 200, {"Cache-Control": "no-store"}
 
 
 def _record_session(pk):
