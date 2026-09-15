@@ -410,11 +410,19 @@ def save_draft(post_id, blocks, state, user):
     write, so routing an autosave through update() would add a full copy of the page every couple of
     seconds, per editor, for ever. The per-person record is not lost, it is deferred: touch_session()
     accumulates what each editor changed and flush_sessions() writes ONE row per person per sitting.
-    Publish and Discard are audited normally."""
-    return _tolerate_0010(lambda: table("post_drafts").upsert(
-        {"post_id": post_id, "blocks": blocks, "state": state,
-         "updated_by": (user or {}).get("id"), "updated_by_email": (user or {}).get("email") or ""},
-        on_conflict="post_id").execute().data)
+    Publish and Discard are audited normally.
+
+    Returns True when the draft was stored and **False when 0010 is not applied yet**, and the caller
+    is expected to pass that on. Tolerating the missing table is right -- the editor has to run before
+    the migration -- but doing it silently told every editor "Saved just now" over work that was going
+    nowhere, which is precisely the invisible bug _tolerate_0010's own docstring refuses to create."""
+    def store():
+        table("post_drafts").upsert(
+            {"post_id": post_id, "blocks": blocks, "state": state,
+             "updated_by": (user or {}).get("id"), "updated_by_email": (user or {}).get("email") or ""},
+            on_conflict="post_id").execute()
+        return True
+    return _tolerate_0010(store, default=False)
 
 
 def clear_draft(post_id):

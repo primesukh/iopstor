@@ -621,7 +621,7 @@
     MODEL = Array.isArray(next) ? next : [];
     canvasFull();
   }
-  function markDirty() { dirty = true; nudgeSave(); }
+  function markDirty() { dirty = true; stampIds(MODEL); reconcileOut(); nudgeSave(); }
 
   // An empty paragraph is the editor waiting for you, not content. Drop it on save — but keep
   // one that holds only a picture, a rule or a table, which has no text and is still real.
@@ -642,6 +642,428 @@
     });
   }
 
+  /* ---- the shared document ---------------------------------------------------------------------
+     Everybody with this page open types into ONE document, and the paragraph is the whole point:
+     two people in the same sentence keep both sets of words, because a paragraph is a Y.Text -- a
+     text CRDT -- and not a string. A string is last-writer-wins however it is transported, which is
+     the thing this run of changes exists to stop.
+
+     MODEL stays the plain array everything else reads and writes (the thirteen markDirty() sites,
+     the six canvas paths, prune(), the Advanced textarea). The shared document is kept beside it:
+
+        markDirty()     -> reconcileOut()   MODEL into Y, matching blocks by data._id
+        YB.observeDeep  -> reconcileIn()    Y back into MODEL, then the smallest repaint that shows it
+
+     Reconciling, rather than rewriting those thirteen sites to speak Yjs, is both the smaller change
+     and the safer one: every one of them already performs its own surgical canvas patch
+     (canvasInsert, node.remove() + renumber, insertBefore), and a diff by _id recovers exactly that
+     intent -- insert, delete, reorder, set -- instead of expressing it twice in two vocabularies.
+
+     TWO KEYS TRAVEL WITH A BLOCK, in data, so they ride posts.blocks and post_drafts.blocks and are
+     listed in blocks.py _NON_TEXT_KEYS (or a uuid would turn up in llms-full.txt and admin search):
+
+       _id    names a section for as long as it exists. data-b is a POSITION and renumber() rewrites
+              it on every insert, so "block 3" means different sections to two browsers; every merge
+              decision here needs a name that does not move.
+       _rich  is the Quill gate's verdict, decided once and stored. quillKeeps() is a pure function of
+              a block's HTML, so two peers agree -- until one of them types. If A's editing changed the
+              markup and B loaded afterwards, B could decide differently and build a Y.Text where A has
+              a string: two shapes for one block, which no amount of merging repairs. It is the kind of
+              fault that passes a two-browser test and fails with the third, so it is content, not a
+              calculation, and only the elected writer ever computes it (see mountQuill). */
+
+  var Y = null, YDOC = null, YB = null;        // the Yjs module, the shared document, its blocks array
+  var YORIGIN = { mine: 1 };                   // our own transactions, recognised when they echo back
+  var SCALARS = {};                            // blocks.py _NON_TEXT_KEYS: never a text type
+  var BINDS = [];                              // live QuillBindings, destroyed when the canvas is replaced
+  var WAITING = [];                            // editors mounted before the shared text existed
+  var viewChanged = function () {};            // late-bound by initCollab: tell peers who can write
+  var shareOut = function () {};               // late-bound by initCollab: put a delta on the wire
+  var canWrite = function () { return true; }; // single player is always the writer
+  var sharedChanged = function () {};          // late-bound by initAutosave: a peer typed; the writer saves
+  var touched = function () {};                // late-bound by initAutosave: this section is my work
+
+  function uid() {
+    return (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+         : "b" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
+  function idOf(b) { return b && b.data && b.data._id; }
+  // The SECTION an editor sees, for a field that may be nested one level inside a columns block.
+  // The activity log lists top-level sections, so crediting a nested block would name nothing.
+  function rootIdOf(path) { return idOf(MODEL[+String(path).split(".")[0]]); }
+
+  /* Which keys become a shared text type: a string that is not one of blocks.py's non-text keys is
+     prose somebody types, and everything else is a setting, a media id or a whitelisted token -- a
+     value, not a sentence. `html` is the exception in both directions. On a block Quill drives it is
+     a Y.Text owned end to end by y-quill; on a block Quill refused it stays a plain string, because
+     splicing two people's edits into one HTML string can interleave inside a tag and publish broken
+     markup. That second case is why those sections say so on hover. */
+  function isProse(key, val, data) {
+    if (typeof val !== "string") return false;
+    if (key === "html") return !!(data && data._rich);
+    return !SCALARS[key];
+  }
+
+  // Every block has an _id before it can be shared. Minting is separate from the gate above because
+  // this is cheap and pure and runs on every change, and the gate needs a Quill in a document.
+  function stampIds(list) {
+    (list || []).forEach(function (b) {
+      if (!b || !b.data) return;
+      if (!b.data._id) b.data._id = uid();
+      if (b.type === "columns" && Array.isArray(b.data.cols)) b.data.cols.forEach(stampIds);
+    });
+  }
+
+  function eachBlock(list, fn) {
+    (list || []).forEach(function (b) {
+      fn(b);
+      if (b && b.type === "columns" && b.data && Array.isArray(b.data.cols)) b.data.cols.forEach(function (c) { eachBlock(c, fn); });
+    });
+  }
+
+  function pathOfId(id, list, prefix) {
+    var found = null;
+    (list || MODEL).forEach(function (b, i) {
+      if (found) return;
+      var p = (prefix == null ? "" : prefix + ".") + i;
+      if (idOf(b) === id) { found = p; return; }
+      if (b.type === "columns" && b.data && Array.isArray(b.data.cols))
+        b.data.cols.forEach(function (col, c) { if (!found) found = pathOfId(id, col, p + "." + c); });
+    });
+    return found;
+  }
+
+  function mapById(id, yarr) {
+    yarr = yarr || YB;
+    if (!yarr) return null;
+    for (var i = 0; i < yarr.length; i++) {
+      var m = yarr.get(i), data = m.get("data");
+      if (data && data.get("_id") === id) return m;
+      var cols = data && data.get("cols");
+      if (cols && cols.length !== undefined) for (var c = 0; c < cols.length; c++) {
+        var hit = mapById(id, cols.get(c));
+        if (hit) return hit;
+      }
+    }
+    return null;
+  }
+
+  // ---- MODEL -> Y -----------------------------------------------------------
+  /* The smallest edit that turns this text into that one: keep the common prefix and suffix, replace
+     what is between them. Not a real diff, and it does not need to be -- a caret only ever edits in
+     one place, and two carets in one field are what the CRDT underneath is for. */
+  function spliceText(yt, want) {
+    var has = yt.toString();
+    if (has === want) return;
+    var n = Math.min(has.length, want.length), a = 0, b = 0;
+    while (a < n && has.charAt(a) === want.charAt(a)) a += 1;
+    while (b < n - a && has.charAt(has.length - 1 - b) === want.charAt(want.length - 1 - b)) b += 1;
+    if (has.length - a - b > 0) yt.delete(a, has.length - a - b);
+    if (want.length - a - b > 0) yt.insert(a, want.slice(a, want.length - b));
+  }
+
+  function yData(ym, data) {
+    Object.keys(data).forEach(function (k) {
+      var v = data[k];
+      if (k === "cols" && Array.isArray(v)) {
+        if (!(ym.get("cols") instanceof Y.Array)) ym.set("cols", new Y.Array());
+        var ya = ym.get("cols");
+        while (ya.length > v.length) ya.delete(ya.length - 1, 1);
+        v.forEach(function (col, i) {
+          if (i >= ya.length) ya.insert(ya.length, [new Y.Array()]);   // attached by the insert itself
+          yList(ya.get(i), col);
+        });
+        return;
+      }
+      if (isProse(k, v, data)) {
+        // y-quill owns a rich block's html end to end -- it holds a Quill delta, not the HTML string
+        // this key carries in MODEL, so writing MODEL's value here would push markup in as literal text.
+        if (k === "html") return;
+        var yt = ym.get(k);
+        if (yt instanceof Y.Text) return spliceText(yt, v);
+        var t = new Y.Text();
+        ym.set(k, t);
+        if (v) t.insert(0, v);
+        return;
+      }
+      var cur = ym.get(k);
+      if (v && typeof v === "object") {
+        // ponytail: a repeater (faq items, cards, spec rows) rides as one value, so two people in two
+        // different rows of ONE block still lose a side. Per-row ids and a nested Y.Array is the
+        // upgrade; focus-wins below stops it happening under a caret in the meantime.
+        if (JSON.stringify(cur) !== JSON.stringify(v)) ym.set(k, JSON.parse(JSON.stringify(v)));
+      } else if (cur !== v) ym.set(k, v);
+    });
+    ym.forEach(function (v, k) { if (!(k in data)) ym.delete(k); });
+  }
+
+  /* Attach first, fill second, all the way down. Yjs refuses to read a type that is not yet in a
+     document -- "Add Yjs type to a document before reading data" -- so building a block whole and
+     then inserting it throws the moment yData looks at a nested column. */
+  function yBlock(yarr, at, b) {
+    var m = new Y.Map();
+    yarr.insert(at, [m]);
+    m.set("type", b.type);
+    m.set("data", new Y.Map());
+    yData(m.get("data"), b.data || {});
+  }
+
+  function yList(yarr, list) {
+    var want = list.map(idOf), i, j;
+    for (i = yarr.length - 1; i >= 0; i -= 1) {
+      var d = yarr.get(i).get("data");
+      if (want.indexOf(d && d.get("_id")) < 0) yarr.delete(i, 1);
+    }
+    for (i = 0; i < list.length; i += 1) {
+      var at = -1;
+      for (j = i; j < yarr.length; j += 1) {
+        var dd = yarr.get(j).get("data");
+        if (dd && dd.get("_id") === want[i]) { at = j; break; }
+      }
+      // ponytail: a move is a delete and a fresh insert, because Y.Array has no move and one Y.Map
+      // cannot be integrated twice -- so a peer typing into the moved block as it moves loses that
+      // sentence. y-utility's move, or a position CRDT, is the upgrade.
+      if (at !== i) {
+        if (at > i) yarr.delete(at, 1);
+        yBlock(yarr, i, list[i]);
+        continue;
+      }
+      var m = yarr.get(i);
+      if (m.get("type") !== list[i].type) m.set("type", list[i].type);
+      yData(m.get("data"), list[i].data || {});
+    }
+  }
+
+  var outPending = null;
+  function reconcileOut() {
+    if (!YDOC) return;
+    // Per keystroke this is a full walk of the document; per broadcast tick it is free. The tick is
+    // also what keeps a fast typist inside the channel's events-per-second budget.
+    clearTimeout(outPending);
+    outPending = setTimeout(function () {
+      YDOC.transact(function () { yList(YB, MODEL); }, YORIGIN);
+    }, 120);
+  }
+
+  // ---- Y -> MODEL -----------------------------------------------------------
+  /* The shared document as plain blocks. Y.Text.toJSON() is the PLAIN TEXT -- a Quill delta's
+     formatting is not in the string -- so a rich block's html is taken from MODEL, which
+     mountQuill()'s text-change mirror keeps current whoever did the typing. */
+  function fromY() {
+    var out = YB.toJSON(), mine = {};
+    eachBlock(MODEL, function (b) { if (idOf(b)) mine[idOf(b)] = b; });
+    eachBlock(out, function (b) {
+      var was = b && b.data && mine[b.data._id];
+      if (b && b.data && b.data._rich && was) b.data.html = was.data.html;
+    });
+    return out;
+  }
+
+  /* Focus wins. A remote value landing in the field somebody is typing in would replace it mid-word,
+     which is worse than the editor before any of this: there, the loser at least kept typing into
+     their own copy until the next save. So a change that touches the block the caret is in is held,
+     and applied when the caret leaves. One rule, and it covers all three things that are not a
+     shared text type: a legacy section's html, a repeater's rows, and the settings in the panel. */
+  var held = [];
+  function caretIn(id) {
+    var d = cdoc(), a = d && d.activeElement, n = a && a.closest && a.closest("[data-b]");
+    return !!n && idOf(blockAt(n.getAttribute("data-b"))) === id;
+  }
+  function later(id, fn) { if (caretIn(id)) held.push([id, fn]); else fn(); }
+  function flushHeld() {
+    var q = held;
+    held = [];
+    q.forEach(function (x) { later(x[0], x[1]); });
+  }
+
+  function reconcileIn(events, tx) {
+    if (!YB || tx.origin === YORIGIN) return;     // our own reconcileOut, echoing back
+    var shape = false, blocks = {}, texts = {};
+    events.forEach(function (e) {
+      if (e.target instanceof Y.Array) { shape = true; return; }
+      if (e.target instanceof Y.Text) {
+        // A rich block's html is y-quill's: it applies the delta into Quill itself, both carets intact,
+        // and that is the whole reason the editor moved to Quill before this change could be made.
+        var key = e.path[e.path.length - 1], owner = e.target.parent;
+        var tid = owner && owner.get && owner.get("_id");
+        if (tid && key !== "html") texts[tid + " " + key] = 1;
+        return;
+      }
+      var g = e.target.get, id = g && (e.target.get("_id") || (e.target.get("data") && e.target.get("data").get("_id")));
+      if (id) blocks[id] = 1; else shape = true;
+    });
+    // ponytail: a section added, removed or moved by somebody else repaints the whole canvas, which
+    // costs the local caret. Typing never comes through here -- y-quill applies that straight into
+    // Quill -- so the common case is unaffected; dispatching a structural delta to canvasInsert /
+    // delBlock / moveBlock by _id is the upgrade when this proves annoying in real use.
+    if (shape) { MODEL = fromY(); return canvasFull(); }
+    Object.keys(texts).forEach(function (k) {
+      var sp = k.indexOf(" "), id = k.slice(0, sp), key = k.slice(sp + 1);
+      later(id, function () {
+        var p = pathOfId(id), b = p && blockAt(p), m = mapById(id);
+        if (!b || !m) return;
+        var yt = m.get("data").get(key);
+        if (!(yt instanceof Y.Text)) return;
+        b.data[key] = yt.toString();
+        var d = cdoc(), f = d && d.querySelector('[data-b="' + p + '"] [data-f="' + key + '"]');
+        // innerText, not textContent, and symmetric with what bindField() reads back. These fields
+        // are contentEditable="plaintext-only", so Enter makes a <br>; textContent would write a bare
+        // "\n" that innerText reads back with the break collapsed, and the next local keystroke
+        // would splice the peer's line break away again -- on every keystroke, until somebody stopped.
+        if (f && f.closest("[data-b]").getAttribute("data-b") === p) f.innerText = b.data[key];
+        else canvasBlock(p);
+      });
+    });
+    Object.keys(blocks).forEach(function (id) {
+      later(id, function () {
+        var p = pathOfId(id), b = p && blockAt(p), m = mapById(id);
+        if (!b || !m) return;
+        var keep = b.data._rich ? b.data.html : null;
+        b.type = m.get("type");
+        b.data = m.get("data").toJSON();
+        if (keep !== null) b.data.html = keep;
+        canvasBlock(p);
+      });
+    });
+  }
+
+  /* One document, however many people opened it. Two editors who each seeded a fresh Y.Doc from the
+     same blocks would hand Yjs two independent histories to merge, and every section would appear
+     twice -- so the stored state is loaded when there is one, and seeded only when there is not. */
+  function initShared(state) {
+    if (!window.IOPY) return;                      // the module did not load: single-player, as before
+    Y = window.IOPY.Y;
+    YDOC = new Y.Doc();
+    YB = YDOC.getArray("blocks");
+    /* Attached before anything below can return, and that ordering is the whole lesson: everything
+       after this point has an early exit in it, and while this line sat at the END of the function a
+       page with a stored state -- which is every page after its first save -- returned before
+       `update` was ever hooked up. Not one keystroke was broadcast to anybody. Nothing threw: the
+       editor worked, the draft saved, the peer markers moved, and the words stayed in the browser.
+       Safe this early because shareOut is a no-op until initCollab has a channel, which is also why
+       loading the state below cannot put the whole document on the wire. */
+    YDOC.on("update", function (delta, origin) { shareOut(delta, origin); });
+    if (state) { try { Y.applyUpdate(YDOC, b64bytes(state)); } catch (e) { say("stored state unreadable: " + e.message); } }
+    // After the state, not before: loading it is not somebody else's edit arriving, and reconcileIn
+    // would answer it with a full repaint of a canvas that does not exist yet.
+    YB.observeDeep(reconcileIn);
+    if (YB.length) return void (MODEL = fromY());   // the stored document wins over what this page drew
+    /* No stored document. Seeding one from `blocks` is only safe if NOBODY ELSE already has one:
+       two browsers that each seed give Yjs two independent histories of the same page, and merging
+       them shows every section twice. (Seen for real, and it is not a rare race -- with no stored
+       state, which is every page load before 0010 is applied, it happens every single time.) So the
+       seed waits until the roster says we are alone; if a peer is here, their state arrives on our
+       join and this becomes a no-op. The timeout is the backstop for a peer that never answers --
+       an editor with a document nobody is sharing beats an editor with no document at all. */
+    if (!(SPEC.rt && SPEC.rt.url && SPEC.rt.room) || !window.supabase) return seedDoc();
+    setTimeout(seedDoc, 4000);
+  }
+
+  /* Bind this editor to the shared paragraph -- the line that makes two people in one sentence keep
+     both sets of words. The Y.Text holds a Quill DELTA, not HTML (Y.Text.toJSON() is the plain text;
+     the formatting lives in the delta), so it is filled from an editor that already has the content,
+     and filled BEFORE the binding: QuillBinding's constructor ends in setContents(type.toDelta()),
+     so binding an empty one would empty the page.
+     Binding also repairs a stale mirror for free -- that setContents is the shared truth arriving --
+     which is what makes coming back from Preview safe. */
+  function shareQuill(node, f, q, key) {
+    if (!YDOC || key !== "html" || !window.IOPY) return;
+    var id = idOf(blockAt(node.getAttribute("data-b")));
+    if (!id) return;
+    WAITING.push({ id: id, q: q, key: key });
+    shareWaiting();
+  }
+
+  /* A QUEUE, and not a decision taken once at mount time, because at mount time the answer is very
+     often "not yet" -- and the cost of treating that as "never" is silent and total. canvasFull()'s
+     onload runs wireDoc() before initCollab() has a channel, so canWrite() is false for every editor
+     on the page's first paint; the shared text is never created, nothing binds, and from then on
+     typing reaches MODEL and stops there. It does not throw and it does not warn: reconcileOut skips
+     a rich block's html by design (y-quill owns it), so the words simply never leave the browser.
+     Seen for real -- a stored draft whose html read "Prime Testing  is available only monday to
+     Friday" beside a shared text that still read "Prime Test".
+
+     So a mount that cannot bind waits, and every event that could change the answer drains the
+     queue: the document arriving, a peer's update, the roster settling, the channel subscribing. */
+  function shareWaiting() {
+    if (!YDOC || !window.IOPY) return;
+    for (var i = WAITING.length - 1; i >= 0; i -= 1) {
+      var w = WAITING[i], m = mapById(w.id), data = m && m.get("data");
+      if (!data) continue;                         // the document itself has not arrived yet
+      if (!(data.get(w.key) instanceof Y.Text)) {
+        if (!canWrite()) continue;                 // somebody else is the one to create it
+        // The shared text holds a Quill DELTA, so it is filled from the editor that already has the
+        // content -- and filled before anything binds, because QuillBinding's constructor ends in
+        // setContents(type.toDelta()) and binding an empty one would empty the page.
+        YDOC.transact(function () {
+          var t = new Y.Text();
+          data.set(w.key, t);
+          t.applyDelta(w.q.getContents().ops);
+        }, YORIGIN);
+      }
+      var yt = data.get(w.key);
+      if (!(yt instanceof Y.Text)) continue;
+      WAITING.splice(i, 1);
+      bindQuill(yt, w.q);
+    }
+  }
+
+  function bindQuill(yt, q) {
+    /* Sweep the dead first. canvasBlock() replaces ONE section's node without going through
+       wireDoc(), so that block's old binding is left observing the shared text and feeding a delta
+       into an editor whose DOM is gone -- and that editor's own observer then writes it back. Two
+       bindings on one text is a loop, not a leak. */
+    for (var i = BINDS.length - 1; i >= 0; i -= 1) {
+      var old = BINDS[i];
+      if (old.quill && old.quill.root && old.quill.root.isConnected) continue;
+      try { old.destroy(); } catch (e) { /* already gone */ }
+      BINDS.splice(i, 1);
+    }
+    BINDS.push(new window.IOPY.QuillBinding(yt, q));
+  }
+
+  // Idempotent by design: called from the roster, from a timeout and from the single-player path,
+  // and whichever arrives first makes the others do nothing.
+  function seedDoc() {
+    if (!YDOC || YB.length) return;
+    stampIds(MODEL);
+    YDOC.transact(function () { yList(YB, MODEL); }, YORIGIN);
+    say("seeded the shared document from this page's sections.");
+    shareWaiting();
+  }
+
+  /* The repair for the race the seed guard cannot close: two browsers loading in the same instant
+     both see an empty roster and both seed. One _id must name one section, so a later copy of a name
+     we already have is deleted. Cheap, because it only runs when a peer's update actually arrives. */
+  function dedupe() {
+    if (!YDOC) return;
+    var seen = {}, dead = [];
+    for (var i = 0; i < YB.length; i += 1) {
+      var d = YB.get(i).get("data"), id = d && d.get("_id");
+      if (!id) continue;
+      if (seen[id]) dead.push(i); else seen[id] = 1;
+    }
+    if (!dead.length) return;
+    say("removed " + dead.length + " duplicated section(s): two browsers had seeded this page.");
+    YDOC.transact(function () {
+      for (var k = dead.length - 1; k >= 0; k -= 1) YB.delete(dead[k], 1);
+    }, YORIGIN);
+    MODEL = fromY();
+    canvasFull();
+  }
+
+  function b64bytes(s) {
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function bytesB64(u8) {
+    var s = "", i;
+    for (i = 0; i < u8.length; i += 1) s += String.fromCharCode(u8[i]);
+    return btoa(s);
+  }
+  function yState() { return YDOC ? bytesB64(Y.encodeStateAsUpdate(YDOC)) : ""; }
+
   function seedFor(type) {
     return JSON.parse(JSON.stringify((SPEC.ui.seed && SPEC.ui.seed[type]) || {}));  // never hand out the shared seed
   }
@@ -660,12 +1082,14 @@
     var box = document.getElementById("ed-saved"), pk = SPEC.pk;
     if (!pk) return;                       // a new post has no row to hang a draft on until it is created
     var timer = null, inFlight = 0, savedAt = 0, sent = null,
-        // The document as this person found it. The server diffs it against what we send back, and
-        // that pair becomes their entry in the activity log when the session is closed.
-        // ponytail: whole-document, which is right while only one person can edit at a time. Once
-        // the document is shared this has to become "was, with only the blocks I touched updated",
-        // or one editor's entry claims everybody's work.
-        was = JSON.stringify(prune(MODEL)),
+        // The document as this person found it, diffed by the server against what we send back; that
+        // pair is their entry in the activity log. Unpruned, like the draft itself -- see saveable().
+        was = JSON.stringify(MODEL),
+        // Which sections THIS person has typed in. Everybody holds the same document now, so a plain
+        // before/after would credit all of it to whoever saved last; `mine` is what narrows the entry
+        // to the work that was actually theirs. Quill says which is which: text-change reports
+        // source "user" for local input and something else for what y-quill applies from a peer.
+        mine = {}, shared = false,
         idle = null;
 
     function show(text, bad) {
@@ -680,21 +1104,53 @@
     }
     setInterval(showAge, 30000);           // so "just now" stops claiming to be just now
 
+    /* What the draft stores, and it is NOT pruned. prune() drops an empty paragraph and rebuilds a
+       columns block as a fresh object -- so a block an editor still has the caret in loses its _id,
+       every section after it answers to a different one, and a remote edit would be applied to the
+       wrong section on the next load. The draft is the live document, empty paragraphs and all;
+       Publish still prunes, because that is where "an empty paragraph is the caret waiting for you,
+       not content" is true. */
+    function saveable() { return JSON.stringify(MODEL); }
+
+    /* This person's sitting: the document as they found it, with only THEIR OWN sections moved on.
+       Everybody's work is on screen at once now, so a plain before/after would put the whole room's
+       writing into one person's activity entry. Built up from `was` rather than from what is on
+       screen, so a section somebody else deleted does not read as this person deleting it. */
+    function sitting(now) {
+      if (!YDOC) return now;               // single player: the whole document IS their work
+      var base = JSON.parse(was), fresh = {}, out = [];
+      JSON.parse(now).forEach(function (b) { if (idOf(b)) fresh[idOf(b)] = b; });
+      base.forEach(function (b) {
+        var id = idOf(b);
+        if (!id || !mine[id]) return out.push(b);        // not mine: exactly as I found it
+        if (fresh[id]) out.push(fresh[id]);              // mine, still here: as I left it
+      });                                                 // mine and gone: I removed it, and that shows
+      Object.keys(fresh).forEach(function (id) {          // sections I added
+        if (mine[id] && !base.some(function (x) { return idOf(x) === id; })) out.push(fresh[id]);
+      });
+      return JSON.stringify(out);
+    }
+
     function body(now, close) {
       var f = new FormData();
       f.append("csrf", csrf());
-      f.append("blocks", now);
+      // The document half is the ELECTED WRITER'S only: every peer holds the same document, so thirty
+      // editors would otherwise be thirty writes of the same bytes. The sitting half below is every
+      // peer's own, which is what keeps the activity log per person. The server tests for the field
+      // being present, not for it being truthy.
+      if (canWrite()) { f.append("blocks", now); f.append("state", yState()); }
       f.append("was", was);
-      f.append("now", now);
+      f.append("now", sitting(now));
       if (close) f.append("close", "1");
       return f;
     }
 
     function save() {
-      // prune(), the serialiser the submit uses -- not the shallower one Preview uses. The draft has
-      // to be the same bytes Publish would store, or publishing would change the page by itself.
-      var now = JSON.stringify(prune(MODEL));
-      if (now === sent) return;            // the title moved, not the page
+      var now = saveable();
+      // `shared` is the other reason to write: a peer typed, so the document moved even though this
+      // copy of the blocks did not -- the encoded state has to catch up or a reload would lose it.
+      if (now === sent && !shared) return;   // the title moved, not the page
+      shared = false;
       sent = now;
       var mine = ++inFlight;
       show("Saving…");
@@ -705,8 +1161,18 @@
           if (r.redirected) throw new Error("your sign-in has ended — open this page again in a new tab");
           return r.json().then(function (j) { return r.ok ? j : Promise.reject(new Error(j.error || "could not save")); });
         })
-        .then(function () {
+        .then(function (j) {
           if (mine !== inFlight) return;   // a newer save already answered
+          /* The server tolerates the working-draft tables not existing yet, because the editor has
+             to run before that migration is applied -- but it says so, and so do we. Reporting
+             "Saved just now" over work with nowhere to go is how typing appears to vanish on the
+             next reload: the page is served the PUBLISHED version back, because there is no draft.
+             No table names on an editor's screen; the console gets the developer half. */
+          if (j && j.stored === false) {
+            sent = null;
+            say("the working-draft tables are missing -- apply migrations/0010_working_draft.sql. Nothing is being saved.");
+            return show("Not saved — this site is not set up to keep drafts yet. Tell a developer.", true);
+          }
           savedAt = Date.now();
           dirty = false;                   // it is safe to leave: the work is on the server
           showAge();
@@ -717,6 +1183,11 @@
           show("Not saved — " + e.message, true);
         });
     }
+
+    // Somebody else typed. Nothing of mine changed, so this is not my sitting and dirty stays as it
+    // was -- but if I am the writer, the draft on the server is now behind and only I can move it.
+    sharedChanged = function () { if (canWrite()) { shared = true; clearTimeout(timer); timer = setTimeout(save, 1500); } };
+    touched = function (id) { if (id) mine[id] = 1; };
 
     nudgeSave = function () {
       clearTimeout(timer);
@@ -729,8 +1200,8 @@
 
     function closeSession() {
       clearTimeout(timer);
-      var now = JSON.stringify(prune(MODEL));
-      if (now === was) return;             // opened the page and read it: not a sitting to write up
+      var now = saveable();
+      if (sitting(now) === was) return;    // opened the page and read it: not a sitting to write up
 
       if (!navigator.sendBeacon) { fetch("/admin/posts/" + pk + "/draft", { method: "POST", body: body(now, true), credentials: "same-origin", keepalive: true }).catch(function () {}); return; }
       // sendBeacon, not fetch: an ordinary request is cancelled when the page goes away. FormData
@@ -1010,7 +1481,17 @@
   function mountQuill(node, f, key) {
     var Q = quillCtor(), d = f.ownerDocument, target = dataFor(node, f);
     if (!Q || !target) return false;
-    if (!quillKeeps(Q, d, target[key] || "")) {
+    /* The verdict is READ here, never worked out here. mountQuill runs once per peer per repaint, so
+       a "compute it if it is missing" fallback is the per-peer gate all over again: three browsers
+       opening one page would all reach it at once and could disagree. Only the elected writer
+       decides, once, and the answer is then content that travels with the block -- and a block with
+       no verdict yet is treated as legacy until the writer's document arrives and repaints. */
+    if (target._rich === undefined) {
+      if (!canWrite()) { node.setAttribute("data-legacy", "1"); return false; }
+      target._rich = quillKeeps(Q, d, target[key] || "");
+      markDirty();
+    }
+    if (!target._rich) {
       // Said on the block, not the field: [data-f]::after is the peer label, and anything put INSIDE
       // a [data-f] is copied into MODEL by the legacy input handler and published.
       node.setAttribute("data-legacy", "1");
@@ -1019,11 +1500,15 @@
     var q = new Q(f, { formats: QUILL_FORMATS, modules: { toolbar: false } });
     q.clipboard.dangerouslyPasteHTML(target[key] || "", "silent");   // silent: mounting is not an edit
     f.__quill = q;
+    shareQuill(node, f, q, key);
     q.on("text-change", function (delta, old, source) {
       var t = dataFor(node, f);
       if (!t) return;
       t[key] = semantic(q);
-      if (source !== "user") return;        // Quill's own normalising is not somebody typing
+      // Quill's own normalising is not somebody typing, and neither is a delta y-quill just applied
+      // from a peer -- it passes the binding as the source, so anything but "user" came from elsewhere.
+      if (source !== "user") return sharedChanged();
+      touched(rootIdOf(node.getAttribute("data-b")));
       markDirty();
       // The "/" inserter. The legacy path gets it from bindSlash()'s keyup, but Quill owns the
       // keyboard, so the hook is the content itself: a line that now reads exactly "/" opens the
@@ -1051,6 +1536,7 @@
       var target = dataFor(node, f);
       if (!target) return;
       target[key] = rich ? f.innerHTML : f.innerText;
+      touched(rootIdOf(node.getAttribute("data-b")));
       markDirty();
     });
     f.addEventListener("focus", function () { select(node.getAttribute("data-b")); });
@@ -1079,7 +1565,11 @@
     closePanel();
     var r = listAt(path);
     if (!r.arr) return;
-    r.arr.splice(r.i + 1, 0, JSON.parse(JSON.stringify(r.arr[r.i])));
+    var copy = JSON.parse(JSON.stringify(r.arr[r.i]));
+    // A copy is a different section, so it gets a different name. Sharing one _id with the original
+    // makes the two indistinguishable to every merge decision below.
+    eachBlock([copy], function (b) { if (b && b.data) delete b.data._id; });
+    r.arr.splice(r.i + 1, 0, copy);
     markDirty();
     canvasInsert(siblingPath(path, r.i + 1));
   }
@@ -1208,6 +1698,11 @@
   function wireDoc() {
     var d = cdoc();
     if (!d) return;
+    // The document this canvas held is gone; its bindings still observe Y types and would apply
+    // deltas into dead Quill instances for the life of the tab.
+    BINDS.splice(0).forEach(function (b) { try { b.destroy(); } catch (e) { /* already gone */ } });
+    WAITING.length = 0;                                    // those editors are gone with the document
+    d.addEventListener("focusout", flushHeld);             // the caret left: apply what was held back
     d.addEventListener("mousedown", startColDrag, true);   // before the caret lands in the cell
     // the canvas is a real page: stop it behaving like one (contact_form would post a live lead)
     d.addEventListener("submit", function (e) { e.preventDefault(); }, true);
@@ -1625,6 +2120,14 @@
   function rememberSelection() {
     var d = cdoc();
     if (!d) return;
+    /* selectionchange stopped meaning "the person at this keyboard moved their caret". y-quill
+       applies a peer's words by mutating the canvas DOM, and that fires it too -- so without this
+       the editor would record a caret it does not have, broadcast "I am typing here" for a field
+       nobody is in, and ask a Quill that has no selection to describe one. The iframe keeps its own
+       activeElement when focus moves to the toolbar in the parent document, so a toolbar click is
+       still a caret in the canvas and the bar stays live. */
+    var here = d.activeElement;
+    if (!here || !here.closest || !here.closest("[data-f]")) return;
     var sel = d.defaultView.getSelection();
     if (!sel || !sel.rangeCount) return;
     var r = sel.getRangeAt(0), host = r.startContainer;
@@ -1803,7 +2306,9 @@
     var q = qHere();
     if (!q) return false;
     q.focus();
-    var now = q.getFormat();
+    var at = q.getSelection();
+    if (!at) return false;             // focus() did not land a caret: do nothing rather than throw
+    var now = q.getFormat(at);
     q.format(name, value === undefined ? !now[name] : (now[name] === value ? false : value), "user");
     syncBar();
     return true;
@@ -1920,7 +2425,7 @@
       if (!q) return docLink();
       var r = q.getSelection(true);
       if (!r || !r.length) return alert("Select the words you want to link first.");
-      var url = prompt("Link address", q.getFormat().link || "https://");
+      var url = prompt("Link address", q.getFormat(r).link || "https://");
       if (url !== null) q.format("link", url || false, "user");
     })].concat(inserts)));
     // Quill's align is an attribute with no value for left, which is also how site.css reads it.
@@ -1941,7 +2446,15 @@
       // toolbar must go dead rather than paint a state it cannot deliver — a control that silently
       // snaps back to "Normal text" is worse than one that is visibly switched off.
       var live = !!(liveField() && savedField.hasAttribute("data-rich"));
-      var q = qHere();
+      /* Read the caret WITHOUT focusing. q.getFormat() with no argument means
+         getFormat(this.getSelection(true)) -- which focuses the editor and returns null when the
+         canvas document does not have focus, and getFormat then reads .index off that null and
+         throws. Painting a toolbar must never move the caret, and it must survive being asked while
+         the caret is somewhere else entirely: selectionchange fires in the canvas whenever y-quill
+         applies a peer's words, and at that moment the person typing may be in the title field, in
+         another pane, or in another window. A Quill field with no caret in it is simply not live. */
+      var q = qHere(), qat = q && q.getSelection();
+      if (q && !qat) live = false;
       bar.classList.toggle("tb-off", !live);
       cmds.concat([style]).forEach(function (x) { x.disabled = !live; });
       proseOnly.forEach(function (x) { x.disabled = !live || !!q; });
@@ -1952,7 +2465,7 @@
       if (HINT) HINT.innerHTML = live ? HINT_ON : "Click in the page to start editing.";
       if (!live) return;
       if (q) {                                    // Quill knows its own state; queryCommandState does not
-        var now = q.getFormat();
+        var now = q.getFormat(qat);
         bold.classList.toggle("on", !!now.bold);
         ital.classList.toggle("on", !!now.italic);
         und.classList.toggle("on", !!now.underline);
@@ -2168,6 +2681,7 @@
       b.classList.toggle("on", b.getAttribute("data-view") === v);
     });
     fitPreview();
+    viewChanged();     // previewing means this browser can no longer be the one that saves
     if (v === "preview") {
       renderPreview();
     } else {
@@ -2216,6 +2730,8 @@
     }
     MODEL = parsed;
     if (!MODEL.length) MODEL = [{ type: "rich_text", data: { html: "" } }];   // open with a caret, not a dialog
+    (SPEC.ui.scalars || []).forEach(function (k) { SCALARS[k] = 1; });
+    initShared(SPEC.state);   // before initAutosave: its baseline has to carry the ids this mints
 
     focusOnLoad = "0";   // land the caret in the document, the way Docs does
     canvasFull();
@@ -2284,7 +2800,7 @@
 
     say("joining " + rt.room + " as " + rt.me.name);
     var client = null, token = null;
-    var chan = null, peers = {}, spot = {}, mine = { path: null, field: null, sig: sig(), at: 0 };
+    var chan = null, peers = {}, spot = {}, mine = { path: null, bid: null, field: null, sig: sig(), at: 0 };
     var roster = document.getElementById("ed-peers");
 
     /* MODEL's shape as a string. data-b is POSITIONAL and renumber() rewrites it on every insert,
@@ -2336,8 +2852,11 @@
       if (VIEW === "preview") return;   // a different document entirely; no [data-b] to mark
       Object.keys(peers).forEach(function (k) {
         var p = peers[k], w = spot[k];
-        if (!w || !w.path || w.sig !== mine.sig) return;   // different shape: say nothing rather than lie
-        var block = d.querySelector('[data-b="' + w.path + '"]');
+        // With one shared document there is one shape, so a name resolves wherever the section has
+        // moved to. sig is the fallback for a peer that has not sent a name yet.
+        var at = w && w.bid ? pathOfId(w.bid) : (w && w.sig === mine.sig ? w.path : null);
+        if (!w || !at) return;
+        var block = d.querySelector('[data-b="' + at + '"]');
         if (!block) return;
         block.setAttribute("data-peer-at", "1");
         block.style.setProperty("--peer", p.colour);
@@ -2362,16 +2881,121 @@
       if (!chan) return;
       mine.sig = sig();
       chan.send({ type: "broadcast", event: "where",
-                  payload: { id: rt.me.id, path: mine.path, field: mine.field, sig: mine.sig } });
+                  payload: { id: rt.me.id, path: mine.path, bid: mine.bid, field: mine.field,
+                             sig: mine.sig, edit: VIEW !== "preview",
+                             stamp: (stampBox() || {}).value || "", panel: panelSig() } });
     }
     function nudge() {                       // selectionchange fires on every caret move
       clearTimeout(pending);
       pending = setTimeout(beam, 250);
     }
 
+    /* ---- the document on the wire -------------------------------------------------------------
+       Base64 in a broadcast payload on the channel #65 already opened. No new server: y-websocket
+       and y-webrtc both want one, and gunicorn runs sync workers that cannot hold a socket. */
+    var outbox = [], flushing = null;
+    shareOut = function (delta, origin) {
+      if (!chan || origin === "remote") return;   // what a peer just sent us is not ours to send back
+      outbox.push(delta);
+      if (flushing) return;
+      // doc.on("update") fires once per transaction, and a fast typist is eight to ten a second
+      // against a channel budget counted in events per second. One merged delta per tick instead.
+      flushing = setTimeout(function () {
+        flushing = null;
+        chan.send({ type: "broadcast", event: "doc",
+                    payload: { id: rt.me.id, u: bytesB64(Y.mergeUpdates(outbox.splice(0))) } });
+      }, 150);
+    };
+
+    function hearDoc(msg) {
+      var m = msg && msg.payload;
+      if (!m || !m.u || m.id === rt.me.id || !YDOC) return;
+      try { Y.applyUpdate(YDOC, b64bytes(m.u), "remote"); }
+      catch (e) { return say("could not apply an update from " + m.id + " -- " + e.message); }
+      dedupe();
+      shareWaiting();
+    }
+
+    /* A newcomer is caught up by a PEER, not by the server. The stored state is behind by the save
+       debounce plus whatever is in flight, so a newcomer who loads it and then receives the next
+       delta has Yjs hold that delta as pending -- its base is missing -- and those words never
+       appear at all. Proved rather than assumed: applying a bare delta to a fresh document yields
+       an empty document, silently. applyUpdate is idempotent, so a redundant one costs nothing. */
+    function beamState(fresh) {
+      // Anyone holding a document answers, not only the writer: the writer is elected by lowest id
+      // and that can be the NEWCOMER, who has nothing to send. applyUpdate is idempotent, so two
+      // peers answering costs one extra message and nothing else.
+      if (!chan || !YDOC || !YB.length) return;
+      // Realtime reports our OWN arrival as a join. Without this the writer encodes and broadcasts
+      // the whole document to an empty room every time it opens the page.
+      if (!fresh.some(function (x) { return x && x.id && x.id !== rt.me.id; })) return;
+      chan.send({ type: "broadcast", event: "doc",
+                  payload: { id: rt.me.id, u: bytesB64(Y.encodeStateAsUpdate(YDOC)) } });
+    }
+
+    /* Everybody holds the same document, so everybody would otherwise save it. The lowest presence
+       id writes, and the election re-runs whenever the roster moves.
+
+       Preview disqualifies you, and that is not tidiness. Preview replaces the canvas, so there are
+       no Quill instances -- and a rich paragraph's HTML is derived from a Quill, not from the shared
+       text (a Y.Text holds a delta; its toJSON is the plain words). A previewing writer would keep
+       saving a draft that is quietly behind whoever is typing. It rides the `where` broadcast rather
+       than presence because presence is rationed to about five events a minute on this instance and
+       a preview toggle is a click. */
+    canWrite = function () {
+      if (!chan || VIEW === "preview") return false;
+      var low = rt.me.id;
+      Object.keys(peers).forEach(function (id) {
+        if (spot[id] && spot[id].edit === false) return;
+        if (id < low) low = id;
+      });
+      return low === rt.me.id;
+    };
+
+    viewChanged = function () { beam(); sharedChanged(); };
+
+    /* After somebody publishes, every other tab still carries the version stamp its form was drawn
+       with, so the next Publish trips #64's guard -- over page content that is now IDENTICAL, because
+       there is only one document. So peers tell each other their stamp, and a later one is adopted.
+
+       Only when the rest of the form matches, and that condition is the whole point. The panel on the
+       right -- title, web address, status, summary, SEO -- is deliberately NOT shared, so #64's guard
+       is still the only thing standing between two people who both retitled the page. Adopting a
+       stamp over a panel that differs would turn a refusal into a silent overwrite. Matching panels
+       mean the only thing that moved was the shared document, and that is exactly the false alarm. */
+    function stampBox() { return document.querySelector('#post-form input[name="updated_at"]'); }
+    // Cached: this is read on every caret move of every peer, and walking a form with a long SEO
+    // panel each time is real work for an answer that only changes when somebody edits the panel.
+    var panelWas = null;
+    function panelSig() {
+      var form = document.getElementById("post-form");
+      if (!form || !window.FormData) return null;
+      if (panelWas !== null) return panelWas;
+      var out = [];
+      new FormData(form).forEach(function (v, k) {
+        if (k !== "blocks" && k !== "csrf" && k !== "updated_at") out.push(k + "\u0000" + v);
+      });
+      return (panelWas = out.join("\u0001"));
+    }
+    var pform = document.getElementById("post-form");
+    if (pform) ["input", "change"].forEach(function (ev) {
+      pform.addEventListener(ev, function () { panelWas = null; });
+    });
+
+    function hearStamp(w) {
+      var box = stampBox();
+      if (!YDOC || !box || !w.stamp || w.panel == null) return;
+      if (w.stamp <= box.value || w.panel !== panelSig()) return;
+      box.value = w.stamp;   // said once per stamp, not once per caret move of every peer
+      say("adopted a newer version stamp from " + w.id + ": the page content is the same document.");
+    }
+
     sendWhere = function (f) {
       var block = f && f.closest && f.closest("[data-b]");
       mine.path = block ? block.getAttribute("data-b") : null;
+      // The NAME of the section, not only its position: data-b is rewritten by renumber() on every
+      // insert, so a marker drawn from a path that has since moved sits on the wrong section.
+      mine.bid = block ? idOf(blockAt(mine.path)) : null;
       mine.field = f ? f.getAttribute("data-f") : null;
       mine.at = Date.now();
       nudge();
@@ -2394,6 +3018,12 @@
       Object.keys(spot).forEach(function (id) { if (!peers[id]) delete spot[id]; });
       drawRoster();
       paintPeers();
+      // Nobody else is here, so seeding cannot collide with anybody else's document. With a peer
+      // present we wait instead: their state arrives on our join.
+      if (!Object.keys(peers).length) seedDoc();
+      shareWaiting();          // the roster decides who creates a shared text, so it just changed
+      // The writer may have just left, or just arrived. Whoever it is now owes the server a save.
+      sharedChanged();
     }
 
     /* Positions are kept apart from the roster on purpose: a broadcast that arrives before the
@@ -2403,6 +3033,7 @@
       var w = msg && msg.payload;
       if (!w || !w.id || w.id === rt.me.id) return;
       spot[w.id] = w;
+      hearStamp(w);
       paintPeers();
     }
 
@@ -2428,13 +3059,22 @@
       client.realtime.setAuth(token);
       chan = client.channel(rt.room, { config: { private: true, presence: { key: rt.me.id } } });
       chan.on("presence", { event: "sync" }, readRoster)
-          .on("presence", { event: "join" }, function () { readRoster(); if (mine.path) nudge(); })
+          .on("presence", { event: "join" }, function (p) {
+            readRoster();
+            beam();                    // a latecomer has heard nobody's position, or whether they can write
+            beamState((p && p.newPresences) || []);
+          })
           .on("presence", { event: "leave" }, readRoster)
           .on("broadcast", { event: "where" }, hearWhere)
+          .on("broadcast", { event: "doc" }, hearDoc)
           .subscribe(function (status, err) {
             say("channel " + status + (err ? " -- " + err.message : ""));
             // The one presence event of the session: who I am. Everything else rides broadcast.
-            if (status === "SUBSCRIBED") { tries = 0; return chan.track({ id: rt.me.id, name: rt.me.name, colour: rt.me.colour }); }
+            if (status === "SUBSCRIBED") {
+              tries = 0;
+              shareWaiting();   // canWrite() was false until this moment: there was no channel
+              return chan.track({ id: rt.me.id, name: rt.me.name, colour: rt.me.colour });
+            }
             // CHANNEL_ERROR is what an expired JWT looks like from here. _session_token() only
             // refreshes AFTER expiry, so reacting to the error is the only schedule that can be
             // honoured -- asking early would hand back the same dying token.

@@ -149,9 +149,16 @@ def layout(name):
     """Expand a LAYOUTS entry into real blocks. Unknown name -> a blank page."""
     return [{"type": t, "data": deepcopy(EDITOR["seed"].get(t) or {})} for t in LAYOUTS.get(name, [])]
 
+# Keys whose value is never prose. Two jobs, and the second is why the underscore pair is here:
+# blocks_text() skips them (a uuid in llms-full.txt and admin search would be nonsense), and the
+# editor sends the set to the browser as EDITOR["scalars"] to decide which fields become a shared
+# text type and which stay plain values. _id names a section for as long as it exists so two
+# browsers can talk about the same one without counting positions; _rich is the Quill gate's
+# verdict, stored rather than recomputed so every editor of a page agrees about it.
 _NON_TEXT_KEYS = {"url", "cta_url", "cta2_url", "button_url", "link_url", "icon", "image", "media_id", "file_media_id",
                   "post_type", "term", "limit", "kind", "top_level", "dark", "type", "widths", "align", "align_box", "width",
-                  "tone", "fx", "count_up", "height"}
+                  "tone", "fx", "count_up", "height", "_id", "_rich"}
+EDITOR["scalars"] = sorted(_NON_TEXT_KEYS)
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
 _TEXT_ORDER = ("eyebrow", "heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company",
                "value", "label", "k", "v", "caption", "alt", "cta_label", "cta2_label", "button_label", "link_label",
@@ -165,7 +172,12 @@ _RANK = {k: i for i, k in enumerate(_TEXT_ORDER)}
 NEVER_NESTED = ("columns", "hero")
 
 
-def validate_blocks(blocks, where="blocks", nested=False):
+def validate_blocks(blocks, where="blocks", nested=False, draft=False):
+    """draft=True checks the shape but not completeness: an unfinished page is what a working draft
+    IS. A paragraph with the caret still in it has no text, an Image section has no picture until one
+    is chosen, and neither is a reason to refuse to save somebody's work. "Required" is a rule about
+    publishing, and Publish enforces it on its own through apply_post() -- which is still the one
+    validation path, so nothing reaches posts.blocks without passing the full check."""
     if not isinstance(blocks, list):
         return [f"{where} must be a list"]
     errors = []
@@ -181,14 +193,15 @@ def validate_blocks(blocks, where="blocks", nested=False):
         if nested and b["type"] in NEVER_NESTED:
             errors.append(f"{at}: a {b['type']} section cannot go inside a column")
             continue
-        for field in spec[0]:
-            if b["data"].get(field) in (None, "", []):
-                errors.append(f"{at}.{field} required")
+        if not draft:
+            for field in spec[0]:
+                if b["data"].get(field) in (None, "", []):
+                    errors.append(f"{at}.{field} required")
         if b["type"] == "columns":
             cols = b["data"].get("cols")
             if isinstance(cols, list):
                 for c, col in enumerate(cols):
-                    errors += validate_blocks(col, f"{at}.cols[{c}]", nested=True)
+                    errors += validate_blocks(col, f"{at}.cols[{c}]", nested=True, draft=draft)
             elif cols not in (None, "", []):        # missing or empty already said "cols required"
                 errors.append(f"{at}.cols must be a list of columns")
     return errors

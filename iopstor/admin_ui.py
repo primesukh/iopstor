@@ -315,8 +315,11 @@ def _form_context(pt, post, errors=None, conflict=None):
     # sitemap and the feed all go on reading posts.blocks, which is what keeps a draft off the site.
     draft = db.get_draft(pk) if pk else None
     content = draft["blocks"] if draft else ((post or {}).get("blocks") or [])
+    # The shared document itself, base64. Every editor of a page loads THIS rather than building
+    # one from the blocks above: two browsers that each seeded their own would hand Yjs two
+    # independent histories to merge, and every section would appear twice.
     return dict(pt=pt, post=post, errors=errors or {}, conflict=conflict, taxonomies=taxonomies, rt=_rt(pk),
-                has_draft=bool(draft),
+                has_draft=bool(draft), doc_state=(draft or {}).get("state") or "",
                 parents=[p for p in siblings if p["id"] != pk] if pt["hierarchical"] else [],
                 taken_slugs=[s["slug"] for s in siblings if s["id"] != pk],
                 media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps(content, indent=2, ensure_ascii=False),
@@ -451,22 +454,39 @@ def autosave(pk):
     login page that fetch() follows, arriving as 200 HTML rather than a 401.
     """
     db.get_post(pk) or abort(404)
+    stored = True           # nothing to store is not a failure; nowhere to store it is -- see below
     db.flush_sessions(pk)   # the backstop: whoever touches the page closes anybody's stale session
-    try:
-        blocks = json.loads(request.form.get("blocks") or "[]")
-    except ValueError as e:
-        return jsonify({"error": f"invalid JSON: {e}"}), 400
-    errs = validate_blocks(blocks)
-    if errs:
-        # Refuse rather than store: an invalid draft would be published by the next press of the
-        # button, through apply_post(), which is the one validation path and would then refuse it
-        # at the worst possible moment.
-        return jsonify({"error": "these sections are not valid", "fields": {"blocks": errs}}), 400
-    db.save_draft(pk, blocks, request.form.get("state", ""), g.user)
+    # Two unrelated payloads share this route, and only one of them is per-person. `blocks`/`state`
+    # are the DOCUMENT, and once it is shared exactly one browser -- the elected writer -- sends
+    # them, because every editor holds the same document and thirty copies of it is thirty writes.
+    # `was`/`now`/`close` are THIS PERSON'S sitting and every browser sends its own, or the activity
+    # log would credit everybody's work to whoever happened to be elected. So the document half is
+    # optional, and the test is `in request.form`, not truthiness: .get("blocks") or "[]" reads a
+    # missing field as an empty page and would wipe the draft on every peer's autosave.
+    if "blocks" in request.form:
+        try:
+            blocks = json.loads(request.form["blocks"])
+        except ValueError as e:
+            return jsonify({"error": f"invalid JSON: {e}"}), 400
+        # draft=True: the shape is checked, completeness is not. A draft is unfinished by definition
+        # -- the empty paragraph the caret is sitting in has no text, and an Image section has no
+        # picture until one is chosen -- and refusing to SAVE somebody's work because they have not
+        # finished it is the worst possible moment to enforce a publishing rule. Publish enforces it
+        # anyway, through apply_post(), which is still the one path into posts.blocks. What is still
+        # refused is a shape that is wrong rather than unfinished: an unknown type, a hero or grid
+        # nested inside a column, a cols that is not a list.
+        errs = validate_blocks(blocks, draft=True)
+        if errs:
+            return jsonify({"error": "these sections are not valid", "fields": {"blocks": errs}}), 400
+        # False means 0010 is not applied, so there is nowhere to put this. Answering 200 and
+        # saying nothing let the editor report "Saved just now" over work that went nowhere -- and
+        # then a reload silently served the published version back, which is what it looks like from
+        # the outside: typing that vanishes. Tolerating the missing table is right; hiding it is not.
+        stored = db.save_draft(pk, blocks, request.form.get("state", ""), g.user)
     _record_session(pk)
     if request.form.get("close"):
         db.flush_sessions(pk, user_id=g.user["id"])
-    return jsonify({"at": db.now_iso()}), 200, {"Cache-Control": "no-store"}
+    return jsonify({"at": db.now_iso(), "stored": stored}), 200, {"Cache-Control": "no-store"}
 
 
 def _record_session(pk):

@@ -3,7 +3,7 @@
 {% set p = post or {} %}
 {% set meta = p.meta or {} %}{% set seo = p.seo or {} %}
 {% set can_delete = p.id and admin_user.role == 'admin' %}
-<script type="application/json" id="editor-data">{{ {"blocks": blocks, "ui": blocks_ui, "layouts": layouts, "media": media, "type": pt.slug, "pk": p.get('id'), "post_types": post_types|map(attribute='slug')|list, "rt": rt}|tojson }}</script>
+<script type="application/json" id="editor-data">{{ {"blocks": blocks, "ui": blocks_ui, "layouts": layouts, "media": media, "type": pt.slug, "pk": p.get('id'), "post_types": post_types|map(attribute='slug')|list, "rt": rt, "state": doc_state}|tojson }}</script>
 {# One screen: a bar (back, saved status, Edit/Preview, Save), the page under a big title, and every
    setting in the panel on the right. textarea[name="blocks"] under Advanced is still the only field
    that carries the content, so the server side is unchanged. #}
@@ -125,4 +125,15 @@
    during parsing, so window.supabase is there before the deferred admin.js runs at DOMContentLoaded.
    Only this screen needs it, so it is not in base.html. #}
 {% if rt.url and rt.room %}<script src="{{ url_for('static', filename='vendor/supabase.js') }}"></script>{% endif %}
+{# Yjs and its Quill binding: the shared document, so two people in one paragraph keep both sets of
+   words. A module, because that is what these two ship as -- and a module script is deferred like
+   admin.js, so window.IOPY is set before DOMContentLoaded runs initBlocks(). No import map and no
+   bare specifiers: y-quill.mjs imports ./yjs.mjs by path, so there is exactly one resolved URL and
+   therefore exactly one copy of Yjs. Two copies is a silent instanceof failure and broken interop.
+   Missing entirely (an old browser, a blocked module) is the single-player editor, unchanged. #}
+<script type="module">
+  import * as Y from "{{ url_for('static', filename='vendor/yjs.mjs') }}";
+  import { QuillBinding } from "{{ url_for('static', filename='vendor/y-quill.mjs') }}";
+  window.IOPY = { Y: Y, QuillBinding: QuillBinding };
+</script>
 {% endblock %}
