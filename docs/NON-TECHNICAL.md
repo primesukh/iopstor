@@ -21,7 +21,14 @@ Anything you change in the admin panel appears on the public website immediately
 
 ## 2. Logging in
 
-1. Go to `/admin`.
+**The admin panel only opens from the office.** This is deliberate: the website itself is on the internet
+for everybody, but the part where content is written is reachable from inside the premises only, so a
+password that goes astray is worth nothing to somebody outside. Working from home or on mobile data, you
+will not be able to reach it — and you will not get a "not allowed" message either. The page simply does
+not exist from out there, which is the point: anybody scanning the internet for a login form finds
+nothing to try passwords against.
+
+1. On the office network, go to `/admin`.
 2. Enter the email and password you were given.
 3. You land on the dashboard, which shows counts of your content and recent enquiries.
 
@@ -31,6 +38,12 @@ Anything you change in the admin panel appears on the public website immediately
 - **Admin** — everything an editor can do, plus deleting content, changing site settings, and creating other user accounts.
 
 If you can log in but see "Forbidden", your login exists but has not been given a role yet — ask an admin.
+
+If the login page itself says the page cannot be found, you are almost certainly not on the office
+network — check that first, before assuming the site is down. The public website answering normally while
+`/admin` does not is exactly what this is supposed to look like from outside. If you *are* in the office
+and everybody is getting that, it is a settings problem rather than something you did; tell whoever looks
+after the server, and they have a note about what to check.
 
 ---
 
@@ -714,6 +727,11 @@ its categories and anything filed under it intact, ready to be published again. 
 **The times in the admin panel have changed.** They are now Indian time, and every screen says IST after
 the time so there is no doubt. They were previously five and a half hours behind without saying so, which
 also meant a publish date you typed was acted on five and a half hours late. Both are now correct.
+
+**I cannot reach /admin from home.** That is intended — the admin panel opens from the office network
+only, so nobody outside can even find the login form, let alone try passwords at it. The public website
+works normally from anywhere. There is no setting on your side to change; content has to be written from
+the premises.
 
 **Somebody has been trying to sign in as me.** Wrong passwords are recorded. An administrator can open
 **Activity**, choose *login failed* in the middle box, and see every attempt with the email that was

@@ -26,5 +26,11 @@ LOGIN_WINDOW = int(os.environ.get("LOGIN_WINDOW", "900"))  # seconds; tune both 
 TRUSTED_PROXIES = tuple(ipaddress.ip_network(c.strip()) for c in (
     os.environ.get("TRUSTED_PROXIES") or "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8,::1/128,fc00::/7"
 ).split(",") if c.strip())
+# The networks allowed to reach /admin and /api/admin/v1 at all, so an editor's session only works from
+# the office. Empty means no restriction, which is what development and any deploy that has not set it
+# want. Compared against the address client_ip() resolves, NOT against remote_addr -- behind Traefik
+# every request would otherwise look like Traefik and either all pass or all fail.
+ADMIN_NETWORKS = tuple(ipaddress.ip_network(c.strip())
+                       for c in os.environ.get("ADMIN_NETWORKS", "").split(",") if c.strip())
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_SECURE = SITE_URL.startswith("https://")

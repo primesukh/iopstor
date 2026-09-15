@@ -1,9 +1,11 @@
 # Production: the CMS, its migrations and its Cloudflare Tunnel, one stack, one Dokploy Compose service.
-# TWO ingresses, on purpose: the Cloudflare tunnel for the public site, and the published port below for
-# LAN access to the admin. Each hands the app a visitor address a different way -- CF-Connecting-IP from
-# the edge, the connection itself on the LAN -- and TRUSTED_PROXIES is what decides which to believe, so
-# that is the variable to get right, not a claim that nothing else can reach this container
-# (docs/TECHNICAL.md §12); the runbook is §15.
+# TWO ingresses, on purpose: the Cloudflare tunnel for the public site, and Dokploy's own Traefik -- which
+# a domain attached in the Dokploy UI puts in front of this container -- for LAN access to the admin. Each
+# hands the app a visitor address a different way, CF-Connecting-IP from the edge and X-Forwarded-For from
+# Traefik, and TRUSTED_PROXIES is what decides which to believe, so that is the variable to get right, not
+# a claim that nothing else can reach this container (docs/TECHNICAL.md §12); the runbook is §15.
+# Still no `ports:` here, but the reason has changed: it is no longer what makes a header trustworthy,
+# it is simply that Traefik already serves the LAN and a second way in would be exposure for nothing.
 # The tunnel is behind a profile, so the stack also deploys before anyone has made one.
 # Every value below comes from the Dokploy service's environment. Nothing here is a secret.
 
@@ -48,14 +50,6 @@ services:
     environment: *app-env
     # default reaches cloudflared; dokploy-network reaches Supabase Kong. Two networks on purpose.
     networks: [default, dokploy-network]
-    # The LAN way in, in the repo rather than in a Dokploy screen, so a redeploy from git cannot quietly
-    # drop it. `mode: host` and not the default: swarm's routing mesh NATs the source address, and every
-    # visitor would then arrive as one Docker address -- one shared throttle bucket and a useless From
-    # column. Under plain `docker compose` it is the ordinary publish it looks like.
-    ports:
-      - target: 8000
-        published: ${LAN_PORT:-8000}
-        mode: host
   cloudflared:
     profiles: [tunnel]                     # started only when COMPOSE_PROFILES=tunnel is in the environment;
                                            # `app` carries no profiles: key, so it deploys either way

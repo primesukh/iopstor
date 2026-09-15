@@ -416,6 +416,8 @@ Writes: `POST /leads` (also the target of the HTML contact form — plain form P
 
 It is post-redirect-get only when the write **succeeds**. A refused save falls through to the same render with the submitted values back in the form and a `400`, the way `new_post` / `edit_post` re-render rather than redirect — a redirect would answer a typo by making the editor retype the record. A refusal is a `(field, message)` pair, **not** a `flash()`: the form carries it as `data-refused-field` / `data-refused`, `initWarranty()` in `admin.js` puts it on that field with `setCustomValidity()` and calls `reportValidity()`, and a `<noscript>` copy says the same sentence without JS. Only a success flashes, at the top, where a confirmation belongs. `editing` is the form's contents, from `request.form` on a refusal and from the row on `?edit=`; the template keys add-vs-edit off `editing.id`, not off `editing` being truthy, so a rejected *new* record does not come back wearing an Edit heading. `?q=` and `?page=` ride through every redirect (save, delete, cancel) so a filtered list survives the round trip.
 
+**Every `/admin` and `/api/admin/v1` route sits behind a `before_request` that answers 404 when `ADMIN_NETWORKS` is set and the caller is outside it** (§12) — the login form and the token endpoint included, because those are the two that take a password.
+
 `/admin/audit` is the activity log: every entry `audit_log` holds, newest first, admin-only, with `?user=` / `?action=` / `?table=` filters and the same `db.paginate(..., 50)` + `page` / `has_next` idiom as `/admin/leads`. It orders by `id DESC` rather than by `at` — ids are handed out in time order so the two agree, and the primary key then does the sorting without a second index. No `/api/admin/v1` mirror exists: nothing consumes the admin API but this browser admin. It opens with a shut `<details>` from `throttle.connection()` saying where the site thinks you are connecting from, so the *From* column can be checked against what the app is actually receiving (§12).
 
 **The screen is translated in `admin_ui.py`, not in the template.** The test it is written against is that somebody who has never seen the database can read a row aloud, so the route hands the template finished rows — `who`, `sentence`, `fields` — and `audit.html` does no thinking. The translators are pure functions living above the routes and importing nothing from them, which is how the offline tests call them directly:
@@ -792,6 +794,21 @@ The invite form is `autocomplete="off"` and its *Temporary password* is `autocom
 - `_password_errors(new, confirm=None)` is the shared validator: eight characters minimum (matching the invite form's `minlength`; GoTrue's own floor is six), and a mismatch check that `confirm=None` skips for the admin's one-field form.
 - **Neither path ends that user's other sessions** — GoTrue's admin API has no sign-out-everywhere. Marked `# ponytail:` on `set_password()`.
 
+**The admin does not exist outside the office.** `ADMIN_NETWORKS` is a CIDR list, and when it is non-empty a `before_request` on **both** admin blueprints — `admin_ui` (`/admin`) and `admin_api` (`/api/admin/v1`) — answers `404` to any request whose resolved client address is outside it (client, 2026-09-15: staff reach the admin from the office premises only). The public site is untouched: it is a different blueprint and never consulted.
+
+Four things about the shape:
+
+- **It tests `client_ip()`, not `remote_addr`.** Behind Traefik every request has the same `remote_addr`, so a `remote_addr` test would admit everybody or nobody. That makes this guard exactly as good as `TRUSTED_PROXIES` — see the lockout below.
+- **A blueprint `before_request`, not a check inside `ui_required()`.** The login form is the one route that takes a password and requires no session, so guarding only the authenticated routes would leave the door that matters open. It also covers every route added later without anyone remembering to.
+- **404, not 403.** `/admin` is a well-known path; a refusal saying "not allowed" also says "something is here, keep trying", which from the public internet is an invitation to return with a password list. The API's own `HTTPException` handler turns it into `{"error": "not found"}`, the same answer a missing row gets.
+- **Empty means unrestricted**, which is what development and any deploy that has not set it want. This is a `.split(",")` on `""` → `()`, not the `or`-a-default that `TRUSTED_PROXIES` uses, because here "set nothing" genuinely means "restrict nothing".
+
+**It is a layer, not the lock.** The password, the roles and the throttle are all still there and still do their jobs; this only decides who may knock. It also does nothing about somebody already inside the building, which is what the roles are for.
+
+**The lockout to know about before it happens.** If `TRUSTED_PROXIES` stops matching the real proxy — Traefik recreated onto a different address, a tunnel added whose bridge is not in the list — then `client_ip()` returns the *proxy's* address, that address is not in `ADMIN_NETWORKS`, and **every editor is locked out with a 404 and nothing on screen to say why**. Verified deliberately: with `TRUSTED_PROXIES=10.9.9.0/24` and a request through a proxy at `127.0.0.1`, `/admin/login` answers 404 to an office address. The refusal logs both addresses (`admin refused: <resolved> is outside ADMIN_NETWORKS (connection from <peer>)`), so the container log names which of the two went wrong. **The recovery is to clear `ADMIN_NETWORKS` in Dokploy and redeploy**, which restores the admin immediately; fix `TRUSTED_PROXIES`, then set it again.
+
+**Cloudflare should also be told**, once the tunnel is live: a WAF or ingress rule refusing `/admin*` at the edge means the flood never reaches the origin at all. The same complement-not-replacement argument as the login rate limit below — the app-side guard is the one that is in this repo and tested, so it stays either way.
+
 **Failed passwords are counted, and the counter is a sqlite file on tmpfs** (`iopstor/throttle.py`). Three endpoints verify a password and two of them are anonymous, so all three are behind it:
 
 | Door | Key | Refusal |
@@ -810,7 +827,7 @@ The third is the one that is easy to miss: it re-checks the current password, so
 
 **The client address is a forwarding header from a peer we named, never from anybody.** `throttle.client_ip()` is the one place it is decided, and every consumer routes through it: both login throttles (`admin_ui.py:94`, `admin_api.py:80`), `post_sessions.ip` (`admin_ui.py:507`) and every audit row (`db.py:110`).
 
-There are **two ways into this app and they answer the question differently**. Through the Cloudflare tunnel the connection is cloudflared and the visitor is in `CF-Connecting-IP`, which the edge sets and strips off anything the client sent. On the LAN port the connection *is* the visitor, so `remote_addr` is the whole truth and no header exists. So the order is: if — and only if — the peer is inside `TRUSTED_PROXIES`, take the first of `CF-Connecting-IP`, `X-Forwarded-For`, `X-Real-IP` that has a value; otherwise `remote_addr`; and `"-"` last, because the key is built with an f-string and a `None` would put every such request in one bucket named `"None"`.
+There are **two ways into this app and they put the address in different places**. Through the Cloudflare tunnel the connection is cloudflared and the visitor is in `CF-Connecting-IP`, which the edge sets and strips off anything the client sent. On the LAN it is **Dokploy's own Traefik** — a domain attached in the Dokploy UI puts it in front of this container whether or not anyone configured it — and the visitor is the last `X-Forwarded-For` entry. `remote_addr` is the answer only when nothing is in front at all, which here means development. So the order is: if — and only if — the peer is inside `TRUSTED_PROXIES`, take the first of `CF-Connecting-IP`, `X-Forwarded-For`, `X-Real-IP` that has a value; otherwise `remote_addr`; and `"-"` last, because the key is built with an f-string and a `None` would put every such request in one bucket named `"None"`.
 
 **The gate is the point, not the header list.** A forwarding header is a claim by whoever opened the connection, and it is only evidence when that was a proxy we deployed. Trusting `CF-Connecting-IP` unconditionally — what this did until a LAN port existed — meant any client on a non-Cloudflare path could set it by hand, rotate it freely past `LOGIN_MAX_FAILURES` for unlimited password guesses, and write a chosen string into `audit_log.ip`, which `audit.html` renders to an admin as the authoritative *From* column with nothing marking it unverified.
 
@@ -819,6 +836,8 @@ There are **two ways into this app and they answer the question differently**. T
 `TRUSTED_PROXIES` is a comma-separated CIDR list, parsed in `config.py` **at import** so a typo refuses to boot the way a missing `SECRET_KEY` does rather than failing quietly on every login. It is read with `or`, not a `get()` default: compose passes `${TRUSTED_PROXIES:-}` and an empty string has to mean *unset* — read as "trust nothing" it would drop `CF-Connecting-IP` and put every tunnel visitor in cloudflared's bucket. Unset it is `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8,::1/128,fc00::/7`, which covers cloudflared, the LAN hop and a dev machine with no configuration at all. **`# ponytail:`** those ranges also contain the LAN *client*, so an insider who chooses to send a header is believed — naming the one subnet the proxy sits on closes it with no code change; and the rightmost-entry rule assumes one hop, so a second trusted proxy in a row would need counting back as many entries as there are hops.
 
 **Measured, 2026-09-15**, against the real WSGI stack on a socket rather than a test request context: from a trusted peer, `CF-Connecting-IP: 9.9.9.9` → `9.9.9.9`; `X-Forwarded-For: 1.2.3.4, 203.0.113.9` → `203.0.113.9` (the spoofed left entry loses); `X-Real-IP` → same; both headers → the Cloudflare one wins. With `TRUSTED_PROXIES=172.18.0.0/16` so the peer is no longer ours, the same two spoofs → `127.0.0.1`, the peer's own address. `TRUSTED_PROXIES=not-a-network` → `ValueError` at import.
+
+**Measured on the deployment, 2026-09-15.** `docker network inspect dokploy-network` puts `dokploy-traefik` at **`10.0.1.7`** on a **`10.0.1.0/24`** overlay, beside `iopstor-backend-nq5xy9-app-1` at `10.0.1.32` and Supabase's Kong at `10.0.1.8`. So the address that started this — every audit row reading `10.0.1.7` — was Traefik, and `10.0.1.0/24` is the value `TRUSTED_PROXIES` should hold: it excludes the office LAN, so no client there can forge a header, and unlike pinning `10.0.1.7/32` it survives a container recreate moving Traefik's address (which would otherwise silently stop `X-Forwarded-For` being read and put every visitor back in one bucket). The container names show plain `docker compose`, not a swarm stack, so the compose `default` network is an ordinary bridge and cloudflared's subnet joins the list when the tunnel goes on.
 
 **`/admin/audit` opens with a shut `<details>` saying where the site thinks you are connecting from** — the value that will be written to the *From* column, the address that actually opened the connection, whether that peer is one of ours, and the raw forwarding headers it sent. `throttle.connection()` builds it, so the screen does not have to know how any of it is worked out, and it is a GET on a route that is already `@ui_required("admin")`: nothing new is exposed, nothing is audited, and `test_every_route_that_can_change_something_is_accounted_for` is untouched. It exists because "is the log recording real visitors" was otherwise a question nobody could answer without a deploy and a guess — and with two ingresses the answer differs by which one you came in on.
 
@@ -1397,7 +1416,7 @@ Everything except `test_offline.py` is marked `live` and skips when `.env` has n
 
 ## 14. Configuration
 
-`SECRET_KEY`, `SITE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `MEDIA_BUCKET`, `PAYMENT_PROVIDER`, `THROTTLE_DB`, `LOGIN_MAX_FAILURES`, `LOGIN_WINDOW`, `TRUSTED_PROXIES`. `FLASK_DEBUG=1` in `.env` gives the dev server the debugger and auto-reload; it must be **absent** in production, and nothing in the Dockerfile guards that.
+`SECRET_KEY`, `SITE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `MEDIA_BUCKET`, `PAYMENT_PROVIDER`, `THROTTLE_DB`, `LOGIN_MAX_FAILURES`, `LOGIN_WINDOW`, `TRUSTED_PROXIES`, `ADMIN_NETWORKS`. `FLASK_DEBUG=1` in `.env` gives the dev server the debugger and auto-reload; it must be **absent** in production, and nothing in the Dockerfile guards that.
 
 **Six are required, and the app refuses to boot without them** — `create_app()`'s `REQUIRED`, checked before a blueprint is registered. The four `SUPABASE_*` were always there; `SECRET_KEY` and `SITE_URL` joined them when production became real, and `config.py` dropped their defaults to make the check bite. **Why a refusal rather than a sensible default.** Both used to fail *silently*, which is the expensive way to fail. `SECRET_KEY` fell back to `"dev-only-change-me"`, a string printed in this repo — and `auth.py` accepts a session token as a Bearer fallback when no `Authorization` header is present, so a forged cookie is a way in. `SITE_URL` fell back to `http://localhost:5000`, which does two things at once: every canonical, sitemap `<loc>`, `robots.txt` `Sitemap:` line, RSS guid, JSON-LD `url` and OG image points at localhost, and `SESSION_COOKIE_SECURE` — computed at import from `SITE_URL.startswith("https://")`, not from the request — comes out `False`, so the admin cookie ships over the tunnel without `Secure`. Neither shows up in a smoke test; a deploy that forgets one now stops instead. `test_boot_refuses_without_secret_key_or_site_url` passes empty strings rather than omitting keys, because pipenv loads `.env` and an omitted key would inherit a real value and pass for the wrong reason.
 
@@ -1502,12 +1521,12 @@ it, and the external `dokploy-network`, which is how it reaches Supabase Kong. `
 `default` only — it has no business reaching Supabase.
 
 **There are two ingresses, and that is the supported shape** (user, 2026-09-15): the Cloudflare tunnel
-for the public site, and `app`'s published port for LAN access to the admin. The port is in the compose
-file rather than in a Dokploy screen so a redeploy from git cannot quietly drop it, and it is
-`mode: host` rather than the default — swarm's routing mesh NATs the source address, and every visitor
-would then arrive as one Docker address, which is one shared throttle bucket and a *From* column that
-says nothing. Under plain `docker compose` it is the ordinary publish it looks like. `LAN_PORT` moves it
-off 8000 if something else wants that.
+for the public site, and **Dokploy's own Traefik** for LAN access to the admin. Traefik is in the path
+because a domain is attached to service `app` in the Dokploy UI — it needs no `ports:` line and no
+Traefik label in this file, which is why it is easy to believe nothing is in front when something is.
+`app` still publishes no port, but the reason has changed: it is no longer what makes a header
+trustworthy (`TRUSTED_PROXIES` is), it is that Traefik already serves the LAN and a second way in would
+be exposure for nothing.
 
 What used to carry this weight was the *absence* of a port: the tunnel being the only way in was the
 reason `CF-Connecting-IP` could be trusted from anybody. That is no longer true and no longer the
@@ -1527,10 +1546,13 @@ not `:?` like every other variable: interpolation is not profile-aware, so a req
 that is switched off still fails `docker compose config` for the whole stack, `app` included — which is
 exactly the error a first deploy without a tunnel hits.
 
-A **Dokploy domain on service `app`, port 8000** is the other way to reach it — a click, not an edit,
-because `app` is already on `dokploy-network` where Traefik can see it, and useful when the LAN wants a
-name and a certificate rather than a port number. It puts Traefik in front, so `TRUSTED_PROXIES` must
-contain `dokploy-network`'s subnet for `X-Forwarded-For` to be read (the default ranges already do).
+A **Dokploy domain on service `app`, port 8000** is how that happens — a click, not an edit, because
+`app` is already on `dokploy-network` where Traefik can see it. **This is the step that puts Traefik in
+the path**, and it leaves no trace in this repo: no `ports:` line, no Traefik label, nothing in
+`docker-compose.yml` at all. That is exactly why `10.0.1.7` was a mystery worth measuring rather than
+guessing — the file says the tunnel is the only way in, and the file cannot see a domain added in a UI.
+`TRUSTED_PROXIES` must contain `dokploy-network`'s subnet for `X-Forwarded-For` to be read; the default
+ranges already do, and `10.0.1.0/24` is the tighter value this deployment wants.
 On a LAN host with no real name,
 `<anything>-<dashed-ip>.sslip.io` resolves to that address (the pattern the dev Supabase already uses) with
 the certificate provider left at none. `SITE_URL` must then be *exactly* the URL being browsed, scheme
@@ -1544,6 +1566,13 @@ client address. There is still no `CF-Connecting-IP` on a non-Cloudflare path, b
 to be: the connection is the visitor, so `remote_addr` is the right answer and each address gets its own
 throttle bucket. And the header is no longer spoofable past the limit from an untrusted peer (§12) — the
 remaining hole is an insider inside `TRUSTED_PROXIES`, which narrowing it closes.
+
+**`ADMIN_NETWORKS` becomes load-bearing the moment the tunnel is live**, because that is when the site
+is reachable by people who are not in the building. Set it to the office range (`192.168.0.0/16` on this
+deployment, client 2026-09-15) *before* switching the tunnel on, not after, and confirm from a phone on
+mobile data that `/admin/login` answers 404 while `/` still loads. If the admin goes dark for everyone,
+the cause is `TRUSTED_PROXIES`, not this (§12): clear `ADMIN_NETWORKS`, redeploy, fix the proxy list,
+set it again.
 
 Switching the tunnel on is therefore four things, not five: `TUNNEL_TOKEN`, `COMPOSE_PROFILES=tunnel`,
 `SITE_URL` back to `https://www.iopstor.com`, and `TRUSTED_PROXIES` wide enough to include the network
