@@ -582,6 +582,8 @@ Plain `.sql` files in `migrations/`, named `NNNN_short_name.sql`, applied in nam
 
 `0000_bootstrap.sql` is pasted **once** into Supabase Studio's SQL editor. It creates `apply_migration(name, sql)` — `SECURITY DEFINER`, executable by `service_role` only — which `flask migrate` calls per file over Kong. Each file runs in one transaction.
 
+In production nobody types that command: `flask migrate` is a service of its own in `docker-compose.yml`, run once per deploy, with `app` gated on it finishing successfully (§15).
+
 **Workflow for a schema change:**
 
 1. Write the `ALTER`/`CREATE` as a new numbered file
@@ -1368,7 +1370,7 @@ pipenv run pytest
 2. Studio → Storage: create a bucket named `media`. Public or private no longer matters to the app — it uploads and reads with the service-role key (§8), and nothing a visitor loads points at the bucket. The instances built so far use a public one
 3. `flask migrate` → `flask seed` → `flask create-admin`
 
-**Workers.** The container runs `flask migrate && exec gunicorn -b 0.0.0.0:8000 'iopstor:create_app()'`, and gunicorn takes its worker and thread count from `GUNICORN_CMD_ARGS` — `-w 2 --threads 8 --preload` from the Dockerfile, overridden in Dokploy's environment (production runs `-w 30`). The number is deploy config rather than code because the app is stateless across processes by construction, and it pays to know exactly what that rests on:
+**Workers.** The `app` container runs `gunicorn -b 0.0.0.0:8000 'iopstor:create_app()'` and nothing else — migrations are the stack's separate `migrate` service (below) — and gunicorn takes its worker and thread count from `GUNICORN_CMD_ARGS` — `-w 2 --threads 8 --preload` from the Dockerfile, overridden in Dokploy's environment (production runs `-w 30`). The number is deploy config rather than code because the app is stateless across processes by construction, and it pays to know exactly what that rests on:
 
 - *Per request:* every cache — `post_types()`, `settings()`, `admin_counts()`, `tree()`, `get_media()` — is `db._cached()` on `flask.g`, gone at teardown. Nothing survives a request, so nothing can go stale between workers; the price is one PostgREST round trip each for `post_types` and `settings` per request (§17).
 - *Per process:* one object, the service-role Supabase client in `app.extensions`, built lazily on the first request. It is HTTP plumbing — a thread-safe `httpx` pool — holds no data, and `.table()` builds a fresh query each call.
@@ -1377,7 +1379,7 @@ pipenv run pytest
 
 `--preload` imports the app once in the master and forks it: a broken import fails once instead of thirty crash-looping workers, and the imported code is shared copy-on-write. It is safe here because the Supabase client is created after the fork, the throttle opens its connection per call, and Python reseeds `random` in every child (`unique_slug()`'s suffix).
 
-Sizing: `create_app()` makes no network call and costs about 0.9 s and 63 MB per worker on its own; a thread costs almost nothing, and every request is a wait on Kong. Measured on the dev box, `-w 30 --threads 8 --preload` boots in a few seconds and holds 472 MB of real memory (PSS, shared pages counted once — the summed RSS reads 1.7 GB, which is the number a per-process view shows). `-w 8 --threads 30` is the same 240 slots at a quarter of that. The ceiling behind either is PostgREST's connection pool — `PGRST_DB_POOL`, 10 by default, with a 10 s acquisition timeout — so check it on the Supabase host (`docker exec supabase-rest env | grep PGRST_DB_POOL`) before going wide. Two **replicas** are a different case from thirty workers: the throttle splits, and two containers running `flask migrate` on a cold database at the same instant leave the loser with `relation already exists` and no gunicorn (`cli.py`); once the ledger is full, migrate is one `SELECT` and any number of containers can start together.
+Sizing: `create_app()` makes no network call and costs about 0.9 s and 63 MB per worker on its own; a thread costs almost nothing, and every request is a wait on Kong. Measured on the dev box, `-w 30 --threads 8 --preload` boots in a few seconds and holds 472 MB of real memory (PSS, shared pages counted once — the summed RSS reads 1.7 GB, which is the number a per-process view shows). `-w 8 --threads 30` is the same 240 slots at a quarter of that. The ceiling behind either is PostgREST's connection pool — `PGRST_DB_POOL`, 10 by default, with a 10 s acquisition timeout — so check it on the Supabase host (`docker exec supabase-rest env | grep PGRST_DB_POOL`) before going wide. Two **replicas** are a different case from thirty workers, though a smaller one than it used to be: the throttle splits per container, and that is now the whole of it. Migrations are no longer a per-container event — there is one `migrate` service in the stack and every replica of `app` waits on the same run of it — so replicas can start together on a cold database.
 
 **Production (Dokploy + Cloudflare Tunnel).** Production is **one Dokploy Compose service** built from
 `docker-compose.yml` at the repo root, holding two containers: `app`, built from the same `Dockerfile`
@@ -1391,6 +1393,27 @@ the app is recreated, so the tunnel's ingress rule silently points at nothing af
 compose project the service name *is* the DNS name, so the origin is a fixed `http://app:8000` that no
 deploy can invalidate. `docker compose up -d` also restarts only what changed, so shipping code rebuilds
 `app` and leaves the tunnel connected.
+
+**Migrations, and why Deploy and Rebuild need not be told apart.** `migrate` is a one-shot service built
+from the same image as `app`, running `flask migrate`, which `app` waits on with
+`depends_on: condition: service_completed_successfully`. It runs once per `docker compose up` rather than
+once per container start, which is the distinction that matters: a crash, an OOM kill or a host reboot
+brings gunicorn back without touching the schema, and only a deploy touches it. Dokploy's **Deploy** and
+**Rebuild** buttons are the same `docker compose up` to Docker — the difference is the `git` pull Dokploy
+does before compose runs, and there is no hook in between to hang a migration on. They do not need
+separating. New code is a new image, which recreates `migrate` and runs it again; a rebuild of unchanged
+source cannot contain a file the ledger has not already seen, so it costs one `SELECT` and prints
+`migrations up to date`; and a `migrate` that exited non-zero never satisfies the condition, so a Rebuild
+after a failed deploy retries it. `migrate` sits on `dokploy-network` only, carries `restart: "no"` (a
+restart policy on a container whose job is to exit is a loop), and disables the inherited `HEALTHCHECK`,
+which probes a port it never serves. Both services read one anchored environment block, so the keys
+cannot drift apart and migrate a different database than the app reads.
+
+The cost of this shape is the one property the old `CMD` had: `flask migrate` was also the boot-time
+proof that `SUPABASE_URL` was right, and `/healthz` is liveness-only partly because of it (§12). A
+container restarting while Supabase is unreachable now starts gunicorn and answers 500s instead of
+refusing to boot. That is the better failure — it logs, and it recovers by itself when Supabase does —
+and the deploy path still proves the configuration, because `migrate` runs before `app` is started.
 
 `app` sits on two networks on purpose: the compose-private `default`, which is how `cloudflared` reaches
 it, and the external `dokploy-network`, which is how it reaches Supabase Kong. `cloudflared` is on
@@ -1462,9 +1485,12 @@ editor's browser opens a socket that cannot connect. Verify with `curl -i https:
 returning the **Flask** 404 page and not PostgREST, and the browser console showing the websocket at
 `wss://www.iopstor.com/realtime/v1/websocket` reaching `SUBSCRIBED`.
 
-**The order of first deployment matters, and getting it wrong looks like a crash loop.** `CMD` is
-`flask migrate && exec gunicorn …`, so a database without `0000_bootstrap.sql` in it fails migrate and
-gunicorn never starts.
+**The order of first deployment matters, and getting it wrong fails the deploy.** A database without
+`0000_bootstrap.sql` in it fails the `migrate` service, which exits 1 with `cli.py`'s message naming both
+causes it could be; `app` is then left `Created` and never started, and Dokploy shows a failed deploy.
+The stack is down either way — what this buys over the old arrangement, where migrate ran inside `app`'s
+`CMD` under `restart: unless-stopped`, is that the reason is stated once, in a container that stays put
+to be read, instead of scrolling past every few seconds in a container that keeps being replaced.
 
 0. **Settle how the operator will reach Kong.** From a phone on mobile data, open the dev gateway URL.
    If it answers, the Dokploy host's 80/443 are public and a Traefik domain on Kong would put production
@@ -1498,7 +1524,9 @@ gunicorn never starts.
    `restart:` and `depends_on`, so there is no image to run), and **service-name randomisation /
    isolated deployment must be off** (it suffixes service and network names, and then `http://app:8000`
    resolves to nothing and the tunnel answers 502). After deploying, `docker compose ps` should list a
-   service named literally `app`. Migrate then applies `0001`–`0007`, and gunicorn starts.
+   service named literally `app` **and one named `migrate`**. Migrate then applies `0001`–`0011`, and
+   gunicorn starts. `migrate` showing `Exited (0)` beside a running `app` is the healthy steady state, not
+   a half-failed deploy — it is a one-shot, and `app` would not be up if it had ended any other way.
 6. Cloudflare Zero Trust → the tunnel that token belongs to → public hostname `www.iopstor.com` →
    `http://app:8000`. Send the apex to www with a redirect rule, which needs a **proxied** DNS record on
    the apex to fire at all.
@@ -1592,13 +1620,13 @@ Shared editing (§12.3), all of them named in `admin.js`:
 - `public.media_file()` reads the whole file into memory before answering — `MAX_CONTENT_LENGTH` caps an upload at 20 MB, so the worst case is bounded. Stream it through httpx if big PDFs ever land.
 - No server-side cache in front of Storage: a cold client costs one LAN round trip per file. The immutable year plus the ETag mean repeat views cost nothing, and `gunicorn --threads 8` keeps a page's images off each other's way; put a CDN or a disk cache in front if that stops being enough.
 - `DummyGateway` moves no money.
-- `flask migrate` runs at container boot with no lock: `apply_migration()` checks the ledger and inserts
-  without one, so two containers starting a **new** migration at the same instant both pass the check and
-  the loser rolls back with `relation already exists`, exits, and is restarted — one wasted boot per new
-  migration per extra replica, self-healing but noisy, and `cli.py`'s "already exists" hint points at
-  `repair_schema_migrations.sql`, which is the wrong advice for a race. One replica is the deployed shape;
-  `perform pg_advisory_xact_lock(hashtext('apply_migration'))` at the top of that function is the fix if
-  that ever changes.
+- `apply_migration()` checks the ledger and inserts without a lock. Within one stack that no longer
+  matters — `migrate` is a single one-shot service, so however many replicas of `app` there are, only one
+  process runs migrations. What is still unguarded is two *stacks* against one database, which is not a
+  shape this project has and would need a second Dokploy service pointed at the same Supabase. If it ever
+  does, `perform pg_advisory_xact_lock(hashtext('apply_migration'))` at the top of that function is the
+  fix, and note that `cli.py`'s "already exists" hint would point at `repair_schema_migrations.sql`, which
+  is the wrong advice for a race.
 - The container runs as root — no `USER` in the Dockerfile. Nothing needs it: the only writes are Storage
   uploads and `/dev/shm`.
 - `/healthz` is liveness-only and touches nothing, so **nothing polls Supabase's health**. It used to run a

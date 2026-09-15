@@ -1,24 +1,47 @@
-# Production: the CMS and its Cloudflare Tunnel, one stack, one Dokploy Compose service.
+# Production: the CMS, its migrations and its Cloudflare Tunnel, one stack, one Dokploy Compose service.
 # The tunnel is the only ingress -- `app` publishes no port and carries no Traefik label, so cloudflared,
 # which is outbound-only, is the only route in. That unreachability is what makes throttle.client_ip()'s
 # trust in CF-Connecting-IP honest (docs/TECHNICAL.md §12); the runbook is §15.
 # The tunnel is behind a profile, so the stack also deploys before anyone has made one -- with the profile
 # off the sentence above is not true yet, and §15 says what that costs while it lasts.
 # Every value below comes from the Dokploy service's environment. Nothing here is a secret.
+
+# One environment, two services: `migrate` runs the CLI, which goes through create_app() like any request
+# does, so it wants SECRET_KEY and SITE_URL as much as the SUPABASE_* keys. Anchored rather than typed
+# twice, because the failure mode of a divergent copy is a migration run against a different database.
+x-app-env: &app-env
+  SECRET_KEY: ${SECRET_KEY:?set it in Dokploy; the app refuses to boot without one}
+  SITE_URL: ${SITE_URL:?https://www.iopstor.com -- sets every canonical and the cookie Secure flag}
+  SUPABASE_URL: ${SUPABASE_URL:?Kong by service name on dokploy-network, e.g. http://...-kong-1:8000}
+  SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:?}
+  SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?}
+  SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:?}
+  MEDIA_BUCKET: ${MEDIA_BUCKET:-media}
+  PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-dummy}
+  GUNICORN_CMD_ARGS: ${GUNICORN_CMD_ARGS:--w 30 --threads 8 --preload --access-logfile -}
 services:
+  migrate:
+    # The schema is brought forward here, once per `docker compose up`, and not in the app's CMD where it
+    # used to live -- so a crash, an OOM kill or a host reboot restarts gunicorn without touching the
+    # database, and a failing migration says so once in this container's log instead of scrolling past
+    # every few seconds under a restart policy. `app` does not start until this exits 0.
+    # Deploy and Rebuild are the same `docker compose up` to Docker, and do not need telling apart: new
+    # code is a new image, which recreates this container and runs it again, while a rebuild of unchanged
+    # source cannot hold a file the ledger has not seen -- one SELECT and "migrations up to date".
+    # `Exited (0)` beside a running `app` in `docker compose ps` is the healthy steady state, not a fault.
+    build: .
+    command: flask migrate
+    restart: "no"                  # one shot: `unless-stopped` would start it again forever after it exits
+    healthcheck: {disable: true}   # it inherits the Dockerfile's probe on 8000, which it never serves
+    environment: *app-env
+    networks: [dokploy-network]    # Supabase Kong is the only thing it talks to
   app:
-    build: .                      # the existing Dockerfile: flask migrate && gunicorn on 8000
+    build: .                       # the existing Dockerfile: gunicorn on 8000
     restart: unless-stopped
-    environment:
-      SECRET_KEY: ${SECRET_KEY:?set it in Dokploy; the app refuses to boot without one}
-      SITE_URL: ${SITE_URL:?https://www.iopstor.com -- sets every canonical and the cookie Secure flag}
-      SUPABASE_URL: ${SUPABASE_URL:?Kong by service name on dokploy-network, e.g. http://...-kong-1:8000}
-      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:?}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?}
-      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:?}
-      MEDIA_BUCKET: ${MEDIA_BUCKET:-media}
-      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-dummy}
-      GUNICORN_CMD_ARGS: ${GUNICORN_CMD_ARGS:--w 30 --threads 8 --preload --access-logfile -}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment: *app-env
     # default reaches cloudflared; dokploy-network reaches Supabase Kong. Two networks on purpose.
     networks: [default, dokploy-network]
   cloudflared:

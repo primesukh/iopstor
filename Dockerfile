@@ -16,5 +16,8 @@ EXPOSE 8000
 # a socket-only probe was rejected because gunicorn's listen backlog accepts TCP with every worker
 # wedged. Exec form and `bash` by name: the shell form runs /bin/sh, which is dash and has no /dev/tcp.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD ["bash","-c","exec 3<>/dev/tcp/127.0.0.1/8000; printf 'GET /healthz HTTP/1.0\\r\\n\\r\\n' >&3; head -1 <&3 | grep -q ' 200 '"]
-# Apply migrations/*.sql, then serve. Dokploy injects env vars (SUPABASE_*, SECRET_KEY, SITE_URL, GUNICORN_CMD_ARGS).
-CMD ["sh", "-c", "flask migrate && exec gunicorn -b 0.0.0.0:8000 'iopstor:create_app()'"]
+# Serve, and only serve. The schema is brought forward by the compose stack's own one-shot service, which
+# has to exit 0 before this one starts (docker-compose.yml) -- so a restart re-runs nothing, and `docker
+# run` on this image alone applies nothing either. Exec form: gunicorn is PID 1 and takes signals itself.
+# Dokploy injects the env vars (SUPABASE_*, SECRET_KEY, SITE_URL, GUNICORN_CMD_ARGS).
+CMD ["gunicorn", "-b", "0.0.0.0:8000", "iopstor:create_app()"]
