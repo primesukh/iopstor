@@ -41,7 +41,10 @@
       "Bash(ls *)",
       "Bash(wc *)",
       "Bash(head *)",
-      "Bash(tail *)"
+      "Bash(tail *)",
+      "Bash(node --check*)",
+      "Bash(node --experimental-websocket*)",
+      "Bash(curl -s http://127.0.0.1:5000*)"
     ],
     "deny": [
       "Bash(pipenv run flask migrate*)",

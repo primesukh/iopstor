@@ -621,7 +621,7 @@
     MODEL = Array.isArray(next) ? next : [];
     canvasFull();
   }
-  function markDirty() { dirty = true; }
+  function markDirty() { dirty = true; nudgeSave(); }
 
   // An empty paragraph is the editor waiting for you, not content. Drop it on save — but keep
   // one that holds only a picture, a rule or a table, which has no text and is still real.
@@ -644,6 +644,108 @@
 
   function seedFor(type) {
     return JSON.parse(JSON.stringify((SPEC.ui.seed && SPEC.ui.seed[type]) || {}));  // never hand out the shared seed
+  }
+
+  // ---- saving itself --------------------------------------------------------
+  /* The page writes itself to a working draft every second and a half. Nothing here touches the
+     published content: that moves only when somebody presses the button, which is why the button
+     says Publish on a live page.
+
+     Reassigned by initAutosave(), a no-op until then and on a post that has not been created yet --
+     markDirty() runs during the first render, before there is anywhere to save to. Same late-binding
+     shape as syncBar() and paintPeers(). */
+  var nudgeSave = function () {};
+
+  function initAutosave(form) {
+    var box = document.getElementById("ed-saved"), pk = SPEC.pk;
+    if (!pk) return;                       // a new post has no row to hang a draft on until it is created
+    var timer = null, inFlight = 0, savedAt = 0, sent = null,
+        // The document as this person found it. The server diffs it against what we send back, and
+        // that pair becomes their entry in the activity log when the session is closed.
+        // ponytail: whole-document, which is right while only one person can edit at a time. Once
+        // the document is shared this has to become "was, with only the blocks I touched updated",
+        // or one editor's entry claims everybody's work.
+        was = JSON.stringify(prune(MODEL)),
+        idle = null;
+
+    function show(text, bad) {
+      if (!box) return;
+      box.className = bad ? "ed-saved bad" : "ed-saved";
+      box.textContent = text;
+    }
+    function showAge() {
+      if (!savedAt) return;
+      var mins = Math.round((Date.now() - savedAt) / 60000);
+      show(mins < 1 ? "Saved just now" : mins === 1 ? "Saved a minute ago" : "Saved " + mins + " minutes ago");
+    }
+    setInterval(showAge, 30000);           // so "just now" stops claiming to be just now
+
+    function body(now, close) {
+      var f = new FormData();
+      f.append("csrf", csrf());
+      f.append("blocks", now);
+      f.append("was", was);
+      f.append("now", now);
+      if (close) f.append("close", "1");
+      return f;
+    }
+
+    function save() {
+      // prune(), the serialiser the submit uses -- not the shallower one Preview uses. The draft has
+      // to be the same bytes Publish would store, or publishing would change the page by itself.
+      var now = JSON.stringify(prune(MODEL));
+      if (now === sent) return;            // the title moved, not the page
+      sent = now;
+      var mine = ++inFlight;
+      show("Saving…");
+      fetch("/admin/posts/" + pk + "/draft", { method: "POST", body: body(now), credentials: "same-origin" })
+        .then(function (r) {
+          // ui_required redirects a finished session to the login page and fetch() follows it, so a
+          // dead session arrives as 200 HTML. Say "sign in again", never parse it as JSON.
+          if (r.redirected) throw new Error("your sign-in has ended — open this page again in a new tab");
+          return r.json().then(function (j) { return r.ok ? j : Promise.reject(new Error(j.error || "could not save")); });
+        })
+        .then(function () {
+          if (mine !== inFlight) return;   // a newer save already answered
+          savedAt = Date.now();
+          dirty = false;                   // it is safe to leave: the work is on the server
+          showAge();
+        })
+        .catch(function (e) {
+          if (mine !== inFlight) return;
+          sent = null;                     // so the next keystroke tries again rather than seeing no change
+          show("Not saved — " + e.message, true);
+        });
+    }
+
+    nudgeSave = function () {
+      clearTimeout(timer);
+      timer = setTimeout(save, 1500);
+      clearTimeout(idle);
+      // Fifteen minutes after the last change, this sitting is over: close the session so the
+      // activity log gets its entry without waiting for the tab to be shut.
+      idle = setTimeout(function () { closeSession(); }, 15 * 60 * 1000);
+    };
+
+    function closeSession() {
+      clearTimeout(timer);
+      var now = JSON.stringify(prune(MODEL));
+      if (now === was) return;             // opened the page and read it: not a sitting to write up
+
+      if (!navigator.sendBeacon) { fetch("/admin/posts/" + pk + "/draft", { method: "POST", body: body(now, true), credentials: "same-origin", keepalive: true }).catch(function () {}); return; }
+      // sendBeacon, not fetch: an ordinary request is cancelled when the page goes away. FormData
+      // and not JSON because ui_required reads the csrf field out of request.form.
+      navigator.sendBeacon("/admin/posts/" + pk + "/draft", body(now, true));
+      was = now;                           // a new sitting starts from here if they keep typing
+    }
+    window.addEventListener("pagehide", closeSession);
+
+    // The button tells the truth about what pressing it does, and the status dropdown can change
+    // that without a reload.
+    var status = form.querySelector('select[name="status"]'), publish = document.getElementById("ed-publish");
+    if (status && publish) status.addEventListener("change", function () {
+      publish.textContent = status.value === "published" ? "Publish" : "Save";
+    });
   }
 
   // ---- the visual canvas ----------------------------------------------------
@@ -1953,6 +2055,7 @@
 
     focusOnLoad = "0";   // land the caret in the document, the way Docs does
     canvasFull();
+    initAutosave(form);
     initCollab();   // canvasFull() is async, so the first paint comes through bars(), not from here
 
     // Advanced is the same data as JSON. The textarea is written when the panel opens (and on
@@ -1985,6 +2088,9 @@
         pvPending = setTimeout(renderPreview, 500);
       });
     });
+    // Still worth asking on a new post, which has no draft to fall back on, and on the rare window
+    // between a keystroke and its autosave. A saved draft clears `dirty`, so this no longer fires
+    // for work that is safely on the server.
     window.addEventListener("beforeunload", function (e) { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
   }
 

@@ -25,15 +25,25 @@
       <button type="button" data-w="390">Phone</button>
     </span>
     <span class="spacer"></span>
+    {# Written by admin.js as the page saves itself. Empty on a new post, which has nowhere to save
+       to until it has been created once. #}
+    {% if p.id %}<span class="ed-saved" id="ed-saved" aria-live="polite"></span>{% endif %}
     {# Filled by admin.js from the realtime roster; stays empty when collaboration is off. #}
     <span class="ed-peers" id="ed-peers" aria-live="polite"></span>
     {% if p.id and p.status == 'published' and p.path %}<a class="btn secondary" href="{{ p.path }}" target="_blank">View live</a>{% endif %}
-    <button type="submit">Save</button>
+    {# Publish or Save, by what the page's status actually is: pressing it on a Draft publishes
+       nothing to anybody, and a button that says otherwise is lying. admin.js relabels it when the
+       status dropdown changes, so it keeps telling the truth without a reload. #}
+    <button type="submit" id="ed-publish">{{ 'Publish' if p.status == 'published' else 'Save' }}</button>
   </div>
   <div class="ed-main">
     {# Its own banner, not a row in the error list: that list prints the field key beside the message,
        and this is about the page, not a field. #}
     {% if conflict %}<div class="notice-amber">{{ conflict }}</div>{% endif %}
+    {# "Not published yet" rather than "draft": this page's status may itself be Draft, and the two
+       mean different things -- see NON-TECHNICAL.md §4. #}
+    {% if has_draft %}<div class="notice-amber">Changes on this page have not been published yet. They are saved, and only you and the other editors can see them.
+      <button type="submit" form="discard-draft" class="linky">Throw them away</button></div>{% endif %}
     {% if errors %}<div class="error"><strong>Not saved.</strong><ul>{% for k, v in errors.items() %}<li><code>{{ k }}</code>: {{ v if v is string else v|join('; ') }}</li>{% endfor %}</ul></div>{% endif %}
     <input type="text" name="title" id="post-title" class="ed-title" value="{{ p.title or '' }}" placeholder="Title" aria-label="Title" required>
     <div id="doc-toolbar" class="doc-toolbar"></div>
@@ -109,6 +119,8 @@
 {# Outside #post-form on purpose: a form inside a form is dropped by the parser, and the Delete
    button would have saved the post instead. form= on the button points here. #}
 {% if can_delete %}<form id="delete-post" method="post" action="{{ url_for('admin_ui.delete_post', pk=p.id) }}" onsubmit="return confirm('Delete this page? This cannot be undone.')"><input type="hidden" name="csrf" value="{{ csrf }}"></form>{% endif %}
+{# Same reason as the delete form: outside #post-form, reached by form= on its button. #}
+{% if has_draft %}<form id="discard-draft" method="post" action="{{ url_for('admin_ui.discard_draft', pk=p.id) }}" onsubmit="return confirm('Throw away the changes that have not been published yet? The version on the site is not affected.')"><input type="hidden" name="csrf" value="{{ csrf }}"></form>{% endif %}
 {# Realtime, for the presence roster. Plain <script>, like menus.html loads Sortable: it executes
    during parsing, so window.supabase is there before the deferred admin.js runs at DOMContentLoaded.
    Only this screen needs it, so it is not in base.html. #}
