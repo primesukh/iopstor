@@ -21,8 +21,18 @@ x-app-env: &app-env
   SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:?}
   MEDIA_BUCKET: ${MEDIA_BUCKET:-media}
   # Empty means "use the built-in private ranges", not "trust nobody" -- config.py reads it with `or`.
-  # Narrow it to the one subnet cloudflared sits on to stop a LAN client claiming somebody else's address.
+  # Narrow it to dokploy-network's own subnet (10.0.1.0/24 here, where Traefik is 10.0.1.7) so a client
+  # on the office LAN falls outside it and cannot claim an address that is not theirs.
   TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+  # The networks allowed to reach /admin and /api/admin/v1 at all. Empty = no restriction, so a value
+  # that never arrives here does not fail loudly -- it quietly leaves the admin open to the whole
+  # internet, which is why every key config.py reads is listed in this block and a test checks it.
+  ADMIN_NETWORKS: ${ADMIN_NETWORKS:-}
+  # The login throttle's three. They are the numbers you tune while an attack is happening, so they have
+  # to be reachable from the Dokploy environment screen rather than a code change.
+  LOGIN_MAX_FAILURES: ${LOGIN_MAX_FAILURES:-10}
+  LOGIN_WINDOW: ${LOGIN_WINDOW:-900}
+  THROTTLE_DB: ${THROTTLE_DB:-/dev/shm/iopstor-throttle.db}
   PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-dummy}
   GUNICORN_CMD_ARGS: ${GUNICORN_CMD_ARGS:--w 30 --threads 8 --preload --access-logfile -}
 services:
