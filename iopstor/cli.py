@@ -432,7 +432,7 @@ def run_seed():
         {"label": "Products", "url": "/products"},
         {"label": "Case Studies", "url": "/case-studies"}, {"label": "Blog", "url": "/blog"},
         {"label": "Company", "url": "/about-us", "children": [
-            {"label": "About Us", "url": "/about-us"}, {"label": "Technology Partners", "url": "/technology-partners"},
+            {"label": "About Us", "url": "/about-us"},
             {"label": "Events", "url": "/events"}, {"label": "Datasheets", "url": "/datasheets"},
             {"label": "Careers", "url": "/careers"}]}]})
     _get_or_create("menus", {"slug": "footer"}, {"name": "Footer", "items": [
