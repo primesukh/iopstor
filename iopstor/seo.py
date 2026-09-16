@@ -22,6 +22,13 @@ def _social(url):
 
 
 def site():
+    """Memoised for the request: the public context processor rebuilds this on every render, and
+    render_blocks() renders one template per block, so a twelve-block page built it ~15 times --
+    each one re-splitting every social URL, and not one block template reads it."""
+    return db._cached("seo_site", _site)
+
+
+def _site():
     s = db.settings()
     return {
         "name": s.get("site_name") or "IOPSTOR", "tagline": s.get("tagline") or "", "url": current_app.config["SITE_URL"],
