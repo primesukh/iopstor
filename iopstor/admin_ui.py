@@ -1439,8 +1439,8 @@ def audit_restore(pk):
 @owner_only
 def stress_panel():
     return render_template("admin/stress.html", conn=connection(), run=request.args.get("run", ""),
-                           here=request.host_url.rstrip("/"),
-                           max_workers=stress.MAX_WORKERS, max_seconds=stress.MAX_SECONDS)
+                           here=request.host_url.rstrip("/"), max_visitors=stress.MAX_VISITORS,
+                           max_attackers=stress.MAX_ATTACKERS, max_seconds=stress.MAX_SECONDS)
 
 
 @ui.post("/stress/run")

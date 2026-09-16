@@ -24,11 +24,11 @@
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <div class="st-grid">
     <label>Visitors
-      <input type="number" name="visitors" value="20" min="0" max="{{ max_workers }}">
-      <span class="st-hint">people reading pages at once</span></label>
+      <input type="number" name="visitors" value="20" min="0" max="{{ max_visitors }}">
+      <span class="st-hint">people reading pages at once (up to {{ max_visitors }})</span></label>
     <label>Attackers
-      <input type="number" name="attackers" value="10" min="0" max="{{ max_workers }}">
-      <span class="st-hint">harmless probes at once</span></label>
+      <input type="number" name="attackers" value="10" min="0" max="{{ max_attackers }}">
+      <span class="st-hint">harmless probes at once (up to {{ max_attackers }})</span></label>
     <label>Duration
       <input type="number" name="seconds" value="15" min="1" max="{{ max_seconds }}">
       <span class="st-hint">seconds (up to {{ max_seconds }})</span></label>
@@ -40,10 +40,13 @@
     <label class="st-radio"><input type="radio" name="target" value="other"> Another site
       <input type="url" name="target_url" placeholder="http://host:port" value="{{ here }}"></label>
   </fieldset>
-  <label class="st-warranty">Warranty page to probe (optional)
+  <label class="st-warranty">Warranty page path (optional)
     <input type="text" name="warranty_path" value="/" placeholder="/warranty">
-    <span class="st-hint">the public page that has the serial-number check on it</span></label>
-  <p class="st-cap muted">At most {{ max_workers }} of each; the numbers are clamped to that.</p>
+    <span class="st-hint">the public page that carries the serial-number check — attackers guess serials against it
+      (<code>?sn=…</code>). Left as “/”, the guesses just hit the home page.</span></label>
+  <p class="st-cap muted">Up to {{ max_visitors }} visitors and {{ max_attackers }} attackers; higher numbers are
+    limited by the machine (open connections, memory) and read as rough — push to find where it breaks,
+    not for an exact count.</p>
   <button type="submit" class="btn">Run</button>
 </form>
 

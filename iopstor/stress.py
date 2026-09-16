@@ -31,8 +31,14 @@ import uuid
 
 STRESS_DB = "/dev/shm/iopstor-stress.db"   # constant, not an env key: keeps it out of x-app-env
 
-# Caps so a fat-fingered number cannot wedge the worker. Threads are per kind; total is twice this.
-MAX_WORKERS = 200
+# Caps on the entered numbers. One OS thread and one socket per worker, so the real ceiling is the
+# machine's open-file-descriptor limit (often 1024) and thread overhead, not these -- past a few hundred
+# to ~1000 the surplus turns into "no answer" errors rather than more concurrency, and on a small
+# container it can OOM. These are the "push until it breaks" bound, not a promise of clean 10k concurrency.
+# ponytail: thread-per-visitor. True concurrency in the thousands needs an async client (a barred dep);
+# until then the honest figure is a few hundred, and the big numbers are a stress bound, not a benchmark.
+MAX_VISITORS = 10000
+MAX_ATTACKERS = 1000
 MAX_SECONDS = 300
 REQ_TIMEOUT = 15          # a stuck target must not pin a worker thread forever
 LAT_SAMPLE = 2000         # reservoir size for the latency percentiles
@@ -265,8 +271,8 @@ def start(target, visitors, attackers, seconds, warranty_path="/", path=STRESS_D
     """Validate, clamp, register the run and kick off its controller thread. Returns the run id.
     Raises ValueError if the target is not a usable base URL."""
     target = validate_target(target)
-    visitors = clamp(visitors, 0, MAX_WORKERS)
-    attackers = clamp(attackers, 0, MAX_WORKERS)
+    visitors = clamp(visitors, 0, MAX_VISITORS)
+    attackers = clamp(attackers, 0, MAX_ATTACKERS)
     seconds = clamp(seconds, 1, MAX_SECONDS)
     warranty_path = "/" + (warranty_path or "/").strip().lstrip("/")
     rid = create({"target": target, "visitors": visitors, "attackers": attackers,
