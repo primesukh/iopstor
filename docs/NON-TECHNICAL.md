@@ -729,6 +729,8 @@ addresses. Add the rest under **Settings → Contact details → Social links**,
 
 **The quote form on Contact Us is no longer black.** That is deliberate. It now sits on the same soft grey panel as the *Apply* form on Careers, at the client's request. Nothing else about it changed — it still asks what the visitor is interested in and how many users, and the enquiry still arrives under **Leads** as a quote request.
 
+**The technology partner logos are in colour now.** They used to be grey, and only turned colourful when you pointed at one. The client asked for them in colour all the time, so that is deliberate — on the home page and on the Technology Partners page alike. Pointing at a logo now nudges it up very slightly, the same small movement the cards elsewhere on the site make. Nothing about adding, editing or removing a partner changed: upload the logo under **Media**, pick it on the partner, and it appears in the row.
+
 **A long web address or code runs off the edge of the page.** It no longer does — a word too long to
 fit now breaks and carries on on the next line, in the editor and on the live site, instead of
 pushing the page sideways.
