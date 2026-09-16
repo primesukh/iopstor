@@ -3386,11 +3386,42 @@
     }
   }
 
+  /* Media grid selection. The screen works without this: every tile carries a real checkbox, and a
+     plain click is a link to ?pick=, which the server answers with that file's panel open and its box
+     already ticked -- so one click selects one file with JavaScript off. What this adds is the two
+     modifier clicks a list of files is expected to have, anywhere on the tile rather than only on the
+     small box: ctrl/cmd to add one to the selection, shift to take the whole run since the last one.
+     Both have to stop the link, or the page navigates away from the selection just made. */
+  function initMediaBulk() {
+    var grid = document.querySelector(".tiles-m");
+    if (!grid) return;
+    var boxes = Array.prototype.slice.call(grid.querySelectorAll(".m-pick")), last = -1;
+    boxes.forEach(function (b, i) { if (b.checked) last = i; });   // the ?pick=ed tile is the anchor
+
+    grid.addEventListener("click", function (e) {
+      var tile = e.target.closest && e.target.closest(".m-tile");
+      if (!tile) return;
+      var box = tile.querySelector(".m-pick"), at = boxes.indexOf(box), onBox = e.target === box;
+      if (!onBox && !e.target.closest(".m-open")) return;   // the tile's own border: not a click on anything
+
+      if (e.shiftKey && last > -1 && last !== at) {
+        if (!onBox) e.preventDefault();
+        for (var i = Math.min(last, at); i <= Math.max(last, at); i++) boxes[i].checked = true;
+      } else if (e.ctrlKey || e.metaKey || e.shiftKey) {
+        if (!onBox) { e.preventDefault(); box.checked = !box.checked; }
+        last = at;
+      } else {
+        last = at;   // a plain click: the link navigates, or the box has toggled itself. Neither is ours
+      }
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     initSlug();
     initTerms();
     initWarranty();
     initMenus();
     initBlocks();
+    initMediaBulk();
   });
 })();

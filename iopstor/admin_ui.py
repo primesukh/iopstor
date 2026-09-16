@@ -111,6 +111,19 @@ def _pg_error(e):
     return render_template("admin/error.html", message=f"Supabase error: {getattr(e, 'message', e)}"), 502
 
 
+@ui.errorhandler(413)
+def _too_big(e):
+    """Choosing several files at once makes the request-wide MAX_CONTENT_LENGTH easy to hit, and
+    Werkzeug's raw 413 page offers an editor no way back. Only the media form is redirected:
+    media_upload answers admin.js with JSON, and a 302 there arrives as a 405 HTML body that the
+    fetch's r.json() throws on."""
+    if request.endpoint != "admin_ui.media":
+        return e
+    flash(f"That is too much at once. Everything in one upload has to fit in "
+          f"{current_app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)} MB together, so send fewer files at a time.")
+    return redirect(request.path)
+
+
 def _safe_next(default="/admin/"):
     """Only relative, same-origin paths may be used as a post-login redirect (no //host, /\\host, or scheme tricks)."""
     nxt = request.args.get("next", "")
@@ -732,16 +745,25 @@ def _upload(fs, alt=""):
 @ui_required()
 def media():
     if request.method == "POST":
-        fs = request.files.get("file")
-        if not fs or not fs.filename:
+        # One bad file does not cost an editor the other nine: each is tried on its own and the
+        # rejects are named back. Alt text is not asked for here any more -- it is per picture, and
+        # one box above a batch could only ever be right about one of them.
+        files = [fs for fs in request.files.getlist("file") if fs and fs.filename]
+        if not files:
             flash("Choose a file first.")
         else:
-            try:
-                m = _upload(fs, request.form.get("alt", ""))
-            except HTTPException as e:
-                flash(e.description)
-            else:
-                flash(f"Uploaded {m['filename']} (id {m['id']}).")
+            done, bad = [], []
+            for fs in files:
+                try:
+                    _upload(fs)
+                except HTTPException as e:
+                    bad.append(f"{fs.filename} ({e.description})")
+                else:
+                    done.append(fs.filename)
+            said = [f"Uploaded {len(done)} file{'' if len(done) == 1 else 's'}."] if done else []
+            if bad:
+                said.append(f"Not added: {', '.join(bad)}.")
+            flash(" ".join(said))
         return redirect(url_for("admin_ui.media"))
     page = max(request.args.get("page", 1, type=int) or 1, 1)
     result = db.paginate(db.table("media").select("*", count="exact").order("id", desc=True), page, 60)
@@ -759,13 +781,19 @@ def media_alt(pk):
     return redirect(url_for("admin_ui.media", **{k: v for k, v in request.args.items()}))
 
 
-@ui.post("/media/<int:pk>/delete")
+@ui.post("/media/delete")
 @ui_required()
-def media_delete(pk):
-    m = db.one(db.table("media").select("*").eq("id", pk)) or abort(404)
-    delete_media(m)
-    flash("Deleted.")
-    return redirect(url_for("admin_ui.media"))
+def media_delete():
+    """Both Delete buttons on the media screen post here: the detail panel sends one id, the grid's
+    tick boxes send several. Ids that are not numbers are dropped rather than refused -- the only way
+    to send one is to have edited the form. Nothing here is restorable: the bytes leave the bucket."""
+    ids = [int(i) for i in request.form.getlist("ids") if i.isdigit()]
+    rows = db.rows(db.table("media").select("*").in_("id", ids)) if ids else []
+    for m in rows:
+        delete_media(m)
+    flash(f"Deleted {len(rows)} file{'' if len(rows) == 1 else 's'}." if rows
+          else "Tick the files you want to delete first.")
+    return redirect(url_for("admin_ui.media", **{k: v for k, v in request.args.items()}))
 
 
 @ui.post("/media/upload")

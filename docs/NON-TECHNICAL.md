@@ -413,9 +413,22 @@ The publish date is in **Indian time**, and so is every date and time shown anyw
 
 The **Media** section is the shared library for every image, logo and PDF.
 
-1. Go to Media and upload the file.
-2. Give it **alt text** — a short description of what is in the picture. This is what a blind visitor's screen reader reads out, and it is one of the things Google looks at. Please do not skip it.
+1. Go to Media and press **Browse**. You can pick **as many files as you like in one go** — hold Ctrl (⌘ on a Mac) as you click them, or drag a box round the lot — and press **Upload** once. Everything together has to fit in 20 MB, so a big batch of photographs may need splitting into two or three goes; if it is too much the site says so and nothing is lost.
+2. Give each one **alt text** — a short description of what is in the picture. This is what a blind visitor's screen reader reads out, and it is one of the things Google looks at. Click the file in the grid and the box is on the right. Please do not skip it.
 3. The file is then selectable anywhere the site asks for an image.
+
+If one file in a batch is a kind the site does not take — a Word document, say — the others still go up. The message at the top tells you how many arrived and names the one that did not.
+
+**Choosing files, and deleting several at a time.** Click a file — anywhere on it, not just the little box in its corner — and it is selected: it turns blue, and its details open in the panel on the right. To choose more than one:
+
+- **Ctrl-click** (**⌘-click** on a Mac) a second, third, fourth file to add each one to what you have already chosen. Ctrl-click one again to take it back out.
+- **Shift-click** to take everything between the last file you clicked and this one, in one go — the quick way to select a whole row or a whole screenful.
+- A plain click on its own starts again with just that file.
+- The tick boxes still work on their own if you prefer them, and they are what you use on a phone or tablet, where there is no Ctrl key.
+
+Then press **Delete selected** underneath the grid. It stays grey until you have chosen something, turns red once you have, and asks you to confirm before anything goes. You can still delete one file at a time from the panel on the right, exactly as before. Deleting is permanent: anything on the site using that picture will lose it, and it does not come back from Activity.
+
+One thing this costs: Ctrl-clicking a file no longer opens it in a new browser tab, because Ctrl-click now means "add this one to the selection".
 
 **Putting a PDF on a page.** Press `/` on an empty line and choose **PDF**. The section drops in; hover it, press **⚙**, and pick the PDF from the list — or press **Choose file** to upload one on the spot. Only PDFs are offered there, so you cannot pick a photo by mistake. Visitors then read it without leaving the page — scrolling, zooming and printing with their browser's own controls — and there is a **Download the PDF** button under it, which saves the file to their computer under the name it was uploaded with. That button is also how people on a phone read it: phone browsers usually will not show a PDF inside a page, so they download it and open it from there. Give the section a heading by typing straight onto the page above the viewer.
 
@@ -428,11 +441,11 @@ picture you have already used stays in the visitor's browser for a long time, so
 on a second visit; if you ever replace a picture, upload it as a new file rather than expecting an old
 address to change.
 
-**You do not have to go to Media first.** Anywhere a page asks for a picture — a Hero image, an Image or Gallery section, the Featured image in the panel on the right — there is a **Choose file** button right there. Pick a file and it uploads straight away, gets used on the spot, and joins the Media library so you can reuse it elsewhere. A small thumbnail next to it shows what is currently selected. Uploads made this way have no alt text yet, so add it in the Media section afterwards for anything important.
+**You do not have to go to Media first.** Anywhere a page asks for a picture — a Hero image, an Image or Gallery section, the Featured image in the panel on the right — there is a **Choose file** button right there. Pick a file and it uploads straight away, gets used on the spot, and joins the Media library so you can reuse it elsewhere. A small thumbnail next to it shows what is currently selected. No upload anywhere on the site asks for alt text at the moment it happens — one box above a batch of five could only ever describe one of them — so add it in the Media section afterwards for anything important.
 
 ---
 
-**Adding a lot of files at once.** Uploading forty partner logos one at a time through this screen is nobody's idea of a good afternoon. Put the folder somewhere on the server and ask a developer to run `flask import-media <folder>` — everything lands in Media exactly as if you had uploaded it, with a first draft of the alt text taken from each filename. It skips anything already there, so it is safe to run twice.
+**Adding a very large number of files.** A batch at a time covers most of it, but forty partner logos is still several trips to the 20 MB limit. Put the folder somewhere on the server and ask a developer to run `flask import-media <folder>` — everything lands in Media exactly as if you had uploaded it, with a first draft of the alt text taken from each filename. It skips anything already there, so it is safe to run twice.
 
 ---
 
