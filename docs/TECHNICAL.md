@@ -120,7 +120,31 @@ Every query goes through this module. Nothing else builds a PostgREST query.
 | `paginate()` | Offset/limit + exact count |
 | `_audit()` / `audit_event()` | One `audit_log` row. `audit_event()` is for the things that are not a row write — login, logout, a wrong password |
 | `ist()` / `ist_input()` | A stored UTC timestamp as the clock an editor in India was looking at, for display and for `<input type="datetime-local">` |
-| `post_types()` / `settings()` | Process-level caches, invalidated with `uncache()` |
+| `post_types()` / `settings()` / `get_menu()` / `get_media()` / `redirect_for()` | Cached **per process** for `CACHE_TTL`, dropped the moment any write bumps the content epoch (below) |
+| `content_epoch()` / `bump_epoch()` | The cross-worker invalidation stamp: one file's mtime on `/dev/shm`, touched by every write |
+
+**Two caches, and the difference matters.** `_cached()` memoises on `flask.g` and dies with the
+request — that is still the right place for anything derived, like `seo.site()` or `tree()`. `_proc_cached()`
+lives in the worker process and survives requests, which is what removed the round trips that dominated the
+public site: measured, `GET /` cost **29 PostgREST round trips and 219 ms**, of which 17 were `media` (one per
+picture, `media_url()`/`media_alt()` calling `get_media()` per id — 14 of them the partner logos in `_card.html`)
+and 2 were `get_menu()`, which had no cache of any kind. With the process cache a first-time page costs 3–5 and
+a repeat costs 0.
+
+Because thirty workers share no memory, the process cache needs an answer to "has anything changed since?", and
+that is `bump_epoch()`: every write touches one empty file on `/dev/shm` — `throttle.py`'s trick — and every read
+compares its mtime and drops anything stamped older. A stat on tmpfs is microseconds against a 219 ms render, so
+asking every time is cheaper than being stale. **It is called from `insert()`/`update()`/`delete()`**, the same
+three funnels the audit log uses, so a write path added later invalidates without anybody remembering; the three
+writers that do not go through them — `set_settings()`, `set_menu()`, `set_post_terms()` — call it themselves,
+and the comment beside each says why. `save_draft()` and `touch_session()` deliberately do **not**: they are
+autosaves, they change no public page, and bumping on each would empty every cache every few seconds while
+somebody types.
+
+`bump_epoch()` also drops the current request's `_cached()` memos, which is not belt-and-braces but a bug that
+was caught by `test_terms_settings_menus`: a writer routinely reads the old row first (`set_menu()` calls
+`get_menu()` for its audit diff), and that read caches the value the write is about to make wrong. `_cached()`
+records its keys on `g._cache_keys` so one call can drop them all.
 
 **The audit log records itself into the write helpers, not into the routes.** `insert()`, `update()` and `delete()` each call `_audit()` with a `{field: [was, now]}` diff, so a write path added later is logged without anybody remembering to log it — and the diff is field-level, which an `after_request` hook could never produce because it sees the response, not the row. `update()` reads the row first to get the "was" half; that read is skipped entirely outside a request context, which is also the whole of the `flask seed` / `import-media` exclusion — `_audit()` returns immediately when `has_request_context()` is false, so there is no flag to remember and no way to forget it. `update(name, pk, changes, action=…)` takes an action label because moving a post to the trash *is* an UPDATE but has to read as `delete` on the screen. The three writers that are not keyed by `id` keep their own calls: `set_settings()` emits **one entry per changed key** (the Settings form posts all eleven every time, and "which setting did they change" is the question the log is asked), `set_menu()` diffs against `get_menu()`, and `set_post_terms()` logs one entry against the *post* rather than the join-table churn.
 
@@ -529,9 +553,46 @@ the read side had to change: `media_url()`, `media_download()`, `featured_media.
 the job it was written for and never did while the column held an absolute URL.
 `migrations/0007_media_through_flask.sql` rewrites the rows that were written before this.
 
+### Caching the public site
+
+**The public site answers identical bytes to every visitor, and used to build them every time.** Two layers
+now stop that, both in `public.py`.
+
+**The page cache** keeps the finished response in the worker process, keyed by `request.full_path`, and
+`_page_cache_read()` returns it as a `before_request` without the view ever running. Measured against a real
+server: **220 ms → 2.9 ms, 29 PostgREST round trips → 0.** Three things about its shape are load-bearing:
+
+- **`_cache_key()` is an allow-list, not a list of exclusions.** Only `public.resolve` is cacheable.
+  `/media/<key>` is on the *same blueprint* and serves files up to `MAX_CONTENT_LENGTH` (20 MB), so a
+  deny-list that ever missed it would buffer 512 × 20 MB. A request carrying `?sn=` (the `warranty_check`
+  block answers per serial number) and anything ending `/checkout` are refused as well, and `?page=2` is its
+  own entry.
+- **Freshness is not a timer.** An entry is dropped the moment `db.content_epoch()` is newer than its stamp,
+  so the origin is never behind a publish — `PAGE_TTL` is only a backstop. Proven across processes: a
+  `bump_epoch()` from a *separate* Python process made the running server re-render on its next request.
+- **A lapsed entry is served stale while one thread re-renders it** (`_refreshing`, guarded by a lock). Without
+  that, a TTL expiring on a busy page becomes 240 simultaneous 219 ms renders. The key is released in
+  `teardown_request`, not `after_request`, because an unhandled exception skips the latter and would pin that
+  page's stale copy until the worker restarted.
+
+**`Cache-Control` on public responses** is what actually takes the traffic off the box, because Cloudflare is
+already in front of the tunnel. `_public_cache_headers()` sends
+`public, max-age=0, s-maxage=60, stale-while-revalidate=300` on any `pub` 200 that carries no `Set-Cookie`.
+`max-age=0` keeps the visitor's own browser revalidating, so a reader never holds a stale page, while
+`s-maxage` lets the edge answer. This only works because anonymous pages carry no cookie — see §7 on why the
+CSRF token is withheld from public blueprints; that decision is what makes this possible and must not be
+undone. **It is opt-in at Cloudflare**: the header alone does nothing, because Cloudflare does not cache HTML
+without a Cache Rule, which must exclude `/admin/*` and `/api/*` (§15).
+
+Guarded by `test_only_whole_public_pages_are_cacheable`,
+`test_a_public_page_tells_shared_caches_it_may_be_served_again` and
+`test_the_page_cache_returns_the_stored_page_and_a_write_drops_it`.
+
 ### Crawler endpoints
 
-`/sitemap.xml`, `/robots.txt`, `/feed.xml`, `/llms.txt`, `/llms-full.txt`, plus `/healthz`.
+`/sitemap.xml`, `/robots.txt`, `/feed.xml`, `/llms.txt`, `/llms-full.txt`, plus `/healthz`. These carry the
+same `Cache-Control` (they are on `pub` and are public), but are **not** in the page cache — only
+`public.resolve` is. Add them if a crawler ever makes them hot; `/sitemap.xml` is one query of up to 5000 posts.
 
 ### Markdown twins (`/<path>.md`)
 
@@ -1485,7 +1546,7 @@ pipenv run pytest
 
 **Workers.** The `app` container runs `gunicorn -b 0.0.0.0:8000 'iopstor:create_app()'` and nothing else — migrations are the stack's separate `migrate` service (below) — and gunicorn takes its worker and thread count from `GUNICORN_CMD_ARGS` — `-w 2 --threads 8 --preload` from the Dockerfile, overridden in Dokploy's environment (production runs `-w 30`). The number is deploy config rather than code because the app is stateless across processes by construction, and it pays to know exactly what that rests on:
 
-- *Per request:* every cache — `post_types()`, `settings()`, `admin_counts()`, `tree()`, `get_media()` — is `db._cached()` on `flask.g`, gone at teardown. Nothing survives a request, so nothing can go stale between workers; the price is one PostgREST round trip each for `post_types` and `settings` per request (§17).
+- *Per request:* `db._cached()` on `flask.g`, gone at teardown — `admin_counts()`, `tree()`, `seo.site()` and the derived per-id memos. *Per process:* `db._proc_cached()` for `post_types()`, `settings()`, `get_menu()`, `get_media()` and `redirect_for()`, plus `public.py`'s page cache. Neither can go stale between workers, because every write touches the `/dev/shm` epoch file and every read compares it (§4). The workers still share no memory, so a cold page is rendered once per worker rather than once between them (§17).
 - *Per process:* one object, the service-role Supabase client in `app.extensions`, built lazily on the first request. It is HTTP plumbing — a thread-safe `httpx` pool — holds no data, and `.table()` builds a fresh query each call.
 - *`TRUSTED_PROXIES` is wider than a proxy:* unset, it is every private range, which contains the LAN **client** as well as the LAN proxy — so somebody on the office network can still put an address that is not theirs into the throttle and the *From* column. Narrowing it to the subnet the proxy actually sits on closes it with no code change, and the app logs a warning at every boot while it is unset. It is a default rather than a `REQUIRED` key because refusing to boot would need the operator to know that subnet before they can go and look it up (§12).
 - *One hop:* `X-Forwarded-For` is read from the right, which is correct for exactly one trusted proxy. Chain two and the last entry is the inner one, not the visitor; the fix is to count back as many entries as there are hops (§12).
@@ -1494,7 +1555,9 @@ pipenv run pytest
 
 `--preload` imports the app once in the master and forks it: a broken import fails once instead of thirty crash-looping workers, and the imported code is shared copy-on-write. It is safe here because the Supabase client is created after the fork, the throttle opens its connection per call, and Python reseeds `random` in every child (`unique_slug()`'s suffix).
 
-Sizing: `create_app()` makes no network call and costs about 0.9 s and 63 MB per worker on its own; a thread costs almost nothing, and every request is a wait on Kong. Measured on the dev box, `-w 30 --threads 8 --preload` boots in a few seconds and holds 472 MB of real memory (PSS, shared pages counted once — the summed RSS reads 1.7 GB, which is the number a per-process view shows). `-w 8 --threads 30` is the same 240 slots at a quarter of that. The ceiling behind either is PostgREST's connection pool — `PGRST_DB_POOL`, 10 by default, with a 10 s acquisition timeout — so check it on the Supabase host (`docker exec supabase-rest env | grep PGRST_DB_POOL`) before going wide. Two **replicas** are a different case from thirty workers, though a smaller one than it used to be: the throttle splits per container, and that is now the whole of it. Migrations are no longer a per-container event — there is one `migrate` service in the stack and every replica of `app` waits on the same run of it — so replicas can start together on a cold database.
+Sizing: `create_app()` makes no network call and costs about 0.9 s and 63 MB per worker on its own; a thread costs almost nothing, and every request is a wait on Kong. Measured on the dev box, `-w 30 --threads 8 --preload` boots in a few seconds and holds 472 MB of real memory (PSS, shared pages counted once — the summed RSS reads 1.7 GB, which is the number a per-process view shows). `-w 8 --threads 30` is the same 240 slots at a quarter of that. The ceiling behind either is PostgREST's connection pool — `PGRST_DB_POOL`, 10 by default, with a 10 s acquisition timeout — so check it on the Supabase host (`docker exec supabase-rest env | grep PGRST_DB_POOL`) before going wide.
+
+**Count the cores before the workers.** The production box is 6 cores and 16 GB running Dokploy, Supabase *and* this app, so every PostgREST call is also CPU on the same six cores — `-w 30` is thirty processes competing with Postgres for both CPU and page cache. A 2000-visitor stress run pinned it flat at 100% for the whole run with memory unmoved at 6 GB, which is the CPU-saturation shape, not a memory or pool-wait one. Prefer the `-w 8 --threads 30` shape here, and raise `PGRST_DB_POOL` to match, sized against `max_connections` (`show max_connections;` in Studio) with budget left for GoTrue, Storage, Realtime and Studio. What removes the load rather than redistributing it is the edge cache below. Two **replicas** are a different case from thirty workers, though a smaller one than it used to be: the throttle splits per container, and that is now the whole of it. Migrations are no longer a per-container event — there is one `migrate` service in the stack and every replica of `app` waits on the same run of it — so replicas can start together on a cold database.
 
 **Production (Dokploy + Cloudflare Tunnel).** Production is **one Dokploy Compose service** built from
 `docker-compose.yml` at the repo root, holding two containers: `app`, built from the same `Dockerfile`
@@ -1696,13 +1759,18 @@ stays, but nothing else joins them — and **Studio and Kong never go on either*
 service, which is the whole reason `/media/<key>` exists (§8). A third way in would be a third answer to
 "where is the visitor's address", so anything added here belongs in `TRUSTED_PROXIES` and in §12. Worth adding
 once the site is live: a Cloudflare rate-limit on `/admin/login`, which §12 argues is a complement to the
-sqlite throttle rather than a replacement, since the flood never reaches the origin. Public HTML can also
-be edge-cached now that anonymous requests carry no `Set-Cookie` (§7) — but **leave that off unless someone
-asks for it.** Cloudflare does not cache HTML without a Cache Rule, so it is opt-in, and turning it on buys
-speed at the cost of the property NON-TECHNICAL.md's *Quick answers* currently promises editors: that a page is live the
-moment they press **Save**. With a Cache Rule a save, and a scheduled `published_at` falling due, both lag
-by the TTL, and there is no purge hook wired to either. Enable it only with a TTL someone has agreed to,
-a rule that excludes `/admin/*` and `/api/*`, and that Quick Answer rewritten to match.
+sqlite throttle rather than a replacement, since the flood never reaches the origin.
+
+**Turn on the edge cache for public HTML** (asked for 2026-09-16, when 2000 simulated visitors saturated the
+box). The origin now sends `Cache-Control: public, max-age=0, s-maxage=60, stale-while-revalidate=300` on
+public pages (§8), but **Cloudflare does not cache HTML without a Cache Rule**, so the header alone does
+nothing. Add one: eligible for cache, respect the origin TTL, **excluding `/admin/*` and `/api/*`**. It works
+only because anonymous pages carry no `Set-Cookie` (§7); do not undo that. The cost is the one
+NON-TECHNICAL.md's *Quick answers* names: the origin drops a published page from its own cache instantly (the
+epoch, §4), but the edge serves the old one for up to `EDGE_TTL`, and a scheduled `published_at` falling due
+lags the same way. Nothing purges on publish — a Cloudflare purge call in the publish path is the fix if a
+minute is ever too long. Without this rule the app is still far faster than it was, but the traffic still
+arrives at the box; this is what stops it arriving at all.
 
 After any `Pipfile` change, regenerate both lockfile exports:
 
@@ -1843,8 +1911,11 @@ Shared editing (§12.3), all of them named in `admin.js`:
 - Thirty workers is where `media_file()` reading a whole object into memory stops being theoretical: 240
   request slots against a 20 MB `MAX_CONTENT_LENGTH` is a 4.8 GB worst case. Streaming through httpx is the
   upgrade named above; what the worker count changes is that it is now a number to watch, not an argument.
-- `post_types` and `settings` are cached per **request** (`db._cached()` on `flask.g`), so every request pays one PostgREST round trip for each. A per-process cache with a short TTL is the upgrade if PostgREST load ever matters; until then nothing can go stale between workers (§15).
-- PostgREST calls wait up to 120 s — the library default, nothing is configured. A stalled Supabase parks that many gthread threads for two minutes. A shared `httpx.Client(timeout=…)` passed as `ClientOptions(httpx_client=…)` in `db._client()` is the non-deprecated way to shorten it.
+- The caches are **per worker process**, so thirty workers each render a cold page once rather than once between them, and each holds its own copy (a 26 KB page × `PAGE_MAX` 512 is the ceiling per worker). A shared cache would fix both and would also be another service to run on a box that is already short of cores. `CACHE_TTL` (30 s) and `PAGE_TTL` (30 s) are backstops only — the epoch file is what actually invalidates — so a write that somehow skipped `bump_epoch()` would still self-correct within half a minute.
+- **Any write invalidates everything**, not just the pages it affects: the epoch is one stamp, so changing a lead's status drops every cached page. Writes are rare next to reads and the miss path is now 3–5 round trips, so this is deliberate; per-table stamps are the upgrade if an import ever makes it hurt.
+- **Edge caching is opt-in and lags a publish.** The origin never does (the epoch drops the entry at once), but a Cloudflare Cache Rule serves for `EDGE_TTL` (60 s), and nothing purges it on publish — a `published_at` falling due lags the same way. A purge call on publish is the fix if a minute is ever too long.
+- The redirect `hits` counter is now approximate in a second way: the row comes from the per-worker cache, so within one cache generation every visit writes back the same number. Nothing reads the column; a `bump_redirect(id)` RPC makes it exact.
+- PostgREST calls wait `db.PGRST_TIMEOUT` (15 s), down from the library's 120 s default. Two minutes was longer than gunicorn's own 30 s worker timeout, so a merely-slow Supabase parked eight threads per worker until the worker was killed mid-request — a slow database read as a dead site. 15 s is far longer than any query here (the widest is the sitemap's 5000 rows) and safely inside that timeout, so overload now sheds load instead of swallowing the pool. It is a constant, not an env key, for the reason `STRESS_DB` is. It rides on `ClientOptions(postgrest_client_timeout=…)`, which the library marks deprecated but still passes on every client it builds (the warning predates this and fires on the default too); `ClientOptions(httpx_client=…)` is where it goes when that is finally removed.
 - A redirect's `hits` is a read-then-write, so parallel visits lose counts. Nothing reads the column; a `bump_redirect(id)` SQL function called via `.rpc()` makes it exact if it is ever reported on.
 - FAQPage JSON-LD is not wired up (§9).
 - The stress-test run (§12) is bounded but coarse: it fans out across `_nprocs()` processes (× threads), lifting throughput ~core-count (measured ~900 req/s one process and *falling* with more threads, vs ~1200 rising, on an 8-core box against a scalable target) — not any fixed number, not 10k/s on modest hardware. Real concurrency is capped at `nprocs × PER_PROC` so a huge entered number is scaled down (the panel shows the driven count); the coordinator terminates the child processes `GRACE` seconds after the deadline/Stop rather than waiting a `REQ_TIMEOUT` per stuck request, so even a heavy self-test ends within ~2s of its duration. The coordinator and children live in whichever worker took the request, so a recycled worker freezes the run at its last `/dev/shm` flush; the only target-URL guard is the scheme (no SSRF allow-list — owner-only behind the office-only admin); nothing prevents two runs at once (one owner, their own doubled load); and a self-test's generators share the box with the workers they hit. What it surfaces first is the target's PostgREST pool, not the driver (§15 step 4).

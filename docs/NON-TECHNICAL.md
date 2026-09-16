@@ -670,9 +670,19 @@ unsure which one you are looking at, check the address at the top of the browser
 never open, because the website would go looking for its own admin panel instead. Pick another word;
 nothing else about the page is lost, only the address box needs changing.
 
-**Will visitors see a page the moment I press Publish?** Yes, if it is set to **Published** — the live
-site is served straight from it, with no waiting and nothing to rebuild. A **Draft** stays invisible, and
-a scheduled page appears by itself at the date you set.
+**Will visitors see a page the moment I press Publish?** Yes, if it is set to **Published** — there is
+nothing to rebuild and no waiting. A **Draft** stays invisible, and a scheduled page appears by itself at
+the date you set. One thing to know now that the site keeps a short-term copy of each page to stay fast
+under heavy traffic: the website itself throws that copy away the instant you publish, so your own check
+shows the new page straight away. If the speed service in front of the site has been switched on, a visitor
+who happens to be served from it may see the previous version for up to a minute before it catches up. It
+catches up by itself; there is nothing to press. The same applies to a page you scheduled — it can appear
+up to a minute after the time you set.
+
+**The site got faster. Did something change about my pages?** No — nothing about writing or publishing is
+different, and no page looks any different. The website simply remembers each finished page for a short
+while instead of rebuilding it for every single visitor, which is what lets it stay quick when thousands
+of people arrive at once. It forgets what it remembered the moment anybody saves or publishes anything.
 
 **The Save button says Publish now. What happened?** The page saves itself as you type, so there is
 nothing left for a Save button to do — the line at the top right tells you it is saved. The blue button
