@@ -56,12 +56,31 @@ STRESS_DB = "/dev/shm/iopstor-stress.db"   # constant, not an env key: keeps it 
 MAX_VISITORS = 10000
 MAX_ATTACKERS = 1000
 MAX_SECONDS = 300
-REQ_TIMEOUT = 15          # a stuck target must not pin a worker thread forever
+REQ_TIMEOUT = 10          # a stuck target must not pin a worker thread forever, nor drag out the wind-down
 LAT_SAMPLE = 2000         # reservoir size for the latency percentiles (per process)
 FLUSH_EVERY = 0.5         # how often a generator writes its part out, and the coordinator merges
+GRACE = 2                 # seconds after the deadline (or a Stop) before child processes are terminated
 UA = "IOPSTOR-stress/1.0"
-PER_PROC = 250            # threads before fanning out to another process; below this, one in-thread run
+PER_PROC = 250            # threads per process; the total real concurrency ceiling is this x _nprocs()
 MAX_PROCS = 16            # hard ceiling on spawned generator processes
+
+
+def _plan(visitors, attackers):
+    """Decide the real shape of a run: how many generator processes, and how many visitor/attacker threads
+    each gets. The important part is the CAP -- real concurrency never exceeds nprocs x PER_PROC, however
+    large the entered numbers are. One OS thread per worker, so an uncapped '10000 visitors' would spawn
+    ten thousand threads: many seconds just to create, a thrashed box (worse on a self-test), and a run
+    that then takes ages to tear those threads down -- while buying no throughput past the cap (measured).
+    Over the cap, the entered numbers are scaled down proportionally. Returns (nprocs, vsplit, asplit)."""
+    total = visitors + attackers
+    if total == 0:
+        return 1, [0], [0]
+    nprocs = _nprocs(visitors, attackers)
+    cap = nprocs * PER_PROC
+    if total > cap:                                    # scale visitors:attackers down to fit the machine
+        visitors = round(visitors * cap / total)
+        attackers = round(attackers * cap / total)
+    return nprocs, _split(visitors, nprocs), _split(attackers, nprocs)
 
 
 def _nprocs(visitors, attackers):
@@ -324,7 +343,7 @@ def _generate(rid, idx, target, visitors, attackers, deadline, warranty_path, ur
             stop_flag.set()
         _write_part(rid, idx, metrics.raw(), path)
         time.sleep(FLUSH_EVERY)
-        if time.time() > deadline + REQ_TIMEOUT + 5:   # workers should have stopped; do not hang
+        if time.time() > deadline + REQ_TIMEOUT + 2:   # workers should have stopped; do not hang
             stop_flag.set()
             break
     for t in threads:
@@ -332,37 +351,43 @@ def _generate(rid, idx, target, visitors, attackers, deadline, warranty_path, ur
     _write_part(rid, idx, metrics.raw(), path)
 
 
-def run_load(rid, target, visitors, attackers, seconds, warranty_path="/", path=STRESS_DB):
+def run_load(rid, target, seconds, vsplit, asplit, warranty_path="/", path=STRESS_DB):
     """The coordinator: fan the load out across generators (a thread, or spawned processes), merge their
-    parts into the run row while they run, finalise. Runs in its own background thread (see start())."""
+    parts into the run row while they run, finalise. vsplit/asplit are the per-generator thread counts
+    (already capped by _plan). Runs in its own background thread (see start())."""
     start_t = time.time()
     deadline = start_t + seconds
+    nprocs = len(vsplit)
     try:
         urls = sitemap_urls(target)                    # fetched once, handed to every generator
         _write(rid, "running", _merge_parts(rid, path, 0.0), path)
-        nprocs = _nprocs(visitors, attackers)
-        vs, as_ = _split(visitors, nprocs), _split(attackers, nprocs)
         procs = []
         if nprocs == 1:                                # small run: an in-process thread, no spawn cost
-            gen = threading.Thread(target=_generate, args=(rid, 0, target, visitors, attackers, deadline,
+            gen = threading.Thread(target=_generate, args=(rid, 0, target, vsplit[0], asplit[0], deadline,
                                    warranty_path, urls, path), daemon=True)
             gen.start()
             workers = [gen]
         else:
             ctx = multiprocessing.get_context("spawn")  # a fresh interpreter, not a fork of this worker
             for i in range(nprocs):
-                p = ctx.Process(target=_generate, args=(rid, i, target, vs[i], as_[i], deadline,
+                p = ctx.Process(target=_generate, args=(rid, i, target, vsplit[i], asplit[i], deadline,
                                 warranty_path, urls, path), daemon=True)
                 p.start()
                 procs.append(p)
             workers = procs
+        mark = None                                    # when the deadline passed or Stop was pressed
         while any(w.is_alive() for w in workers):
+            if mark is None and (time.time() >= deadline or _stopped(rid, path)):
+                mark = time.time()
             _write(rid, "running", _merge_parts(rid, path, time.time() - start_t), path)
-            time.sleep(FLUSH_EVERY)
-            if time.time() > deadline + REQ_TIMEOUT + 8:   # generators should have stopped; force it
+            # A worker blocked in a request cannot be interrupted, so waiting for a graceful drain means
+            # waiting a whole REQ_TIMEOUT on a saturated target. Once time is up, kill the child processes
+            # instead (SIGTERM takes their threads with them); the run ends within GRACE, not a timeout.
+            if mark is not None and time.time() > mark + GRACE:
                 for p in procs:
                     p.terminate()
                 break
+            time.sleep(FLUSH_EVERY)
         for w in workers:
             w.join(timeout=2)
         _write(rid, "done", _merge_parts(rid, path, time.time() - start_t), path)
@@ -373,16 +398,20 @@ def run_load(rid, target, visitors, attackers, seconds, warranty_path="/", path=
 
 
 def start(target, visitors, attackers, seconds, warranty_path="/", path=STRESS_DB):
-    """Validate, clamp, register the run and kick off its coordinator thread. Returns the run id.
-    Raises ValueError if the target is not a usable base URL."""
+    """Validate, clamp, plan the fan-out, register the run and kick off its coordinator thread. Returns
+    the run id. Raises ValueError if the target is not a usable base URL. The run records both the
+    requested numbers and the *_run numbers actually driven (real concurrency is capped to what the
+    machine can drive -- see _plan)."""
     target = validate_target(target)
     visitors = clamp(visitors, 0, MAX_VISITORS)
     attackers = clamp(attackers, 0, MAX_ATTACKERS)
     seconds = clamp(seconds, 1, MAX_SECONDS)
     warranty_path = "/" + (warranty_path or "/").strip().lstrip("/")
+    nprocs, vsplit, asplit = _plan(visitors, attackers)
     rid = create({"target": target, "visitors": visitors, "attackers": attackers,
+                  "visitors_run": sum(vsplit), "attackers_run": sum(asplit), "procs": nprocs,
                   "seconds": seconds}, path)
     threading.Thread(target=run_load,
-                     args=(rid, target, visitors, attackers, seconds, warranty_path, path),
+                     args=(rid, target, seconds, vsplit, asplit, warranty_path, path),
                      daemon=True).start()
     return rid

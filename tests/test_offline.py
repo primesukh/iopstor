@@ -2323,3 +2323,16 @@ def test_a_multiprocess_run_completes(tmp_path, monkeypatch):
     assert run["state"] == "done", run
     assert run["progress"]["sent"] > 0
     assert len(stress._read_parts(rid, db)) == 2             # both spawned children reported
+
+
+def test_plan_caps_real_concurrency():
+    """The fix for a big self-test hanging: real concurrency never exceeds nprocs x PER_PROC, so a huge
+    entered number is scaled down instead of spawning tens of thousands of threads."""
+    from iopstor import stress
+    n, v, a = stress._plan(20, 10)                          # small: one process, nothing scaled
+    assert n == 1 and sum(v) == 20 and sum(a) == 10
+    n, v, a = stress._plan(10000, 0)                        # huge: capped, per-process <= PER_PROC
+    assert n <= stress.MAX_PROCS
+    assert sum(v) <= n * stress.PER_PROC
+    assert all(x <= stress.PER_PROC for x in v)
+    assert stress._plan(0, 0) == (1, [0], [0])              # nothing to do, still well-formed

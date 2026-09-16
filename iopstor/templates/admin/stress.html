@@ -45,8 +45,10 @@
     <span class="st-hint">the public page that carries the serial-number check — attackers guess serials against it
       (<code>?sn=…</code>). Left as “/”, the guesses just hit the home page.</span></label>
   <p class="st-cap muted">Up to {{ max_visitors }} visitors and {{ max_attackers }} attackers. The load spreads
-    across this machine's CPU cores, but real throughput is limited by the machine and by how fast the target
-    can answer — read the numbers as “push to find where it breaks”, not an exact count.</p>
+    across this machine's CPU cores; if you ask for more than the machine can drive, it is <strong>capped
+    automatically</strong> (the run shows the real number it used) so it starts and stops quickly instead of
+    thrashing. Real throughput is limited by the machine and by how fast the target can answer — read the
+    numbers as “push to find where it breaks”, not an exact count.</p>
   <button type="submit" class="btn">Run</button>
 </form>
 
@@ -89,7 +91,12 @@
   function paint(run) {
     var p = run.progress || {}, params = run.params || {};
     set('st-state', {starting:'starting…',running:'running',done:'finished',error:'stopped on an error'}[run.state] || run.state);
-    set('st-meta', (params.visitors||0) + ' visitors · ' + (params.attackers||0) + ' attackers · aimed at ' +
+    var vr = params.visitors_run, ar = params.attackers_run;
+    var capped = vr !== undefined && (vr !== params.visitors || ar !== params.attackers);
+    var who = capped
+      ? (vr + ' visitors + ' + ar + ' attackers (capped from ' + params.visitors + ' + ' + params.attackers + ' — this machine)')
+      : ((params.visitors||0) + ' visitors · ' + (params.attackers||0) + ' attackers');
+    set('st-meta', who + ' · ' + (params.procs||1) + ' process(es) · aimed at ' +
                    (params.target||'') + ' · ' + (p.elapsed||0) + 's elapsed');
     set('st-sent', p.sent || 0); set('st-rps', p.req_per_sec || 0);
     set('st-p95', p.p95_ms || 0); set('st-max', p.max_ms || 0);
