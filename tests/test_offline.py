@@ -2336,3 +2336,150 @@ def test_plan_caps_real_concurrency():
     assert sum(v) <= n * stress.PER_PROC
     assert all(x <= stress.PER_PROC for x in v)
     assert stress._plan(0, 0) == (1, [0], [0])              # nothing to do, still well-formed
+
+
+# ---- the page cache and the cross-request cache ----------------------------
+# The public site's whole capacity story: a home page measured 29 PostgREST round trips and 219 ms,
+# and ten thousand people browsing needs a few hundred views a second. These pin the two things that
+# make that possible and the three that make it safe.
+
+def test_proc_cached_serves_from_the_process_until_a_write_or_the_ttl(app, tmp_path, monkeypatch):
+    from iopstor import db
+    monkeypatch.setattr(db, "EPOCH_FILE", str(tmp_path / "epoch"))
+    db._proc_cache.clear()
+    hits = []
+
+    def load():
+        hits.append(1)
+        return len(hits)
+
+    assert db._proc_cached("k", load) == 1
+    assert db._proc_cached("k", load) == 1          # second reader pays nothing
+    assert len(hits) == 1
+
+    db.bump_epoch()                                  # any write invalidates every worker
+    assert db._proc_cached("k", load) == 2
+    assert len(hits) == 2
+
+    db._proc_cached("lapsing", load, ttl=-1)         # stored already expired
+    assert len(hits) == 3
+    db._proc_cached("lapsing", load, ttl=-1)         # a lapsed entry reloads even with no write
+    assert len(hits) == 4
+
+
+def test_content_epoch_survives_a_missing_file(app, tmp_path, monkeypatch):
+    """First boot, or a container with no /dev/shm: everyone reads 0.0 and the TTL carries it,
+    rather than the cache raising on every request."""
+    from iopstor import db
+    monkeypatch.setattr(db, "EPOCH_FILE", str(tmp_path / "nope" / "deeper" / "epoch"))
+    assert db.content_epoch() == 0.0
+    db.bump_epoch()                                  # unwritable path: must not raise
+    assert db.content_epoch() == 0.0
+
+
+def test_only_whole_public_pages_are_cacheable(app):
+    """An allow-list, not a list of exclusions: /media/<key> is on the same blueprint and serves
+    files up to MAX_CONTENT_LENGTH, so a deny-list that missed it would buffer 512 x 20 MB."""
+    from iopstor import public
+    with app.test_request_context("/media/some-key.jpg"):
+        assert public._cache_key() is None           # the file proxy, not a page
+    with app.test_request_context("/products/thing/checkout"):
+        assert public._cache_key() is None           # a form
+    with app.test_request_context("/warranty?sn=ABC123"):
+        assert public._cache_key() is None           # answers per serial number
+    with app.test_request_context("/", method="POST"):
+        assert public._cache_key() is None
+    with app.test_request_context("/about-us"):
+        assert public._cache_key() is not None
+    with app.test_request_context("/blog?page=2"):
+        key = public._cache_key()
+    with app.test_request_context("/blog?page=3"):
+        assert public._cache_key() != key            # a paged archive is its own entry
+
+
+def test_a_public_page_tells_shared_caches_it_may_be_served_again(app):
+    """Cloudflare is what actually removes the traffic from the box. max-age=0 keeps the visitor's
+    own browser revalidating, so a reader never holds a stale page."""
+    from flask import Response
+
+    from iopstor import public
+    with app.test_request_context("/about-us"):
+        cc = public._public_cache_headers(Response("hi", status=200)).headers["Cache-Control"]
+    assert "s-maxage=60" in cc and "max-age=0" in cc and "public" in cc
+
+    with app.test_request_context("/about-us"):      # a response that sets a cookie is per-person
+        r = Response("hi", status=200)
+        r.headers["Set-Cookie"] = "session=abc"
+        assert "Cache-Control" not in public._public_cache_headers(r).headers
+
+    with app.test_request_context("/nope"):          # only a 200 is worth repeating
+        assert "Cache-Control" not in public._public_cache_headers(Response("no", status=404)).headers
+
+
+def test_the_page_cache_returns_the_stored_page_and_a_write_drops_it(app, tmp_path, monkeypatch):
+    from flask import Response, g
+
+    from iopstor import db, public
+    monkeypatch.setattr(db, "EPOCH_FILE", str(tmp_path / "epoch"))
+    public._page_cache.clear()
+
+    with app.test_request_context("/about-us"):
+        assert public._page_cache_read() is None                     # cold: nothing to serve
+        public._public_cache_headers(Response("PAGE ONE", status=200))
+    with app.test_request_context("/about-us"):
+        served = public._page_cache_read()                           # warm: served without rendering
+        assert served is not None and served.get_data() == b"PAGE ONE"
+        assert g.page_cached is True
+
+    db.bump_epoch()
+    with app.test_request_context("/about-us"):
+        assert public._page_cache_read() is None                     # a write drops it at once
+
+
+def test_a_page_that_stops_existing_is_dropped_not_left_stale(app, tmp_path, monkeypatch):
+    """The trap in serve-stale-while-refreshing: if the re-render is a 404 -- the page was trashed or
+    unpublished -- the old 200 must go. Leaving it means every CONCURRENT request keeps being handed a
+    page that no longer exists, which is the exact traffic shape this cache exists for."""
+    from flask import Response
+
+    from iopstor import db, public
+    monkeypatch.setattr(db, "EPOCH_FILE", str(tmp_path / "epoch"))
+    public._page_cache.clear()
+
+    with app.test_request_context("/going-away"):
+        public._page_cache_read()
+        public._public_cache_headers(Response("PAGE ONE", status=200))
+    db.bump_epoch()                                          # the editor trashes it
+    with app.test_request_context("/going-away"):
+        assert public._page_cache_read() is None             # stale: this caller re-renders
+        public._public_cache_headers(Response("gone", status=404))
+    assert "/going-away?" not in public._page_cache
+    assert not [k for k in public._page_cache if k.startswith("/going-away")]
+
+    # ...but a failing database must NOT wipe a good page: keep serving the last copy instead.
+    public._page_cache.clear()
+    with app.test_request_context("/still-here"):
+        public._page_cache_read()
+        public._public_cache_headers(Response("GOOD", status=200))
+    db.bump_epoch()
+    with app.test_request_context("/still-here"):
+        public._page_cache_read()
+        public._public_cache_headers(Response("boom", status=502))
+    assert [k for k in public._page_cache if k.startswith("/still-here")]
+
+
+def test_the_page_cache_stays_within_its_ceiling(app, tmp_path, monkeypatch):
+    """full_path includes the query, so a campaign's ?utm_* fills this fast. It must evict rather
+    than grow, and storing must not trip over its own trim."""
+    from flask import Response
+
+    from iopstor import db, public
+    monkeypatch.setattr(db, "EPOCH_FILE", str(tmp_path / "epoch"))
+    public._page_cache.clear()
+    for i in range(public.PAGE_MAX + 25):
+        with app.test_request_context(f"/?utm_source=camp{i}"):
+            public._page_cache_read()
+            public._public_cache_headers(Response(f"p{i}", status=200))
+    assert len(public._page_cache) == public.PAGE_MAX
+    with app.test_request_context(f"/?utm_source=camp{public.PAGE_MAX + 24}"):
+        assert public._page_cache_read() is not None         # the newest survived the trim

@@ -1,10 +1,13 @@
 """Public site: catch-all page resolver, SEO endpoints (sitemap/robots/llms/feed), and the read-only JSON API."""
 import json
+import threading
+import time
+from collections import OrderedDict
 from datetime import date
 from io import BytesIO
 from pathlib import PurePosixPath
 
-from flask import Blueprint, Response, abort, jsonify, redirect, render_template, request, send_file
+from flask import Blueprint, Response, abort, g, jsonify, redirect, render_template, request, send_file
 from markupsafe import escape
 from postgrest import APIError
 from storage3.exceptions import StorageApiError
@@ -22,6 +25,103 @@ api.register_error_handler(HTTPException, _http_error)
 api.register_error_handler(APIError, _pg_error)
 
 PUBLIC_SETTINGS = ("site_name", "tagline", "logo_url", "social_links", "contact_email", "contact_phone", "address")
+
+
+# ---- the page cache ---------------------------------------------------------
+# The public site renders identical bytes for every visitor: measured, one home page cost 29
+# PostgREST round trips and 219 ms, i.e. 4.6 renders a second per thread, and ten thousand people
+# browsing at once needs a few hundred views a second. Even with every query answered from memory
+# the render alone is ~28 ms, so the answer cannot be a faster render -- it has to be no render.
+#
+# Two layers do that. This one holds the finished page in the worker process, so a repeat view is a
+# dict lookup. The Cache-Control header set below hands the same job to Cloudflare, which is what
+# takes the traffic off the box altogether; this layer still matters because the Dokploy/Traefik LAN
+# ingress does not go through Cloudflare, and a cold edge would otherwise arrive here all at once.
+#
+# Freshness is not on a timer. db.bump_epoch() touches one file on /dev/shm on every write and a
+# stale entry is dropped the moment its stamp is older, so the origin is never behind -- only the
+# edge is, for its s-maxage. The TTL below is just a backstop.
+# ponytail: a dict per worker, so thirty workers each render a cold page once rather than once
+# between them. A shared cache would fix that and would also be another service to run on a box
+# that is already short of cores.
+
+PAGE_TTL = 30       # seconds; backstop only, the epoch is what actually invalidates
+PAGE_MAX = 512      # entries; campaign ?utm_* junk must not grow this without bound
+EDGE_TTL = 60       # seconds a shared cache may serve a page for -- agreed with the client
+_page_cache = OrderedDict()     # key -> (expires, epoch, body, content_type)
+_refreshing = set()             # keys some thread is already re-rendering
+_refresh_lock = threading.Lock()
+
+
+def _cache_key():
+    """The page resolver only. /media/<key> is on this same blueprint and serves files up to
+    MAX_CONTENT_LENGTH (20 MB), so this is an allow-list on purpose, not a list of exclusions."""
+    if request.endpoint != "public.resolve" or request.method not in ("GET", "HEAD"):
+        return None
+    if "sn" in request.args:                                # warranty_check answers per serial
+        return None
+    if request.path.rstrip("/").endswith("/checkout"):      # a form, and it is noindex anyway
+        return None
+    return request.full_path            # path + query, so ?page=2 is its own entry
+
+
+@pub.before_request
+def _page_cache_read():
+    g.page_key = key = _cache_key()
+    hit = _page_cache.get(key) if key else None
+    if hit is None:
+        return None
+    expires, epoch, body, ctype = hit
+    if expires > time.time() and epoch >= db.content_epoch():
+        g.page_cached = True
+        return Response(body, content_type=ctype)
+    # Stale. One caller re-renders and the rest keep reading the old copy until it does, so a
+    # lapsed entry on a busy page cannot become 240 simultaneous renders of the same page.
+    with _refresh_lock:
+        if key in _refreshing:
+            g.page_cached = True
+            return Response(body, content_type=ctype)
+        _refreshing.add(key)
+        g.page_refreshing = True
+    return None
+
+
+@pub.after_request
+def _public_cache_headers(resp):
+    """Store the render, and tell shared caches they may serve it. max-age=0 keeps the visitor's own
+    browser revalidating -- they get a fresh page on every click -- while s-maxage lets Cloudflare
+    answer from the edge, which is the whole point. stale-while-revalidate means the edge refreshes
+    in the background instead of making somebody wait for it."""
+    key = getattr(g, "page_key", None)
+    if key and not getattr(g, "page_cached", False):
+        storable = (resp.status_code == 200 and not resp.headers.get("Set-Cookie")
+                    and not resp.direct_passthrough)
+        with _refresh_lock:     # the whole store, so a concurrent trim cannot evict what we reinsert
+            if storable:
+                _page_cache.pop(key, None)      # reinsert rather than move_to_end: another thread's
+                _page_cache[key] = (time.time() + PAGE_TTL, db.content_epoch(),
+                                    resp.get_data(), resp.content_type)   # trim may have evicted it
+                while len(_page_cache) > PAGE_MAX:
+                    _page_cache.popitem(last=False)
+            elif resp.status_code < 500:
+                # A definitive non-200 -- the page was trashed, unpublished, or is now a redirect.
+                # Without this the old 200 stays and every CONCURRENT request keeps being served the
+                # page that no longer exists, which is exactly the traffic shape this cache is for.
+                # 5xx is left alone on purpose: a pool-exhausted database should go on serving the
+                # last good copy rather than replacing a working site with an error.
+                _page_cache.pop(key, None)
+    if request.method in ("GET", "HEAD") and resp.status_code == 200 and not resp.headers.get("Set-Cookie") \
+            and "Cache-Control" not in resp.headers:
+        resp.headers["Cache-Control"] = f"public, max-age=0, s-maxage={EDGE_TTL}, stale-while-revalidate=300"
+    return resp
+
+
+@pub.teardown_request
+def _page_cache_release(exc=None):
+    """In teardown, not after_request: an unhandled exception skips after_request, and a key left in
+    the set would pin that page's stale copy until the worker restarts."""
+    if getattr(g, "page_refreshing", False):
+        _refreshing.discard(g.page_key)
 
 
 def _service_nav():
@@ -227,10 +327,12 @@ def resolve(path):
     if path.endswith(".md"):
         path = "" if path == "index.md" else path[:-3]
     full = "/" + path
-    r = db.one(db.table("redirects").select("*").eq("from_path", full))
+    r = db.redirect_for(full)
     if r:
-        # ponytail: read-then-write loses hits under parallel visits, and nothing reads the column yet.
-        # A bump_redirect(id) SQL function called via .rpc() makes it exact if it is ever reported on.
+        # ponytail: the hit counter is now approximate in a second way -- `hits` comes from the
+        # per-worker cache, so within one cache generation every visit writes back the same number.
+        # It was already lossy under parallel visits, and nothing reads the column. A bump_redirect(id)
+        # SQL function called via .rpc() makes it exact if it is ever reported on.
         # Not db.update(): this fires on an anonymous page view, and a hit counter is not a step
         # anybody took, so an audit entry per visit would bury the log it was meant to fill.
         db.table("redirects").update({"hits": r["hits"] + 1}).eq("id", r["id"]).execute()
