@@ -591,6 +591,29 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pl-post .card h3{margin:0 24px 8px}
 .pl-post .card p{margin:0 24px 24px}
 
+/* "Items per row" on an Automatic list. The count is worked out in blocks.py (`even_cols()` when the
+   editor picks Even rows) and arrives as a class, so nothing an editor typed reaches a style
+   attribute -- the same reason `tone` and `width` are whitelists. Two classes plus .cards matches
+   the specificity of `.pl-partner:not(.arch-body) .cards` above, so this group must stay below it.
+   `minmax(0,1fr)` and not the per-type minimum: a fixed count only fits if the tracks may shrink.
+   760px is where it starts, chosen by looking: at 834 seven logos across are smaller but perfectly
+   legible, and 7 + 7 beats the 5 + 5 + 4 that wrapping by width gives there. Below it the strip
+   wraps by width again -- at 390 that is two per row, which for fourteen is seven even rows anyway.
+   ponytail: one breakpoint for every count. A list of 8 could hold its row lower than one of 7;
+   if that ever matters, give the class its own floor rather than moving this one. */
+@media(min-width:760px){
+  .pl.pl-cols-2 .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .pl.pl-cols-3 .cards{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .pl.pl-cols-4 .cards{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .pl.pl-cols-5 .cards{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .pl.pl-cols-6 .cards{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .pl.pl-cols-7 .cards{grid-template-columns:repeat(7,minmax(0,1fr))}
+  .pl.pl-cols-8 .cards{grid-template-columns:repeat(8,minmax(0,1fr))}
+  /* ...but not inside a column: a fixed count in half the width squashes the tracks, and a
+     column is already the editor choosing a width. One rule, 4 classes, so it beats the seven. */
+  .column .pl[class*="pl-cols-"] .cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+}
+
 /* An archive holds however many posts happen to be published, so its grid is auto-FILL: the empty
    tracks stay, and one blog post keeps a tile's width instead of stretching into a billboard across
    the page. A deck inside a page is auto-fit, because there the editor chose the count. 300px is the

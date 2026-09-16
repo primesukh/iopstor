@@ -31,7 +31,7 @@ BLOCKS = {  # type: (required fields, optional fields)
     "embed_html": (["html"], []),
     # link_label/link_url are the "All services →" link in the section header.
     "post_list": (["post_type"], ["heading", "eyebrow", "term", "limit", "top_level",
-                                  "link_label", "link_url"]),  # queried at render time; top_level=true → parents only
+                                  "link_label", "link_url", "per_row"]),  # queried at render time; top_level=true → parents only
     "spec_table": (["rows"], ["heading"]),  # rows: [{k, v}]
     # A term and its description on a ruled row -- the design's "ZFS features, in plain terms".
     # Deliberately spec_table's shape: same repeater, same labels, only the markup differs. Values are
@@ -65,7 +65,7 @@ EDITOR = {
                 "url": "url", "cta_url": "url", "button_url": "url", "limit": "number",
                 "top_level": "checkbox", "post_type": "post_type", "kind": "kind",
                 "cta2_url": "url", "link_url": "url", "dark": "checkbox",
-                "count_up": "checkbox", "fx": "choice", "height": "choice"},
+                "count_up": "checkbox", "fx": "choice", "height": "choice", "per_row": "choice"},
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
     "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label", "fx", "count_up"],
               "spec_table": ["k", "v"], "definitions": ["k", "v"], "points": ["text"],
@@ -80,7 +80,7 @@ EDITOR = {
                "cta2_label": "Second button text", "cta2_url": "Second button link",
                "link_label": "Header link text", "link_url": "Header link",
                "dark": "Dark background",
-               "count_up": "Count up from zero", "fx": "Effect"},
+               "count_up": "Count up from zero", "fx": "Effect", "per_row": "Items per row"},
     "kinds": ["contact", "quote", "career"],
     # options for the "choice" widget, keyed by field: [value, label] pairs, so the empty one can
     # say what it means. blocks.py FX is the whitelist these values are checked against.
@@ -88,7 +88,10 @@ EDITOR = {
                        ["rise", "Fades in as the page loads"],
                        ["gradient", "Gradient across the big text"],
                        ["sweep", "Highlighter sweep behind the headings"]],
-                "height": [["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["huge", "Extra large"]]},
+                "height": [["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["huge", "Extra large"]],
+                "per_row": [["", "As many as fit the width"],
+                            ["even", "Even rows, worked out from how many there are"]]
+                           + [[str(n), f"{n} per row"] for n in range(2, 9)]},
     # order the section picker offers them in, commonest first (Jinja's tojson sorts dict keys,
     # so BLOCKS' own order does not survive the trip to the browser)
     "order": ["hero", "rich_text", "cards", "columns", "spacer", "divider", "cta", "faq", "stats",
@@ -176,7 +179,7 @@ def layout(name):
 # verdict, stored rather than recomputed so every editor of a page agrees about it.
 _NON_TEXT_KEYS = {"url", "cta_url", "cta2_url", "button_url", "link_url", "icon", "image", "media_id", "file_media_id",
                   "post_type", "term", "limit", "kind", "top_level", "dark", "type", "widths", "align", "align_box", "width",
-                  "tone", "fx", "count_up", "height", "_id", "_rich"}
+                  "tone", "fx", "count_up", "height", "per_row", "_id", "_rich"}
 EDITOR["scalars"] = sorted(_NON_TEXT_KEYS)
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
 _TEXT_ORDER = ("eyebrow", "heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company",
@@ -346,7 +349,8 @@ def render_blocks(blocks, edit=False, path="0"):
                 # pt_slug comes from the DB lookup, never from b["data"], so the class it becomes in
                 # the template cannot be anything an editor typed.
                 posts, pt_slug = _post_list(b["data"])
-                extra = {"posts": posts, "pt_slug": pt_slug}
+                # cols is computed here, never taken from the data, so the class is ours
+                extra = {"posts": posts, "pt_slug": pt_slug, "cols": _cols(b["data"], len(posts))}
             elif b["type"] == "warranty_check":
                 extra = {"found": None if edit else _warranty()}  # the admin canvas gets the bare form, never a lookup
             elif b["type"] == "columns":
@@ -492,6 +496,30 @@ def blocks_md(blocks, h1=True):
         elif t == "divider":
             out.append("---")   # the join is "\n\n", so this can only ever be a thematic break
     return "\n\n".join(x for x in out if x and x.strip())
+
+
+def even_cols(n, lo=4, hi=8):
+    """How many per row splits n items into rows of the same length -- or as close as n allows.
+
+    An exact divisor wins (14 -> 7, two rows of seven); the largest one, so 16 is 8+8 rather than
+    4+4+4+4. When n has no divisor in range (13 is prime) the count leaving the fullest last row
+    wins instead, which is 7 -> 7+6. Fewer than hi items are one row of themselves.
+    `-n % c` is the shortfall in the last row, 0 when c divides n; -c breaks the tie upward.
+    """
+    if n <= hi:
+        return n or None
+    return min(range(lo, hi + 1), key=lambda c: (-n % c, -c))
+
+
+def _cols(data, n):
+    """The editor's "Items per row" as a column count, or None for the width-driven default.
+
+    Parsed here rather than trusted, because it reaches the template as a class name.
+    """
+    v = str(data.get("per_row") or "").strip()
+    if v == "even":
+        return even_cols(n)
+    return int(v) if v.isdigit() and 2 <= int(v) <= 8 else None
 
 
 def _post_list(data):
