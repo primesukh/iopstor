@@ -413,9 +413,13 @@ The publish date is in **Indian time**, and so is every date and time shown anyw
 
 The **Media** section is the shared library for every image, logo and PDF.
 
-1. Go to Media and upload the file.
-2. Give it **alt text** — a short description of what is in the picture. This is what a blind visitor's screen reader reads out, and it is one of the things Google looks at. Please do not skip it.
+1. Go to Media and press **Browse**. You can pick **as many files as you like in one go** — hold Ctrl (⌘ on a Mac) as you click them, or drag a box round the lot — and press **Upload** once. Everything together has to fit in 20 MB, so a big batch of photographs may need splitting into two or three goes; if it is too much the site says so and nothing is lost.
+2. Give each one **alt text** — a short description of what is in the picture. This is what a blind visitor's screen reader reads out, and it is one of the things Google looks at. Click the file in the grid and the box is on the right. Please do not skip it.
 3. The file is then selectable anywhere the site asks for an image.
+
+If one file in a batch is a kind the site does not take — a Word document, say — the others still go up. The message at the top tells you how many arrived and names the one that did not.
+
+**Deleting several at a time.** Every file in the grid has a small tick box in its top left corner. Tick the ones you want rid of — they turn pink so you can see what you have chosen — and press **Delete selected** underneath. The button stays grey until you have ticked something, and asks you to confirm before anything goes. You can still delete one at a time from the panel on the right, exactly as before. Deleting is permanent: anything on the site using that picture will lose it, and it does not come back from Activity.
 
 **Putting a PDF on a page.** Press `/` on an empty line and choose **PDF**. The section drops in; hover it, press **⚙**, and pick the PDF from the list — or press **Choose file** to upload one on the spot. Only PDFs are offered there, so you cannot pick a photo by mistake. Visitors then read it without leaving the page — scrolling, zooming and printing with their browser's own controls — and there is a **Download the PDF** button under it, which saves the file to their computer under the name it was uploaded with. That button is also how people on a phone read it: phone browsers usually will not show a PDF inside a page, so they download it and open it from there. Give the section a heading by typing straight onto the page above the viewer.
 
@@ -428,11 +432,11 @@ picture you have already used stays in the visitor's browser for a long time, so
 on a second visit; if you ever replace a picture, upload it as a new file rather than expecting an old
 address to change.
 
-**You do not have to go to Media first.** Anywhere a page asks for a picture — a Hero image, an Image or Gallery section, the Featured image in the panel on the right — there is a **Choose file** button right there. Pick a file and it uploads straight away, gets used on the spot, and joins the Media library so you can reuse it elsewhere. A small thumbnail next to it shows what is currently selected. Uploads made this way have no alt text yet, so add it in the Media section afterwards for anything important.
+**You do not have to go to Media first.** Anywhere a page asks for a picture — a Hero image, an Image or Gallery section, the Featured image in the panel on the right — there is a **Choose file** button right there. Pick a file and it uploads straight away, gets used on the spot, and joins the Media library so you can reuse it elsewhere. A small thumbnail next to it shows what is currently selected. No upload anywhere on the site asks for alt text at the moment it happens — one box above a batch of five could only ever describe one of them — so add it in the Media section afterwards for anything important.
 
 ---
 
-**Adding a lot of files at once.** Uploading forty partner logos one at a time through this screen is nobody's idea of a good afternoon. Put the folder somewhere on the server and ask a developer to run `flask import-media <folder>` — everything lands in Media exactly as if you had uploaded it, with a first draft of the alt text taken from each filename. It skips anything already there, so it is safe to run twice.
+**Adding a very large number of files.** A batch at a time covers most of it, but forty partner logos is still several trips to the 20 MB limit. Put the folder somewhere on the server and ask a developer to run `flask import-media <folder>` — everything lands in Media exactly as if you had uploaded it, with a first draft of the alt text taken from each filename. It skips anything already there, so it is safe to run twice.
 
 ---
 

@@ -1,6 +1,7 @@
 {% extends "admin/base.html" %}{% block title %}Media{% endblock %}
 {% block content %}
 {% set sel = result['items'] | selectattr('id', 'equalto', request.args.get('pick', 0)|int) | first %}
+{% set cap = config.MAX_CONTENT_LENGTH // 1048576 %}
 <div class="adm-head"><div><h1>Media <small>{{ result.total }}</small></h1>
   <p class="page-sub">Pictures and PDFs you can use anywhere on the site.</p></div></div>
 <div class="media-grid">
@@ -8,21 +9,30 @@
     <form method="post" enctype="multipart/form-data" class="drop-zone">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <p class="dz-title">Choose files to upload</p>
-      <p class="dz-hint">JPG, PNG, SVG, PDF &middot; up to 25 MB</p>
-      <p><input type="file" name="file" required></p>
-      <p><label>Alt text <input type="text" name="alt" placeholder="What is in the picture?"></label></p>
+      <p class="dz-hint">JPG, PNG, WEBP, GIF, SVG, PDF &middot; pick as many as you like, up to {{ cap }} MB altogether</p>
+      <p><input type="file" name="file" multiple required></p>
       <p><button type="submit">Upload</button></p>
+      <p class="dz-hint">Describe each picture afterwards — click it below and fill in its alt text.</p>
     </form>
-    <div class="tiles-m">
-      {% for m in result['items'] %}
-      <a class="m-tile{{ ' on' if sel and sel.id == m.id }}" href="?page={{ page }}&amp;pick={{ m.id }}">
-        <span class="m-prev">{% if m.mime.startswith('image/') %}<img src="{{ m.url }}" alt="{{ m.alt }}" loading="lazy">{% else %}<span class="m-pdf">PDF</span>{% endif %}</span>
-        <span class="m-meta"><span class="m-name">{{ m.filename }}</span>
-          <span class="m-sub">{{ (m.size/1024)|round(1) }} KB
-            <span class="{{ 'ok' if m.alt else 'no' }}">{{ 'alt ✓' if m.alt else 'no alt' }}</span></span></span>
-      </a>
-      {% else %}<p class="empty-box">No uploads yet.</p>{% endfor %}
-    </div>
+    <form method="post" action="{{ url_for('admin_ui.media_delete', **request.args) }}"
+          onsubmit="return confirm('Delete the ticked files? Anything using them will lose them.')">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="tiles-m">
+        {% for m in result['items'] %}
+        <div class="m-tile{{ ' on' if sel and sel.id == m.id }}">
+          <label class="m-pick"><input type="checkbox" name="ids" value="{{ m.id }}" aria-label="Select {{ m.filename }}"></label>
+          <a class="m-open" href="?page={{ page }}&amp;pick={{ m.id }}">
+            <span class="m-prev">{% if m.mime.startswith('image/') %}<img src="{{ m.url }}" alt="{{ m.alt }}" loading="lazy">{% else %}<span class="m-pdf">PDF</span>{% endif %}</span>
+            <span class="m-meta"><span class="m-name">{{ m.filename }}</span>
+              <span class="m-sub">{{ (m.size/1024)|round(1) }} KB
+                <span class="{{ 'ok' if m.alt else 'no' }}">{{ 'alt ✓' if m.alt else 'no alt' }}</span></span></span>
+          </a>
+        </div>
+        {% else %}<p class="empty-box">No uploads yet.</p>{% endfor %}
+      </div>
+      {% if result['items'] %}<p class="m-bulk"><button type="submit" class="danger">Delete selected</button>
+        <small class="muted">Tick the box on any file above.</small></p>{% endif %}
+    </form>
     <p class="pager">{% if page > 1 %}<a class="btn secondary" href="?page={{ page-1 }}">Previous</a>{% endif %} {% if has_next %}<a class="btn secondary" href="?page={{ page+1 }}">Next</a>{% endif %}</p>
   </div>
   <aside class="m-panel">
@@ -37,8 +47,9 @@
       <p><button type="submit">Save alt text</button></p>
     </form>
     <label>Public address <input class="mono" value="{{ sel.url if '://' in sel.url else config.SITE_URL + sel.url }}" readonly onclick="this.select()"></label>
-    <form method="post" action="{{ url_for('admin_ui.media_delete', pk=sel.id) }}" onsubmit="return confirm('Delete this file? Anything using it will lose it.')">
-      <input type="hidden" name="csrf" value="{{ csrf }}"><p><button type="submit" class="danger">Delete</button></p>
+    <form method="post" action="{{ url_for('admin_ui.media_delete', **request.args) }}" onsubmit="return confirm('Delete this file? Anything using it will lose it.')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="ids" value="{{ sel.id }}">
+      <p><button type="submit" class="danger">Delete</button></p>
     </form>
     {% else %}<p class="muted">Pick a file to see its details and edit its alt text.</p>{% endif %}
   </aside>

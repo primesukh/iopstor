@@ -1,4 +1,5 @@
 """Pure logic — no Supabase needed."""
+import io
 import ipaddress
 import json
 import pathlib
@@ -791,6 +792,84 @@ def test_media_public_address_is_one_url_whichever_shape_the_row_is_in(app, clie
     assert f'value="{old}"' in body                       # still on Storage: shown as it stands
     body = client.get("/admin/media?pick=2").get_data(as_text=True)
     assert 'value="http://test/media/2026/09/b.png"' in body   # migrated: SITE_URL in front, once
+
+
+def _media_screen(monkeypatch, client, rows):
+    """Everything /admin/media touches outside the route itself: a signed-in admin, the caches the
+    sidebar reads, and a query object that is built and handed straight to the stubbed paginate()."""
+    from iopstor import admin_ui, db
+
+    monkeypatch.setattr(admin_ui, "current_user", lambda: {"id": "u1", "email": "e@x.com", "role": "admin"})
+    monkeypatch.setattr(db, "post_types", lambda: [])
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "admin_counts", lambda: {})
+    monkeypatch.setattr(db, "paginate", lambda q, page, per: {"items": rows, "total": len(rows)})
+    asked = {}
+
+    class Q:
+        def __getattr__(self, name):
+            def call(*a, **k):
+                if name == "in_":
+                    asked[a[0]] = a[1]
+                return self
+            return call
+
+    monkeypatch.setattr(db, "table", lambda *a, **k: Q())
+    with client.session_transaction() as sess:
+        sess["access_token"] = "t"
+        sess["csrf"] = "x"
+    return asked
+
+
+def test_a_rejected_file_in_a_batch_does_not_cost_the_editor_the_good_ones(app, client, monkeypatch):
+    """Several files now arrive in one request, so a bad type in the middle has to leave the rest
+    uploaded and name the one that failed -- failing the whole batch would punish the wrong files."""
+    from iopstor import admin_ui
+    from werkzeug.exceptions import BadRequest
+
+    tried = []
+
+    def fake_save(fs, user_id=None):
+        tried.append(fs.filename)
+        if fs.filename.endswith(".txt"):
+            raise BadRequest("file type not allowed")
+        return {"id": len(tried), "filename": fs.filename, "alt": ""}
+
+    monkeypatch.setattr(admin_ui, "save_upload", fake_save)
+    _media_screen(monkeypatch, client, [])
+
+    body = client.post("/admin/media", data={
+        "csrf": "x",
+        "file": [(io.BytesIO(b"a"), "a.png"), (io.BytesIO(b"n"), "notes.txt"), (io.BytesIO(b"b"), "b.png")],
+    }, content_type="multipart/form-data", follow_redirects=True).get_data(as_text=True)
+
+    assert tried == ["a.png", "notes.txt", "b.png"]   # the reject did not stop the one behind it
+    assert "Uploaded 2 files." in body
+    assert "notes.txt" in body and "file type not allowed" in body
+    assert "a.png" not in body                        # a success is a count, not a list to read
+
+
+def test_media_delete_takes_the_ticked_files_and_nothing_else(app, client, monkeypatch):
+    """One route serves both Delete buttons -- the panel's single id and the grid's tick boxes. An id
+    that is not a number can only come from an edited form, so it is dropped before the query."""
+    from iopstor import admin_ui, db
+
+    rows = [{"id": n, "key": f"2026/09/{n}.png", "url": f"/media/2026/09/{n}.png",
+             "filename": f"{n}.png", "mime": "image/png", "alt": "", "size": 10} for n in (1, 2, 3)]
+    gone = []
+    monkeypatch.setattr(admin_ui, "delete_media", lambda m: gone.append(m["id"]))
+    asked = _media_screen(monkeypatch, client, rows)
+    monkeypatch.setattr(db, "rows", lambda q: [r for r in rows if r["id"] in asked.get("id", [])])
+
+    body = client.post("/admin/media/delete", data={"csrf": "x", "ids": ["1", "3", "oops"]},
+                       follow_redirects=True).get_data(as_text=True)
+    assert asked["id"] == [1, 3]      # 'oops' never reached the query
+    assert gone == [1, 3]
+    assert "Deleted 2 files." in body
+
+    gone.clear()
+    body = client.post("/admin/media/delete", data={"csrf": "x"}, follow_redirects=True).get_data(as_text=True)
+    assert gone == [] and "Tick the files you want to delete first." in body
 
 
 def test_display_name_falls_back_to_the_email():
