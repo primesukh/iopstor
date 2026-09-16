@@ -560,17 +560,24 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pl-case_study .chips{display:flex}
 .pl-case_study .chip-industry{background:rgba(66,115,184,.1);border-color:transparent;color:var(--blue-hover)}
 .pl-partner .cards{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
-/* On a page the partner list is a logo strip -- no card, no name, just the marks in a row, greyed
-   back until you point at one. The archive (.arch-body) keeps the cards, which is where the names
-   and roles belong. */
+/* On a page the partner list is a logo strip -- no card, no name, just the marks in a row, in the
+   colour the client's own files carry. The mock greys them back and fades them to .7; the client
+   asked for full colour instead (2026-09-16), so do not restore the filter from it. The archive
+   (.arch-body) keeps the cards, which is where the names and roles belong.
+   The hover needs its own rule: .card, not a.card -- a partner has no page, so the strip is a row
+   of <div>s and the lift in `a.card:hover` above cannot reach one. The mark grows instead of
+   lifting: a logo has no card edge to rise off, so a scale reads where a 2px nudge did not. The
+   ease-out curve runs the growth almost all the way in the first half of .3s and settles, which is
+   what stops it looking like a snap. It is decoration, not an affordance (there is nowhere to
+   click), which is why it is a size change and not a colour or border one.
+   transform-origin is the default centre, so the mark grows in place and the grid never reflows;
+   `position:relative` only raises the growing tile above its neighbours' edges while it is big. */
 .pl-partner:not(.arch-body){border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:56px 0}
 .pl-partner:not(.arch-body) .sec-head{justify-content:center;margin-bottom:28px}
 .pl-partner:not(.arch-body) .eyebrow{color:var(--muted);text-align:center;margin:0}
 .pl-partner:not(.arch-body) .cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;align-items:center}
-.pl-partner:not(.arch-body) .card{height:64px;display:flex;align-items:center;justify-content:center;padding:10px 16px;border:0;background:none;border-radius:0;filter:grayscale(1);opacity:.7;transition:filter .2s,opacity .2s}
-/* .card, not a.card: a partner has no page, so the strip is a row of <div>s. The colour coming
-   back on hover is decoration, not an affordance -- it should survive that. */
-.pl-partner:not(.arch-body) .card:hover{filter:none;opacity:1;transform:none;border:0}
+.pl-partner:not(.arch-body) .card{height:64px;display:flex;align-items:center;justify-content:center;padding:10px 16px;border:0;background:none;border-radius:0;transition:transform .3s cubic-bezier(.2,.7,.3,1)}
+.pl-partner:not(.arch-body) .card:hover{transform:scale(1.14);position:relative;z-index:1}
 .pl-partner:not(.arch-body) .card h3,.pl-partner:not(.arch-body) .card p{display:none}
 .pl-partner:not(.arch-body) .card-img{height:100%;margin:0}
 .pl-partner:not(.arch-body) .card-img img{max-height:100%;max-width:100%;object-fit:contain}
@@ -583,6 +590,29 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pl-post .card .date{margin:20px 24px 6px}
 .pl-post .card h3{margin:0 24px 8px}
 .pl-post .card p{margin:0 24px 24px}
+
+/* "Items per row" on an Automatic list. The count is worked out in blocks.py (`even_cols()` when the
+   editor picks Even rows) and arrives as a class, so nothing an editor typed reaches a style
+   attribute -- the same reason `tone` and `width` are whitelists. Two classes plus .cards matches
+   the specificity of `.pl-partner:not(.arch-body) .cards` above, so this group must stay below it.
+   `minmax(0,1fr)` and not the per-type minimum: a fixed count only fits if the tracks may shrink.
+   760px is where it starts, chosen by looking: at 834 seven logos across are smaller but perfectly
+   legible, and 7 + 7 beats the 5 + 5 + 4 that wrapping by width gives there. Below it the strip
+   wraps by width again -- at 390 that is two per row, which for fourteen is seven even rows anyway.
+   ponytail: one breakpoint for every count. A list of 8 could hold its row lower than one of 7;
+   if that ever matters, give the class its own floor rather than moving this one. */
+@media(min-width:760px){
+  .pl.pl-cols-2 .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .pl.pl-cols-3 .cards{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .pl.pl-cols-4 .cards{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .pl.pl-cols-5 .cards{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .pl.pl-cols-6 .cards{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .pl.pl-cols-7 .cards{grid-template-columns:repeat(7,minmax(0,1fr))}
+  .pl.pl-cols-8 .cards{grid-template-columns:repeat(8,minmax(0,1fr))}
+  /* ...but not inside a column: a fixed count in half the width squashes the tracks, and a
+     column is already the editor choosing a width. One rule, 4 classes, so it beats the seven. */
+  .column .pl[class*="pl-cols-"] .cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+}
 
 /* An archive holds however many posts happen to be published, so its grid is auto-FILL: the empty
    tracks stay, and one blog post keeps a tile's width instead of stretching into a billboard across
@@ -778,7 +808,7 @@ a.chip:hover{border-color:var(--blue);color:var(--blue)}
    frame, which is the hidden one -- so the slides are stood down explicitly and the first picture
    is simply left showing. */
 @media(prefers-reduced-motion:reduce){
-  a.card:hover{transform:none}
+  a.card:hover,.pl-partner:not(.arch-body) .card:hover{transform:none}
   .hero-text,.hero-media,.hero-media::before,.hero-media>img,.hero-slides,.site-nav .sub,.mega,.mega-pane,.nav-toggle:checked~.site-nav{animation:none!important}
   .hero-slide{animation:none!important;opacity:0}
   .hero-slide:first-child{opacity:1}

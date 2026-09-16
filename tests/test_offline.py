@@ -174,6 +174,29 @@ def test_layouts_expand_and_validate():
     assert b[0]["data"]["heading"] != "changed"  # seeds must be copied, not shared
 
 
+def test_even_rows_pick_a_count_that_divides_or_comes_closest():
+    """"Items per row -> Even rows" is the fix for a logo strip whose last line was half empty:
+    fourteen partners laid out 8 + 6. Nothing here touches the database."""
+    from iopstor.blocks import _cols, even_cols
+
+    assert even_cols(14) == 7          # the case that started it: 7 + 7, not 8 + 6
+    assert even_cols(16) == 8          # exact divisor, and the LARGEST one -- not 4 + 4 + 4 + 4
+    assert even_cols(20) == 5          # 5 divides, 8 would leave 8 + 8 + 4
+    assert even_cols(13) == 7          # prime: no exact split, so the fullest last row wins (7 + 6)
+    assert even_cols(6) == 6           # fewer than a row holds is one row of itself
+    assert even_cols(0) is None        # nothing to lay out -> no class at all
+    for n in range(9, 60):             # it always picks the emptiest-last-row count 4..8 allows,
+        c = even_cols(n)               # which for 22 is 8 (8+8+6) -- no count in range does better
+        assert (-n % c) == min(-n % k for k in range(4, 9)), (n, c)
+
+    # the editor's value is parsed, never trusted: it lands in a class name
+    assert _cols({"per_row": "even"}, 14) == 7
+    assert _cols({"per_row": "5"}, 14) == 5
+    assert _cols({}, 14) is None                      # unset -> the width decides, as before
+    assert _cols({"per_row": "99"}, 14) is None       # out of the 2..8 range the CSS defines
+    assert _cols({"per_row": "1; }"}, 14) is None     # anything typed is simply not a count
+
+
 def test_menu_rows_rebuild_into_one_level_of_children():
     """The menus screen posts flat rows and a level per row; this is the only place that shape
     turns back into what base.html renders."""

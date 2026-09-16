@@ -277,7 +277,8 @@ def home_blocks(media=lambda name: None):
         {"type": "columns", "data": {"heading": "What our clients say", "cols": [
             [{"type": "testimonial", "data": {"quote": TESTIMONIALS[0][0], "author": TESTIMONIALS[0][1], "role": TESTIMONIALS[0][2]}}],
             [{"type": "testimonial", "data": {"quote": TESTIMONIALS[1][0], "author": TESTIMONIALS[1][1], "role": TESTIMONIALS[1][2]}}]]}},
-        {"type": "post_list", "data": {"post_type": "partner", "limit": 24, "eyebrow": "Technology partners"}},
+        {"type": "post_list", "data": {"post_type": "partner", "limit": 24, "eyebrow": "Technology partners",
+                                       "per_row": "even"}},  # a logo wall with a half-empty last row reads as broken
         {"type": "cta", "data": {"heading": "Don't just store data. Protect it.",
                                  "text": "Tell us the workload and the user count. We come back with a configuration and a one-time price, "
                                          "with no hidden or repetitive costs.",
@@ -416,7 +417,7 @@ def run_seed():
                 '</dl>'
                 '<div class="map-ph">Replace with an Embedded code section holding the Google Maps embed</div>'}}],
             [{"type": "contact_form", "data": {"kind": "quote", "heading": "Request a quote"}}]]}}])
-    _post(page, "Technology Partners", blocks=[{"type": "hero", "data": {"heading": "Technology Partners"}}, {"type": "post_list", "data": {"post_type": "partner", "limit": 50}}])
+    _post(page, "Technology Partners", blocks=[{"type": "hero", "data": {"heading": "Technology Partners"}}, {"type": "post_list", "data": {"post_type": "partner", "limit": 50, "per_row": "even"}}])
     logo = db.one(db.table("media").select("url").eq("filename", "iopstor_logo-png1.png"))
     if logo:
         SETTINGS["logo_url"] = logo["url"]
