@@ -565,15 +565,19 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
    asked for full colour instead (2026-09-16), so do not restore the filter from it. The archive
    (.arch-body) keeps the cards, which is where the names and roles belong.
    The hover needs its own rule: .card, not a.card -- a partner has no page, so the strip is a row
-   of <div>s and the lift in `a.card:hover` above cannot reach one. Same -2px as every other card
-   on the site, so the strip moves the way the rest of it does. It is decoration, not an affordance
-   (there is nowhere to click), which is why it is a lift and not a colour or border change. */
+   of <div>s and the lift in `a.card:hover` above cannot reach one. The mark grows instead of
+   lifting: a logo has no card edge to rise off, so a scale reads where a 2px nudge did not. The
+   ease-out curve runs the growth almost all the way in the first half of .3s and settles, which is
+   what stops it looking like a snap. It is decoration, not an affordance (there is nowhere to
+   click), which is why it is a size change and not a colour or border one.
+   transform-origin is the default centre, so the mark grows in place and the grid never reflows;
+   `position:relative` only raises the growing tile above its neighbours' edges while it is big. */
 .pl-partner:not(.arch-body){border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:56px 0}
 .pl-partner:not(.arch-body) .sec-head{justify-content:center;margin-bottom:28px}
 .pl-partner:not(.arch-body) .eyebrow{color:var(--muted);text-align:center;margin:0}
 .pl-partner:not(.arch-body) .cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;align-items:center}
-.pl-partner:not(.arch-body) .card{height:64px;display:flex;align-items:center;justify-content:center;padding:10px 16px;border:0;background:none;border-radius:0;transition:transform .2s}
-.pl-partner:not(.arch-body) .card:hover{transform:translateY(-2px)}
+.pl-partner:not(.arch-body) .card{height:64px;display:flex;align-items:center;justify-content:center;padding:10px 16px;border:0;background:none;border-radius:0;transition:transform .3s cubic-bezier(.2,.7,.3,1)}
+.pl-partner:not(.arch-body) .card:hover{transform:scale(1.14);position:relative;z-index:1}
 .pl-partner:not(.arch-body) .card h3,.pl-partner:not(.arch-body) .card p{display:none}
 .pl-partner:not(.arch-body) .card-img{height:100%;margin:0}
 .pl-partner:not(.arch-body) .card-img img{max-height:100%;max-width:100%;object-fit:contain}
