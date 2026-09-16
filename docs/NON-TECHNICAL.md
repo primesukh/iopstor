@@ -71,6 +71,7 @@ Content is organised into **types**. Each type has its own list in the admin sid
 | **Case Studies** | Customer stories | `/case-studies/lks` |
 | **Events** | Trade shows, launches, collaborations | `/events/broadcast-2018` |
 | **Technology Partners** | Partner companies and their logos | *(no page of its own — see below)* |
+| **Testimonials** | What a customer said about you | *(no page of its own — see below)* |
 | **Datasheets** | Downloadable PDFs | `/datasheets/flash-array` |
 | **Products** | Items that can be paid for online | `/products/starter-array` |
 
@@ -87,6 +88,37 @@ Some types ask for a few extra details. A Case Study asks for Client, Challenge,
 - **Services** (`/services`) is one wide row per group, with every sub-service beside it as a button a visitor can click straight through to.
 - **Events** (`/events`) is a list with the year and month on a black tile at the left of each row.
 - **Datasheets** (`/datasheets`) is a list of rows with a PDF mark and a **Download** button.
+
+**Testimonials are added like anything else.** Open **Testimonials** in the sidebar, click **Add new**, and fill in
+as much or as little as you have:
+
+- **Title** — the person's name. This is the only thing you must fill in.
+- **What they said** — the quote itself, in their words. This is the box that would say *Summary* on any other kind
+  of content; on a testimonial it is the quote, so it says so.
+- **Featured image** — their photo. It is shown as a small round portrait. Leave it out and a plain grey circle
+  takes its place, which is what most of them will have.
+- **Job title** and **Company** — either, both or neither. If you fill in only one, only that one shows, with no
+  stray comma left behind.
+- **Stars out of 5** — type a whole number from 1 to 5. Leave it empty and the card simply has no stars, and closes
+  up the space they would have taken. If you type something silly like 9, the card shows five, not nine.
+
+Set the testimonial to **Published** and it appears on the home page straight away. Nothing else to arrange: the
+row shows the newest twelve, and it grows as you add to it. If you ever want more or fewer than twelve, that is the
+**Limit** box on the section itself — open the home page, click the testimonials section and change the number.
+
+**They have no pages of their own**, for the same reason partners do not — a quote is something shown on our pages,
+not somewhere a visitor goes. The admin list shows *"no page of its own"* where the web address usually goes. All of
+them together are at `/testimonials` if you ever want to link to the full set.
+
+**On the home page they slide.** The row drifts sideways on its own, one card at a time, and:
+
+- **it stops the moment somebody points at it**, so nobody ever loses their place mid-sentence;
+- the **‹ and › buttons** step it one card, and the **dots** underneath jump straight to a position;
+- a visitor can also just **scroll it with the mouse wheel, drag it, or swipe it on a phone**;
+- for anyone whose computer is set to reduce motion, it **does not drift at all** — the buttons still work.
+
+You will see the cards in the page editor too, but they will not drift there and there are no arrows: things moving
+around while you are trying to write is unhelpful, so the editor shows them still.
 
 **Technology Partners have no pages.** A partner is a logo shown on other pages, so there is nothing
 to read on a page of its own: the logos in the strip are not clickable, and there is no
@@ -824,6 +856,20 @@ paragraph of writing instead, use the **—** button on the writing toolbar. The
 **Someone left the company.** An admin should delete their user account. This removes both their login and their access.
 
 **I deleted something by mistake.** Deletion is permanent. Set things to *Draft* instead when you only want them off the site.
+
+**The home page testimonials look different, and they move.** The two quotes that used to sit side by side are now
+**Testimonials** in the sidebar, and the home page shows every published one in a row that slides. The two that were
+there before are already in the list — nothing was lost. Add a third and it appears in the row on its own.
+
+**A testimonial I added is not on the home page.** Check it is set to **Published** rather than *Draft*, and that
+*Publish date* is not in the future. If it still does not show, it is almost certainly the website remembering the
+old version of the page for a minute — wait a minute and reload.
+
+**On a testimonial, where does the quote go?** In the big box marked **What they said**. On every other kind of
+content that box is called *Summary*; on a testimonial it is the quote itself.
+
+**The sliding row is annoying me while I am editing.** It does not slide in the page editor — only on the live
+website. If it is moving, you are looking at the site rather than the editor.
 
 ---
 

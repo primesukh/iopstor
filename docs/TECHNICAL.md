@@ -46,7 +46,8 @@ iopstor/stress.py     the owner-only load simulator behind /admin/stress: fires 
                       a target, progress in a sqlite file on /dev/shm. Stdlib only (urllib, threading). §12
 iopstor/cli.py        flask migrate | seed | import-media | create-admin
 iopstor/templates/    base/post/archive/404, blocks/<type>.html, admin/*.html
-iopstor/static/       site.css (the whole public theme) + admin.css (admin extras, layered on top)
+iopstor/static/       site.css (the whole public theme) + site.js (the sliding row, and nothing else)
+                      + admin.css (admin extras, layered on top)
                       + canvas.css (editor chrome), favicon.svg, vendor/sortable.min.js
 migrations/           0000_bootstrap.sql (run once by hand) + NNNN_name.sql applied by `flask migrate`
 tests/                test_offline.py always runs; the rest need a live Supabase and skip without it
@@ -96,7 +97,7 @@ Note `0008`'s own header still describes the pre-guard behaviour. It is applied,
 
 **Prices are rupees, and only rupees.** `rupees()` is a Jinja global in `__init__.py` beside `media_url`; `{:,}` groups in threes all the way up and would print `12,50,000` as `1,250,000`, so it groups the last three digits and then twos. Anything non-numeric passes through, so a price typed as "on request" still prints. The three display sites (`post.html`'s Buy button, `checkout.html`'s total, `_card.html`'s card foot) all call it. **A price is never a detail tile.** `post.html` rejects the `price` key from the meta strip and puts it on the Buy button instead (`Buy · ₹ 10,000`), the same pairing `_card.html` makes in an archive card's footer: the price is the ask, not a fact about the product the way SKU is, and showing it twice on one page made a grey band out of a single number. `seo.py` and `public.py` keep the literal `"INR"` — a currency *code* for `priceCurrency` and the payments row is not display. The per-product `currency` field and the never-read `currency` setting under Payments are both gone. `posts.blocks` is the ordered page content, `[{type, data}, ...]` — flat, except a `columns` block, whose `data.cols` holds one such list per column (one level deep, see §6).
 
-**Seeded types:** `page` (prefix `""`), `post` (`blog`, BlogPosting), `service` (`services`, hierarchical, Service), `case_study` (`case-studies`, Article), `event` (`events`, Event), `partner` (`partners`, Organization), `datasheet` (`datasheets`), `product` (`products`).
+**Seeded types:** `page` (prefix `""`), `post` (`blog`, BlogPosting), `service` (`services`, hierarchical, Service), `case_study` (`case-studies`, Article), `event` (`events`, Event), `partner` (`partners`, Organization), `datasheet` (`datasheets`), `product` (`products`), `testimonial` (`testimonials`, `has_pages=false`, `0014`).
 
 ---
 
@@ -229,7 +230,7 @@ would be unreachable, and so would a hierarchical page whose top-level slug is `
 
 ### 5.1 Checkout
 
-The design's Buy flow is a modal. The public site ships no JavaScript, so it is a page instead — which the handoff offers as the alternative. It is handled **inside the catch-all**, not as its own rule: a rule shaped `/<a>/<b>/checkout` would have to out-rank `/<path:path>`, and reading the last segment where the resolver already has the post type is six lines. A trailing `checkout` under a type's prefix resolves the segment before it, and 404s unless that post is live, sits at that exact path, and has a `meta.price`.
+The design's Buy flow is a modal. The public site's one script (`site.js`) drives the sliding row and nothing else, so checkout is a page instead — which the handoff offers as the alternative. It is handled **inside the catch-all**, not as its own rule: a rule shaped `/<a>/<b>/checkout` would have to out-rank `/<path:path>`, and reading the last segment where the resolver already has the post type is six lines. A trailing `checkout` under a type's prefix resolves the segment before it, and 404s unless that post is live, sits at that exact path, and has a `meta.price`.
 
 `POST /api/v1/payments/checkout` answers both callers: a JSON body still gets JSON and a `201`, and a plain form post gets a `303` to the gateway's `redirect_url` — the same `request.is_json` split `/api/v1/leads` already uses for `_form_redirect()`.
 
@@ -287,6 +288,14 @@ proposing exactly that on `pdf`) and `sp-*` is emitted for whoever declares it. 
 editor it is a section nobody can see to hover, drag or delete.
 
 `post_list` gained `eyebrow`, `link_label` and `link_url` (the "All services →" link in a section header), and **`per_row`** (2026-09-16), and `render_blocks()` hands its template a **`pt_slug`** extra alongside `posts` and **`cols`**. `per_row` is a `choice`: empty keeps the width-driven `auto-fit` every list had before, `even` asks `even_cols()` to work the count out from `len(posts)`, and `2`–`8` pin it. `even_cols()` takes the largest exact divisor in 4–8 (14 → 7, 16 → 8 rather than 4×4) and, when there is none, the count leaving the fullest last row (13 → 7, i.e. 7 + 6); fewer items than a row holds are one row of themselves. The number reaches the template as `cols` and becomes `pl-cols-<n>` on the section — **computed in `_cols()`, never read from the block's data**, which is why it is safe in a class name, the same rule `pt_slug` follows. `per_row` is in `_NON_TEXT_KEYS`, so it neither leaks into `llms-full.txt` nor gets co-edited as prose. The CSS applies the fixed track count only above **760px** and never inside a `.column`: a fixed count in half the width squashes the tracks, and a phone has to wrap by width. That becomes `pl-<slug>` on the section, and `site.css` styles one card per post type from it — the number for services, the logo for partners, the 16:9 picture and date for blog posts, the industry/solution chips for case studies. One template, the variants in CSS. `pt_slug` comes from the resolved `post_types` row, never from the block's own data, so it is safe in a class name.
+
+**`rail` (2026-09-16) is the third computed extra**, and it is `pt_slug == "testimonial"` — a `post_list` of
+testimonials renders as a sliding row rather than a grid. It is decided in `render_blocks()` beside `cols` and for
+the same reason: it depends on the resolved type, so it can never be something an editor typed. It adds `pl-rail`
+to the section and a `.rail-nav` after the cards, and `§12`'s *The sliding row* has the mechanism. There is
+deliberately **no "Sliding row" checkbox** on the block — one content type wants this, and a field nobody sets is
+a field that still has to be validated, seeded, labelled and tested (`# ponytail:` in `blocks.py` names the
+upgrade path).
 
 When `top_level` is set on a hierarchical type, `_post_list()` also hangs each parent's live children off `p["children"]` for the chips under the card, reusing `db.tree()` — already memoised for the request by the header's services panel, so on most pages it costs nothing.
 
@@ -720,6 +729,22 @@ old rows keep the address they have until it runs.
 
 `0002_enable_rls.sql` enables RLS on every app table, so the anon key cannot read drafts or leads. The app's service-role key bypasses RLS by design. A new table repeats that one line for itself — `0003_warranty.sql` ends with `ALTER TABLE warranties ENABLE ROW LEVEL SECURITY;`, and defines no policies.
 
+`0014_testimonials.sql` is the shape to copy for **a content change that the seed cannot carry**, and it is three
+things in one file: the `post_types` row for `testimonial`, the two quotes that used to be typed into the home page
+as `posts` rows, and the swap of the home page's section from a `columns` block to a `post_list` one. That last part
+is `0012`'s pattern — `jsonb_agg(... ORDER BY ord)` over `jsonb_array_elements(blocks) WITH ORDINALITY`, matching the
+block **by its content** (`type = 'columns' AND data->>'heading' = 'What our clients say'`) and never by its index
+or a row id, because production has its own ids and a block's position in the array was never a promise. It runs the
+identical update against **`post_drafts`, setting `state = ''`**: a working draft holds its own copy of the blocks and
+`state` is the stored shared document, so a draft left behind puts the old section straight back the next time
+somebody opens the page. The seed (`cli.py`) makes the same three changes for a fresh database, because
+`_get_or_create()` only ever inserts and so never reaches one that already exists.
+
+**A hand-applied file does not bump the cache epoch.** `flask migrate` calls the `apply_migration` RPC, not
+`db.insert()/update()`, so nothing calls `bump_epoch()` — a server that is already running keeps serving its cached
+`post_types()` and its cached rendering of the page until it restarts or somebody saves something in the admin
+(§4, §8 *Caching the public site*). Every content migration should say so in its own header comment; `0014` does.
+
 ---
 
 ## 11. Payments
@@ -769,7 +794,7 @@ Its data comes from `service_nav()` (`public.py`), a template global over `db.tr
 
 **Long words wrap.** `body` carries `overflow-wrap:break-word`, so an unbroken string (a pasted URL, a hash) breaks instead of running off the right of its section and giving the page a horizontal scrollbar — and it is inherited, so the editor canvas gets it too. `break-word` only wraps *inside* a box, and a grid track or a table column is sized from min-content, which a 300-character word still blows out; the boxes that size to their content (`.card`, `.column`, `.stats li`, table cells) get `overflow-wrap:anywhere`, which counts in that size. Not on `body`: `anywhere` would let the header nav break mid-word.
 
-No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS, the section effects and the counting figures are `@property` + `counter()` on the document timeline, and the public site ships no JavaScript at all.
+No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS, and the section effects and the counting figures are `@property` + `counter()` on the document timeline. The public site ships **one** first-party script, `static/site.js` (2026-09-16) — see *The sliding row* below for what it does and what it deliberately does not. Everything else on the site is still server-rendered HTML and CSS.
 
 **A blog post reads down, not across.** Every other type puts its featured picture beside the words (`.page-head.has-media`, two columns); an article stacks — title, date, the picture **at its own size**, then the rule that divides the head from the writing. `.featured` is a banner crop (`width:100%`, a 440px ceiling, `object-fit:cover`), which is right for a card or a product shot and wrong inside an article: a small picture was blown up to 1200 wide and then cut off top and bottom. `.pt-post .page-media img` hands the sizing back to the browser and only shrinks a picture wider than the column. The rule is `.pt-post .page-head`'s own bottom border, the same way the hero and an archive head draw theirs, so it spans the page rather than the 1200px column. The article also drops the eyebrow, which only repeated the breadcrumb's last link.
 
@@ -827,6 +852,100 @@ The other three shapes size from `auto` tracks that stay inside a 390px card (da
 **A numeric `cards` icon is a counter, not an icon.** `card-icon num` drops the tinted tile for the design's mono blue number, and the deck tightens around it (`.cards:has(.card-icon.num)`).
 
 **Favicons.** `static/favicon.svg` plus PNGs at 16/32/48/180/192/512, generated from the SVG with **Inkscape** — `inkscape --export-type=png --export-width=N --export-height=N --export-filename=static/favicon-N.png static/favicon.svg`, once per size — and linked from both `base.html` and `admin/base.html` (only svg/16/32/180 are linked; 48/192/512 are kept for a web manifest that does not exist yet). Recolouring the mark means editing the SVG and re-running the six. **Not ImageMagick**, which these were generated with until 2026-09-12: `convert` has no usable SVG delegate here and falls back to its own MSVG rasteriser, whose antialiasing turns the ring into a blob at 16-48px and quantises the result to a 256-colour palette. Inkscape renders each size natively in RGBA; compare before replacing the tool again.
+
+### The sliding row
+
+`static/site.js` is the public site's only first-party script, it is ~5 KB unminified, it is `defer`-loaded from
+`base.html`, and it touches nothing but `.pl-rail` sections. It exists because the client asked for testimonials
+that scroll on their own *and* that a visitor can drive — arrows and dots, which nothing in CSS can do (2026-09-16,
+`requirements.md`).
+
+**The row works without it, and that is the design.** `.pl-testimonial:not(.arch-body) .cards` is
+`display:flex; overflow-x:auto; scroll-snap-type:x mandatory` — a native scroll container. The wheel, a trackpad and
+a finger on a phone all move it on a page served with scripts blocked, and the snap settles it on a card. What the
+script adds on top is the drift, the arrows, the dots and click-drag. `post_list.html` therefore renders `.rail-nav`
+with **`hidden`**, and `site.js` is what removes it: no script, no buttons that do nothing.
+
+**Nothing in it is a hard-coded number.** The step is the first card's measured `getBoundingClientRect().width` plus
+the container's computed `columnGap`, because the card is `flex:0 0 min(340px,74vw)` and the gap is CSS — both move
+with the viewport. The **dots are built by the script, not by Jinja**, and rebuilt on `resize`, because the count is
+`ceil((scrollWidth − clientWidth) / step) + 1` and not the number of cards: at 1440 the row shows 3.22 cards, so six
+testimonials have four stops, and a dot per card would have left the last two pointing at the same end position.
+
+Measured in Firefox 140 headless, which is also what the numbers in the commit body are:
+
+| viewport | card | step | peek | rail width | stops |
+|---|---|---|---|---|---|
+| 1440 | 340 | 360 | 800 | 1160 | 4 |
+| 834 | 340 | 360 | 434 | 794 | 5 |
+| 390 | 288.6 (74vw) | 308.6 | 41.4 | 350 | 6 |
+
+`74vw` rather than `82vw` is measured, not chosen: 82vw left a **10px** peek at 390, which reads as a rendering
+error rather than as an invitation to swipe. No width has horizontal page overflow.
+
+**The controls hide themselves when there is nothing to drive, and that took two fixes.** `buildDots()` sets
+`nav.hidden = stops <= 1` and rebuilds on `resize`, because the same two published quotes *fit* 1440 (one stop, nav
+hidden) and *overflow* 390 (two stops, nav shown) — a fixed decision would have been wrong at one of the two. The
+second fix is one CSS line, `.rail-nav[hidden]{display:none}`, and it is load-bearing rather than tidy: the UA
+sheet's `[hidden]{display:none}` is a bare attribute selector and loses on specificity to `.rail-nav{display:flex}`,
+so **the `hidden` attribute did nothing at all** — the template's own `hidden` included, which quietly voided the
+whole no-script promise. The first screenshot of the real home page is what caught it: two dead arrows under two
+quotes that fit. `test_the_rail_controls_stay_hidden_without_the_script` asserts the rule is still there.
+
+**`justify-content: safe center`, not `center`.** Two published quotes do not fill the row, and left-aligned under a
+centred heading they read as a broken layout. Plain `center` fixes that and breaks the overflowing case instead: a
+centred flex line puts its overflow on *both* sides, and a scroll container cannot scroll to a negative offset, so
+the first card becomes permanently unreachable. `safe` is the keyword for exactly this. Measured in Firefox 140 with
+six cards: first card's left edge 140 against a rail left edge of 140 at `scrollLeft` 0, and still 140 after
+scrolling to the end and back.
+
+**`scroll-snap-type: x mandatory` was verified to refuse nothing.** The worry is real — the last card's
+`scroll-snap-align:start` position lies past `maxScroll`, so a mandatory snap could make the final stop unreachable
+and strand the last dot. Every stop was asked for and read straight back at all three widths: each landed exactly
+where asked and the last clamped to `maxScroll` (1440: asked 1080, landed 980). `at()` is
+`Math.min(Math.round(scrollLeft / step), stops - 1)`, and that `min` is what makes the clamped end still report as
+the last stop, so the dot marks and *Next* disables.
+
+**The drift is off by default for anyone who asked for that.** Under `prefers-reduced-motion: reduce` the interval
+is never created and `scrollTo` uses `behavior:'auto'`, but the nav still shows and the arrows still work — verified
+in a Firefox profile with `ui.prefersReducedMotion=1`: nav shown, four dots, *Next* moved the row 0 → 360 with no
+animation. It also pauses on `pointerenter`/`focusin`, and any arrow, dot or drag holds it off for ten seconds;
+drifting out from under somebody mid-sentence is the thing that makes carousels hated.
+
+Click-drag sets `scroll-snap-type:none` and `user-select:none` for the duration and restores both on `pointerup`,
+and sits out `pointerType === 'touch'` entirely — the browser's own touch scrolling is better than anything this
+would do. `admin/canvas.html` does not extend `base.html`, so **the editor canvas gets the row as a plain scroller**
+with no arrows and no drift, which is deliberate: autoplay under somebody's caret is hostile.
+
+### The testimonial card
+
+`.pl-testimonial` shapes `_card.html` into a quote card, and the card rules sit outside the
+`:not(.arch-body)` guard so the archive at `/testimonials` gets the same card in a plain grid.
+
+The card is a **grid**, not a stack, because the photo has to sit beside the name *and* the job title:
+`grid-template-areas:"stars stars" "quote quote" "avatar name" "avatar role"`. There is deliberately **no
+`row-gap`** — a gap is applied between empty tracks as well as full ones, and every field on a testimonial is
+optional, so a card with no stars would have carried a band of dead air for a row that renders nothing. The spacing
+is margins on the elements, which cost nothing when the element is absent.
+
+Where a quote's parts live: `posts.title` is the name, `posts.excerpt` is the quote, `posts.featured_media_id` is
+the photo, and `meta.role` / `meta.company` / `meta.rating` are the three optional extras in the type's
+`field_schema`. There is no `quote` field because `excerpt` already *is* one, and it is already what the card
+macro, the archive and the `.md` twin read — `post_form.html` relabels the **Summary** box to *What they said* for
+this one type instead, the same hard-coded-slug idiom `_card.html` uses for six other types.
+
+Three things the CSS has to undo or lift:
+
+- **`.pl .card-img` is hidden for every list**, so the avatar is switched back on explicitly as a 48px disc. With
+  no photo the macro still emits `.card-img-empty`, whose diagonal-hatch placeholder reads as a broken image at that
+  size, so it becomes the flat grey circle the `testimonial` block already draws.
+- **The stars are drawn server-side and clamped** — `[[m.get('rating')|int, 0]|max, 5]|min` — so a 9 or a −3 typed
+  into a plain number box can only ever come out as five marks or none. `m.get('rating')` and not `m.rating`: the
+  `int` filter raises `UndefinedError` on a missing key rather than returning 0, which is not what its name suggests.
+- **`.card>*{position:relative;z-index:1}`** lifts the real children over the `::after` quote watermark. `::after`
+  paints after its siblings, and at 390 the card is 289px wide, which is where a long job title ran under the mark.
+  `z-index:-1` on the watermark is *not* the fix: `.card` opens no stacking context, so that drops it behind the
+  card's own white background and loses it.
 
 ### The admin shell
 
@@ -1497,6 +1616,15 @@ tests/test_public.py     hierarchical URLs + breadcrumbs, leads, redirects, site
 
 **The stress engine (`iopstor/stress.py`) is covered offline**: `test_validate_target_*` (scheme-only URL guard), `test_clamp_*`, `test_percentile_is_nearest_rank_in_ms`, `test_progress_store_roundtrips_and_stops` (the `/dev/shm` store on a `tmp_path` file), `test_nprocs_and_split` (the fan-out sizing and even split), `test_plan_caps_real_concurrency` (a huge entered number is scaled down so per-process threads stay ≤ `PER_PROC`), `test_merge_parts_sums_children` (the coordinator's sum of two part rows), and two measured ones: `test_run_load_hits_a_real_server_and_the_honeypot_leaves_no_row` stands up a throwaway `http.server`, runs `stress.start()` at it and asserts requests went, real pages answered 200 and every honeypot lead post was dropped without a row; `test_a_multiprocess_run_completes` forces the fan-out to real spawned processes and asserts both children reported through the `parts` table into a finished run. No Supabase, so they live in `test_offline.py`.
 
+**The testimonial row has four offline tests**, all monkeypatching `blocks._post_list` so no Supabase is needed:
+`test_a_rating_is_clamped_to_five_stars_and_absent_when_unset` (9 → five marks, −3 → none, and no rating renders no
+`.stars` at all), `test_a_testimonial_card_with_only_a_name_renders_nothing_else` (every other field blank leaves no
+empty `<p>` and no stray comma), `test_only_a_testimonial_list_becomes_a_sliding_row` (`pl-rail` and the `hidden`
+nav, and a `partner` list getting neither — it asserts the dots box ships **empty**, since the browser builds them),
+and `test_a_post_with_no_page_still_reaches_the_md_twin`. What none of them can cover is the drift, hover-pause,
+click-drag, the wheel and a real finger: those are measured in a browser (§12 *The sliding row*) and listed as
+user-only in the PR, the way `/collab-check` does it.
+
 Everything except `test_offline.py` is marked `live` and skips when `.env` has no Supabase.
 
 ---
@@ -1819,6 +1947,8 @@ Marked in code with `# ponytail:` comments.
 - **A hard-deleted post loses its type on the screen** and falls back to "page or post" — `_post_context()` resolves the type from the row. Production never hard-deletes a post (deleting trashes it), so this only shows for rows the test cleanup removes.
 - **A restore is not pre-checked against what it references.** Putting back a version whose featured image or parent page has since been deleted fails on the foreign key and surfaces through `_pg_error` as a 502 page rather than a sentence.
 - **`/admin/audit` pages with offset/limit** like every other admin list. Deep pages get slower; keyset pagination if that day comes.
+- **The sliding row is hard-coded to one content type.** `render_blocks()` sets `rail = pt_slug == "testimonial"`; nothing else can ask for it. A "Sliding row" checkbox on the `post_list` block is the upgrade, and it is deliberately not built yet — a field costs validation, a seed entry, a label, an `EDITOR["widgets"]` line and a test, and exactly one type wants this.
+- **`site.js` has no error boundary and no feature detection.** It is 45 lines against `scrollTo`, pointer events and `matchMedia`, all of which every browser the client's visitors use has had for years; if any of it throws, the row silently stays a plain native scroller, which is the state the page is served in anyway. That is the whole reason the controls ship `hidden` and the script unhides them.
 
 Shared editing (§12.3), all of them named in `admin.js`:
 
