@@ -330,7 +330,7 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .column{--w:initial}   /* a section inside a column keeps its own measure, not the grid's */
 
 /* Section effects, set per section under ⚙ (blocks.py FX + count_up; keyframes at the top of this
-   file). Four classes, all CSS: the public site still ships no JavaScript. Effects compose — a
+   file). Four classes, all CSS: the site's one script drives the sliding row and nothing else. Effects compose — a
    Numbers band can count up AND fade in — so each one is its own class. A Numbers figure carries
    the same classes on its own <li> (stats.html), which is what lets one figure differ from the
    band it sits in; that is why every rule below names both the section and the figure.
@@ -591,6 +591,74 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pl-post .card h3{margin:0 24px 8px}
 .pl-post .card p{margin:0 24px 24px}
 
+/* --- testimonials: the cards, then the sliding row they sit in -------------------------------
+   Card first, because the archive at /testimonials uses it too, in a plain grid.
+   The card is a grid and not a stack: the photo has to sit beside the name AND the job title, so
+   those three share two columns while the stars and the quote span both. Nothing here is a gap --
+   `row-gap` is applied between empty tracks as well as full ones, and a card with no stars would
+   have carried a band of dead air at the top for a row that renders nothing. Margins belong to the
+   elements, so an absent element costs no space. */
+.pl-testimonial .card{display:grid;grid-template-columns:auto 1fr;column-gap:14px;align-content:start;
+  grid-template-areas:"stars stars" "quote quote" "avatar name" "avatar role";position:relative;overflow:hidden}
+.pl-testimonial .stars{grid-area:stars;margin:0 0 14px;font-size:15px;letter-spacing:2px;color:var(--line-2)}
+.pl-testimonial .stars b{font-weight:inherit;color:#e0a32e}
+/* :not(.card-where) -- the role line is a <p> too, and it belongs on the last row, not the quote's */
+.pl-testimonial .card>p:not(.card-where){grid-area:quote;margin:0 0 24px;font:500 italic 16.5px/1.65 var(--head);color:var(--ink-2)}
+/* .pl hides every card picture by default; here it is the portrait, so it comes back as a disc.
+   With no photo the macro still emits .card-img-empty, whose hatched placeholder would read as a
+   broken image at 48px -- it becomes the same flat grey circle the testimonial block already draws. */
+.pl-testimonial .card-img{grid-area:avatar;display:block;width:48px;height:48px;border-radius:999px;overflow:hidden;background:var(--line)}
+.pl-testimonial .card-img img{width:100%;height:100%;object-fit:cover}
+.pl-testimonial .card-img-empty{background:var(--line)}
+.pl-testimonial .card h3{grid-area:name;align-self:end;margin:0;font-size:16px}
+.pl-testimonial .card-where{grid-area:role;display:block;align-self:start;margin:2px 0 0;font-size:13.5px;color:var(--muted)}
+/* The watermark the design puts in the bottom-right of the card -- decoration, so it is CSS and
+   never markup, and nothing reads it out. It has to sit BEHIND the words: ::after paints after its
+   siblings by default, and at 390 the card is 289px wide, which is where a long job title runs under
+   the mark and came out as "Head of IT, Ascent Fina█i". z-index:-1 is not the fix -- .card has no
+   stacking context of its own, so that would drop the mark behind the card's own white background
+   and lose it entirely. Lifting the real children over it is. */
+.pl-testimonial .card::after{content:"\201D";position:absolute;right:14px;bottom:-26px;
+  font:800 110px/1 var(--head);color:var(--grey);pointer-events:none}
+.pl-testimonial .card>*{position:relative;z-index:1}
+
+/* The row itself, and never on the archive -- /testimonials is the full list, so it stays a grid.
+   The same :not(.arch-body) split .pl-partner makes.
+   .cards stops being a grid and becomes the scroll container: that one line is what gives the wheel,
+   a trackpad and a finger on a phone real control of the row with no script involved. site.js only
+   adds the arrows, the dots and the drift on top of it. The scrollbar is hidden because the dots say
+   the same thing; the scrolling itself is untouched. */
+.pl-testimonial:not(.arch-body) .sec-head{justify-content:center;text-align:center}
+.pl-testimonial:not(.arch-body) .sec-head .eyebrow{margin:0}
+/* `safe center` and not plain `center`: two published quotes do not fill the row, and left-aligned
+   under a centred heading they read as a layout that broke. Plain `center` would fix that and break
+   the overflowing case instead -- a centred flex line puts its overflow on BOTH sides and the first
+   card becomes unreachable, because a scroll container cannot scroll to a negative offset. `safe`
+   is the keyword for exactly this: centre while it fits, fall back to flex-start the moment it does
+   not. Measured both ways below. */
+.pl-testimonial:not(.arch-body) .cards{display:flex;grid-template-columns:none;gap:20px;justify-content:safe center;
+  overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:4px}
+.pl-testimonial:not(.arch-body) .cards::-webkit-scrollbar{display:none}
+/* min(), so a phone shows one card and a slice of the next -- the slice is what says "there are more"
+   before anybody has touched it. Measured at 390: 74vw leaves a 41px peek where 82vw left 10px, which
+   read as a rendering error rather than an invitation. A fixed 340px would simply overflow. */
+.pl-testimonial:not(.arch-body) .card{flex:0 0 min(340px,74vw);scroll-snap-align:start}
+.rail-nav{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:28px}
+/* This line is load-bearing, not tidiness. The nav is served with `hidden` so a blocked script
+   leaves no dead buttons, and site.js also re-hides it when the row has nothing to scroll (two
+   published quotes fit 1440). `display:flex` on a class beats the UA sheet's `[hidden]{display:none}`
+   on specificity, so without this the attribute does nothing and the arrows show in both cases --
+   which is what the first measured screenshot showed. */
+.rail-nav[hidden]{display:none}
+.rail-arrow{width:40px;height:40px;border:1px solid var(--line);border-radius:999px;background:var(--white);
+  color:var(--ink);font:400 20px/1 var(--head);cursor:pointer;transition:background .2s,border-color .2s,color .2s}
+.rail-arrow:hover{background:var(--blue);border-color:var(--blue);color:var(--white)}
+.rail-arrow[disabled]{opacity:.35;cursor:default;background:var(--white);border-color:var(--line);color:var(--ink)}
+.rail-dots{display:flex;gap:8px}
+.rail-dot{width:8px;height:8px;padding:0;border:0;border-radius:999px;background:var(--line-2);cursor:pointer;
+  transition:width .25s,background .25s}
+.rail-dot[aria-current="true"]{width:22px;background:var(--blue)}
+
 /* "Items per row" on an Automatic list. The count is worked out in blocks.py (`even_cols()` when the
    editor picks Even rows) and arrives as a class, so nothing an editor typed reaches a style
    attribute -- the same reason `tone` and `width` are whitelists. Two classes plus .cards matches
@@ -790,7 +858,7 @@ a.chip:hover{border-color:var(--blue);color:var(--blue)}
 .meta-prose h2{margin:0 0 12px;font-size:24px}
 .meta-prose p{margin:0;font-size:17px;line-height:1.7;color:var(--ink-2);white-space:pre-line}
 
-/* checkout: the design's modal, as a page, because the public site ships no JavaScript */
+/* checkout: the design's modal, as a page. site.js drives the sliding row and holds no modal machinery */
 .checkout-card{max-width:460px;margin:32px 0 0;background:var(--white);border:1px solid var(--line);border-radius:14px;padding:28px}
 .checkout-card h1{margin:0 0 20px;font-size:22px}
 .checkout-card .total{display:flex;align-items:center;justify-content:space-between;margin:0;padding:16px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:15px;color:var(--muted)}

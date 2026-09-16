@@ -70,6 +70,13 @@ POST_TYPES = [  # slug, name, url_prefix, hierarchical, jsonld_type, taxonomies,
     ("partner", "Technology Partners", "partners", False, "Organization", [], [
         {"key": "logo_media_id", "label": "Logo", "type": "media", "required": False},
         {"key": "website", "label": "Website", "type": "url", "required": False}], False),
+    # Also has_pages=False: a quote is something said about us, shown on our pages, never a page of
+    # its own. The words live in `excerpt` and the person's photo in featured_media_id, so only the
+    # three extras need a schema -- and all three are optional, because the card closes up without them.
+    ("testimonial", "Testimonials", "testimonials", False, None, [], [
+        {"key": "role", "label": "Job title", "type": "text", "required": False},
+        {"key": "company", "label": "Company", "type": "text", "required": False},
+        {"key": "rating", "label": "Stars out of 5", "type": "number", "required": False}], False),
     ("datasheet", "Datasheets", "datasheets", False, None, [], [
         {"key": "file_media_id", "label": "PDF", "type": "media", "required": True},
         {"key": "product_family", "label": "Product family", "type": "text", "required": False}], True),
@@ -168,6 +175,9 @@ ZFS_FEATURES = [
     ("RaidZ", "No write hole, instant array build, and a drive failure never interrupts work."),
     ("Hardware agnostic", "No lock-in. Replace any component with any vendor's."),
 ]
+# quote, name, job title. The slug is derived (slugify("Sarah M.") -> "sarah-m") and must keep
+# matching migrations/0014_testimonials.sql, which inserts these same two for a database that already
+# exists -- the seed only ever inserts, so it never reaches one.
 TESTIMONIALS = [
     ("I sleep better knowing my family photos and business files are in a ZFS NAS.", "Sarah M.", "Photographer"),
     ("Set it up once. Haven't had to touch it in 2 years.", "Mark D.", "Small Business Owner"),
@@ -274,9 +284,9 @@ def home_blocks(media=lambda name: None):
         {"type": "post_list", "data": {"tone": "dark", "post_type": "case_study", "limit": 4, "eyebrow": "Case studies",
                                        "heading": "Proven across finance, education, media and logistics",
                                        "link_label": "All case studies", "link_url": "/case-studies"}},
-        {"type": "columns", "data": {"heading": "What our clients say", "cols": [
-            [{"type": "testimonial", "data": {"quote": TESTIMONIALS[0][0], "author": TESTIMONIALS[0][1], "role": TESTIMONIALS[0][2]}}],
-            [{"type": "testimonial", "data": {"quote": TESTIMONIALS[1][0], "author": TESTIMONIALS[1][1], "role": TESTIMONIALS[1][2]}}]]}},
+        {"type": "post_list", "data": {"post_type": "testimonial", "limit": 12,
+                                       "eyebrow": "What our clients say",
+                                       "heading": "Trusted by the teams who run on it"}},
         {"type": "post_list", "data": {"post_type": "partner", "limit": 24, "eyebrow": "Technology partners",
                                        "per_row": "even"}},  # a logo wall with a half-empty last row reads as broken
         {"type": "cta", "data": {"heading": "Don't just store data. Protect it.",
@@ -368,6 +378,8 @@ def run_seed():
               blocks=[{"type": "cta", "data": {"heading": f"Is {title} the right size for you?",
                                                "text": "Tell us the workload and the user count and we will come back with a configuration and a one-time price.",
                                                "button_label": "Request a quote", "button_url": "/contact-us"}}])
+    for i, (quote, name, role) in enumerate(TESTIMONIALS):
+        _post(types["testimonial"], name, menu_order=i, excerpt=quote, meta={"role": role}, blocks=[])
     for i, (name, logo) in enumerate(PARTNERS):
         _post(types["partner"], name, menu_order=i, meta={"logo_media_id": media_id(logo)},
               excerpt=f"{name} hardware and software, supported in every IOPStor build.",

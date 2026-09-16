@@ -2618,3 +2618,89 @@ def test_the_page_cache_stays_within_its_ceiling(app, tmp_path, monkeypatch):
     assert len(public._page_cache) == public.PAGE_MAX
     with app.test_request_context(f"/?utm_source=camp{public.PAGE_MAX + 24}"):
         assert public._page_cache_read() is not None         # the newest survived the trim
+
+
+# --- testimonials -------------------------------------------------------------------------------
+# A testimonial is a post of a has_pages=false type, so the four things below are the ones that can
+# only break silently: a number reaching the page unclamped, the row losing its controls, a card
+# with nothing filled in emitting empty markup, and the quotes vanishing from the .md twin because
+# they have no URL.
+
+def _testimonial(title="Ada", excerpt="It works.", **meta):
+    return {"id": 1, "title": title, "excerpt": excerpt, "meta": meta, "path": None, "terms": [],
+            "children": [], "featured_media": None, "published_at": None,
+            "post_type": {"slug": "testimonial"}}
+
+
+def _render_testimonials(app, monkeypatch, posts):
+    from iopstor import db
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    monkeypatch.setattr(blocks, "_post_list", lambda data: (posts, "testimonial"))
+    with app.test_request_context():
+        return render_blocks([{"type": "post_list", "data": {"post_type": "testimonial"}}])
+
+
+def test_a_rating_is_clamped_to_five_stars_and_absent_when_unset(app, monkeypatch):
+    """The stars are drawn server-side from a number an editor types into a plain box, so 9 and -3
+    have to come out as something sane. And no rating at all means no markup, not five empty stars:
+    every field on a testimonial is optional and the card is supposed to close up without them."""
+    html = _render_testimonials(app, monkeypatch, [_testimonial(rating=9)])
+    assert html.count("★") == 5 and "☆" not in html
+
+    html = _render_testimonials(app, monkeypatch, [_testimonial(rating=-3)])
+    assert "stars" not in html
+
+    html = _render_testimonials(app, monkeypatch, [_testimonial(rating=4)])
+    assert html.count("★") == 4 and html.count("☆") == 1
+
+    assert "stars" not in _render_testimonials(app, monkeypatch, [_testimonial()])
+
+
+def test_a_testimonial_card_with_only_a_name_renders_nothing_else(app, monkeypatch):
+    """Every field but the name is optional. None of them filled in must not leave an empty <p> or a
+    stray comma on the card — which is what a single `role or company` check would have done."""
+    html = _render_testimonials(app, monkeypatch, [_testimonial(excerpt="")])
+    assert "Ada" in html
+    assert "stars" not in html and "card-where" not in html
+
+    html = _render_testimonials(app, monkeypatch, [_testimonial(company="Acme")])
+    assert ">Acme<" in html and ", " not in html.split('card-where">')[1].split("<")[0]
+
+
+def test_only_a_testimonial_list_becomes_a_sliding_row(app, monkeypatch):
+    """pl-rail and the arrows are what site.js looks for. They are decided in blocks.py from the
+    resolved post type, never from block data, and no other type gets them."""
+    html = _render_testimonials(app, monkeypatch, [_testimonial()])
+    assert "pl-rail" in html and 'class="rail-nav" hidden' in html and 'data-rail="1"' in html
+    # the dots are built by the browser from measured widths, so the server sends the box empty
+    assert '<span class="rail-dots"></span>' in html
+
+    from iopstor import db
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    monkeypatch.setattr(blocks, "_post_list", lambda data: ([], "partner"))
+    with app.test_request_context():
+        html = render_blocks([{"type": "post_list", "data": {"post_type": "partner"}}])
+    assert "pl-rail" not in html and "rail-nav" not in html
+
+
+def test_the_rail_controls_stay_hidden_without_the_script():
+    """The nav ships `hidden` so a blocked script leaves no buttons that do nothing, and site.js
+    re-hides it when the row has nothing to scroll. Neither works without this one CSS rule: the UA
+    sheet's `[hidden]{display:none}` is a bare attribute selector and loses to `.rail-nav{display:flex}`
+    on specificity, so the attribute silently does nothing — which is what the first screenshot of the
+    real home page showed, two dead arrows under two quotes that fit."""
+    css = (pathlib.Path(__file__).parent.parent / "iopstor" / "static" / "site.css").read_text()
+    assert ".rail-nav[hidden]{display:none}" in css
+
+
+def test_a_post_with_no_page_still_reaches_the_md_twin(app, monkeypatch):
+    """A has_pages=false type is content without a URL, not content without words. Dropping those
+    rows left a heading over an empty list in every .md twin and in llms-full.txt."""
+    monkeypatch.setattr(blocks, "_post_list", lambda data: (
+        [_testimonial(), {"id": 2, "title": "Grace", "excerpt": "", "meta": {}, "path": "/blog/x"}], "testimonial"))
+    with app.test_request_context():
+        md = blocks_md([{"type": "post_list", "data": {"post_type": "testimonial", "heading": "Clients"}}])
+    assert "- **Ada**: It works." in md      # no URL to link, so the name is bolded instead
+    assert "- [Grace](/blog/x.md)" in md   # one that does have a page is unchanged

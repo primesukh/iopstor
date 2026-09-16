@@ -61,8 +61,12 @@
     {# data-taken, not #editor-data: initSlug() runs before initBlocks() parses that blob, and slugs are [a-z0-9-] so spaces separate them safely. #}
     <small id="slug-hint">Made from the title.</small>
 
-    <h3>Summary</h3>
-    <textarea name="excerpt" aria-label="Summary" placeholder="One or two sentences. Shown in lists, and as the description under the page in search results.">{{ p.excerpt or '' }}</textarea>
+    {# A testimonial has no page of its own, so "shown in search results" is nonsense there and the
+       box is where the quote itself goes. Hard-coded slug, the way _card.html already switches card
+       parts on per type. #}
+    {% set is_quote = pt.slug == 'testimonial' %}
+    <h3>{{ 'What they said' if is_quote else 'Summary' }}</h3>
+    <textarea name="excerpt" aria-label="{{ 'What they said' if is_quote else 'Summary' }}" placeholder="{{ 'The quote, in their words. This is what the card shows.' if is_quote else 'One or two sentences. Shown in lists, and as the description under the page in search results.' }}">{{ p.excerpt or '' }}</textarea>
 
     <h3>Featured image</h3>
     <select name="featured_media_id" data-media="images" aria-label="Featured image"><option value="">— none —</option>{% for m in media if m.mime.startswith('image/') %}<option value="{{ m.id }}" {{ 'selected' if p.featured_media_id|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select>

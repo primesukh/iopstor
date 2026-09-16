@@ -142,4 +142,7 @@ def test_seed_idempotent(app, seeded):
         return tuple(db.table(t).select("id", count="exact").limit(1).execute().count for t in ("posts", "post_types", "terms", "menus"))
     first = counts()
     run_seed()
-    assert counts() == first and first[1] == 8 and first[0] >= 30
+    # 9 since testimonials (0014). The count is spelled out rather than read from POST_TYPES on
+    # purpose: this test exists to notice a type being added, and comparing the seed against itself
+    # would notice nothing.
+    assert counts() == first and first[1] == 9 and first[0] >= 30

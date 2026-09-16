@@ -1050,7 +1050,7 @@ KIND = {"media": "picture or file", "leads": "enquiry", "warranties": "warranty 
 # back to i-dot -- a new content type reads slightly oddly rather than not at all.
 POST_KIND = {"page": "page", "post": "blog post", "service": "service", "case_study": "case study",
              "event": "event", "partner": "technology partner", "datasheet": "datasheet",
-             "product": "product"}
+             "product": "product", "testimonial": "testimonial"}
 
 # column -> the label the editor already sees for it elsewhere in the admin
 FIELD = {"blocks": "The writing on the page", "title": "Title", "slug": "Web address",

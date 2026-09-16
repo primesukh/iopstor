@@ -351,7 +351,7 @@ def resolve(path):
             if pt["hierarchical"]:
                 q = q.is_("parent_id", "null")
             return render_archive(q, pt["name"], full, [("Home", "/"), (pt["name"], full)], pt=pt)
-        # Checkout is a page, not a modal: the public site ships no JavaScript. Handled here rather
+        # Checkout is a page, not a modal: site.js drives the sliding row and nothing else. Handled here rather
         # than as its own rule, which would have to out-rank the catch-all.
         # ponytail: "checkout" is a reserved last segment, so a product slugged "checkout" would be
         # unreachable. Nothing is.

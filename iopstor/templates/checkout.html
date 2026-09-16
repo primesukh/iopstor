@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-{# The design's checkout is an overlay. The public site ships no JavaScript, so it is a page —
+{# The design's checkout is an overlay. The site's one script drives the sliding row only, so this is a page —
    the handoff offers that as the alternative. A plain form post; /api/v1/payments/checkout
    answers a browser with a 303 to the gateway and a JSON client with JSON. #}
 {% set meta_ = post.meta or {} %}

@@ -350,7 +350,11 @@ def render_blocks(blocks, edit=False, path="0"):
                 # the template cannot be anything an editor typed.
                 posts, pt_slug = _post_list(b["data"])
                 # cols is computed here, never taken from the data, so the class is ours
-                extra = {"posts": posts, "pt_slug": pt_slug, "cols": _cols(b["data"], len(posts))}
+                # rail is decided here for the same reason cols is: it depends on pt_slug, which came
+                # from the row rather than the data. ponytail: one type is named. Make it a "Sliding
+                # row" checkbox on the block when a second type wants one.
+                extra = {"posts": posts, "pt_slug": pt_slug, "cols": _cols(b["data"], len(posts)),
+                         "rail": pt_slug == "testimonial"}
             elif b["type"] == "warranty_check":
                 extra = {"found": None if edit else _warranty()}  # the admin canvas gets the bare form, never a lookup
             elif b["type"] == "columns":
@@ -484,9 +488,14 @@ def blocks_md(blocks, h1=True):
             table = "\n".join(f"| {r.get('k', '')} | {r.get('v', '')} |" for r in rows)
             out += [head, f"| Label | Value |\n| --- | --- |\n{table}" if rows else ""]
         elif t == "post_list":
+            # A post with no path is not a post with nothing to say: a has_pages=false type (a
+            # testimonial, a technology partner) is real content that simply has no page of its own,
+            # and dropping it left a heading over an empty list in the .md twins and llms-full.txt.
+            # It loses the link, not the line.
             out.append(head)
-            out.append("\n".join(f"- [{p['title']}]({md_url(p['path'])})" + (f": {p['excerpt']}" if p.get("excerpt") else "")
-                                 for p in _post_list(d)[0] if p.get("path")))
+            out.append("\n".join((f"- [{p['title']}]({md_url(p['path'])})" if p.get("path") else f"- **{p['title']}**")
+                                 + (f": {p['excerpt']}" if p.get("excerpt") else "")
+                                 for p in _post_list(d)[0]))
         elif t == "pdf":
             out += [head, _md_link("Download the PDF", _media(d.get("file_media_id"))[0])]
         elif t == "contact_form":
