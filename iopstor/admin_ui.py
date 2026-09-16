@@ -16,7 +16,7 @@ from postgrest import APIError
 from supabase_auth.errors import AuthError
 from werkzeug.exceptions import HTTPException
 
-from . import db, display_name, seo
+from . import db, display_name, seo, stress
 from .admin_api import apply_post
 from .auth import ROLES, _session_token, create_auth_user, current_user, delete_auth_user, login, set_password
 from .blocks import BLOCKS, EDITOR, LAYOUTS, _NON_TEXT_KEYS, at_path, blocks_text, render_blocks, validate_blocks, warranty_active
@@ -34,6 +34,10 @@ SETTING_TABS = (("Site identity", ("site_name", "tagline", "logo_url", "default_
                 ("Payments", ("notify_email",)))   # prices are rupees, always: rupees() in __init__.py
 LEAD_STATUSES = ("new", "in_progress", "handled")
 SEO_KEYS = ("title", "description", "canonical", "robots", "og_image")
+# The stress-test panel is not a role, it is one person: an internal load tool that can point real
+# traffic at any target, so it is fenced to a single email rather than to "admin". Change here to hand
+# it over. A stranger -- even another admin -- gets a 404, the same "learn nothing" the office gate uses.
+STRESS_OWNER = "sukhpreet.saluja@primeabgb.com"
 
 
 def ui_required(min_role="editor"):
@@ -51,6 +55,18 @@ def ui_required(min_role="editor"):
             return fn(*args, **kwargs)
         return wrapper
     return deco
+
+
+def owner_only(fn):
+    """Admin, and specifically the one owner (STRESS_OWNER). Layered on ui_required('admin'), so the
+    login, role and CSRF checks all still run and g.user is set; then anyone but the owner gets a 404 --
+    a screen that is not theirs should not announce that it exists."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if (getattr(g, "user", None) or {}).get("email") != STRESS_OWNER:
+            abort(404)
+        return fn(*args, **kwargs)
+    return ui_required("admin")(wrapper)
 
 
 @ui.before_request
@@ -86,7 +102,8 @@ def _globals():
     # nav_counts, not "counts": the dashboard view passes its own `counts` and a view's context
     # shadows a processor's, which would leave the sidebar's leads pill empty on that one page.
     return {"csrf": session["csrf"], "admin_user": user, "post_types": db.post_types() if user else [],
-            "nav_counts": db.admin_counts() if user else {}}
+            "nav_counts": db.admin_counts() if user else {},
+            "is_owner": bool(user) and user["email"] == STRESS_OWNER}
 
 
 @ui.errorhandler(APIError)
@@ -1410,3 +1427,48 @@ def audit_restore(pk):
             db.clear_draft(int(row_id))
         flash(f"Put {entry['label'] or name} back the way it was.")
     return redirect(url_for("admin_ui.audit", **{k: v for k, v in request.args.items()}))
+
+
+# ---- stress test (owner only) ----------------------------------------------
+# An internal load-and-abuse simulator: fire N visitors and M attackers at a target -- this instance,
+# or another (dev -> prod) -- and watch it. The engine is stress.py; these routes only start, poll and
+# stop a run. Nothing here writes a row of ours (attackers are non-destructive; the honeypot lead post
+# is accepted and dropped), so it takes no audit_event -- see AUDITED in tests/test_offline.py.
+
+@ui.get("/stress")
+@owner_only
+def stress_panel():
+    return render_template("admin/stress.html", conn=connection(), run=request.args.get("run", ""),
+                           here=request.host_url.rstrip("/"), max_visitors=stress.MAX_VISITORS,
+                           max_attackers=stress.MAX_ATTACKERS, max_seconds=stress.MAX_SECONDS)
+
+
+@ui.post("/stress/run")
+@owner_only
+def stress_run():
+    f = request.form
+    target = request.host_url.rstrip("/") if f.get("target") == "self" else f.get("target_url", "")
+    try:
+        rid = stress.start(target, f.get("visitors"), f.get("attackers"), f.get("seconds"),
+                           f.get("warranty_path", "/"))
+    except ValueError as e:
+        flash(str(e))
+        return redirect(url_for("admin_ui.stress_panel"))
+    return redirect(url_for("admin_ui.stress_panel", run=rid))
+
+
+@ui.get("/stress/progress/<run_id>")
+@owner_only
+def stress_progress(run_id):
+    """The live-view poll. A GET, so nothing new is exposed to the audit accounting."""
+    run = stress.read(run_id)
+    if run is None:
+        return jsonify({"error": "not found"}), 404, {"Cache-Control": "no-store"}
+    return jsonify(run), 200, {"Cache-Control": "no-store"}
+
+
+@ui.post("/stress/stop/<run_id>")
+@owner_only
+def stress_stop(run_id):
+    stress.request_stop(run_id)
+    return redirect(url_for("admin_ui.stress_panel", run=run_id))

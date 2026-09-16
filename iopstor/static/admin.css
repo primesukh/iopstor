@@ -447,3 +447,26 @@
 .aud-diff summary{cursor:pointer;font:600 13px/1.4 var(--body);color:var(--blue)}
 .aud-diff form{margin-top:10px}
 .t-restore{margin-top:4px}
+
+/* --- stress test (owner-only load panel, admin/stress.html) --- */
+.st-warn{margin:0 0 18px}
+.st-form{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;max-width:720px}
+.st-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.st-form label{display:block;font-weight:600;font-size:14px;color:var(--ink)}
+.st-form .st-hint{display:block;font-weight:400;font-size:12px;color:var(--muted);margin-top:3px}
+.st-form input[type=number],.st-form input[type=text],.st-form input[type=url]{margin-top:6px}
+.st-target{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:16px 0}
+.st-target legend{font:600 13px/1 var(--body);color:var(--ink);padding:0 6px}
+.st-radio{display:flex;align-items:baseline;gap:8px;font-weight:500;margin:6px 0}
+.st-radio input[type=url]{flex:1;min-width:0;margin:0}
+.st-warranty{margin:0 0 12px}
+.st-cap{margin:0 0 14px;font-size:13px}
+.st-live{margin-top:28px}
+.st-live-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.st-state{font-weight:600;color:var(--accent)}
+.st-meters{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin:0 0 20px}
+.st-meter{background:var(--white);border:1px solid var(--line);border-radius:10px;padding:16px}
+.st-meter .st-n{display:block;font:800 30px/1 var(--head);color:var(--ink)}
+.st-meter .st-l{display:block;margin-top:6px;font-size:12.5px;color:var(--muted)}
+.st-table td:nth-child(2){font-weight:600;color:var(--ink);width:120px}
+@media (max-width:640px){.st-grid{grid-template-columns:1fr}}

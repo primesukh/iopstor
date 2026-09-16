@@ -1100,6 +1100,10 @@ AUDITED = {
     "admin_ui.canvas": "changes nothing, renders the page into the editor",
     "admin_ui.preview": "changes nothing, renders the unsaved form as a page",
     "admin_api.auth_refresh": "session mechanics, not a step anybody takes",
+    # the stress-test panel fires HTTP at a target but writes no row of ours: attackers are
+    # non-destructive and the honeypot lead post is accepted and dropped, so nothing to record here
+    "admin_ui.stress_run": "starts a load run; changes no data of ours (see iopstor/stress.py)",
+    "admin_ui.stress_stop": "flips a stop flag in the /dev/shm progress store, no row of ours",
 }
 
 
@@ -2143,3 +2147,192 @@ def test_every_setting_the_app_reads_is_passed_into_the_container():
     passed = set(re.findall(r"^\s{2}([A-Z_]+):", anchor, re.M))
     assert read, "no settings found -- the regex stopped matching config.py"
     assert not (read - passed), f"config.py reads these but docker-compose.yml never passes them: {sorted(read - passed)}"
+
+
+# ---- stress-test engine (iopstor/stress.py) ----------------------------------------------------
+
+def test_validate_target_accepts_a_base_and_rejects_junk():
+    from iopstor import stress
+    assert stress.validate_target("http://host:5000/") == "http://host:5000"
+    assert stress.validate_target(" https://www.iopstor.com ") == "https://www.iopstor.com"
+    for bad in ("", "host:5000", "ftp://host", "http://host/a/path", "javascript:alert(1)"):
+        with pytest.raises(ValueError):
+            stress.validate_target(bad)
+
+
+def test_clamp_holds_the_ceiling_and_survives_nonsense():
+    from iopstor import stress
+    assert stress.clamp(5, 0, 200) == 5
+    assert stress.clamp(9999, 0, 200) == 200
+    assert stress.clamp(-3, 1, 300) == 1
+    assert stress.clamp("not a number", 1, 300) == 1
+
+
+def test_percentile_is_nearest_rank_in_ms():
+    from iopstor import stress
+    assert stress.percentile([], 95) == 0.0
+    # ten samples 0.01s..0.10s: p95 lands on the top sample
+    sample = [i / 100 for i in range(1, 11)]
+    assert stress.percentile(sample, 95) == 100.0
+    assert stress.percentile(sample, 50) == 50.0
+
+
+def test_progress_store_roundtrips_and_stops(tmp_path):
+    from iopstor import stress
+    db = str(tmp_path / "s.db")
+    rid = stress.create({"visitors": 2}, path=db)
+    run = stress.read(rid, path=db)
+    assert run["state"] == "starting" and run["params"]["visitors"] == 2 and run["stop"] is False
+    assert stress.read("nope", path=db) is None
+    # stop only bites a running run
+    assert stress.request_stop(rid, path=db) is False
+    stress._write(rid, "running", {"sent": 1}, db)
+    assert stress.request_stop(rid, path=db) is True
+    assert stress.read(rid, path=db)["stop"] is True
+
+
+def test_run_load_hits_a_real_server_and_the_honeypot_leaves_no_row(tmp_path):
+    """Measured, not assumed: run the engine against a throwaway stdlib server and prove requests are
+    sent, statuses tallied, real pages answer 200, and every lead post arrives with the honeypot filled
+    so nothing is stored (the accept-and-drop path public.py takes)."""
+    import http.server
+    import threading
+    import time
+    from iopstor import stress
+
+    tally = {"rows": 0, "honeypot": 0, "hits": 0}
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            tally["hits"] += 1
+            if self.path == "/sitemap.xml":
+                body = (b"<urlset><url><loc>%s/</loc></url>"
+                        b"<url><loc>%s/about</loc></url></urlset>"
+                        % (self._base(), self._base()))
+                self._send(200, body)
+            elif self.path in ("/", "/about"):
+                self._send(200, b"ok")
+            else:
+                self._send(404, b"no")
+
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(n) or b"{}")
+            if body.get("website"):
+                tally["honeypot"] += 1        # accepted and dropped, exactly like public.py
+            else:
+                tally["rows"] += 1
+            self._send(201, b"ok")
+
+        def _base(self):
+            return b"http://127.0.0.1:%d" % self.server.server_address[1]
+
+        def _send(self, code, body):
+            self.send_response(code)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    db = str(tmp_path / "run.db")
+    try:
+        rid = stress.start(base, visitors=3, attackers=3, seconds=2, path=db)
+        deadline = time.time() + 20
+        while time.time() < deadline:
+            run = stress.read(rid, path=db)
+            if run and run["state"] in ("done", "error"):
+                break
+            time.sleep(0.2)
+    finally:
+        srv.shutdown()
+
+    assert run["state"] == "done", run
+    p = run["progress"]
+    assert p["sent"] > 0 and tally["hits"] > 0
+    assert p["status"].get("200", 0) > 0           # visitors read the real pages
+    assert tally["rows"] == 0                       # the honeypot spared the target every time
+
+
+def test_nprocs_and_split():
+    """The fan-out: one process below the threshold, more above it (capped), and the split sums back."""
+    from iopstor import stress
+    assert stress._nprocs(10, 5) == 1                       # under PER_PROC -> in-thread
+    assert 1 <= stress._nprocs(5000, 1000) <= stress.MAX_PROCS
+    assert stress._split(10, 3) == [4, 3, 3] and sum(stress._split(10, 3)) == 10
+    assert stress._split(0, 4) == [0, 0, 0, 0]
+
+
+def test_merge_parts_sums_children(tmp_path):
+    """The coordinator sums every generator's raw counts into the one progress dict the poll reads."""
+    from iopstor import stress
+    db = str(tmp_path / "m.db")
+    stress._write_part("r1", 0, {"sent": 10, "errors": 1, "status": {"200": 9},
+                                 "kind": {"visitor": 10, "attacker": 0}, "lat": [0.01] * 5}, db)
+    stress._write_part("r1", 1, {"sent": 20, "errors": 2, "status": {"200": 15, "429": 3},
+                                 "kind": {"visitor": 0, "attacker": 20}, "lat": [0.02] * 5}, db)
+    agg = stress._merge_parts("r1", db, 2.0)
+    assert agg["sent"] == 30 and agg["errors"] == 3
+    assert agg["status"]["200"] == 24 and agg["throttled"] == 3
+    assert agg["kind"] == {"visitor": 10, "attacker": 20}
+    assert agg["req_per_sec"] == 15.0                       # 30 sent / 2s
+
+
+def test_a_multiprocess_run_completes(tmp_path, monkeypatch):
+    """Measured: force the fan-out to real spawned processes and prove they run, report through the parts
+    table and merge into one finished run. Two children hit a throwaway server over TCP."""
+    import http.server
+    import threading
+    import time
+    from iopstor import stress
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            if self.path == "/sitemap.xml":
+                b = b"<urlset><url><loc>http://127.0.0.1:%d/</loc></url></urlset>" % self.server.server_address[1]
+            else:
+                b = b"ok"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    db = str(tmp_path / "mp.db")
+    monkeypatch.setattr(stress, "_nprocs", lambda v, a: 2)   # force the spawn path regardless of CPU count
+    try:
+        rid = stress.start(base, visitors=4, attackers=0, seconds=2, path=db)
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            run = stress.read(rid, path=db)
+            if run and run["state"] in ("done", "error"):
+                break
+            time.sleep(0.2)
+    finally:
+        srv.shutdown()
+
+    assert run["state"] == "done", run
+    assert run["progress"]["sent"] > 0
+    assert len(stress._read_parts(rid, db)) == 2             # both spawned children reported
+
+
+def test_plan_caps_real_concurrency():
+    """The fix for a big self-test hanging: real concurrency never exceeds nprocs x PER_PROC, so a huge
+    entered number is scaled down instead of spawning tens of thousands of threads."""
+    from iopstor import stress
+    n, v, a = stress._plan(20, 10)                          # small: one process, nothing scaled
+    assert n == 1 and sum(v) == 20 and sum(a) == 10
+    n, v, a = stress._plan(10000, 0)                        # huge: capped, per-process <= PER_PROC
+    assert n <= stress.MAX_PROCS
+    assert sum(v) <= n * stress.PER_PROC
+    assert all(x <= stress.PER_PROC for x in v)
+    assert stress._plan(0, 0) == (1, [0], [0])              # nothing to do, still well-formed
