@@ -3,10 +3,22 @@
    turns the card's parts on and off from there — the number for services, the logo for partners,
    the date for blog posts. Nothing inside a card carries fe(): those belong to other posts. #}
 {% from "_card.html" import card %}
-<section class="section pl pl-{{ pt_slug }}{% if cols %} pl-cols-{{ cols }}{% endif %}{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
+<section class="section pl pl-{{ pt_slug }}{% if rail %} pl-rail{% endif %}{% if cols %} pl-cols-{{ cols }}{% endif %}{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
   {% if data.heading or data.eyebrow or data.link_url or edit %}<div class="sec-head">
     <div>{% if data.eyebrow or edit %}<p class="eyebrow"{{ fe('eyebrow') }}>{{ data.eyebrow }}</p>{% endif %}{% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}</div>
     {% if data.link_url %}<a class="sec-link" href="{{ data.link_url }}"{{ fe('link_label') }}>{{ data.link_label or 'See all' }} &rarr;</a>{% endif %}
   </div>{% endif %}
   <div class="cards">{% for p in posts %}{{ card(p, loop.index) }}{% else %}<p class="lead">Coming soon.</p>{% endfor %}</div>
+  {#- A sliding row is a scroll container first and a carousel second: .cards scrolls natively, so the
+      wheel, a trackpad and a finger all work with the page exactly as it is served. site.js adds the
+      arrows, the dots and the drifting, and it is what removes `hidden` -- so with a script blocked
+      the row is still usable and there are no buttons that do nothing.
+      .rail-dots is left empty on purpose. One dot per card would be wrong: at 1440 the row shows
+      about three at a time, so the last few would all point at the same end position. How many stops
+      there really are depends on measured widths, which only the browser knows. #}
+  {%- if rail %}<div class="rail-nav" hidden>
+    <button type="button" class="rail-arrow" data-rail="-1" aria-label="Previous testimonials">&lsaquo;</button>
+    <span class="rail-dots"></span>
+    <button type="button" class="rail-arrow" data-rail="1" aria-label="More testimonials">&rsaquo;</button>
+  </div>{% endif %}
 </div></section>

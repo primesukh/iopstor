@@ -25,6 +25,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@500;700;800&display=swap">
 <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}">
+{# The site's only first-party script, and only for the sliding row of testimonials -- the row works
+   without it (see site.js). defer, so it never holds the page up. #}
+<script defer src="{{ url_for('static', filename='site.js') }}"></script>
 {% for node in jsonld %}<script type="application/ld+json">{{ node|tojson }}</script>
 {% endfor %}{% if site.ga_id and not preview %}<script async src="https://www.googletagmanager.com/gtag/js?id={{ site.ga_id }}"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','{{ site.ga_id }}');</script>

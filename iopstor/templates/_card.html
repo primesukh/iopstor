@@ -25,12 +25,19 @@
       until the pl-<slug> rule switches them on. #}
   {%- if p.post_type.slug == 'event' and mo %}<span class="card-date"><b>{{ m.start_date[:4] }}</b><i>{{ MONTHS[mo - 1] }}</i></span>{% endif %}
   {%- if p.post_type.slug == 'datasheet' %}<span class="card-pdf" aria-hidden="true">PDF</span>{% endif %}
+  {#- A rating is drawn here, not in the class or the style attribute: the number is clamped to 0..5
+      and turned into that many marks, so a 9 or a -3 typed into the box can only ever come out as
+      five stars or none. No rating at all renders nothing, and the card closes up. #}
+  {%- if p.post_type.slug == 'testimonial' %}{% set r = [[m.get('rating')|int, 0]|max, 5]|min %}
+  {%- if r %}<span class="stars" aria-label="Rated {{ r }} out of 5"><b>{{ '★' * r }}</b>{{ '☆' * (5 - r) }}</span>{% endif %}{% endif %}
   {%- if p.terms %}<span class="chips">{% for t in p.terms %}<span class="chip chip-{{ t.taxonomy.slug }}">{{ t.name }}</span>{% endfor %}</span>{% endif %}
   {%- if p.post_type.slug == 'post' and p.published_at %}<span class="date">{{ p.published_at[:10] }}</span>{% endif %}
   <h3>{% if act %}<a href="{{ p.path }}">{{ p.title }}</a>{% else %}{{ p.title }}{% endif %}</h3>
   {%- if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}
   {%- if p.post_type.slug == 'event' and m.location %}<p class="card-where">{{ m.location }}</p>{% endif %}
   {%- if p.post_type.slug == 'datasheet' and m.product_family %}<p class="card-where">{{ m.product_family }}</p>{% endif %}
+  {#- Either one alone reads correctly, and neither renders the comma on its own. #}
+  {%- if p.post_type.slug == 'testimonial' and (m.role or m.company) %}<p class="card-where">{{ [m.role, m.company]|select|join(', ') }}</p>{% endif %}
   {#- On the archive every child is a tile you can click, because that page IS the full list. In a
       deck the chips are a taste of what is inside, and every card in a row is as tall as the
       tallest: Cloud's seven sub-services padded four cards out with empty space. Four, then a
