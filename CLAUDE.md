@@ -26,6 +26,7 @@ iopstor/config.py        env → constants (module, no class)
 iopstor/db.py            supabase-py clients + query helpers: table(), one(), rows(), insert(), update(), delete(), live(), select_posts(), tree(),
                          get_draft()/save_draft()/clear_draft() + touch_session()/flush_sessions() (the working draft; the only two unaudited writes),
                          _audit()/audit_event() (every write is logged from inside the three write helpers), ist()/ist_input(),
+                         _proc_cached() + content_epoch()/bump_epoch() (the cross-request cache; every write invalidates every worker through one /dev/shm file),
                          with_paths()/ancestors()/hydrate() (hierarchical URLs, has_pages), unique_slug(), ensure_term(), paginate(), admin_counts(), post_types()/settings() caches
 iopstor/auth.py          login/refresh/logout via GoTrue, verify_jwt() (local HS256), require_role(), create_auth_user()
 iopstor/storage.py       save_upload()/delete_media() → Supabase Storage bucket + media table; public_path() (= media.url), fetch() (the bytes back)
@@ -147,7 +148,7 @@ So the full order is: branch → work → three docs → `/pr` → **stop** → 
   Roles: `editor` < `admin`. A GoTrue login without a `users` row gets 403.
   **`ADMIN_NETWORKS` puts the whole admin behind the office network**: set, a `before_request` on both admin blueprints 404s anyone outside it, login form included. It tests `client_ip()`, so a wrong `TRUSTED_PROXIES` locks out every editor — clearing `ADMIN_NETWORKS` is the recovery (`docs/TECHNICAL.md` §12).
 - Payments: only `PaymentGateway` subclasses in `payments.py`; `PAYMENT_PROVIDER` env selects one. `dummy` is the placeholder.
-- Ponytail mode is on for this repo: fewest files, stdlib first, mark deliberate ceilings with `# ponytail:` comments (46 in `iopstor/`; `/ponytail-debt` lists them). Non-trivial logic gets one small pytest test in `tests/test_offline.py` when it can run without Supabase.
+- Ponytail mode is on for this repo: fewest files, stdlib first, mark deliberate ceilings with `# ponytail:` comments (38 in `iopstor/`; `/ponytail-debt` lists them). Non-trivial logic gets one small pytest test in `tests/test_offline.py` when it can run without Supabase.
 
 ## Env keys (`.env.example`)
 

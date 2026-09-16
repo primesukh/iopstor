@@ -1,12 +1,14 @@
 """All data access: Supabase PostgREST over Kong with the service-role key (bypasses RLS).
 No direct Postgres connection anywhere. Rows are plain dicts."""
+import os
 import random
 import re
 import string
+import time
 import unicodedata
 from datetime import datetime, timedelta, timezone
 
-from flask import current_app, g, has_request_context
+from flask import current_app, g, has_app_context, has_request_context
 from postgrest import APIError
 from supabase import ClientOptions, create_client
 
@@ -16,9 +18,20 @@ POST_SELECT = "*, post_type:post_types(*), featured_media:media(*), terms(*, tax
 POST_SELECT_BY_TERM = POST_SELECT + ", post_terms!inner(term_id)"  # + .eq("post_terms.term_id", id)
 
 
+# The library waits two minutes on a PostgREST call by default, while gunicorn kills a worker at
+# thirty seconds -- so a Supabase that is merely slow parked eight threads per worker until the
+# worker was killed mid-request, turning a slow database into a dead site. Fifteen seconds is far
+# longer than any query here (the widest is the sitemap's 5000 rows) and safely inside gunicorn's
+# timeout, so overload now fails fast enough to shed load instead of swallowing the pool.
+# ponytail: a constant, not an env key -- it would have to join docker-compose's x-app-env and the
+# test that walks it, and nobody has needed to tune it. STRESS_DB is a constant for the same reason.
+PGRST_TIMEOUT = 15
+
+
 def _client(key):
     cfg = current_app.config
-    return create_client(cfg["SUPABASE_URL"], key, ClientOptions(auto_refresh_token=False, persist_session=False))
+    return create_client(cfg["SUPABASE_URL"], key, ClientOptions(
+        auto_refresh_token=False, persist_session=False, postgrest_client_timeout=PGRST_TIMEOUT))
 
 
 def sb():
@@ -127,6 +140,7 @@ def audit_event(action, label="", user=None, system=False, name="", row_id="", c
 def insert(name, row):
     created = table(name).insert(row).execute().data[0]
     _audit("create", name, created.get("id", ""), _diff({}, created), _label(created))
+    bump_epoch()
     return created
 
 
@@ -157,6 +171,7 @@ def update(name, pk, changes, action="update", if_unchanged=None):
     after = data[0] if data else None
     if after:
         _audit(action, name, pk, _diff(before, after), _label(after) or _label(before))
+        bump_epoch()
     return after
 
 
@@ -166,6 +181,7 @@ def delete(name, pk):
     row = _before(name, pk)
     table(name).delete().eq("id", pk).execute()
     _audit("delete", name, pk, _diff(row, {}), _label(row))
+    bump_epoch()
     return row
 
 
@@ -227,6 +243,7 @@ def reserved(value):
 def _cached(key, loader):
     if not hasattr(g, key):
         setattr(g, key, loader())
+        g._cache_keys = getattr(g, "_cache_keys", set()) | {key}
     return getattr(g, key)
 
 
@@ -235,10 +252,67 @@ def uncache(*keys):
         g.pop(k, None)
 
 
+# ---- the cross-request cache ---------------------------------------------
+# _cached() above dies with the request, which is why every page used to pay a round trip for
+# post_types, settings and one per picture. This one lives in the worker process, so it also has to
+# answer "has anything changed since?" -- and the ~30 workers share no memory. They do share
+# /dev/shm (throttle.py's trick), so one empty file's mtime is the whole invalidation protocol:
+# every write touches it, every reader stats it. A stat on tmpfs is microseconds against a render
+# that measured 219 ms, so it is cheaper to ask every time than to be stale.
+# The drafts and editing-session writes deliberately do NOT bump it: they are autosaves, they change
+# no public page, and bumping on each would empty the cache every few seconds while somebody types.
+
+# ponytail: _proc_cache grows one key per media id ever read by this worker and is never trimmed.
+# It is bounded by the media table (a few hundred small dicts), so a ceiling costs more than it
+# saves; give it PAGE_MAX's treatment in public.py if the library ever gets large.
+CACHE_TTL = 30          # seconds; the ceiling on staleness if a bump is ever missed
+EPOCH_FILE = "/dev/shm/iopstor-content-epoch"
+_proc_cache = {}        # key -> (expires, epoch, value)
+
+
+def content_epoch():
+    try:
+        return os.stat(EPOCH_FILE).st_mtime
+    except OSError:     # first boot, or no /dev/shm: everyone reads 0.0 and the TTL carries it
+        return 0.0
+
+
+def bump_epoch():
+    """Invalidate every worker's cache. Called from the three write helpers, so a new write path is
+    covered without anybody remembering -- the same reason the audit log lives in them.
+
+    It also drops _cached()'s memos for the rest of THIS request. Those are per-request and usually
+    die before anything can read them stale, but a writer routinely reads the old row first --
+    set_menu() calls get_menu() for the audit diff -- and that read caches the value it is about to
+    make wrong. Doing it here rather than at each write site is the same argument as the audit log:
+    one place every write already goes through, so the next one is covered without being asked."""
+    try:
+        with open(EPOCH_FILE, "w"):
+            pass
+    except OSError:
+        pass
+    if has_app_context():
+        uncache(*getattr(g, "_cache_keys", ()), "_cache_keys")
+
+
+def _proc_cached(key, loader, ttl=None):
+    """Cache across requests inside this worker. The epoch is read BEFORE the loader runs, so a
+    write landing mid-load stores the older stamp and the next reader reloads -- wrong in the safe
+    direction."""
+    now, epoch = time.time(), content_epoch()
+    hit = _proc_cache.get(key)
+    if hit and hit[0] > now and hit[1] >= epoch:
+        return hit[2]
+    value = loader()
+    _proc_cache[key] = (now + (CACHE_TTL if ttl is None else ttl), epoch, value)
+    return value
+
+
 # ---- post types & settings -------------------------------------------------
 
 def post_types():
-    return _cached("post_types", lambda: rows(table("post_types").select("*").order("id")))
+    return _cached("post_types", lambda: _proc_cached(
+        "post_types", lambda: rows(table("post_types").select("*").order("id"))))
 
 
 def post_type(**match):
@@ -247,7 +321,8 @@ def post_type(**match):
 
 
 def settings():
-    return _cached("settings", lambda: {r["key"]: r["value"] for r in rows(table("settings").select("*"))})
+    return _cached("settings", lambda: _proc_cached(
+        "settings", lambda: {r["key"]: r["value"] for r in rows(table("settings").select("*"))}))
 
 
 def set_settings(values):
@@ -259,6 +334,7 @@ def set_settings(values):
         for k, v in values.items():
             if before.get(k) != v:
                 _audit("update", "settings", k, {"value": [before.get(k), v]}, k)
+        bump_epoch()   # upsert(), not update(): the helper's bump never runs here
     uncache("settings")
 
 
@@ -387,6 +463,7 @@ def set_post_terms(post_id, term_ids):
         # and without it the entry reads "12 in posts" and names nothing
         _audit("update", "posts", post_id, {"terms": [before, list(term_ids)]},
                _label(one(table("posts").select("title").eq("id", post_id)) or {}))
+    bump_epoch()   # a term archive's contents just changed; neither write went through the helpers
     uncache("post_index_")
 
 
@@ -535,8 +612,14 @@ def paginate(q, page, per_page, transform=lambda x: x):
 
 
 def get_media(pk):
-    # per-request memo: the visual editor calls media_url()/media_alt() once per image per block swap
-    return _cached(f"media_{pk}", lambda: one(table("media").select("*").eq("id", pk))) if pk else None
+    """# ponytail: one row per picture, cached per process. The N+1 was the single biggest cost on the
+    public site -- a page with seventeen pictures made seventeen sequential round trips, fourteen of
+    them the partner logos in _card.html. Batching the ids per page would fix the home page; caching
+    the row fixes every page, the admin included, for less code."""
+    if not pk:
+        return None
+    return _cached(f"media_{pk}", lambda: _proc_cached(
+        f"media_{pk}", lambda: one(table("media").select("*").eq("id", pk))))
 
 
 def admin_counts():
@@ -554,9 +637,21 @@ def admin_counts():
     return _cached("admin_counts", load)
 
 
+def redirect_for(path):
+    """The whole redirects table as {from_path: row}, cached per worker. It was one round trip on
+    every request of every page -- a tiny table that almost always misses. A redirect added or
+    removed goes through insert()/delete(), which bump the epoch, so this drops on the next read."""
+    found = _proc_cached("redirects", lambda: {r["from_path"]: r for r in rows(table("redirects").select("*"))})
+    return found.get(path)
+
+
 def get_menu(slug):
-    m = one(table("menus").select("*").eq("slug", slug))
-    return m["items"] if m else []
+    """base.html calls this twice on every page (header, footer) and it had no cache of any kind --
+    not even the per-request one -- so it was two round trips on every view of every page."""
+    def load():
+        m = one(table("menus").select("*").eq("slug", slug))
+        return m["items"] if m else []
+    return _cached(f"menu_{slug}", lambda: _proc_cached(f"menu_{slug}", load))
 
 
 def set_menu(slug, items, name=None):
@@ -564,5 +659,6 @@ def set_menu(slug, items, name=None):
     the JSON API, which lets a caller title a menu; the browser screen has no field for it."""
     before = get_menu(slug)
     table("menus").upsert({"slug": slug, "name": name or slug.title(), "items": items}, on_conflict="slug").execute()
+    bump_epoch()   # upsert(), not update(): the helper's bump never runs here
     if before != items:
         _audit("update", "menus", slug, {"items": [before, items]}, slug)
