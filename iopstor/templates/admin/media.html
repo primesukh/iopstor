@@ -20,7 +20,7 @@
       <div class="tiles-m">
         {% for m in result['items'] %}
         <div class="m-tile{{ ' on' if sel and sel.id == m.id }}">
-          <label class="m-pick"><input type="checkbox" name="ids" value="{{ m.id }}" aria-label="Select {{ m.filename }}"></label>
+          <input class="m-pick" type="checkbox" name="ids" value="{{ m.id }}" aria-label="Select {{ m.filename }}"{{ ' checked' if sel and sel.id == m.id }}>
           <a class="m-open" href="?page={{ page }}&amp;pick={{ m.id }}">
             <span class="m-prev">{% if m.mime.startswith('image/') %}<img src="{{ m.url }}" alt="{{ m.alt }}" loading="lazy">{% else %}<span class="m-pdf">PDF</span>{% endif %}</span>
             <span class="m-meta"><span class="m-name">{{ m.filename }}</span>
@@ -31,7 +31,7 @@
         {% else %}<p class="empty-box">No uploads yet.</p>{% endfor %}
       </div>
       {% if result['items'] %}<p class="m-bulk"><button type="submit" class="danger">Delete selected</button>
-        <small class="muted">Tick the box on any file above.</small></p>{% endif %}
+        <small class="muted">Click a file to select it. Ctrl-click (&#8984; on a Mac) adds one, Shift-click takes a run.</small></p>{% endif %}
     </form>
     <p class="pager">{% if page > 1 %}<a class="btn secondary" href="?page={{ page-1 }}">Previous</a>{% endif %} {% if has_next %}<a class="btn secondary" href="?page={{ page+1 }}">Next</a>{% endif %}</p>
   </div>

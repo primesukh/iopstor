@@ -849,6 +849,39 @@ def test_a_rejected_file_in_a_batch_does_not_cost_the_editor_the_good_ones(app, 
     assert "a.png" not in body                        # a success is a count, not a list to read
 
 
+def test_the_file_the_panel_is_showing_arrives_already_selected(app, client, monkeypatch):
+    """Clicking a tile is a link to ?pick=, and clicking a tile has to *select* it -- so the server
+    ticks that one box. This is also what makes a plain click clear the rest of a selection, and what
+    gives initMediaBulk() an anchor to shift-click from with JavaScript off or before it runs."""
+    rows = [{"id": n, "key": f"2026/09/{n}.png", "url": f"/media/2026/09/{n}.png",
+             "filename": f"{n}.png", "mime": "image/png", "alt": "", "size": 10} for n in (1, 2, 3)]
+    _media_screen(monkeypatch, client, rows)
+
+    body = client.get("/admin/media?pick=2").get_data(as_text=True)
+    assert 'value="2" aria-label="Select 2.png" checked' in body
+    assert 'value="1" aria-label="Select 1.png">' in body      # the others are left alone
+    assert body.count(" checked") == 1
+
+
+def test_the_grid_selection_leaves_a_plain_click_alone():
+    """initMediaBulk() only exists for the two modifier clicks. A plain click has to stay a link --
+    that is the whole no-JavaScript path (the server answers ?pick= with the panel and a ticked box),
+    and swallowing it would leave an editor with no way to reach a file's alt text. Both modifier
+    branches must call preventDefault, or the page navigates away from the selection just made.
+    Measured in Firefox against this file: 8/8, including that a plain click is not intercepted."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    fn = js[js.index("function initMediaBulk("):js.index("document.addEventListener(\"DOMContentLoaded\"")]
+    assert 'document.querySelector(".tiles-m")' in fn and "if (!grid) return;" in fn
+    assert fn.count("e.preventDefault();") == 2             # the shift branch and the ctrl branch, and no more
+    assert "e.ctrlKey || e.metaKey" in fn                    # a Mac selects with cmd, not ctrl
+    # the plain branch moves the anchor and nothing else -- no preventDefault after the last else
+    plain = fn[fn.rindex("} else {"):]
+    assert "preventDefault" not in plain and "last = at;" in plain
+    # a <label> round the box would forward a second click and toggle every ctrl-click back again
+    assert ".m-pick input" not in fn and 'tile.querySelector(".m-pick")' in fn
+    assert "initMediaBulk();" in js                          # actually wired into DOMContentLoaded
+
+
 def test_media_delete_takes_the_ticked_files_and_nothing_else(app, client, monkeypatch):
     """One route serves both Delete buttons -- the panel's single id and the grid's tick boxes. An id
     that is not a number can only come from an edited form, so it is dropped before the query."""

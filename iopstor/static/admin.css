@@ -321,19 +321,24 @@
 .dz-hint{margin:4px 0 12px;font-size:12.5px;color:var(--muted)}
 .drop-zone .dz-hint:last-child{margin:12px 0 0}
 .tiles-m{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
-.m-tile{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--white)}
-.m-tile.on{border-color:var(--blue);box-shadow:0 0 0 2px rgba(66,115,184,.25)}
-/* ticked means "about to be deleted", so it reads in red -- it has to be impossible to confuse with
-   .on, which is only the blue ring on whichever file the panel happens to be showing */
-.m-tile:has(.m-pick input:checked){border-color:var(--red);background:var(--red-bg)}
+/* user-select:none so shift-clicking a run highlights files rather than dragging a text selection
+   across their names */
+.m-tile{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--white);user-select:none}
+/* selected and "the one the panel is showing" are the same look on purpose: a plain click does both,
+   and two blues competing on one tile would only ask which is which. The red is on the button */
+.m-tile.on,.m-tile:has(.m-pick:checked){border-color:var(--blue);background:var(--blue-tint);box-shadow:0 0 0 2px rgba(66,115,184,.25)}
 .m-open{display:block;text-decoration:none;color:inherit}
-.m-pick{position:absolute;top:8px;left:8px;z-index:1;display:flex;padding:4px;line-height:0;cursor:pointer;
-  background:var(--white);border:1px solid var(--line-2);border-radius:6px}
-.m-bulk{display:flex;align-items:center;gap:10px;margin:14px 0 0}
+/* the box is the chip -- a <label> round it would forward a second click to the input, so every
+   modifier click would arrive twice and toggle back to where it started. The white ring is what
+   keeps it visible on top of a dark photograph */
+.admin .m-pick{position:absolute;top:8px;left:8px;z-index:1;width:17px;height:17px;margin:0;cursor:pointer;
+  accent-color:var(--blue);box-shadow:0 0 0 3px var(--white);border-radius:3px}
+.m-bulk{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:14px 0 0}
+.m-bulk button{white-space:nowrap}
 /* the button is grey until a box is ticked: nothing is selected far more often than something is,
    and a permanently red Delete on a screen full of pictures reads like a threat */
 .admin .m-bulk button{background:var(--line-2);color:var(--ink)}
-.admin form:has(.m-pick input:checked) .m-bulk button{background:#b91c1c;color:var(--white)}
+.admin form:has(.m-pick:checked) .m-bulk button{background:#b91c1c;color:var(--white)}
 .m-prev{display:flex;align-items:center;justify-content:center;aspect-ratio:1;background:var(--grey)}
 .m-prev img{max-width:100%;max-height:100%;object-fit:contain}
 .m-pdf{display:flex;align-items:center;justify-content:center;width:44px;height:56px;border:2px solid var(--black);border-radius:4px;font:700 10px/1 var(--mono)}

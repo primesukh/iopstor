@@ -419,7 +419,16 @@ The **Media** section is the shared library for every image, logo and PDF.
 
 If one file in a batch is a kind the site does not take — a Word document, say — the others still go up. The message at the top tells you how many arrived and names the one that did not.
 
-**Deleting several at a time.** Every file in the grid has a small tick box in its top left corner. Tick the ones you want rid of — they turn pink so you can see what you have chosen — and press **Delete selected** underneath. The button stays grey until you have ticked something, and asks you to confirm before anything goes. You can still delete one at a time from the panel on the right, exactly as before. Deleting is permanent: anything on the site using that picture will lose it, and it does not come back from Activity.
+**Choosing files, and deleting several at a time.** Click a file — anywhere on it, not just the little box in its corner — and it is selected: it turns blue, and its details open in the panel on the right. To choose more than one:
+
+- **Ctrl-click** (**⌘-click** on a Mac) a second, third, fourth file to add each one to what you have already chosen. Ctrl-click one again to take it back out.
+- **Shift-click** to take everything between the last file you clicked and this one, in one go — the quick way to select a whole row or a whole screenful.
+- A plain click on its own starts again with just that file.
+- The tick boxes still work on their own if you prefer them, and they are what you use on a phone or tablet, where there is no Ctrl key.
+
+Then press **Delete selected** underneath the grid. It stays grey until you have chosen something, turns red once you have, and asks you to confirm before anything goes. You can still delete one file at a time from the panel on the right, exactly as before. Deleting is permanent: anything on the site using that picture will lose it, and it does not come back from Activity.
+
+One thing this costs: Ctrl-clicking a file no longer opens it in a new browser tab, because Ctrl-click now means "add this one to the selection".
 
 **Putting a PDF on a page.** Press `/` on an empty line and choose **PDF**. The section drops in; hover it, press **⚙**, and pick the PDF from the list — or press **Choose file** to upload one on the spot. Only PDFs are offered there, so you cannot pick a photo by mistake. Visitors then read it without leaving the page — scrolling, zooming and printing with their browser's own controls — and there is a **Download the PDF** button under it, which saves the file to their computer under the name it was uploaded with. That button is also how people on a phone read it: phone browsers usually will not show a PDF inside a page, so they download it and open it from there. Give the section a heading by typing straight onto the page above the viewer.
 
