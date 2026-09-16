@@ -44,9 +44,9 @@
     <input type="text" name="warranty_path" value="/" placeholder="/warranty">
     <span class="st-hint">the public page that carries the serial-number check — attackers guess serials against it
       (<code>?sn=…</code>). Left as “/”, the guesses just hit the home page.</span></label>
-  <p class="st-cap muted">Up to {{ max_visitors }} visitors and {{ max_attackers }} attackers; higher numbers are
-    limited by the machine (open connections, memory) and read as rough — push to find where it breaks,
-    not for an exact count.</p>
+  <p class="st-cap muted">Up to {{ max_visitors }} visitors and {{ max_attackers }} attackers. The load spreads
+    across this machine's CPU cores, but real throughput is limited by the machine and by how fast the target
+    can answer — read the numbers as “push to find where it breaks”, not an exact count.</p>
   <button type="submit" class="btn">Run</button>
 </form>
 

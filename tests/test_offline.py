@@ -2256,3 +2256,70 @@ def test_run_load_hits_a_real_server_and_the_honeypot_leaves_no_row(tmp_path):
     assert p["sent"] > 0 and tally["hits"] > 0
     assert p["status"].get("200", 0) > 0           # visitors read the real pages
     assert tally["rows"] == 0                       # the honeypot spared the target every time
+
+
+def test_nprocs_and_split():
+    """The fan-out: one process below the threshold, more above it (capped), and the split sums back."""
+    from iopstor import stress
+    assert stress._nprocs(10, 5) == 1                       # under PER_PROC -> in-thread
+    assert 1 <= stress._nprocs(5000, 1000) <= stress.MAX_PROCS
+    assert stress._split(10, 3) == [4, 3, 3] and sum(stress._split(10, 3)) == 10
+    assert stress._split(0, 4) == [0, 0, 0, 0]
+
+
+def test_merge_parts_sums_children(tmp_path):
+    """The coordinator sums every generator's raw counts into the one progress dict the poll reads."""
+    from iopstor import stress
+    db = str(tmp_path / "m.db")
+    stress._write_part("r1", 0, {"sent": 10, "errors": 1, "status": {"200": 9},
+                                 "kind": {"visitor": 10, "attacker": 0}, "lat": [0.01] * 5}, db)
+    stress._write_part("r1", 1, {"sent": 20, "errors": 2, "status": {"200": 15, "429": 3},
+                                 "kind": {"visitor": 0, "attacker": 20}, "lat": [0.02] * 5}, db)
+    agg = stress._merge_parts("r1", db, 2.0)
+    assert agg["sent"] == 30 and agg["errors"] == 3
+    assert agg["status"]["200"] == 24 and agg["throttled"] == 3
+    assert agg["kind"] == {"visitor": 10, "attacker": 20}
+    assert agg["req_per_sec"] == 15.0                       # 30 sent / 2s
+
+
+def test_a_multiprocess_run_completes(tmp_path, monkeypatch):
+    """Measured: force the fan-out to real spawned processes and prove they run, report through the parts
+    table and merge into one finished run. Two children hit a throwaway server over TCP."""
+    import http.server
+    import threading
+    import time
+    from iopstor import stress
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            if self.path == "/sitemap.xml":
+                b = b"<urlset><url><loc>http://127.0.0.1:%d/</loc></url></urlset>" % self.server.server_address[1]
+            else:
+                b = b"ok"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    db = str(tmp_path / "mp.db")
+    monkeypatch.setattr(stress, "_nprocs", lambda v, a: 2)   # force the spawn path regardless of CPU count
+    try:
+        rid = stress.start(base, visitors=4, attackers=0, seconds=2, path=db)
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            run = stress.read(rid, path=db)
+            if run and run["state"] in ("done", "error"):
+                break
+            time.sleep(0.2)
+    finally:
+        srv.shutdown()
+
+    assert run["state"] == "done", run
+    assert run["progress"]["sent"] > 0
+    assert len(stress._read_parts(rid, db)) == 2             # both spawned children reported

@@ -9,17 +9,33 @@ Progress lives in a sqlite file on /dev/shm, the same trick throttle.py uses: th
 are separate processes, so a run started in one and polled from another need shared memory, and tmpfs
 gives it, wiped on redeploy -- exactly a load run's lifetime. Nothing here is application data.
 
-Stdlib only (urllib, threading, sqlite3): pip install is denied and no load tool is in the image.
+One CPython process is GIL-bound, so past a few hundred threads throughput FALLS, not rises. To lift
+that the load fans out across processes (`_nprocs()` of them, spawned), each running the thread model
+below for its share; a coordinator merges their partial counts into the one run row the poll reads. The
+generator processes are separate from the ~30 gunicorn workers that serve requests -- the Run lands on
+one worker, which spawns the children; the other workers keep serving and can still answer the progress
+poll because the run state is in the shared /dev/shm store.
 
-# ponytail: the controller thread lives inside whichever worker took the Run request. If that worker
-# is recycled mid-run the run freezes at its last flush -- acceptable for a manual diagnostic; move the
-# controller to its own process, or a broker, if runs must outlive a worker.
+Stdlib only (urllib, threading, multiprocessing, sqlite3): pip install is denied and no load tool is
+in the image. multiprocessing uses the "spawn" context so a gunicorn worker's forked state, sockets and
+locks are never copied into a child.
+
+# ponytail: processes x threads, ceiling ~= cores. It multiplies the single-process throughput by the
+# core count, not to an unconditional 10k; and the target caps it first (PostgREST pool of 10). A real
+# async client would go further but is a barred dependency.
+# ponytail: the controller thread and the children live in whichever worker took the Run request. If
+# that worker is recycled mid-run the run freezes at its last flush (children are daemon, so they die
+# with it) -- acceptable for a manual diagnostic; a broker would be the fix if runs must outlive a worker.
 # ponytail: the only guard on the target URL is the scheme -- no SSRF allow-list. The panel is
 # owner-only behind the office-only admin, and pointing dev at prod on the LAN is the whole point;
 # add an allow-list if this ever escapes that trust boundary.
+# ponytail: nothing prevents two runs at once (two Run clicks land on two workers) -- owner-only, so the
+# double load is on the one person who asked for it; add a single-active-run lock if that changes.
 """
 import json
 import math
+import multiprocessing
+import os
 import random
 import re
 import sqlite3
@@ -41,9 +57,29 @@ MAX_VISITORS = 10000
 MAX_ATTACKERS = 1000
 MAX_SECONDS = 300
 REQ_TIMEOUT = 15          # a stuck target must not pin a worker thread forever
-LAT_SAMPLE = 2000         # reservoir size for the latency percentiles
-FLUSH_EVERY = 0.5         # how often the controller writes progress out for the poll to read
+LAT_SAMPLE = 2000         # reservoir size for the latency percentiles (per process)
+FLUSH_EVERY = 0.5         # how often a generator writes its part out, and the coordinator merges
 UA = "IOPSTOR-stress/1.0"
+PER_PROC = 250            # threads before fanning out to another process; below this, one in-thread run
+MAX_PROCS = 16            # hard ceiling on spawned generator processes
+
+
+def _nprocs(visitors, attackers):
+    """How many generator processes to fan out to. 1 (an in-process thread, spawn-free and snappy) until
+    the load is worth splitting, then one per PER_PROC up to the container's own CPU quota. Uses
+    os.process_cpu_count() (Python 3.13), which honours a cgroup/affinity limit -- os.cpu_count() reports
+    the host's cores, so on a CPU-capped container behind a big host it would oversubscribe wildly."""
+    load = visitors + attackers
+    if load <= PER_PROC:
+        return 1
+    cpu = os.process_cpu_count() or 2
+    return max(1, min(cpu, MAX_PROCS, math.ceil(load / PER_PROC)))
+
+
+def _split(n, k):
+    """Distribute n as evenly as possible across k buckets; the buckets sum to n."""
+    base, extra = divmod(n, k)
+    return [base + (1 if i < extra else 0) for i in range(k)]
 
 
 def clamp(n, lo, hi):
@@ -69,8 +105,11 @@ def validate_target(url):
 def _db(path):
     db = sqlite3.connect(path, timeout=5)
     db.execute("PRAGMA busy_timeout=5000")
+    db.execute("PRAGMA journal_mode=WAL")   # many child writers + the coordinator reader, no blocking
     db.execute("CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, started REAL, state TEXT, "
                "stop INTEGER DEFAULT 0, params TEXT, progress TEXT)")
+    db.execute("CREATE TABLE IF NOT EXISTS parts (rid TEXT, idx INTEGER, progress TEXT, "
+               "PRIMARY KEY (rid, idx))")
     return db
 
 
@@ -111,6 +150,19 @@ def _stopped(rid, path):
     return bool(row and row[0])
 
 
+def _write_part(rid, idx, raw, path):
+    """One generator's own running counts. The coordinator reads every part and sums them."""
+    with _db(path) as db:
+        db.execute("INSERT OR REPLACE INTO parts (rid, idx, progress) VALUES (?,?,?)",
+                   (rid, idx, json.dumps(raw)))
+
+
+def _read_parts(rid, path):
+    with _db(path) as db:
+        rows = db.execute("SELECT progress FROM parts WHERE rid=?", (rid,)).fetchall()
+    return [json.loads(r[0]) for r in rows]
+
+
 # ---- metrics ----------------------------------------------------------------------------------
 
 def percentile(sample, p):
@@ -122,9 +174,21 @@ def percentile(sample, p):
     return round(s[k] * 1000, 1)
 
 
+def _derive(sent, errors, status, kind, lat, elapsed):
+    """The progress dict the UI reads, from raw counts. Shared by a single generator's snapshot and by
+    the coordinator's merge of many, so the shape is defined once."""
+    return {
+        "sent": sent, "errors": errors, "status": status, "kind": kind,
+        "req_per_sec": round(sent / elapsed, 1) if elapsed > 0 else 0.0,
+        "avg_ms": round(sum(lat) / len(lat) * 1000, 1) if lat else 0.0,
+        "p95_ms": percentile(lat, 95), "max_ms": round(max(lat) * 1000, 1) if lat else 0.0,
+        "throttled": status.get("429", 0), "elapsed": round(elapsed, 1),
+    }
+
+
 class Metrics:
-    """Thread-safe counters. Latencies are reservoir-sampled so the memory is bounded however long
-    the run goes."""
+    """Thread-safe counters for one generator (process). Latencies are reservoir-sampled so the memory
+    is bounded however long the run goes."""
     def __init__(self):
         self.lock = threading.Lock()
         self.sent = 0
@@ -150,18 +214,30 @@ class Metrics:
                 if j < LAT_SAMPLE:
                     self.lat[j] = latency
 
-    def snapshot(self, elapsed):
+    def raw(self):
+        """The mergeable counts, for a part row. Not derived -- the coordinator sums these first."""
         with self.lock:
-            lat = list(self.lat)
-            status = dict(self.status)
-            sent, errors, kind = self.sent, self.errors, dict(self.kind)
-        return {
-            "sent": sent, "errors": errors, "status": status, "kind": kind,
-            "req_per_sec": round(sent / elapsed, 1) if elapsed > 0 else 0.0,
-            "avg_ms": round(sum(lat) / len(lat) * 1000, 1) if lat else 0.0,
-            "p95_ms": percentile(lat, 95), "max_ms": round(max(lat) * 1000, 1) if lat else 0.0,
-            "throttled": status.get("429", 0), "elapsed": round(elapsed, 1),
-        }
+            return {"sent": self.sent, "errors": self.errors, "status": dict(self.status),
+                    "kind": dict(self.kind), "lat": list(self.lat)}
+
+    def snapshot(self, elapsed):
+        r = self.raw()
+        return _derive(r["sent"], r["errors"], r["status"], r["kind"], r["lat"], elapsed)
+
+
+def _merge_parts(rid, path, elapsed):
+    """Sum every generator's raw counts into the one progress dict the poll reads."""
+    sent = errors = 0
+    status, kind, lat = {}, {"visitor": 0, "attacker": 0}, []
+    for r in _read_parts(rid, path):
+        sent += r.get("sent", 0)
+        errors += r.get("errors", 0)
+        for k, v in (r.get("status") or {}).items():
+            status[k] = status.get(k, 0) + v
+        for k, v in (r.get("kind") or {}).items():
+            kind[k] = kind.get(k, 0) + v
+        lat.extend(r.get("lat") or [])
+    return _derive(sent, errors, status, kind, lat, elapsed)
 
 
 # ---- the requests -----------------------------------------------------------------------------
@@ -231,44 +307,73 @@ def _worker(fn, args, metrics, deadline, stop_flag):
         metrics.record(kind, status, latency, error)
 
 
-def run_load(rid, target, visitors, attackers, seconds, warranty_path="/", path=STRESS_DB):
-    """The controller: start the workers, flush progress while they run, finalise. Runs in its own
-    background thread (see start())."""
+def _generate(rid, idx, target, visitors, attackers, deadline, warranty_path, urls, path=STRESS_DB):
+    """One generator: run this share's threads until the deadline or the stop flag, writing its own part
+    row every FLUSH_EVERY. Module-level and picklable, so it is both the thread target (nprocs==1) and the
+    spawned-process target (nprocs>1). It never touches the run row -- the coordinator merges the parts."""
     metrics = Metrics()
+    stop_flag = threading.Event()
+    threads = [threading.Thread(target=_worker, args=(_visit, (target, urls), metrics, deadline, stop_flag),
+                                daemon=True) for _ in range(visitors)]
+    threads += [threading.Thread(target=_worker, args=(_attack, (target, warranty_path), metrics, deadline,
+                                 stop_flag), daemon=True) for _ in range(attackers)]
+    for t in threads:
+        t.start()
+    while any(t.is_alive() for t in threads):
+        if _stopped(rid, path):
+            stop_flag.set()
+        _write_part(rid, idx, metrics.raw(), path)
+        time.sleep(FLUSH_EVERY)
+        if time.time() > deadline + REQ_TIMEOUT + 5:   # workers should have stopped; do not hang
+            stop_flag.set()
+            break
+    for t in threads:
+        t.join(timeout=1)
+    _write_part(rid, idx, metrics.raw(), path)
+
+
+def run_load(rid, target, visitors, attackers, seconds, warranty_path="/", path=STRESS_DB):
+    """The coordinator: fan the load out across generators (a thread, or spawned processes), merge their
+    parts into the run row while they run, finalise. Runs in its own background thread (see start())."""
     start_t = time.time()
     deadline = start_t + seconds
-    stop_flag = threading.Event()
     try:
-        urls = sitemap_urls(target)
-        _write(rid, "running", metrics.snapshot(0.0), path)
-        threads = []
-        for _ in range(visitors):
-            threads.append(threading.Thread(target=_worker,
-                           args=(_visit, (target, urls), metrics, deadline, stop_flag), daemon=True))
-        for _ in range(attackers):
-            threads.append(threading.Thread(target=_worker,
-                           args=(_attack, (target, warranty_path), metrics, deadline, stop_flag), daemon=True))
-        for t in threads:
-            t.start()
-        while any(t.is_alive() for t in threads):
-            if _stopped(rid, path):
-                stop_flag.set()
-            _write(rid, "running", metrics.snapshot(time.time() - start_t), path)
+        urls = sitemap_urls(target)                    # fetched once, handed to every generator
+        _write(rid, "running", _merge_parts(rid, path, 0.0), path)
+        nprocs = _nprocs(visitors, attackers)
+        vs, as_ = _split(visitors, nprocs), _split(attackers, nprocs)
+        procs = []
+        if nprocs == 1:                                # small run: an in-process thread, no spawn cost
+            gen = threading.Thread(target=_generate, args=(rid, 0, target, visitors, attackers, deadline,
+                                   warranty_path, urls, path), daemon=True)
+            gen.start()
+            workers = [gen]
+        else:
+            ctx = multiprocessing.get_context("spawn")  # a fresh interpreter, not a fork of this worker
+            for i in range(nprocs):
+                p = ctx.Process(target=_generate, args=(rid, i, target, vs[i], as_[i], deadline,
+                                warranty_path, urls, path), daemon=True)
+                p.start()
+                procs.append(p)
+            workers = procs
+        while any(w.is_alive() for w in workers):
+            _write(rid, "running", _merge_parts(rid, path, time.time() - start_t), path)
             time.sleep(FLUSH_EVERY)
-            if time.time() > deadline + REQ_TIMEOUT + 5:   # workers should have stopped; do not hang
-                stop_flag.set()
+            if time.time() > deadline + REQ_TIMEOUT + 8:   # generators should have stopped; force it
+                for p in procs:
+                    p.terminate()
                 break
-        for t in threads:
-            t.join(timeout=1)
-        _write(rid, "done", metrics.snapshot(time.time() - start_t), path)
+        for w in workers:
+            w.join(timeout=2)
+        _write(rid, "done", _merge_parts(rid, path, time.time() - start_t), path)
     except Exception as e:   # noqa: BLE001 - a broken run must land as 'error', not vanish
-        snap = metrics.snapshot(time.time() - start_t)
+        snap = _merge_parts(rid, path, time.time() - start_t)
         snap["error"] = str(e)[:200]
         _write(rid, "error", snap, path)
 
 
 def start(target, visitors, attackers, seconds, warranty_path="/", path=STRESS_DB):
-    """Validate, clamp, register the run and kick off its controller thread. Returns the run id.
+    """Validate, clamp, register the run and kick off its coordinator thread. Returns the run id.
     Raises ValueError if the target is not a usable base URL."""
     target = validate_target(target)
     visitors = clamp(visitors, 0, MAX_VISITORS)
