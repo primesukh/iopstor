@@ -862,6 +862,8 @@ paragraph of writing instead, use the **—** button on the writing toolbar. The
 
 **I deleted something by mistake.** Deletion is permanent. Set things to *Draft* instead when you only want them off the site.
 
+**Do my product photos all have to be the same shape?** No. Each card gives the picture a fixed amount of room and centres it there, so a tall photo and a wide one still produce two cards that line up — same size, titles level, the line under the picture in the same place. Upload whatever the manufacturer sent.
+
 **On my phone the menu was one huge list, and the partner logos were enormous.** Both fixed, and neither needs anything from you. Tapping the menu button now shows just six rows — *Services*, *Case Studies*, *Blog*, *Company*, *Datasheets*, *Products* — and the whole menu fits on one screen. The ones with a small arrow open when you tap them: *Services* opens into its groups, and tapping a group (*Cloud*, say) opens that group's pages. Tap again to close. And the technology partner logos are three to a row instead of two, so they read as a row of partners rather than a wall. On a computer both look exactly as they did before.
 
 **On my phone the page slid sideways, and the quote cards had an empty gap under the name.** Both fixed, and neither needed anything from you. The page no longer drifts left and right when you scroll it on a phone — that was the big picture at the top of the home page sliding in from the side and pushing everything over. And a short quote no longer leaves a block of empty white under the person's name: the photo and name now sit on the bottom edge of the card, however long or short the quote is. The buttons either side of the testimonials are also bigger on a phone, so they are easier to hit with a thumb.

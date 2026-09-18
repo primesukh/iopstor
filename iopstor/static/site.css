@@ -603,8 +603,16 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pl-service .card-n{display:block;margin:0 0 14px;font:700 12px/1 var(--mono);color:var(--blue)}
 .pl-service .chips-kids{display:flex}
 .pl-product .card{padding:0;overflow:hidden}
-.pl-product .card-img{display:flex;align-items:center;justify-content:center;min-height:150px;padding:20px;background:var(--white);border-bottom:1px solid var(--line)}
-.pl-product .card-img img{width:auto;max-height:150px;object-fit:contain}
+/* The picture area is a FIXED height, not a minimum, and that is the whole point of these two rules.
+   A product photo's aspect ratio is whatever the client sent: the tower is 600x375, the rack unit
+   518x135. With `min-height:150px` the box only grew for a picture tall enough to reach it, so the
+   short one sat in a 176px box and the tall one in a 191px box -- and since the rule under it draws
+   the divider, the line and the title were 15px out of step between two cards sitting side by side.
+   Fixed height instead, picture centred in it and capped at 100% rather than a number, so every card
+   in the row rules off at the same place whatever shape the next photo turns out to be.
+   190 = 150 for the picture + 20 above and below. */
+.pl-product .card-img{display:flex;align-items:center;justify-content:center;height:190px;padding:20px;background:var(--white);border-bottom:1px solid var(--line)}
+.pl-product .card-img img{width:auto;max-width:100%;max-height:100%;object-fit:contain}
 .pl-product .card h3{margin:20px 24px 8px}
 .pl-product .card p{margin:0 24px 24px}
 .pl-case_study .card-img{display:block;min-height:150px;margin:0 0 16px;border-radius:10px}
@@ -789,8 +797,9 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 /* products: the archive card is taller, prices and sells */
 .arch-body.pl-product .cards{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
 .arch-body.pl-product .card{display:flex;flex-direction:column}
-.arch-body.pl-product .card-img{min-height:180px;padding:28px}
-.arch-body.pl-product .card-img img{max-height:160px}
+/* the archive had it worse -- 217px against 180px, a 37px step. 216 = 160 + 28 above and below */
+.arch-body.pl-product .card-img{height:216px;padding:28px}
+.arch-body.pl-product .card-img img{max-height:100%}
 .arch-body.pl-product .card h3{margin:20px 24px 8px;font-size:22px}
 .arch-body.pl-product .card h3 a{color:inherit;text-decoration:none}
 .arch-body.pl-product .card h3 a:hover{color:var(--blue)}
