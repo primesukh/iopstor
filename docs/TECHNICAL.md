@@ -1000,7 +1000,13 @@ Three things the CSS has to undo or lift:
 
 - **`.pl .card-img` is hidden for every list**, so the avatar is switched back on explicitly as a 48px disc. With
   no photo the macro still emits `.card-img-empty`, whose diagonal-hatch placeholder reads as a broken image at that
-  size, so it becomes the flat grey circle the `testimonial` block already draws.
+  size, so it becomes a grey circle carrying **a person outline** (2026-09-18). No photo is the common case — an
+  editor writes up a quote long before they have a portrait — so the fallback should look finished, not unfinished.
+  It is a `background-image` holding an inline SVG data URI, not markup: the mark is decoration, so there is nothing
+  to read out, `_card.html` needs no branch, and the archive at `/testimonials` gets it from the same rule. The one
+  compromise is that the stroke colour (`#9aa5b4`) is written **inside** the data URI, where a `var()` cannot reach;
+  it is a placeholder tone rather than a brand colour, so it does not follow the palette. If it ever has to, the
+  upgrade is a `mask-image` on an `::after` with `background:var(--muted-dark-2)` — marked `ponytail:` in the file.
 - **The stars are drawn server-side and clamped** — `[[m.get('rating')|int, 0]|max, 5]|min` — so a 9 or a −3 typed
   into a plain number box can only ever come out as five marks or none. `m.get('rating')` and not `m.rating`: the
   `int` filter raises `UndefinedError` on a missing key rather than returning 0, which is not what its name suggests.
