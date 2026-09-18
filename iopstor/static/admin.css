@@ -326,7 +326,7 @@
 .m-tile{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--white);user-select:none}
 /* selected and "the one the panel is showing" are the same look on purpose: a plain click does both,
    and two blues competing on one tile would only ask which is which. The red is on the button */
-.m-tile.on,.m-tile:has(.m-pick:checked){border-color:var(--blue);background:var(--blue-tint);box-shadow:0 0 0 2px rgba(66,115,184,.25)}
+.m-tile.on,.m-tile:has(.m-pick:checked){border-color:var(--blue);background:var(--blue-tint);box-shadow:0 0 0 2px rgba(53,115,185,.25)}
 .m-open{display:block;text-decoration:none;color:inherit}
 /* the box is the chip -- a <label> round it would forward a second click to the input, so every
    modifier click would arrive twice and toggle back to where it started. The white ring is what
