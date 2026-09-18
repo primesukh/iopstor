@@ -754,6 +754,27 @@ def test_warranty_form_hands_back_what_was_typed_when_the_save_is_refused(app, c
     assert r.status_code == 302 and saved["expiry_date"] == "2024-06-01" and saved["purchase_date"] is None
 
 
+def test_a_public_lead_cannot_store_more_than_it_is_allowed_to(app, client, monkeypatch):
+    """The contact form is open to the internet and every accepted lead is stored twice -- the row,
+    and the whole row again in audit_log, which is append-only with no retention job. So every field
+    is capped, including the ones the endpoint does not know by name and keeps in `data`. The
+    honeypot is the other half: a filled `website` is thanked and dropped without a write."""
+    from iopstor import db
+
+    saved = {}
+    monkeypatch.setattr(db, "insert", lambda name, row: saved.update(row) or {"id": 1})
+
+    r = client.post("/api/v1/leads", json={"name": "a", "email": "a@b.c", "message": "x" * 100_000,
+                                           "junk": "y" * 5_000, **{f"pad{i}": "z" for i in range(60)}})
+    assert r.status_code == 201
+    assert len(saved["message"]) == 5_000
+    assert len(saved["data"]["junk"]) == 200
+    assert len(saved["data"]) == 20 and "junk" in saved["data"]   # 61 extra keys in, 20 stored
+
+    monkeypatch.setattr(db, "insert", lambda *a: pytest.fail("a filled honeypot must not write"))
+    assert client.post("/api/v1/leads", json={"name": "Bot", "email": "b@c.d", "website": "spam"}).status_code == 201
+
+
 def test_media_is_served_by_the_app_not_the_storage_gateway(app, client, monkeypatch):
     """Supabase is LAN-only, so every picture and PDF comes through /media/<bucket key>: Flask fetches
     the bytes server-side, caches them for a year, and turns ?download into an attachment. Only the
