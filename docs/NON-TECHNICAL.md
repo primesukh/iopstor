@@ -95,8 +95,9 @@ as much or as little as you have:
 - **Title** — the person's name. This is the only thing you must fill in.
 - **What they said** — the quote itself, in their words. This is the box that would say *Summary* on any other kind
   of content; on a testimonial it is the quote, so it says so.
-- **Featured image** — their photo. It is shown as a small round portrait. Leave it out and a plain grey circle
-  takes its place, which is what most of them will have.
+- **Featured image** — their photo. It is shown as a small round portrait. Leave it out and the circle shows a
+  simple person outline instead, which is what most of them will have — so a testimonial with no photo still looks
+  finished rather than unfinished.
 - **Job title** and **Company** — either, both or neither. If you fill in only one, only that one shows, with no
   stray comma left behind.
 - **Stars out of 5** — type a whole number from 1 to 5. Leave it empty and the card simply has no stars, and closes

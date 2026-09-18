@@ -627,7 +627,16 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
    broken image at 48px -- it becomes the same flat grey circle the testimonial block already draws. */
 .pl-testimonial .card-img{grid-area:avatar;display:block;width:48px;height:48px;border-radius:999px;overflow:hidden;background:var(--line)}
 .pl-testimonial .card-img img{width:100%;height:100%;object-fit:cover}
-.pl-testimonial .card-img-empty{background:var(--line)}
+/* No photo is the common case -- an editor adds a quote long before they have a portrait -- so the
+   fallback is a person rather than a blank disc. It is a background-image and not markup, because
+   the mark is decoration: nothing to read out, no branch in _card.html, and the archive gets it from
+   the same rule. The grey is written into the data URI because a var() cannot reach inside one; it
+   is a placeholder tone rather than a brand colour, so it does not follow the palette. If it ever
+   has to, the upgrade is a mask-image on a ::after with background:var(--muted-dark-2).
+   ponytail: one hardcoded grey, #9aa5b4. */
+.pl-testimonial .card-img-empty{background:var(--line)
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa5b4' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='9' r='3.6'/%3E%3Cpath d='M5.6 19.6a6.6 6.6 0 0 1 12.8 0'/%3E%3C/svg%3E")
+  center/26px no-repeat}
 .pl-testimonial .card h3{grid-area:name;align-self:end;margin:0;font-size:16px}
 .pl-testimonial .card-where{grid-area:role;display:block;align-self:start;margin:2px 0 0;font-size:13.5px;color:var(--muted)}
 /* The watermark the design puts in the bottom-right of the card -- decoration, so it is CSS and
