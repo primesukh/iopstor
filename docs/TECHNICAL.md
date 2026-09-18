@@ -765,6 +765,27 @@ A second, shorter line under them maps the *old* token names (`--navy`, `--accen
 
 **Animations.** Three on menus: `drop` (the mega panel at .22s and the Company drop-down at .2s, `cubic-bezier(.2,.7,.2,1)`), `fade` (the mega's right pane, .2s ease-out, as the pointer moves down the group list) and `slide` (the mobile sheet, .25s ease-out). Five on the hero, from the design's own keyframes: `rise` on the words (.7s), `heroin` on the picture column (.8s), `glow` on the radial wash behind it (5s, infinite), `float` on the picture itself (6s, infinite) and `dot3`/`dot2` on the rotator's progress dots. Every one-shot is `both`-filled so it holds its end state. The entrance pair is scoped to `.hero-split` — the hero with art beside it, which is the only hero the design animates; every other opening band is still. Hover work is `transition` at .15s.
 
+**`.hero` carries `overflow-x:clip`, and it is load-bearing** (2026-09-18). Three of the hero's entry animations
+start the element to the *right* of where it lands — `heroin` at `translateX(40px)` on `.hero-media`, and
+`slides2`/`slides3` at `translateX(60px)` per slide — and a transform counts toward scrollable overflow. A desktop
+band has slack either side and nothing shows; a phone has none, so **the whole page grew and slid sideways under the
+reader's thumb**: measured on the real home page, `documentElement.scrollWidth` was 451 against a 390 viewport
+(61px) and 401 against 320 (81px). Toggling one thing at a time accounted for every pixel — the rotator was 48 of
+the 61, `heroin` the rest, the `glow` contributed nothing, and **the testimonial row contributed zero**, which is
+worth knowing because the sliding row is what looks guilty.
+
+Two things the fix had to be, and both were decided by measuring rather than by reasoning:
+
+- **`clip`, not `hidden`.** `hidden` would make the band a scroll container.
+- **On `.hero`, not on `body`.** `body{overflow-x:clip}` was tried and left the overflow at 61px / 81px — **exactly
+  unchanged, it does nothing here** — which is the trap, because it is the first thing anyone reaches for. It would
+  also have been wrong on principle: `.site-header` is `position:sticky`, and any non-`visible` overflow on an
+  ancestor takes that away.
+
+`.hero-media` keeps its exact width with the rule in place (336px at 390, 289px at 320, 538px at 1440), so it clips
+the animation's transient overshoot and never the layout. `test_the_hero_clips_the_overshoot_of_its_own_entry_animations`
+guards it, because a page-wide horizontal scroll is invisible to pytest and to a screenshot that is not looking for it.
+
 **The hero rotator is CSS.** `hero.images` renders `.hero-slides` with the picture count inline as `--n` and each `.hero-slide` carrying its turn as `--i`. Every slide runs the same loop over the whole cycle (`calc(var(--n) * 4.5s)`) delayed by `calc(var(--i) * 4.5s)`, so exactly one is showing at a time with the design's slide-in / slide-out either side of its turn. The dots are `<span>`s, not buttons: they report which picture is up and fill blue across its 4.5 seconds, and they are `aria-hidden` because they say nothing the pictures' `alt` text does not. **`.hero-dots` is a sibling of `.hero-slides`, not a child of it** — `.hero-slides` carries the `float` loop, so a dot inside it drifted up and down with the picture, and an indicator that bobs is hard to read against. Being absolutely positioned it now measures from `.hero-media` instead, which only has the one-shot entrance; the picture still floats and the dots hold still. Measured rather than eyeballed: with `.hero-slides` held at each end of its float, `.hero-dots` reports the same `getBoundingClientRect().top` while `.hero-slides` moves 9.6px. There is one keyframe set per count — `slides2`/`dot2` and `slides3`/`dot3` — because a slide's share of the cycle is written into the percentages; a fourth picture needs a fourth set, marked `ponytail:` in the file. Under `prefers-reduced-motion` the slides are stood down explicitly and the first picture is left showing: the mock's blanket `animation-duration:.01ms` would have parked every slide on its final frame, which is the hidden one.
 
 **Section effects (`fx-*`)** are the four an editor can put on a Numbers or Rich text section (§6). All four run on the document timeline and play once as the page loads, in every browser. `fx-gradient` paints the section's big text — every heading, plus a Numbers figure, which is a `<strong>` and not a heading at all — with the brand gradient through `background-clip:text`, drifting on a plain time loop. The other three are one-shot entrances: `fx-rise` fades and lifts `>.wrap` (never the `<section>` itself, which would fade a dark band in from white), `fx-sweep` grows a marker-pen bar as the element's *own* `background-size` from `0 .3em` to `100% .3em`, and `fx-count` rolls a registered `@property --cv` through `counter()`.
@@ -867,7 +888,7 @@ script adds on top is the drift, the arrows, the dots and click-drag. `post_list
 with **`hidden`**, and `site.js` is what removes it: no script, no buttons that do nothing.
 
 **Nothing in it is a hard-coded number.** The step is the first card's measured `getBoundingClientRect().width` plus
-the container's computed `columnGap`, because the card is `flex:0 0 min(340px,74vw)` and the gap is CSS — both move
+the container's computed `columnGap`, because the card is `flex:0 0 min(340px, 100% - 68px)` and the gap is CSS — both move
 with the viewport. The **dots are built by the script, not by Jinja**, and rebuilt on `resize`, because the count is
 `ceil((scrollWidth − clientWidth) / step) + 1` and not the number of cards: at 1440 the row shows 3.22 cards, so six
 testimonials have four stops, and a dot per card would have left the last two pointing at the same end position.
@@ -878,10 +899,16 @@ Measured in Firefox 140 headless, which is also what the numbers in the commit b
 |---|---|---|---|---|---|
 | 1440 | 340 | 360 | 800 | 1160 | 4 |
 | 834 | 340 | 360 | 434 | 794 | 5 |
-| 390 | 288.6 (74vw) | 308.6 | 41.4 | 350 | 6 |
+| 390 | 282 | 302 | 48.0 | 350 | 6 |
+| 360 | 252 | 272 | 48.0 | 320 | — |
+| 320 | 212 | 232 | 48.0 | 280 | — |
 
-`74vw` rather than `82vw` is measured, not chosen: 82vw left a **10px** peek at 390, which reads as a rendering
-error rather than as an invitation to swipe. No width has horizontal page overflow.
+**It is the peek that is held constant, not the card** (2026-09-18). `100%` on a `flex-basis` resolves against the
+rail's inner width, so `min(340px, 100% - 68px)` gives the card everything except a 20px gap and a 48px sliver, and
+above about 420px the `340px` arm wins so no desktop width moves. The first version was `74vw`, which did the
+opposite of what it was for: the card *and* its container both shrank with the viewport, so the affordance fell away
+exactly where it was needed — measured 41.4px at 390, 33.6 at 360, **23.2 at 320**. It is now 48.0 at all three.
+`100vw` is deliberately not used; it includes the scrollbar, and would put back the overflow the hero rule removes.
 
 **The controls hide themselves when there is nothing to drive, and that took two fixes.** `buildDots()` sets
 `nav.hidden = stops <= 1` and rebuilds on `resize`, because the same two published quotes *fit* 1440 (one stop, nav
@@ -927,6 +954,14 @@ The card is a **grid**, not a stack, because the photo has to sit beside the nam
 `row-gap`** — a gap is applied between empty tracks as well as full ones, and every field on a testimonial is
 optional, so a card with no stars would have carried a band of dead air for a row that renders nothing. The spacing
 is margins on the elements, which cost nothing when the element is absent.
+
+**`grid-template-rows:auto 1fr auto auto`, and the `1fr` is the whole point** (2026-09-18). Cards in the row are
+flex items, so every one is as tall as the tallest — and the original `align-content:start` packed the rows to the
+top and dumped the leftover height *under* the card. With the real home page's two quotes that was **65px of white
+at 390 and 92px at 360**, over a third of the card, and it got worse as the screen narrowed because the taller quote
+wrapped to more lines. Handing the slack to the quote's row instead pins the photo and name to the bottom edge,
+which is what the reference designs draw; measured dead air is now **0px at every width**, and as a free side effect
+the two cards' attributions line up with each other on desktop, where before they sat at different heights.
 
 Where a quote's parts live: `posts.title` is the name, `posts.excerpt` is the quote, `posts.featured_media_id` is
 the photo, and `meta.role` / `meta.company` / `meta.rating` are the three optional extras in the type's

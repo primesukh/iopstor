@@ -391,7 +391,18 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 
 /* hero: words left, picture right. .hero-dark is the full-bleed variant, where the picture is a
    faded backdrop behind the words instead of the art beside them. */
-.hero{position:relative;background:var(--white);border-bottom:1px solid var(--line);padding:72px 0 56px}
+/* overflow-x:clip is load-bearing, not tidiness. Three of the hero's entry animations start the
+   element off to the RIGHT and slide it home -- `heroin` at translateX(40px) on .hero-media, and
+   slides2/slides3 at translateX(60px) per slide -- and a transform counts toward scrollable
+   overflow. On a desktop the band has slack either side and nothing shows; on a phone it has none,
+   so the whole PAGE grew and slid sideways under the reader's thumb. Measured on the real home page
+   before this line: 61px of horizontal scroll at 390, 81px at 320, and toggling the animations off
+   one at a time accounted for every pixel of it -- the testimonial row below contributed zero.
+   `clip` and not `hidden`, which would make the band a scroll container. And it belongs HERE, not on
+   `body`: `body{overflow-x:clip}` was measured and changed nothing at all (still 61/81), and it
+   would also have cost .site-header its `position:sticky`, because any non-visible overflow on an
+   ancestor takes that away. It clips the overshoot only -- .hero-media keeps its exact width. */
+.hero{position:relative;overflow-x:clip;background:var(--white);border-bottom:1px solid var(--line);padding:72px 0 56px}
 .hero>.wrap{display:grid;gap:40px;align-items:center}
 .hero-split>.wrap{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
 .hero-text{min-width:0}
@@ -604,7 +615,8 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
    `row-gap` is applied between empty tracks as well as full ones, and a card with no stars would
    have carried a band of dead air at the top for a row that renders nothing. Margins belong to the
    elements, so an absent element costs no space. */
-.pl-testimonial .card{display:grid;grid-template-columns:auto 1fr;column-gap:14px;align-content:start;
+.pl-testimonial .card{display:grid;grid-template-columns:auto 1fr;column-gap:14px;
+  grid-template-rows:auto 1fr auto auto;
   grid-template-areas:"stars stars" "quote quote" "avatar name" "avatar role";position:relative;overflow:hidden}
 .pl-testimonial .stars{grid-area:stars;margin:0 0 14px;font-size:15px;letter-spacing:2px;color:var(--line-2)}
 .pl-testimonial .stars b{font-weight:inherit;color:#e0a32e}
@@ -645,10 +657,15 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pl-testimonial:not(.arch-body) .cards{display:flex;grid-template-columns:none;gap:20px;justify-content:safe center;
   overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:4px}
 .pl-testimonial:not(.arch-body) .cards::-webkit-scrollbar{display:none}
-/* min(), so a phone shows one card and a slice of the next -- the slice is what says "there are more"
-   before anybody has touched it. Measured at 390: 74vw leaves a 41px peek where 82vw left 10px, which
-   read as a rendering error rather than an invitation. A fixed 340px would simply overflow. */
-.pl-testimonial:not(.arch-body) .card{flex:0 0 min(340px,74vw);scroll-snap-align:start}
+/* A phone shows one card and a slice of the next, and the slice is what says "there are more" before
+   anybody has touched it -- so it is the SLICE that is held constant, not the card. `100%` on a
+   flex-basis resolves against the rail's inner width, so the card takes everything except a fixed
+   68px: the 20px gap plus a 48px sliver. Above about 420px the 340px arm wins and nothing changes.
+   The earlier `74vw` did the opposite of what it was for: the card and the container both shrank
+   with the viewport, so the peek fell away exactly when it was needed most -- measured 41px at 390,
+   34px at 360, 23px at 320. Now it is 48px at all three.
+   Not `100vw`: that includes the scrollbar, and would put back the very overflow `.hero` fixes. */
+.pl-testimonial:not(.arch-body) .card{flex:0 0 min(340px, 100% - 68px);scroll-snap-align:start}
 .rail-nav{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:28px}
 /* This line is load-bearing, not tidiness. The nav is served with `hidden` so a blocked script
    leaves no dead buttons, and site.js also re-hides it when the row has nothing to scroll (two
@@ -661,9 +678,20 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .rail-arrow:hover{background:var(--blue);border-color:var(--blue);color:var(--white)}
 .rail-arrow[disabled]{opacity:.35;cursor:default;background:var(--white);border-color:var(--line);color:var(--ink)}
 .rail-dots{display:flex;gap:8px}
-.rail-dot{width:8px;height:8px;padding:0;border:0;border-radius:999px;background:var(--line-2);cursor:pointer;
+.rail-dot{position:relative;width:8px;height:8px;padding:0;border:0;border-radius:999px;background:var(--line-2);cursor:pointer;
   transition:width .25s,background .25s}
 .rail-dot[aria-current="true"]{width:22px;background:var(--blue)}
+/* An 8px dot is a fair mark and an unfair target. The hit area is grown with a transparent ::after
+   rather than by padding the button, so the painted dot stays 8px and the `transition:width` on the
+   active one still animates the thing you can see. */
+.rail-dot::after{content:"";position:absolute;inset:-12px}
+@media(max-width:700px){
+  /* 24px is the card padding .arch-body.pl-service already uses on a phone; 28px left only 181px of
+     text inside a 237px card at 320. 44px is this stylesheet's own touch target (.btn, above) -- the
+     arrows were 40px, which is under it. */
+  .pl-testimonial .card{padding:24px}
+  .rail-arrow{width:44px;height:44px}
+}
 
 /* "Items per row" on an Automatic list. The count is worked out in blocks.py (`even_cols()` when the
    editor picks Even rows) and arrives as a class, so nothing an editor typed reaches a style

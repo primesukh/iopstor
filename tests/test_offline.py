@@ -2695,6 +2695,30 @@ def test_the_rail_controls_stay_hidden_without_the_script():
     assert ".rail-nav[hidden]{display:none}" in css
 
 
+def _site_css():
+    return (pathlib.Path(__file__).parent.parent / "iopstor" / "static" / "site.css").read_text()
+
+
+def test_the_hero_clips_the_overshoot_of_its_own_entry_animations():
+    """Three hero animations start the element 40-60px to the right and slide it home, and a
+    transform counts toward scrollable overflow — so without this the whole PAGE scrolled sideways on
+    a phone (measured 61px at 390, 81px at 320). It is invisible to pytest and to a screenshot that
+    does not go looking, and `body{overflow-x:clip}` does NOT substitute for it (measured: no change
+    at all, and it would cost .site-header its position:sticky)."""
+    css = _site_css()
+    assert "overflow-x:clip" in css.split(".hero{")[1].split("}")[0]
+
+
+def test_a_short_testimonial_does_not_pad_out_with_dead_air():
+    """Cards in the sliding row are all as tall as the tallest, so the shortest quote gets the
+    slack. `align-content:start` dumped it under the card — 65px of white at 390, 92px at 360, and
+    worse the narrower the screen. The `1fr` on the quote row hands it to the quote instead, so the
+    name and photo sit on the bottom edge."""
+    card = _site_css().split(".pl-testimonial .card{")[1].split("}")[0]
+    assert "grid-template-rows:auto 1fr auto auto" in card
+    assert "align-content:start" not in card
+
+
 def test_a_post_with_no_page_still_reaches_the_md_twin(app, monkeypatch):
     """A has_pages=false type is content without a URL, not content without words. Dropping those
     rows left a heading over an empty list in every .md twin and in llms-full.txt."""

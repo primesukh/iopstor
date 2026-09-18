@@ -861,6 +861,8 @@ paragraph of writing instead, use the **—** button on the writing toolbar. The
 
 **I deleted something by mistake.** Deletion is permanent. Set things to *Draft* instead when you only want them off the site.
 
+**On my phone the page slid sideways, and the quote cards had an empty gap under the name.** Both fixed, and neither needed anything from you. The page no longer drifts left and right when you scroll it on a phone — that was the big picture at the top of the home page sliding in from the side and pushing everything over. And a short quote no longer leaves a block of empty white under the person's name: the photo and name now sit on the bottom edge of the card, however long or short the quote is. The buttons either side of the testimonials are also bigger on a phone, so they are easier to hit with a thumb.
+
 **The home page testimonials look different, and they move.** The two quotes that used to sit side by side are now
 **Testimonials** in the sidebar, and the home page shows every published one in a row that slides. The two that were
 there before are already in the list — nothing was lost. Add a third and it appears in the row on its own.
