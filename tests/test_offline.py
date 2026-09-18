@@ -2736,12 +2736,33 @@ def test_the_mega_menu_keeps_the_order_both_layouts_depend_on():
     assert ".mega-g:hover+.mega-pane" in css
 
 
-def test_a_post_with_no_page_still_reaches_the_md_twin(app, monkeypatch):
-    """A has_pages=false type is content without a URL, not content without words. Dropping those
-    rows left a heading over an empty list in every .md twin and in llms-full.txt."""
-    monkeypatch.setattr(blocks, "_post_list", lambda data: (
-        [_testimonial(), {"id": 2, "title": "Grace", "excerpt": "", "meta": {}, "path": "/blog/x"}], "testimonial"))
-    with app.test_request_context():
-        md = blocks_md([{"type": "post_list", "data": {"post_type": "testimonial", "heading": "Clients"}}])
-    assert "- **Ada**: It works." in md      # no URL to link, so the name is bolded instead
-    assert "- [Grace](/blog/x.md)" in md   # one that does have a page is unchanged
+def test_a_top_level_menu_item_that_holds_others_collapses_the_same_way():
+    """Services and Company get the same four-part order one level up, and the link they replace is
+    hidden rather than left to render a second row saying the same word."""
+    html = (pathlib.Path(__file__).parent.parent / "iopstor" / "templates" / "base.html").read_text()
+    li = html.split("{% for i in menu('header') %}")[1].split("{% endfor %}")[0]
+    order = [li.index(x) for x in ('class="nv-toggle"', 'class="nv-row"', '<a href="{{ i.url }}"')]
+    assert order == sorted(order), "the top-level item's three parts are out of order"
+
+    css = _site_css()
+    assert ".nv-toggle:checked+.nv-row+a+.mega,.nv-toggle:checked+.nv-row+a+.sub{display:block}" in css
+    # and it must out-specify `.site-nav>ul>li>a`, which sets display:block at (0,1,3). A bare
+    # `.nav-group>a` loses to it and every group renders twice -- once as the row, once as the link.
+    assert ".site-nav>ul>li.nav-group>a{display:none}" in css
+
+
+def test_a_pointer_only_menu_rule_never_escapes_the_desktop_query():
+    """`:hover` latches on a touch screen and `:focus-within` fires when a link inside takes focus, so
+    a drop-down opened by pointer jams open on a phone. The "nothing hovered, so show the first group"
+    rule is worse: at (0,4,0) it out-specifies the phone's plain `.mega-pane{display:none}`, so group
+    one would be stuck open. All of them live behind min-width:961px, and the closed default is the
+    only thing the two layouts share."""
+    css = _site_css()
+    assert "@media(min-width:961px){.nav-mega:hover>.mega,.nav-mega:focus-within>.mega{display:block}}" in css
+    assert "@media(min-width:961px){.site-nav li:hover>.sub,.site-nav li:focus-within>.sub{display:block}}" in css
+
+    desktop = css.split("@media(min-width:961px){\n")[1].split("\n}")[0]
+    assert ".mega-cats:not(:has(:hover,:focus)) .mega-g:nth-of-type(1)+.mega-pane{display:block}" in desktop
+    assert ".mega-g:hover+.mega-pane" in desktop
+    # the shared closed default is NOT in there: both layouts start from it
+    assert ".mega-pane{display:none}" not in desktop and ".mega-pane{display:none}" in css

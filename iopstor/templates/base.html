@@ -42,7 +42,12 @@
     <label for="nav-toggle" class="nav-toggle-label" aria-label="Menu">&#9776;</label>
     <nav class="site-nav" aria-label="Main">
       <ul>
-        {% for i in menu('header') %}{% set is_mega = svc and i.url == svc.url %}<li{% if is_mega %} class="nav-mega"{% endif %}><a href="{{ i.url }}">{{ i.label }}{% if is_mega or i.children %} <span aria-hidden="true">&#9662;</span>{% endif %}</a>
+        {% for i in menu('header') %}{% set is_mega = svc and i.url == svc.url %}{% set has_kids = is_mega or i.children %}<li{% if is_mega or has_kids %} class="{{ 'nav-mega ' if is_mega }}{{ 'nav-group' if has_kids }}"{% endif %}>
+          {#- the phone's disclosure for a top-level item that holds others; same four-part order as a
+              service group, so the chain stays adjacent and nothing on the desktop nav moves. The link
+              is hidden on a phone rather than doubled: Services repeats "All services" in the panel's
+              own foot, and Company's URL IS its first child (/about-us). -#}
+          {%- if has_kids %}<input type="checkbox" id="nv-{{ loop.index }}" class="nv-toggle"><label class="nv-row" for="nv-{{ loop.index }}">{{ i.label }}<span class="nv-chev" aria-hidden="true">&#9662;</span></label>{% endif %}<a href="{{ i.url }}">{{ i.label }}{% if has_kids %} <span aria-hidden="true">&#9662;</span>{% endif %}</a>
           {%- if is_mega %}<div class="mega"><div class="wrap">
             <div class="mega-cats">{% for g in svc.groups %}{#- the checkbox and its label come BEFORE the group link, so `.mega-g + .mega-pane` stays adjacent and the desktop panel's hover rules are untouched; site.css has the whole reason -#}
               <input type="checkbox" id="mg-{{ loop.index }}" class="mg-toggle"><label class="mg-row" for="mg-{{ loop.index }}">{{ g.title }}<span class="mg-chev" aria-hidden="true">&#9662;</span></label><a class="mega-g" href="{{ g.path }}"><span class="n">{{ '%02d' % loop.index }}</span>{{ g.title }}<span class="arrow" aria-hidden="true">&rarr;</span></a><div class="mega-pane"><h3>{{ g.title }}</h3>{% if g.excerpt %}<p class="blurb">{{ g.excerpt }}</p>{% endif %}<div class="mega-tiles">{% for c in g.children %}<a href="{{ c.path }}">{{ c.title }}<span class="arrow" aria-hidden="true">&rarr;</span></a>{% endfor %}</div></div>{% endfor %}</div>
