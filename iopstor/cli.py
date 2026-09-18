@@ -430,9 +430,13 @@ def run_seed():
                 '<div class="map-ph">Replace with an Embedded code section holding the Google Maps embed</div>'}}],
             [{"type": "contact_form", "data": {"kind": "quote", "heading": "Request a quote"}}]]}}])
     _post(page, "Technology Partners", blocks=[{"type": "hero", "data": {"heading": "Technology Partners"}}, {"type": "post_list", "data": {"post_type": "partner", "limit": 50, "per_row": "even"}}])
-    logo = db.one(db.table("media").select("url").eq("filename", "iopstor_logo-png1.png"))
-    if logo:
-        SETTINGS["logo_url"] = logo["url"]
+    # The 2026-09 artwork first, falling back to the original: a site seeded before that file
+    # existed keeps working, and a fresh one does not start on the superseded blue.
+    for _f in ("iopstor-logo-2026.png", "iopstor_logo-png1.png"):
+        logo = db.one(db.table("media").select("url").eq("filename", _f))
+        if logo:
+            SETTINGS["logo_url"] = logo["url"]
+            break
     existing = db.settings()
     # fill a key that is missing OR blank -- every key exists from the first seed as "", so
     # "not already there" would mean the contact details could never land. A value someone has

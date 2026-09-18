@@ -676,7 +676,11 @@ to white — the footer stays dark, and the logo is still white down there. And 
 shows in a browser tab (the "favicon") is now the IOPSTOR mark at every size a phone or a bookmark
 asks for.
 
-**The brand blue has changed** to a deeper, calmer blue. Every blue on the site follows it — buttons, the small labels above headings, the blue band at the bottom of a product page, the tab icon — and none of it needs anything from you. The **one thing that does**: the logo picture itself is still drawn in the old, brighter blue, because it is an image the client supplied rather than something the site colours in. When a new logo file arrives, upload it in **Media** and point **Settings → Site identity → Logo url** at it, and the header will match.
+**The brand colours are the company's own now.** Every blue on the site — buttons, the small labels above headings, the blue band at the bottom of a product page, the tab icon — is the blue taken from the IOPSTOR logo itself, so the logo and the button beside it are the same colour. Headings and body text moved to the dark grey from the *STOR* half of the logo, a little softer than the near-black they were. None of that needs anything from you.
+
+**One thing does need you.** The logo picture on the site is still the old file, drawn in the old brighter blue — it is a picture, not something the site colours in. The new one is ready: go to **Media**, upload `iopstor-logo-2026.png`, then **Settings → Site identity → Logo url** and point it at the new file. The header and the footer both pick it up.
+
+One oddity worth knowing, so nobody reports it as a fault: the printed brand sheet names a slightly different blue from the one on the site. The site uses the blue that is actually inside the logo artwork, on purpose, so the two always match.
 
 **One more thing changed behind the scenes** and needs nothing from you: pictures and PDFs are now
 delivered by the website itself instead of by the file store behind it, so that store can be closed off
