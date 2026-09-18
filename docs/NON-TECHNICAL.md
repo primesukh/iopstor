@@ -494,6 +494,15 @@ Each enquiry has three states, and the tabs across the top follow them:
 
 Change the dropdown on the right of an enquiry and it moves to that tab. The blue number beside **Leads** in the sidebar counts the new ones.
 
+**Junk enquiries.** Every form on the site carries a hidden trap that automated spam programs fill in
+and a real visitor never sees — anything that fills it is quietly thrown away and never reaches this
+screen. That is the only thing standing between the form and **Leads** at the moment: there is no
+picture puzzle to solve, and no limit on how many times the form can be sent. That is the right trade
+while the site is new and no junk has arrived; if junk does start turning up, say so and it can be shut
+off before it ever reaches the website, with nothing changing on your side. One other quiet limit: a
+message longer than about two pages of typed text is shortened before it is saved, so nobody can fill
+the site up by sending a book. No real enquiry comes anywhere near that length.
+
 ## 8. Warranty records
 
 **Warranty** in the admin panel is the register of every unit you have sold and how long it is covered for. It is what the *Warranty check* box on the website reads from — put that section on a page (press `/` and pick **Warranty check**) and customers can look their own unit up instead of emailing to ask.
@@ -714,6 +723,13 @@ paragraph, the way Google Docs does (§4).
 completely separate copy: content does not travel between the two in either direction, so a page you want
 customers to see has to be written on the live site at `https://www.iopstor.com/admin`. If you are ever
 unsure which one you are looking at, check the address at the top of the browser.
+
+**Is the contact form protected from spam?** Partly, and deliberately so for now. A hidden trap catches
+automated spam programs, and anything caught is thrown away before it reaches **Leads** — but there is
+no picture puzzle and nothing stopping the same form being sent over and over. While the site is still
+being built and no junk has come through, that is the right balance: a puzzle on a quote form costs real
+enquiries. Tell whoever looks after the site the moment junk starts arriving and it can be blocked
+without you noticing any difference.
 
 **Save says a word "is part of the website's own address".** A few words are used by the system itself
 — `admin`, `api`, `media`, `static`, `healthz` — so a page cannot take one as its address: it would

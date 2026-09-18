@@ -601,7 +601,11 @@ def _form_redirect(b):
 def api_create_lead():
     b = request.get_json(silent=True) if request.is_json else request.form.to_dict()
     b = b if isinstance(b, dict) else {}
-    if b.get("website"):  # ponytail: honeypot only; add rate limiting if spam gets through
+    # ponytail: a honeypot is the whole bot defence. When spam gets through, the rate limit belongs at
+    # Cloudflare -- a WAF rule on this path -- rather than here: the edge sees the real client IP,
+    # while client_ip() sees only what TRUSTED_PROXIES tells it to believe, and getting that wrong
+    # would cap the contact form for every visitor at once (the ADMIN_NETWORKS failure again).
+    if b.get("website"):
         return _form_redirect(b) or (jsonify(ok=True), 201)
     name, email = str(b.get("name") or "").strip(), str(b.get("email") or "").strip()
     if not name or "@" not in email:
@@ -610,10 +614,17 @@ def api_create_lead():
     if post_id and db.one(db.table("posts").select("id").eq("id", post_id)) is None:
         post_id = None
     known = {"name", "email", "phone", "company", "message", "kind", "post_id", "website", "back"}
+    # Every stored field is capped, including the ones nobody named: db.insert() writes the whole row
+    # a second time into audit_log, which is append-only by trigger with no retention job, so an
+    # uncapped body is stored twice and neither copy can be deleted. MAX_CONTENT_LENGTH is 20 MB
+    # because an upload needs it, which is not a bound a public form should inherit. `known` is
+    # filtered out before the 20 are counted, so the fields the endpoint reads by name never spend
+    # that budget -- the site's own forms add two keys to `data` (interest, users), well inside it.
+    extra = {k: str(v)[:200] for k, v in b.items() if k not in known}
     lead = db.insert("leads", {
         "kind": b.get("kind") if b.get("kind") in ("contact", "quote", "career") else "contact", "name": name[:200], "email": email[:300],
-        "phone": str(b.get("phone") or "")[:50], "company": str(b.get("company") or "")[:200], "message": str(b.get("message") or ""),
-        "post_id": post_id, "data": {k: v for k, v in b.items() if k not in known}})
+        "phone": str(b.get("phone") or "")[:50], "company": str(b.get("company") or "")[:200], "message": str(b.get("message") or "")[:5000],
+        "post_id": post_id, "data": dict(list(extra.items())[:20])})
     return _form_redirect(b) or (jsonify(ok=True, id=lead["id"]), 201)
 
 
