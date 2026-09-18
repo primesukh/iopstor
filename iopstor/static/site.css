@@ -118,7 +118,7 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
    pane it opens; span 99 is "every row of the list", so the pane is beside the last link too. */
 .mega-cats{display:grid;grid-template-columns:260px minmax(0,1fr)}
 .mega-g{grid-column:1;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:8px;text-decoration:none;color:var(--muted);font:600 15px/1.3 var(--body)}
-.mega-g:first-child{margin-top:18px}
+.mega-g:nth-of-type(1){margin-top:18px}
 .mega-g:last-of-type{margin-bottom:18px}
 .mega-g .n{flex:none;width:22px;font:700 11px/1 var(--mono);color:var(--blue)}
 .mega-g .arrow{margin-left:auto;color:var(--blue);opacity:0}
@@ -138,12 +138,23 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
    highlight back from a hovered pane to its link. Nothing hovered or focused = the first group,
    which is also the whole behaviour in a browser without :has(). No ceiling on the group count. */
 .mega-pane{display:none}
-.mega-g:hover+.mega-pane,.mega-g:focus+.mega-pane,.mega-pane:hover,.mega-pane:focus-within{display:block}
-.mega-g:hover,.mega-g:focus,.mega-g:has(+.mega-pane:hover,+.mega-pane:focus-within){background:var(--grey);color:var(--black)}
-.mega-g:hover .arrow,.mega-g:focus .arrow,.mega-g:has(+.mega-pane:hover,+.mega-pane:focus-within) .arrow{opacity:1}
-.mega-cats:not(:has(:hover,:focus)) .mega-g:first-child{background:var(--grey);color:var(--black)}
-.mega-cats:not(:has(:hover,:focus)) .mega-g:first-child .arrow{opacity:1}
-.mega-cats:not(:has(:hover,:focus)) .mega-g:first-child+.mega-pane{display:block}
+@media(min-width:961px){
+  .mega-g:hover+.mega-pane,.mega-g:focus+.mega-pane,.mega-pane:hover,.mega-pane:focus-within{display:block}
+  .mega-g:hover,.mega-g:focus,.mega-g:has(+.mega-pane:hover,+.mega-pane:focus-within){background:var(--grey);color:var(--black)}
+  .mega-g:hover .arrow,.mega-g:focus .arrow,.mega-g:has(+.mega-pane:hover,+.mega-pane:focus-within) .arrow{opacity:1}
+  .mega-cats:not(:has(:hover,:focus)) .mega-g:nth-of-type(1){background:var(--grey);color:var(--black)}
+  .mega-cats:not(:has(:hover,:focus)) .mega-g:nth-of-type(1) .arrow{opacity:1}
+  .mega-cats:not(:has(:hover,:focus)) .mega-g:nth-of-type(1)+.mega-pane{display:block}
+}
+/* The phone's disclosure, and it is the same trick the burger itself uses: a display:none checkbox
+   driven by its <label>, no script. The checkbox and its label sit BEFORE the group link on purpose
+   -- put them between the link and its pane and `.mega-g:hover+.mega-pane` stops being adjacent, and
+   the whole desktop panel above would have had to be rewritten. This way the only desktop casualties
+   were three `:first-child`s that became `:nth-of-type(1)`.
+   The chain is adjacent the whole way (`+`, never `~`): the groups are flat siblings, so a `~` would
+   open every group below the one that was tapped as well. */
+.mg-toggle{display:none}
+.mg-row{display:none}
 
 @media(max-width:960px){
   .nav-toggle-label{display:flex}
@@ -157,14 +168,25 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
   .site-nav .sub a:hover{background:transparent;color:var(--blue)}
   .site-nav .nav-cta{margin:12px 0 0}
   .site-nav .nav-cta>a{text-align:center;padding:14px 18px}
-  /* the panel collapses to a plain list: no group column, every pane shown, no blurbs */
+  /* The panel collapses to a list of closed groups. It used to show EVERY pane expanded, which
+     turned four service groups into one flat wall of eighteen links you had to scroll past to reach
+     anything else in the menu (client, 2026-09-18). Now the label is the row you tap and the pane
+     under it opens; `.mega-pane{display:none}` above is already the shared default, so nothing here
+     has to fight it back closed. */
   .mega{display:block;position:static;background:transparent;color:inherit;border:0;box-shadow:none;animation:none}
   .mega::before{display:none}
   .mega>.wrap{padding:0}
   .mega-cats{display:block}
   .mega-g{display:none}
-  .mega-pane{display:block;border-left:0;padding:0 0 8px}
-  .mega-pane h3{font:600 15px/1.3 var(--body);color:var(--muted);margin:12px 0 4px}
+  .mega-pane{border-left:0;padding:0 0 8px}
+  /* the label carries the group's name now, so the pane's own heading would say it twice */
+  .mega-pane h3{display:none}
+  .mg-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;
+    font:600 15px/1.3 var(--body);color:var(--ink);cursor:pointer;border-bottom:1px solid var(--line)}
+  .mg-row .mg-chev{color:var(--muted);transition:transform .2s}
+  .mg-toggle:checked+.mg-row{color:var(--blue);border-bottom-color:transparent}
+  .mg-toggle:checked+.mg-row .mg-chev{transform:rotate(180deg);color:var(--blue)}
+  .mg-toggle:checked+.mg-row+.mega-g+.mega-pane{display:block}
   .mega-pane .blurb{display:none}
   .mega-tiles{grid-template-columns:1fr;gap:0}
   .mega-tiles a{background:transparent;border:0;color:var(--muted);padding:10px 16px}
@@ -601,6 +623,23 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .pl-partner .card-img{display:flex;align-items:center;height:64px;margin:0 0 14px}
 .pl-partner .card-img img{width:auto;max-height:64px;object-fit:contain}
 .pl-partner .card h3{font-size:17px}.pl-partner .card p{font-size:13.5px}
+/* On a phone the 130px floor above only ever fits TWO tracks, which turns fourteen partners into a
+   675px wall of brand marks half the screen wide each -- the opposite of the quiet strip this is
+   meant to be, and what the client reported (2026-09-18). 80px is not a guess: it is the largest
+   floor that still fits three tracks at 320, measured across the phone range, so the count stays
+   the same everywhere instead of flipping between two and three on a few pixels of viewport.
+     floor   430    390    360    320
+     130    2x7    2x7    2x7    2x7     <- today, 675px tall
+     100    3x5    3x5    2x7    2x7
+      90    3x5    3x5    3x5    2x7
+      80    3x5    3x5    3x5    3x5     <- 523px tall
+   The side padding drops with it: 16px of a 169px track was fine, 16px of an 85px one is a fifth of
+   the space the mark has to read in. Nothing here applies at 760px and up, where the `pl-cols-*`
+   count from `even_cols()` takes over. */
+@media(max-width:700px){
+  .pl-partner:not(.arch-body) .cards{grid-template-columns:repeat(auto-fit,minmax(80px,1fr))}
+  .pl-partner:not(.arch-body) .card{padding:10px 8px}
+}
 .pl-post .card{padding:0;overflow:hidden}
 .pl-post .card-img{display:block;aspect-ratio:16/9;background:var(--grey)}
 .pl-post .card-img img{height:100%;object-fit:cover}

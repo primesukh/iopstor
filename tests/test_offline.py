@@ -2719,6 +2719,23 @@ def test_a_short_testimonial_does_not_pad_out_with_dead_air():
     assert "align-content:start" not in card
 
 
+def test_the_mega_menu_keeps_the_order_both_layouts_depend_on():
+    """One markup order serves two behaviours, and swapping it breaks both silently. The desktop
+    panel opens a pane with `.mega-g:hover+.mega-pane`, which needs the link IMMEDIATELY before its
+    pane; the phone's disclosure is `.mg-toggle:checked+.mg-row+.mega-g+.mega-pane`, adjacent the
+    whole way because the groups are flat siblings and a `~` would open every group below the one
+    tapped. So the checkbox and its label go BEFORE the link, never between it and the pane."""
+    html = (pathlib.Path(__file__).parent.parent / "iopstor" / "templates" / "base.html").read_text()
+    cats = html.split('class="mega-cats"')[1].split("</div>\n")[0]
+    order = [cats.index(x) for x in ('class="mg-toggle"', 'class="mg-row"',
+                                     'class="mega-g"', 'class="mega-pane"')]
+    assert order == sorted(order), "the mega group's four parts are out of order"
+
+    css = _site_css()
+    assert ".mg-toggle:checked+.mg-row+.mega-g+.mega-pane{display:block}" in css
+    assert ".mega-g:hover+.mega-pane" in css
+
+
 def test_a_post_with_no_page_still_reaches_the_md_twin(app, monkeypatch):
     """A has_pages=false type is content without a URL, not content without words. Dropping those
     rows left a heading over an empty list in every .md twin and in llms-full.txt."""
