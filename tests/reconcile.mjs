@@ -43,6 +43,8 @@ const ctx = vm.createContext({
   // (design.md, 2026-09-15); this only has to prove the delta reaches MODEL at all.
   document: { createElement: () => ({ style: {}, setAttribute () {} }), body: { appendChild () {} } },
   QUILL_FORMATS: [],                      // the real list lives with the other Quill plumbing
+  withSize: Q => Q,                       // widens Quill's size whitelist; out of the slice, and
+                                          // the fake Quill above has no import/register anyway
   semantic: q => q.getSemanticHTML().replace(/&nbsp;/g, ' '),
   canvasFull: () => { repaints += 1 },
   canvasBlock: p => { sections.push(p) },
