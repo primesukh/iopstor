@@ -369,8 +369,15 @@ def _form_context(pt, post, errors=None, conflict=None):
     # The shared document itself, base64. Every editor of a page loads THIS rather than building
     # one from the blocks above: two browsers that each seeded their own would hand Yjs two
     # independent histories to merge, and every section would appear twice.
+    # post.html skips its whole page head -- and with it the featured picture -- when the first
+    # section draws its own title and picture. Read off `content`, so it follows the unpublished
+    # draft the editor is actually looking at rather than what is live.
+    # ponytail: rendered once, with the page. Adding or removing a Hero in the canvas does not
+    # move it until the next load; it is a hint beside a box, not a gate on anything.
+    leads_with_own_head = bool(content) and (content[0] or {}).get("type") in ("hero", "columns")
     return dict(pt=pt, post=post, errors=errors or {}, conflict=conflict, taxonomies=taxonomies, rt=_rt(pk),
                 has_draft=bool(draft), doc_state=(draft or {}).get("state") or "",
+                leads_with_own_head=leads_with_own_head,
                 parents=[p for p in siblings if p["id"] != pk] if pt["hierarchical"] else [],
                 taken_slugs=[s["slug"] for s in siblings if s["id"] != pk],
                 media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps(content, indent=2, ensure_ascii=False),

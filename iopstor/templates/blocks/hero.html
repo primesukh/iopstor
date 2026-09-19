@@ -2,7 +2,11 @@
    full-bleed band, where the picture becomes a faded backdrop instead of the art beside the words.
    The backdrop is an <img>, not a CSS background, because section_style() already owns the style
    attribute and a second one would be dropped by the parser. #}
-<section class="hero{{ ' hero-dark' if data.dark }}{{ ' hero-split' if (data.image or data.images) and not data.dark }}{{ cls }}"{{ sty }}{{ fe() }}>
+{#- Three arrangements, and only literal class names ever reach the attribute -- `arrange` is
+    compared, never interpolated, the same rule hero.dark follows. A dark hero has no arrangement:
+    its picture is the backdrop, not a column. -#}
+{% set art = (data.image or data.images) and not data.dark %}
+<section class="hero{{ ' hero-dark' if data.dark }}{{ ' hero-still' if data.still }}{{ (' hero-above' if data.arrange == 'above' else ' hero-below' if data.arrange == 'below' else ' hero-split') if art }}{{ cls }}"{{ sty }}{{ fe() }}>
   {%- if data.image and data.dark %}<img class="hero-bg" src="{{ media_url(data.image) }}" alt="" aria-hidden="true">{% endif %}
   <div class="wrap">
     <div class="hero-text">

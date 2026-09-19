@@ -442,10 +442,14 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .hero{position:relative;overflow-x:clip;background:var(--white);border-bottom:1px solid var(--line);padding:72px 0 56px}
 .hero>.wrap{display:grid;gap:40px;align-items:center}
 .hero-split>.wrap{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+/* The other two arrangements need no grid of their own: .hero>.wrap is already a single column, so
+   "below the words" is what the markup does on its own and only "above" has anything to say. It is
+   `order`, not a DOM swap, so the heading is still read first however the picture is placed. */
+.hero-above .hero-media{order:-1}
 .hero-text{min-width:0}
 /* Only the hero with art beside it moves. That is the one hero the design animates -- every
    other screen's opening band is still, and a headline that fades in on every page is a tic. */
-.hero-split .hero-text{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+.hero-split .hero-text,.hero-above .hero-text,.hero-below .hero-text{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
 .hero h1{margin:0 0 20px;font-size:clamp(36px,5vw,60px);line-height:1.05;max-width:var(--w,820px);text-wrap:pretty}
 .hero .lead{max-width:540px;margin-bottom:30px;text-wrap:pretty}
 .hero-media{position:relative;min-width:0;min-height:220px;display:flex;align-items:center;justify-content:center;animation:heroin .8s cubic-bezier(.2,.7,.2,1) both}
@@ -470,6 +474,12 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .hero-dark{background:var(--black);color:#d1d6de;border-bottom:0;padding:96px 0 80px;overflow:hidden}
 .hero-dark h1{color:var(--white)}
 .hero-dark .lead{color:#d1d6de;max-width:640px}
+/* "Hold the picture still": the two perpetual loops stop, the one-shot entrance does not. The
+   picture still arrives the way the design draws it and then sits, which is what was asked for --
+   so this names the two elements that carry `float` and the ::before that carries `glow`, and
+   deliberately not .hero-media, whose animation IS the entrance. .hero-slide keeps its own
+   slides2/slides3, so several pictures go on taking turns; the dots go on marking which. */
+.hero-still .hero-media::before,.hero-still .hero-media>img,.hero-still .hero-slides{animation:none}
 .hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.18}
 .hero-dark>.wrap{position:relative}
 @media(max-width:700px){.hero{padding:48px 0 40px}.hero-dark{padding:64px 0 56px}}
