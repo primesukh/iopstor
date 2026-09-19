@@ -16,7 +16,7 @@ BLOCKS = {  # type: (required fields, optional fields)
     # own, in CSS. Both are kept: images wins when it has two or more rows, so nothing already
     # published changes shape.
     "hero": (["heading"], ["eyebrow", "subheading", "image", "images", "cta_label", "cta_url",
-                           "cta2_label", "cta2_url", "dark", "still", "arrange"]),
+                           "cta2_label", "cta2_url", "dark", "still", "arrange", "noglow"]),
     "rich_text": (["html"], ["fx"]),  # ponytail: raw HTML from trusted staff; add nh3 sanitising if untrusted authors appear
     "image": (["media_id"], ["alt", "caption"]),
     "gallery": (["images"], []),  # images: [{media_id, alt}]
@@ -64,7 +64,7 @@ EDITOR = {
                 "caption": "textarea", "quote": "textarea", "image": "media", "media_id": "media", "file_media_id": "pdf",
                 "url": "url", "cta_url": "url", "button_url": "url", "limit": "number",
                 "top_level": "checkbox", "post_type": "post_type", "kind": "kind",
-                "cta2_url": "url", "link_url": "url", "dark": "checkbox", "still": "checkbox", "arrange": "choice",
+                "cta2_url": "url", "link_url": "url", "dark": "checkbox", "still": "checkbox", "arrange": "choice", "noglow": "checkbox",
                 "count_up": "checkbox", "fx": "choice", "height": "choice", "per_row": "choice"},
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
     "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label", "fx", "count_up"],
@@ -80,6 +80,7 @@ EDITOR = {
                "cta2_label": "Second button text", "cta2_url": "Second button link",
                "link_label": "Header link text", "link_url": "Header link",
                "dark": "Dark background", "still": "Hold the picture still", "arrange": "Where the picture goes",
+               "noglow": "Hide the glow behind the picture",
                "count_up": "Count up from zero", "fx": "Effect", "per_row": "Items per row"},
     "kinds": ["contact", "quote", "career"],
     # options for the "choice" widget, keyed by field: [value, label] pairs, so the empty one can
@@ -179,7 +180,7 @@ def layout(name):
 # browsers can talk about the same one without counting positions; _rich is the Quill gate's
 # verdict, stored rather than recomputed so every editor of a page agrees about it.
 _NON_TEXT_KEYS = {"url", "cta_url", "cta2_url", "button_url", "link_url", "icon", "image", "media_id", "file_media_id",
-                  "post_type", "term", "limit", "kind", "top_level", "dark", "still", "arrange", "type", "widths", "align", "align_box", "width",
+                  "post_type", "term", "limit", "kind", "top_level", "dark", "still", "arrange", "noglow", "type", "widths", "align", "align_box", "width",
                   "tone", "fx", "count_up", "height", "per_row", "_id", "_rich"}
 EDITOR["scalars"] = sorted(_NON_TEXT_KEYS)
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
