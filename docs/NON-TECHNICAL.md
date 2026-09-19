@@ -757,6 +757,11 @@ being built and no junk has come through, that is the right balance: a puzzle on
 enquiries. Tell whoever looks after the site the moment junk starts arriving and it can be blocked
 without you noticing any difference.
 
+**The trail of links at the top of a page is squashed against the menu bar.** It isn't any more. On
+pages that open with a big banner section the trail — *Home / Case Studies / …* — was sitting almost
+touching the menu bar above it, while on every other page it had a comfortable gap. Both now have the
+same gap. Nothing to change on your side; it applies to every page on the site.
+
 **Can I move the Hero's picture, or stop it moving about?** Yes, both. Open the Hero section's
 settings (the ⚙ on the section) and you will find **Where the picture goes** — beside the words,
 above them, or below them — **Hold the picture still**, which stops the gentle drifting and stops

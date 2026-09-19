@@ -250,6 +250,7 @@ Decisions that are easy to undo by accident:
   the shorthand, or a toned column card loses its sides; `:not(.spacer)`, or a Spacer's Height and
   its Spacing fight over one gap. `canvas.css` gives a `pad-none` divider an 8px hit area the page
   does not get, because 1px is unhoverable.
+- **`.crumb-bar` belongs to the hero branch only** (client, 2026-09-19): when `post.html` skips the page head it draws the breadcrumb alone in a bare `.wrap`, which is the side gutter and nothing else — the crumb sat 10px under the header rule on every service, About, Careers and Contact page (text top y=75 at 1440, against y=123 with a `.page-head`). `.crumb-bar{padding-block:48px 0}` matches `.page-head`'s own top padding, so both branches land at 123. `padding-block`, never the `padding` shorthand, or the gutter goes with it; and putting the class on `.page-head` too would double the gap, not unify it.
 - **Product page has no hero**: the page head *is* the design's detail header.
 - One `_card.html` macro for archive, page lists and post children; `actions=True` (archive only) turns product/datasheet/service cards into `<div>`s with linked titles because an `<a>` cannot nest.
 
