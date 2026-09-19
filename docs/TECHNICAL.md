@@ -266,7 +266,11 @@ Both land in a class attribute and so neither is free text: `still` is a bool, a
 **compared** against the two literals in the template, never interpolated, so a value the editor
 never chose falls back to the beside layout rather than reaching the class
 (`test_nothing_an_editor_types_reaches_the_hero_class_attribute` feeds it six kinds of junk). A dark
-hero ignores `arrange` entirely — its picture is the backdrop, not a column.
+hero ignores `arrange` entirely — its picture is the backdrop, not a column. `noglow` is a third
+checkbox and is **not** the same control as `still`, which is the trap: `still` only stops the
+keyframes, and `glow` runs its `0%`/`100%` at `opacity:.7`, so a *stilled* glow sits at the
+element's own `opacity:1` and reads as more present, not less. `noglow` takes the `::before` out
+with `display:none`. The two compose.
 
 **Two keys in `data` are not fields and are not typed by anybody.** `_id` names a section for as long as it exists, and `_rich` records whether Quill can hold that section's markup without losing any of it (§12.1). They are written by the editor, travel with the block through `posts.blocks` and `post_drafts.blocks`, and exist so two browsers can agree about which section is which and about how it is edited (§12.3). `validate_blocks()` ignores extra `data` keys — it checks required fields and the type name, never an allow-list — and both are in `_NON_TEXT_KEYS` so `blocks_text()` skips them.
 
@@ -827,6 +831,16 @@ rather than reasoned from the cascade: with the class on, `getComputedStyle` rep
 `animationName` `none` for the picture and the glow and still `heroin` for the entrance; without it,
 `float`/`glow`/`heroin`. `prefers-reduced-motion` is unaffected — it is the last block in the file
 and says `!important`, so a reader who asks for stillness still gets all of it.
+
+**"Hide the glow behind the picture" is a separate switch, and has to be.** `.hero-noglow
+.hero-media::before{display:none}` removes the wash; `.hero-still` only silences its keyframes, and
+because `glow`'s `0%`/`100%` frame is `opacity:.7` a stilled glow renders at the element's own
+`opacity:1`. Measured together in one render: `getComputedStyle(.hero-media, '::before')` reports
+`display` `block` for every state except `hero-noglow`, where it is `none`, while `animationName`
+independently goes `glow` → `none` under `hero-still`. **The visual change is small** — the wash is
+`rgba(53,115,185,.16)` on an ellipse inset 10% of `.hero-media`, and the picture fills that box, so
+most of it is occluded by the photo and only a rim shows. That is worth knowing before anybody
+"fixes" the switch for not doing enough.
 
 **Section effects (`fx-*`)** are the four an editor can put on a Numbers or Rich text section (§6). All four run on the document timeline and play once as the page loads, in every browser. `fx-gradient` paints the section's big text — every heading, plus a Numbers figure, which is a `<strong>` and not a heading at all — with the brand gradient through `background-clip:text`, drifting on a plain time loop. The other three are one-shot entrances: `fx-rise` fades and lifts `>.wrap` (never the `<section>` itself, which would fade a dark band in from white), `fx-sweep` grows a marker-pen bar as the element's *own* `background-size` from `0 .3em` to `100% .3em`, and `fx-count` rolls a registered `@property --cv` through `counter()`.
 
