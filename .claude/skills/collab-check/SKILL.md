@@ -35,6 +35,7 @@ Two browsers, two accounts, one page:
 - a colleague's paragraph shows in Preview; **Publish from Preview** publishes it
 - scroll a long page halfway in Preview, the colleague types — the words appear and the page does not move
 - A adds one word to B's sentence — A's Activity entry names only A's word; A deletes a section without typing, reloads, types again — **one** entry fifteen minutes later
+- **undo never reaches the other person** (2026-09-19): B types a sentence, A presses ↶ — A's own last change is taken back and **B's sentence is untouched**; then A undoes past their own first change and ↶ goes grey rather than walking into B's work. This is the one behaviour a `Y.UndoManager`'s `trackedOrigins` exists to give and the one no single browser can prove; before it, Quill's default `userOnly:false` meant A's ↶ reverted B's words *and broadcast the revert*.
 - **nobody sees anybody**: `0009` not applied (`CHANNEL_ERROR`, single-player fallback, retries 2→30 s); the realtime container caching authorisation (restart it after a policy change); or the tenant-name trap (TECHNICAL §15) — a bare `403` on every join
 
 ## Migrations this depends on

@@ -30,6 +30,8 @@ const ctx = vm.createContext({
   atob: s => Buffer.from(s, 'base64').toString('binary'),
   btoa: s => Buffer.from(s, 'binary').toString('base64'),
   say: () => {},
+  syncBar: () => {},                      // the toolbar lives outside the slice; undo repaints it
+
   get MODEL () { return MODEL }, set MODEL (v) { MODEL = v },
   cdoc: () => null,                       // no canvas in here, so focus-wins never holds anything back
   // Which editor, if any, owns a rich field. cdoc() is null in here so mirrorProse can never find
@@ -53,6 +55,8 @@ const ctx = vm.createContext({
 vm.runInContext(js.slice(from, to) + `
 this.API = { stampIds, reconcileOut, initShared, pathOfId, idOf, eachBlock, yState, SCALARS,
              seedDoc, dedupe, fromY, shareQuill, shareWaiting,
+             step, undo, redo, canUndo, canRedo,
+             get undoDepth () { return UNDO ? UNDO.undoStack.length : -1 },
              set canWrite (v) { canWrite = v },
              set shareOut (v) { shareOut = v },
              get BINDS () { return BINDS }, get WAITING () { return WAITING },
@@ -285,6 +289,67 @@ Yns.applyUpdate(API.YDOC, Yns.encodeStateAsUpdate(new Yns.Doc()), 'remote')
 API.YB.get(0).get('data').set('tone', 'dark')
 ok('...while what a peer sent is not echoed back to them',
    sent.filter(o => o === 'remote').length === 0 && sent.length === 1)
+
+/* ---- undo -------------------------------------------------------------------------------
+   The point of the feature is that ONE action is ONE step. reconcileOut debounces at 120ms, so
+   transactions are timer ticks and not actions; step() is what puts the boundary where the action
+   is. These assert the step COUNT as well as the contents, because an undo that needs pressing
+   twice to show anything is the bug being fixed, in a new place. */
+
+MODEL = [{ type: 'hero', data: { _id: 'a', heading: 'One' } },
+         { type: 'rich_text', data: { _id: 'b', _rich: true, html: '<p>Keep <em>this</em></p>' } },
+         { type: 'divider', data: { _id: 'c' } }]
+API.initShared('')
+API.seedDoc(); await settle()
+const ids = () => API.YB.toJSON().map(x => x.data._id).join()
+ok('undo starts with nothing to undo', !API.canUndo() && !API.canRedo())
+
+API.step(); MODEL.splice(2, 1); API.reconcileOut(); await settle()
+ok('deleting a section is one undo step', API.canUndo() && ids() === 'a,b')
+repaints = 0
+API.undo()
+ok('...and undoing it puts the section back', ids() === 'a,b,c')
+ok('...and repaints the canvas without being asked', repaints === 1)
+ok('...and can be redone', API.canRedo())
+API.redo()
+ok('...which takes it away again', ids() === 'a,b')
+
+API.step(); MODEL[0].data.heading = 'Two'; API.reconcileOut(); await settle()
+API.step(); MODEL.splice(0, 0, MODEL.splice(1, 1)[0]); API.reconcileOut(); await settle()
+ok('two actions are two steps, not one', ids() === 'b,a')
+API.undo()
+ok('...so undo takes back only the move', ids() === 'a,b' && String(API.YB.get(0).get('data').get('heading')) === 'Two')
+API.undo()
+ok('...and again takes back only the heading', String(API.YB.get(0).get('data').get('heading')) === 'One')
+
+/* Undoing a DELETE is the case where formatting is easiest to lose: the block is back in the
+   document and gone from MODEL, so there is no mirror to read the html off and Y.Text.toJSON()
+   is the bare words. fromY() renders the delta through converter() instead. */
+const bmap = API.YB.toArray().find(mm => mm.get('data').get('_id') === 'b')
+const bty = new Yns.Text(); bmap.get('data').set('html', bty)
+bty.applyDelta([{ insert: 'Keep ' }, { insert: 'this', attributes: { italic: true } }])
+API.step(); MODEL.splice(MODEL.findIndex(x => API.idOf(x) === 'b'), 1)
+API.reconcileOut(); await settle()
+API.undo()
+const back = MODEL.find(x => API.idOf(x) === 'b')
+ok('undoing a deleted rich section brings the section back', !!back)
+ok('...with its words, not an empty paragraph', !!back && /Keep/.test(back.data.html))
+
+/* The headline behaviour: a colleague's edit is not on your stack, so undo can never revert it. */
+const mate = new Yns.Doc(); Yns.applyUpdate(mate, Yns.encodeStateAsUpdate(API.YDOC))
+mate.getArray('blocks').get(0).get('data').set('heading', 'Theirs')
+Yns.applyUpdate(API.YDOC, Yns.encodeStateAsUpdate(mate), 'remote')
+ok('a peer\'s edit reaches the page', String(API.YB.get(0).get('data').get('heading')) === 'Theirs')
+API.undo()
+ok('...and undo does not revert it', String(API.YB.get(0).get('data').get('heading')) === 'Theirs')
+
+/* Seeding writes under YSEED rather than YORIGIN, and that is not a tidiness choice: it used to be
+   UNDO.clear() inside seedDoc(), and seedDoc runs on a FOUR SECOND timer when there is a room to
+   wait for -- so anything the editor did in those four seconds was wiped. Measured in a browser: a
+   section moved at 4.0s left an empty undo stack and a button that still looked live. */
+API.step(); MODEL[0].data.heading = 'Three'; API.reconcileOut(); await settle()
+API.seedDoc()                                   // the deferred seed, arriving late
+ok('a late seed does not wipe what has already been done', API.canUndo())
 
 console.log(bad ? bad + ' FAILED' : 'all passed')
 process.exit(bad ? 1 : 0)

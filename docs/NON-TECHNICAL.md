@@ -196,7 +196,7 @@ exists offers you the one that is there rather than a second copy of it, whateve
 
 | | |
 |---|---|
-| **↶ ↷** | Undo and redo |
+| **↶ ↷** | Undo and redo — **Ctrl+Z** and **Ctrl+Shift+Z** (⌘ on a Mac; Ctrl+Y also redoes on Windows). They step back the last thing *you* did anywhere on the page, not just your typing: a section you deleted, moved, copied or added, and anything you changed in a section's **⚙** settings. They go grey when there is nothing left to undo. If somebody else is editing the same page, undo never touches their work. |
 | **Normal text ▾** | Sets the size of the line: **H1** down to **H6**, or back to *Normal text*. H2 is the normal way to start a section, H3 for something under it, and so on down. |
 | **Size ▾** | Makes ordinary writing bigger or smaller — *Small*, *Normal*, *Large*, *Larger*, *Huge*. Select some words to resize just those, or click anywhere in a line to resize the whole line. *Normal* puts it back. It is greyed out on a heading, because a heading's size is set by its H-level instead — and turning a line into a heading drops any size you had set on it, so the heading comes out the size a heading should be. |
 | **B** *I* <u>U</u> **S** | Bold, italic, underline and strikethrough |
@@ -783,6 +783,14 @@ section. A Hero draws its own picture, so on a page that has one the picture you
 picture in the Hero section's own **Image** box instead, or remove the Hero and the page will show
 yours. Case studies and events no longer start with a Hero unless you add one, so there the picture
 usually shows straight away.
+
+**I deleted a section by mistake — can I get it back?** Yes. Press **↶** in the toolbar, or
+**Ctrl+Z** (**⌘Z** on a Mac). It brings back the section with its writing and its settings. The same
+works for a section you moved, copied or added, and for anything you changed under **⚙** — press it
+again to keep stepping back, and **↷** / **Ctrl+Shift+Z** to go forward again. Two things worth
+knowing: it only undoes **your own** changes, so it can never wipe out what a colleague is typing on
+the same page; and it is for the page you have open right now — once you have left the page, use
+**Activity** in the sidebar instead, which keeps a record of every saved change and can restore one.
 
 **Can I put the title on top of a picture, like the big banner sections?** Yes. Choose a
 **Featured image** in the panel on the right, then tick **Show the title on this picture** just
