@@ -3123,3 +3123,31 @@ def test_the_form_offers_a_spot_per_section_and_keeps_the_choice(app, monkeypatc
     with app.test_request_context("/admin/posts/7", method="POST",
                                   data={"title": "T", "slug": "t", "status": "published"}):
         assert _form_body(_prose_pt(), post)["meta"]["_details_at"] == "1"      # untouched, not blanked
+
+
+def test_opening_a_dropdown_in_the_section_panel_does_not_repaint_the_section():
+    """The settings popover schedules a section re-render on input, change AND click, because
+    fieldInput() mutates in place and reports nothing. `click` is there for the panel's BUTTONS --
+    a repeater's + Add and its X, the media browser -- which change data and fire nothing else.
+
+    It must not fire for a click on a form control. That click changes nothing by itself, and on a
+    <select> it is the click that OPENS the native dropdown: 250ms later canvasBlock() replaces the
+    section under it and the menu is dismissed before anybody can choose. Reported by the client as
+    "it kind of refreshes and the dropdown closes before i select something".
+
+    A source assertion because the handler is a closure inside openPanel(), which no harness here
+    can reach -- the same reason /collab-check pins some of admin.js by shape. It was proved in a
+    real browser instead: driving the actual editor with the database stubbed and counting
+    /admin/canvas round trips, clicking a <select> went 1 -> 0 while changing one stayed at 1 and a
+    repeater button stayed at 1."""
+    js = (pathlib.Path(__file__).parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    guard = 'if (ev === "click" && /^(SELECT|OPTION|INPUT|TEXTAREA|LABEL)$/.test(e.target.tagName)) return;'
+    assert guard in js, "the settings panel would repaint on merely opening a dropdown again"
+
+    # the guard is worthless if the handler stops receiving the event, or stops watching clicks at
+    # all -- buttons are the reason click is in the list
+    handler = js[js.index('["input", "change", "click"].forEach'):]
+    handler = handler[:handler.index("panelPlace =")]
+    assert "function (e) {" in handler, "the handler needs the event to read e.target"
+    assert guard in handler, "the guard must live in the popover's own listener, not somewhere else"
+    assert "canvasBlock(panelAt)" in handler and "markDirty()" in handler

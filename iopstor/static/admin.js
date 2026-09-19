@@ -1889,11 +1889,22 @@
     ]));
     box.appendChild(blockFields(block));
 
-    // fieldInput() mutates in place and reports nothing, so watch the popover for any activity
-    // and redraw the one block it belongs to. Cheaper than threading a callback through every widget.
+    /* fieldInput() mutates in place and reports nothing, so watch the popover for any activity
+       and redraw the one block it belongs to. Cheaper than threading a callback through every widget.
+
+       `click` is in the list for the panel's BUTTONS -- a repeater's + Add and its ✕, the media
+       browser -- which mutate data and fire nothing else. It must NOT fire for a click on a form
+       control: that click changes nothing by itself, and on a <select> it is the click that OPENS
+       the native dropdown. The repaint 250ms later replaces the section under it (canvasBlock ->
+       node.replaceWith), the popover is repositioned, and the menu is dismissed before anybody can
+       pick anything -- reported as "it kind of refreshes and the dropdown closes". Measured with
+       the real editor: opening a <select> cost one /admin/canvas round trip that nothing asked for.
+       Every one of these controls announces a real change through input or change, so nothing is
+       lost by ignoring their clicks. */
     var pending = null;
     ["input", "change", "click"].forEach(function (ev) {
-      box.addEventListener(ev, function () {
+      box.addEventListener(ev, function (e) {
+        if (ev === "click" && /^(SELECT|OPTION|INPUT|TEXTAREA|LABEL)$/.test(e.target.tagName)) return;
         clearTimeout(pending);
         pending = setTimeout(function () { if (panelAt) canvasBlock(panelAt); }, 250);
         markDirty();
