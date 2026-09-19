@@ -530,6 +530,20 @@
   /* The band a section sits on. Same shape as alignPick: picking the blank option deletes the key,
      so an untouched section stays byte-identical in the saved JSON. */
   var TONES = [["", "Page background"], ["grey", "Light grey"], ["dark", "Dark"], ["blue", "Blue"]];
+
+  /* How much air the section keeps, and only ever less than the design's own -- adding space is a
+     Spacer, which is a thing you can drag. Same shape as tonePick: the blank option deletes the key.
+     Values mirror blocks.py PADS by hand, like ALIGNMENTS/WIDTHS/TONES above; a test compares them. */
+  var PADS = [["", "Default"], ["none", "None"], ["small", "Small"], ["medium", "Medium"]];
+  function padPick(data) {
+    var sel = el("select", { title: "Space above and below the section" });
+    PADS.forEach(function (p) { sel.appendChild(el("option", {value: p[0], text: p[1]})); });
+    sel.value = data.pad || "";
+    sel.addEventListener("change", function () {
+      if (sel.value) data.pad = sel.value; else delete data.pad;
+    });
+    return labelled("Spacing", false, sel);
+  }
   function tonePick(data) {
     var sel = el("select");
     TONES.forEach(function (t) { sel.appendChild(el("option", {value: t[0], text: t[1]})); });
@@ -572,6 +586,8 @@
       body.appendChild(alignPick("Align the section", "align_box", block.data));
       body.appendChild(tonePick(block.data));
       body.appendChild(widthPick(block.data));
+      // not on a spacer: its Height is its spacing, and two controls on one gap is the trap
+      if (block.type !== "spacer") body.appendChild(padPick(block.data));
       fieldsOf(block.type).forEach(function (f) {
         // a rich_text section IS its html, edited on the page; a second document editor in a 23rem
         // popover is a trap, so the panel here is layout only

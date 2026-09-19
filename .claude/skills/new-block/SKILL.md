@@ -33,7 +33,32 @@ Then `/theme-check` at three widths, on a page that has the section inside a Col
 
 ## What usually needs nothing
 
-`admin.js` — the editor is driven by `SPEC` (`#editor-data` from `post_form.html`, the same `BLOCKS` + `EDITOR` that `GET /api/admin/v1/blocks` serves). Its `BLOCK_NAMES` literal is a fallback consulted after `EDITOR["names"]`. It changes only for a new *widget* type or a new nesting rule. `canvas.css` (only `pdf` needs chrome), `validate_blocks()`, `apply_post()`, `seo.py`, `public.py`, `post.html` — untouched.
+`admin.js` — the editor is driven by `SPEC` (`#editor-data` from `post_form.html`, the same `BLOCKS` + `EDITOR` that `GET /api/admin/v1/blocks` serves). Its `BLOCK_NAMES` literal is a fallback consulted after `EDITOR["names"]`. It changes only for a new *widget* type, a new nesting rule — **or a new universal control, which is not a block field at all; see below**. `canvas.css` (only `pdf` needs chrome), `validate_blocks()`, `apply_post()`, `seo.py`, `public.py`, `post.html` — untouched.
+
+## A universal control is not a block type
+
+Every step above is written for a new *type*. A control that belongs to **every** section — the ⚙'s
+Align, Background, Width, Spacing — is a different, shorter path, and nothing here covered it until
+`pad` was added on 2026-09-19:
+
+1. **A whitelist tuple in `blocks.py`** beside `ALIGNS`/`TONES`/`WIDTHS`/`FX`/`HEIGHTS`, and one line
+   in `section_class()`. The value lands in a class attribute, so it is a whitelist, never a
+   passthrough.
+2. **The key into `_NON_TEXT_KEYS`** — it reaches the browser as `EDITOR["scalars"]` and decides
+   whether the editor co-edits it letter by letter. That is the whole of the collaboration story;
+   `admin.js` reads the list generically and needs nothing.
+3. **A picker in `blockFields()`**, copying `tonePick`, appended unconditionally — and it **must**
+   `delete data[key]` when empty, or an untouched section stops being byte-identical in the saved
+   JSON. Its vocabulary is a hand-written JS literal duplicating the Python tuple, like the other
+   four; **nothing checks they agree**, so write the test that compares them.
+4. **No block templates**, unlike a new field: every root already interpolates `{{ cls }}`.
+5. **A CSS group whose placement is the mechanism.** The rules you must beat are nearly all
+   *specificity ties* (`.band-*.section`, `.column>.section.t-*`, `.column>.section.divider`), so
+   the group goes after the last of them and wins on source order. Remember `.hero` is **not** a
+   `.section` and needs a selector of its own, and that `.column>` variants need (0,3,0).
+6. **Docs:** TECHNICAL §6's layout-key table *and* §12.1's list of the shared controls, design.md §5
+   and §9, NON-TECHNICAL §4 *Changing a section* plus a Quick answer. Every one of those lists has
+   been found stale at least once — count them rather than trusting the prose.
 
 ## Common mistakes
 

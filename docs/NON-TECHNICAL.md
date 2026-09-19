@@ -307,7 +307,7 @@ Click any wording inside a section and type over it — headline, button label, 
 A section of your own writing has the same toolbar — hover it and it appears in the corner, so a block of writing can be moved, copied, aligned or widened like any other section.
 
 **Lining a section up: left, centre or right.** The **⇤ ↔ ⇥** buttons on the top toolbar centre one
-paragraph at a time. To do a whole section at once, open its **⚙** and use the two boxes at the top:
+paragraph at a time. To do a whole section at once, open its **⚙** and use the first two boxes:
 
 | Box | What it moves |
 |---|---|
@@ -318,7 +318,7 @@ Both start on **Default**, which is how the design lays that section out on its 
 page redraws as you choose it. A coloured CTA band stays centred and a specification table stays
 left, whatever you pick — those two are designed that way on purpose.
 
-**How wide a section is.** The third box in the same **⚙** panel:
+**How wide a section is.** Also in the same **⚙** panel:
 
 | Width | What you get |
 |---|---|
@@ -329,6 +329,28 @@ left, whatever you pick — those two are designed that way on purpose.
 
 Set a width and an alignment together and they work as you would expect: a section narrowed to 700
 and set to *Align the section: Centre* sits as a neat centred column.
+
+**The colour behind a section.** The **Background** box in the same panel. **Page background** is
+the plain white the page is built on, and is how every section starts; **Light grey** is the soft
+band the design alternates down a page to separate one part from the next; **Dark** and **Blue**
+are the full-width coloured bands. A section that is already a coloured band by design — the blue
+*Call to action*, the black *Numbers* strip — keeps its own colour unless you pick one here.
+
+**Too much space above and below a section.** The **Spacing** box, last in the panel:
+
+| Spacing | What you get |
+|---|---|
+| **Default** | The generous air the design gives every section. This is how every section starts, and nothing already published has changed. |
+| **Medium** | About half the usual. |
+| **Small** | About a quarter — useful for a Divider, which otherwise sits in a lot of white for one thin line. |
+| **None** | No air at all above or below. The section sits directly against its neighbours. |
+
+Two things worth knowing. **Each section only controls its own space**, and the gap you see between
+two sections is both of theirs added together — so to really close up around a Divider, set it on
+the Divider *and* on the sections either side of it. Setting only the Divider halves the gap;
+setting all three closes it. And there is deliberately no setting **bigger** than Default: to add
+space, drop in a **Spacer** section instead, which you can drag, copy and delete like anything
+else. A Spacer has no Spacing box of its own, because its **Height** already is its spacing.
 
 **Giving a section a bit of movement as the page opens.** Two sections can be given an effect: **Numbers**
 (the strip of big figures) and your own writing. Open the section's **⚙** and you will find an
@@ -352,7 +374,7 @@ the label. Leave them alone and that figure does whatever the whole section is s
 that one figure wins. So you can have one figure counting up in brand blue and the three beside it
 sitting still.
 
-**Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live on the section itself: hover it, click the **⚙** on its little dark toolbar, and a small panel opens over that section with exactly its own options — **Align the content**, **Align the section**, **Width**, **Effect** where the section has one, the picture, the button link, how many posts to list, and **+ Add** / ✕ for rows in a Cards, FAQ, Numbers or Specification section. Rows always come last in that panel, so the settings above them are never buried under a long list. Any picture field there has a **Choose file** button that uploads on the spot. The page updates as you type. Close it with **Esc**, the ✕, another press of ⚙, or by clicking anywhere else.
+**Pictures, links and settings.** Some things are not words on the page — which picture a section uses, where a button goes, how many posts a list shows. Those live on the section itself: hover it, click the **⚙** on its little dark toolbar, and a small panel opens over that section with exactly its own options — **Align the content**, **Align the section**, **Background**, **Width**, **Spacing**, **Effect** where the section has one, the picture, the button link, how many posts to list, and **+ Add** / ✕ for rows in a Cards, FAQ, Numbers or Specification section. Rows always come last in that panel, so the settings above them are never buried under a long list. Any picture field there has a **Choose file** button that uploads on the spot. The page updates as you type. Close it with **Esc**, the ✕, another press of ⚙, or by clicking anywhere else.
 
 **The writing area has been rebuilt**, and for most sections you will not notice — the same toolbar,
 the same buttons, the same typing. It is what lets two people write in the same paragraph at once
@@ -891,6 +913,11 @@ places, a little faster on a repeat visit.
 plays once as the page opens. A section far down a long page will therefore have finished before you
 scroll to it. If you have asked your computer to reduce motion, nothing animates at all and every
 figure and heading simply sits there in full, which is deliberate.
+
+**There is too much space around my Divider.** That is the design's usual spacing, and every
+section has it. Open the Divider's **⚙** and set **Spacing** to *Small* or *None* — then do the
+same on the section above it and the one below, because the gap you see is all three added
+together. Setting only the Divider halves it; setting all three closes it up.
 
 **How do I put a bit more space between two sections?** Press `/` on an empty line and pick
 **Spacer**, then set its **Height** under the **⚙**. Four sizes, from a small nudge to a big

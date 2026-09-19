@@ -3125,6 +3125,64 @@ def test_the_form_offers_a_spot_per_section_and_keeps_the_choice(app, monkeypatc
         assert _form_body(_prose_pt(), post)["meta"]["_details_at"] == "1"      # untouched, not blanked
 
 
+# --- how much air a section keeps ----------------------------------------------------------------
+# The seventh layout key. Only ever LESS than the design's 80px: adding space is a Spacer, and
+# keeping the two apart is what lets both exist (design.md, 2026-09-10). The whole mechanism rests
+# on CSS source order, which no assertion about a rule merely existing would catch.
+
+def test_section_padding_is_a_whitelist():
+    """Same shape as the other six: the value lands in a class attribute, so nothing an editor can
+    type reaches it. 'large' is refused on purpose -- it is not a step, it is a Spacer."""
+    from iopstor.blocks import PADS, section_class
+    assert PADS == ("none", "small", "medium")
+    assert section_class({"pad": "none"}) == " pad-none"
+    assert section_class({"pad": "medium"}) == " pad-medium"
+    for junk in ('x" onload="', "<script>", "large", "PAD-NONE", "none small", " none", "", None, 1, {}):
+        assert section_class({"pad": junk}) == "", f"{junk!r} reached the class attribute"
+    # and it composes with the six that were already there, in section_class's own order
+    assert section_class({"pad": "small", "tone": "grey", "align": "center"}) == " al-center t-grey pad-small"
+
+    from iopstor.blocks import BLOCKS, EDITOR
+    assert "pad" in EDITOR["scalars"], "pad would be co-edited as prose"
+    assert not any("pad" in req + opt for req, opt in BLOCKS.values()), "pad is universal, not a block field"
+
+
+def test_the_padding_rules_sit_after_everything_they_have_to_beat():
+    """Every conflict is a specificity TIE, so placement is the mechanism rather than tidiness.
+    Move the group earlier and it silently loses to whichever rule it now precedes -- and a
+    stylesheet cannot report that. Three selectors because `.hero` is not a `.section`."""
+    css = _site_css()
+    for step, px in (("none", "0"), ("small", "24px"), ("medium", "40px")):
+        rule = (f".section.pad-{step}:not(.spacer),.hero.pad-{step},"
+                f".column>.section.pad-{step}:not(.spacer){{padding-block:{px}}}")
+        assert rule in css, f"missing or reshaped: {rule}"
+
+    first = css.index(".section.pad-none")
+    for earlier in (".column>.section.divider{", ".band-dark.section{", ".divider{padding",
+                    ".column>.section.t-grey", ".column>.section+.section{"):
+        assert css.index(earlier) < first, f"{earlier} must come BEFORE the pad group, or the tie goes the wrong way"
+
+    # padding-block, not the shorthand: a toned section in a column is a card and keeps its sides
+    assert "pad-none:not(.spacer){padding:" not in css
+    # and the canvas gives a flattened divider something to click, which the page must not have
+    canvas = (pathlib.Path(__file__).parent.parent / "iopstor" / "static" / "canvas.css").read_text()
+    assert ".iop-canvas .divider.pad-none{padding-block:8px}" in canvas
+    assert ".iop-canvas" not in css
+
+
+def test_the_editors_spacing_options_match_the_python_whitelist():
+    """ALIGNMENTS, WIDTHS and TONES are hand-written JS duplicating a Python whitelist with nothing
+    checking they agree -- only `fx` is guarded, because it travels through EDITOR["choices"].
+    This is the one of the five that cannot drift silently."""
+    from iopstor.blocks import PADS
+    js = (pathlib.Path(__file__).parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    literal = re.search(r"var PADS = \[(.*?)\];", js, re.S)
+    assert literal, "the PADS literal in admin.js has moved or been renamed"
+    values = re.findall(r'\["([^"]*)",', literal.group(1))
+    assert values == [""] + list(PADS), f"admin.js offers {values}, blocks.py allows {PADS}"
+    # offered on every section but a spacer, whose Height already is its spacing
+    assert 'if (block.type !== "spacer") body.appendChild(padPick(block.data));' in js
+    assert "else delete data.pad;" in js, "an untouched section must stay byte-identical in the JSON"
 def test_opening_a_dropdown_in_the_section_panel_does_not_repaint_the_section():
     """The settings popover schedules a section re-render on input, change AND click, because
     fieldInput() mutates in place and reports nothing. `click` is there for the panel's BUTTONS --

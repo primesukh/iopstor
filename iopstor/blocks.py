@@ -180,7 +180,7 @@ def layout(name):
 # browsers can talk about the same one without counting positions; _rich is the Quill gate's
 # verdict, stored rather than recomputed so every editor of a page agrees about it.
 _NON_TEXT_KEYS = {"url", "cta_url", "cta2_url", "button_url", "link_url", "icon", "image", "media_id", "file_media_id",
-                  "post_type", "term", "limit", "kind", "top_level", "dark", "still", "arrange", "noglow", "type", "widths", "align", "align_box", "width",
+                  "post_type", "term", "limit", "kind", "top_level", "dark", "still", "arrange", "noglow", "pad", "type", "widths", "align", "align_box", "width",
                   "tone", "fx", "count_up", "height", "per_row", "_id", "_rich"}
 EDITOR["scalars"] = sorted(_NON_TEXT_KEYS)
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
@@ -266,15 +266,26 @@ ALIGNS = ("left", "center", "right")
 WIDTHS = {"wide": "w-wide", "full": "w-full"}   # "width" also takes a number of pixels; see section_style()
 FX = ("rise", "gradient", "sweep")   # the motion an editor can put on a section; counting figures up is its own checkbox
 HEIGHTS = ("small", "medium", "large", "huge")   # how tall a spacer is; the CSS holds the pixels
+# How much air a section keeps above and below. Absent is the design's own 80px, which is right for
+# a band of content and far too much for a rule: a divider between two sections sat in 208px of
+# white (80 below the one above + 24 of its own, then 24 + 80). The CSS holds the pixels, and sets
+# padding-block only, so a toned section inside a column keeps the side padding that makes it a card.
+#
+# NOTHING LARGER THAN THE DEFAULT, deliberately. design.md's 2026-09-10 row chose Spacer and Divider
+# as block types over "spacing controls on every section's gear", and that stands for ADDING air --
+# a thing you can drag, copy and delete beats a dropdown. What a Spacer cannot do is take away air
+# that is already there, which is all this is for. Add with a Spacer, remove with this, and the two
+# never overlap. Every value below is a number the theme already uses.
+PADS = ("none", "small", "medium")
 MAX_W = 4000
 
 
 def section_class(data):
-    """The layout classes for one section, from six optional keys — absent means the theme's own
+    """The layout classes for one section, from seven optional keys — absent means the theme's own
     layout. "align" lines up what is inside it, "align_box" moves the box, "tone" is the band it sits
     on (the design alternates white and grey down a page for rhythm), "width" is either a named
     step (wide / full) or a number of pixels, which section_style() carries instead, and "fx" is
-    the motion in site.css's effects group, and "height" is how tall a spacer stands. A whitelist,
+    the motion in site.css's effects group, "height" is how tall a spacer stands, and "pad" is how much air it keeps above and below. A whitelist,
     not a passthrough: the result goes straight into a class attribute, the same reason col_widths()
     is strict — which is also why stats.html calls this for one figure's own effect rather than
     building the class itself.
@@ -284,6 +295,7 @@ def section_class(data):
     out += [WIDTHS[str(data.get("width"))]] if str(data.get("width")) in WIDTHS else []
     out += ["fx-" + data["fx"]] if data.get("fx") in FX else []
     out += ["sp-" + data["height"]] if data.get("height") in HEIGHTS else []
+    out += ["pad-" + data["pad"]] if data.get("pad") in PADS else []
     return (" " + " ".join(out)) if out else ""
 
 
