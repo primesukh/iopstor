@@ -1650,7 +1650,8 @@ seen any other way**: `db.live()` (`db.py:106-108`) gates every public lookup on
 and `crumbs_for()` from `public.py`. `_preview_post()` shapes the result like a hydrated row, and
 `db.hydrate()`/`db.ancestors()` work on it unchanged because they read only `post_type`,
 `post_type_id`, `parent_id` and `slug` — never `id`. `?part=card` returns just the search/social
-fragment (`admin/seo_card.html`) from the same data. Nothing needed rewiring: `public.py:22-24`
+fragment (`admin/seo_card.html`) from the same data — **and since 2026-09-19 that is a view of its
+own**, the fourth button in the width row, rather than a strip hung under the page. Nothing needed rewiring: `public.py:22-24`
 registers `site`, `menu`, `render_blocks` and `year` with `app_context_processor`, so they are
 already live in admin templates.
 
@@ -1673,10 +1674,30 @@ textarea is only written on submit). Preview mode runs `wirePreview()` instead o
 `contenteditable`, no section bars, no Sortable — plus capture-phase handlers that cancel `submit`
 and open links in a new tab rather than navigating the preview away. Device widths render at
 1440/834/390 and `transform: scale()` down to `#canvas-wrap`, which Preview sizes to the rest of the
-window (from the frame's top to the bottom, `flex:none` so the search and share cards under it cannot
-squeeze it; the column scrolls to them), with the iframe's height divided by the same factor so the
-scaled result fills it exactly; the iframe *is* the viewport, so the site's own
+window (from the frame's top to the bottom, `flex:none`), with the iframe's height divided by the same
+factor so the scaled result fills it exactly; the iframe *is* the viewport, so the site's own
 breakpoints answer honestly. A 500 ms debounce on any form `input` keeps it a step behind your typing.
+
+**Preview has two halves, and each fetches only itself** (client, 2026-09-19). `VIEW` is still
+edit-or-preview — twelve reads of it mean exactly that, and three are collaboration rather than
+rendering (`paintPeers`, `edit:` on the presence wire, `canWrite()` disqualifying a previewing tab
+from autosaving) — so which half is showing is a **sub-state**, `PVPART`, and all twelve keep their
+meaning. A fourth `VIEW` value would have had to be audited into every one. The fourth button in
+`#pv-device` carries `data-pv="seo"` and **never a `data-w`**: `initPreview()` binds one handler to
+every button in that group and reads `+data-w`, so a width-less button there would set `DEVICE` to
+`NaN`.
+
+`renderPreview()` used to fetch **both** halves on every beat — the page and the cards in parallel,
+each a full `_form_body()` + `_preview_post()` + `build_meta()`, the page one 8-11 Supabase round
+trips. It now fetches the one on screen. Measured by driving the real editor through its own
+buttons and counting `POST /admin/preview`: entering Preview and a keystroke each went from
+`page=1 card=1` to `page=1 card=0`, and the cards view costs `page=0 card=1` — the expensive render
+is not paid at all while they are up.
+
+**`pvParts()` runs before `fitPreview()`, never after.** With `#canvas-wrap` hidden its
+`clientWidth` is 0, so `fitPreview()` computes `scale(0)` and the page returns invisible; measured
+on the way back it is `scale(0.515)`. The wrap is *hidden*, never emptied, so `cdoc()` keeps
+answering and the three collaboration paths above are not left working against nothing.
 
 One CSS rule underpins all the show/hide: `.admin [hidden]{display:none!important}`. Author display
 rules outrank the UA's `[hidden]{display:none}`, so toggling `hidden` on a flex or grid element

@@ -441,10 +441,14 @@ you can check a draft before anyone else sees it. The preview keeps up as you ty
 **Desktop / Tablet / Phone**, which appear next to them in Preview, redraw the page at those screen sizes, so you can check a page
 works on a phone before publishing rather than after.
 
-The preview fills the screen; scroll down under it for two small cards that show **how the page will look in a Google result** and **when someone
-shares the link** on WhatsApp or LinkedIn — the title, the web address, the description and the
-picture. They also tell you if your title or description is too long and will be cut short. If the
-share card says *No image*, set a Featured image in the panel on the right.
+**Search & social** is the fourth button in that same row, and it swaps the page for two small
+cards: **how the page will look in a Google result** and **when someone shares the link** on
+WhatsApp or LinkedIn — the title, the web address, the description and the picture. They also tell
+you if your title or description is too long and will be cut short. If the share card says
+*No image*, set a Featured image in the panel on the right. Both keep up as you type, the same way
+the page does. (These cards used to sit underneath the page, so you had to scroll past the whole
+thing including the footer to reach them; they have their own button now, and Preview shows only
+the page.)
 
 Links in the preview open in a new tab rather than taking you away from it, and the contact form
 does not send anything.

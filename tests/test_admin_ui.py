@@ -146,8 +146,16 @@ def test_browser_admin_login_and_create_post(client, seeded, monkeypatch):
     assert b"<h2>What it does</h2>" in shown                        # unsaved blocks render
     assert client.get("/blog/zz-test-preview").status_code == 404   # ...while the public URL still 404s
 
+    # part=card is a view of its own now, not a postscript under the page, so the contract is
+    # sharper: the cards AND NOT the page. If it ever started returning the whole document the
+    # editor would silently show a page inside the cards pane.
     card = client.post("/admin/preview?type=post&part=card", data=fields)
     assert card.status_code == 200 and b"zz-test Preview" in card.data and b"How it looks to a visitor" in card.data
+    assert b'class="seo-cards"' in card.data and card.data.count(b'class="seo-card"') == 2
+    assert b"In a Google result" in card.data and b"When the link is shared" in card.data
+    assert b"/60" in card.data and b"/155" in card.data          # the length warnings
+    for not_the_page in (b'class="site-header"', b'class="site-footer"', b"breadcrumb", b"<!doctype"):
+        assert not_the_page not in card.data.lower(), f"part=card returned the page: {not_the_page!r}"
     assert client.post("/admin/preview?type=post", data={"title": "x"}).status_code == 400  # CSRF enforced
 
     # post.html slices published_at as a string; apply_post() stores a datetime. The preview must

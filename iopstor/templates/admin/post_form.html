@@ -23,6 +23,9 @@
       <button type="button" data-w="1440" class="on">Desktop</button>
       <button type="button" data-w="834">Tablet</button>
       <button type="button" data-w="390">Phone</button>
+      {#- data-pv, not data-w: initPreview() binds one handler to every button in this group and
+          reads +data-w, so a fourth width-less button here would set DEVICE to NaN. #}
+      <button type="button" data-pv="seo">Search &amp; social</button>
     </span>
     <span class="spacer"></span>
     {# Written by admin.js as the page saves itself. Empty on a new post, which has nowhere to save
