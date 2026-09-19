@@ -20,12 +20,23 @@
     The predicate itself lives in blocks.owns_head() because the .md twin and the editor canvas ask
     the same question, and the three had already drifted apart. -#}
 {% set own_head = owns_head(pt.slug, post.blocks) %}
+{#- "Put the image in the title just like hero section" (client, 2026-09-19). The head takes the
+    dark hero's treatment -- the Featured image full-bleed behind it, darkened, white text -- with
+    no new chooser and no new block: `band-dark` already restyles a head's heading, breadcrumb and
+    lead (archive.html does exactly this), and `.hero-bg` already IS the backdrop mechanism. Both
+    halves are required: a flag with no picture draws nothing rather than a black box, which is the
+    one thing the control must not do silently. -#}
+{% set head_banner = post.featured_media and meta_.get('_head_banner') %}
 {# The eyebrow above the title is where you already are: the parent for a nested page, the content
    type otherwise. crumbs already holds that chain, so nothing new is looked up. #}
 {% set eyebrow = crumbs[-2][0] if crumbs|length > 2 else (pt.name if pt.url_prefix else '') %}
 <article class="pt-{{ pt.slug }}">
   {% if own_head %}
-  <div class="page-head{{ ' has-media' if post.featured_media and not article }}"><div class="wrap">
+  <div class="page-head{{ ' has-media' if post.featured_media and not article and not head_banner }}{{ ' band-dark head-banner' if head_banner }}">
+    {#- decoration, so aria-hidden and an empty alt: the title beside it IS the content. Same call
+        hero.html makes for the same picture in the same role. -#}
+    {% if head_banner %}<img class="hero-bg" src="{{ post.featured_media.url }}" alt="" aria-hidden="true">{% endif %}
+    <div class="wrap">
     <div class="page-head-text">
       {% if crumbs|length > 1 %}<nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav>{% endif %}
       {% if eyebrow and not article %}<p class="eyebrow">{{ eyebrow }}</p>{% endif %}
@@ -39,8 +50,9 @@
       </p>{% endif %}
     </div>
     {#- the one part of the head a hero really does replace: it draws data.image itself, and a
-        featured picture here as well would be two pictures on the page. -#}
-    {% if post.featured_media and not has_hero %}<div class="page-media"><img class="featured" src="{{ post.featured_media.url }}" alt="{{ post.featured_media.alt or post.title }}"></div>{% endif %}
+        featured picture here as well would be two pictures on the page. The banner is the same
+        rule from the other side -- there the picture IS the head, so it must not also sit in it. -#}
+    {% if post.featured_media and not has_hero and not head_banner %}<div class="page-media"><img class="featured" src="{{ post.featured_media.url }}" alt="{{ post.featured_media.alt or post.title }}"></div>{% endif %}
   </div></div>
   {% elif crumbs|length > 1 %}<div class="wrap crumb-bar"><nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav></div>{% endif %}
   {# The type's own fields, split by shape rather than by type name: short ones are the meta strip,

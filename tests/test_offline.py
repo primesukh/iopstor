@@ -2886,6 +2886,57 @@ def test_a_hero_led_page_gives_its_breadcrumb_room_under_the_header(app, monkeyp
     assert ".crumb-bar{padding-block:48px 0}" in css
 
 
+def test_the_title_can_sit_on_the_featured_picture(app, monkeypatch):
+    """"Put the image in the title just like hero section" (client, 2026-09-19). The head takes the
+    dark hero's band, reusing `band-dark` for the colours and `.hero-bg` for the picture, so the
+    two bands match without a measurement being copied between them. The picture appears ONCE:
+    as the backdrop, never also as .page-media, which is the two-pictures rule from the other
+    side."""
+    banner = _case_study(meta={"client": "KLPL", "_head_banner": "1"})
+    html = _render_post(app, monkeypatch, banner)
+    assert 'class="page-head band-dark head-banner"' in html
+    assert '<img class="hero-bg" src="/media/2026/09/klpl.png" alt="" aria-hidden="true">' in html
+    assert "page-media" not in html                       # the backdrop IS the picture
+    assert '<h1 class="page-title">' in html              # and the head is otherwise itself
+
+
+def test_the_banner_draws_nothing_without_a_picture_and_nothing_unasked(app, monkeypatch):
+    """The two ways it must stay quiet. Ticked with no picture chosen is a black box with a
+    headline in it if the flag alone is trusted -- the recurring failure in this editor is a
+    control that silently does the wrong thing, so it is pinned rather than found later."""
+    none_chosen = _case_study(meta={"client": "KLPL", "_head_banner": "1"}, featured_media=None)
+    html = _render_post(app, monkeypatch, none_chosen)
+    assert "head-banner" not in html and "hero-bg" not in html
+
+    off = _render_post(app, monkeypatch, _case_study())   # no flag at all
+    assert "head-banner" not in off and "hero-bg" not in off
+    assert 'class="featured"' in off                      # the picture still shows the normal way
+
+
+def test_the_banner_rules_sit_below_the_article_rule_they_have_to_beat():
+    """A specificity tie, so source order is the entire mechanism: .pt-post .page-head draws a 1px
+    --line hairline and both selectors are (0,2,0). Above it, the banner renders with a light rule
+    across the bottom of a black band -- which reads as a markup bug, not a cascade one. The same
+    trap .arch-head.band-dark and the pad-* group already carry comments about."""
+    css = (pathlib.Path(__file__).resolve().parents[1] / "iopstor/static/site.css").read_text()
+    assert css.index(".page-head.head-banner{") > css.index(".pt-post .page-head,.pt-case_study .page-head{")
+
+
+def test_unticking_the_banner_box_is_saved_as_false_not_as_missing(app):
+    """An unchecked checkbox posts NOTHING, so this key cannot use the "did the form carry the
+    control" guard `_details_at` uses -- absence would be indistinguishable from unticked. It is
+    written every save instead. Get this wrong and ticking sticks while unticking does nothing,
+    which is the failure an editor reports as "the button is broken"."""
+    from iopstor.admin_ui import _form_body
+    pt = {"slug": "case_study", "field_schema": []}
+    post = {"meta": {"_head_banner": "1"}}
+    base = {"title": "T", "slug": "t", "status": "published"}
+    with app.test_request_context("/admin/posts/7", method="POST", data=dict(base, head_banner="1")):
+        assert _form_body(pt, post)["meta"]["_head_banner"] == "1"
+    with app.test_request_context("/admin/posts/7", method="POST", data=base):
+        assert _form_body(pt, post)["meta"]["_head_banner"] == ""     # cleared, not left as it was
+
+
 def test_owns_head_is_the_one_answer_three_callers_share():
     """post.html, the .md twin and the editor canvas all have to agree about this, and before it was
     a function they did not: the twin tested `hero` and left `columns` out. A unit test here is

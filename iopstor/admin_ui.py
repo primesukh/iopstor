@@ -285,6 +285,12 @@ def _form_body(pt, existing):
     # the JSON API, which never posts a form) can never blank it by omission.
     if "details_at" in f:
         meta["_details_at"] = f.get("details_at", "")
+    # The second reserved key, and written WITHOUT that guard on purpose. An unchecked checkbox
+    # posts nothing, so "head_banner" in f can never mean "the form carried the control" -- it
+    # means "ticked". The guard above is safe for details_at because that control is conditional
+    # (a type with no long field never renders it); this one renders on every type, beside the
+    # Featured image box every type has, so absence really is unticked.
+    meta["_head_banner"] = "1" if f.get("head_banner") else ""
     for field in pt.get("field_schema") or []:
         raw = f.get(f"meta_{field['key']}", "")
         if field.get("type") == "kv":
@@ -397,6 +403,7 @@ def _form_context(pt, post, errors=None, conflict=None):
                 has_draft=bool(draft), doc_state=(draft or {}).get("state") or "",
                 leads_with_own_head=leads_with_own_head, details_spots=details_spots,
                 details_at=str((post or {}).get("meta", {}).get("_details_at") or ""),
+                head_banner=bool((post or {}).get("meta", {}).get("_head_banner")),
                 parents=[p for p in siblings if p["id"] != pk] if pt["hierarchical"] else [],
                 taken_slugs=[s["slug"] for s in siblings if s["id"] != pk],
                 media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps(content, indent=2, ensure_ascii=False),

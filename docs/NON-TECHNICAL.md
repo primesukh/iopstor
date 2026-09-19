@@ -168,7 +168,7 @@ The sections available:
 | **Publish** | Draft or published, and the date (see §5). The small grey or green label in the top bar shows what is *saved* — it changes when you press Save, not before. |
 | **Web address** | Made from the title automatically. If another page of the same kind already uses that address, three random letters are added so yours still works — `testing-shc` — and the note under the box tells you so. **Edit** if you really need to change it; it asks first, because changing it breaks existing links. A handful of words — `admin`, `api`, `media`, `static`, `healthz` — belong to the website itself and cannot be used; if you pick one, Save says so and asks for another. Only where the word would be the *start* of the address: a blog post called "Admin" is fine, because blog posts sit under `/blog/`. |
 | **Summary** | A sentence or two. Shown in lists, and under the page in Google results. |
-| **Featured image** | The picture used in lists and when the page is shared, and — unless the page starts with a **Hero** section — the big picture at the top of the page itself. A Hero draws its own picture, so on a page that has one this box only feeds the list card and the shared link, and the box says so right above it whenever that is the case. (On a blog article or a case study the title, date and categories still show; it is only the picture the Hero replaces.) **Choose file** uploads on the spot. |
+| **Featured image** | The picture used in lists and when the page is shared, and — unless the page starts with a **Hero** section — the big picture at the top of the page itself. A Hero draws its own picture, so on a page that has one this box only feeds the list card and the shared link, and the box says so right above it whenever that is the case. (On a blog article or a case study the title, date and categories still show; it is only the picture the Hero replaces.) **Choose file** uploads on the spot. Tick **Show the title on this picture** just underneath and the picture moves behind the page's title instead — full width, darkened, white text, the way a Hero section looks. |
 | **Organise** | The parent page (for services) and any categories or tags — see below. It only appears for types that have one or the other. Nothing here asks you to number your pages — lists show the newest first on their own. |
 | **Details** | The extra boxes some kinds of content have — a case study's client, an event's dates, a datasheet's PDF. Leave one blank and nothing at all shows for it on the page; there is no empty space left behind. Where a type has long boxes (Challenge, Solution, Results), **Where the long details go** decides where they land on the page — see below. |
 | **Search engine overrides**, **Advanced** | Closed by default. Leave them closed unless you know why you are opening them. |
@@ -783,6 +783,13 @@ section. A Hero draws its own picture, so on a page that has one the picture you
 picture in the Hero section's own **Image** box instead, or remove the Hero and the page will show
 yours. Case studies and events no longer start with a Hero unless you add one, so there the picture
 usually shows straight away.
+
+**Can I put the title on top of a picture, like the big banner sections?** Yes. Choose a
+**Featured image** in the panel on the right, then tick **Show the title on this picture** just
+below it. The page's title, date and categories then sit on that picture across the full width of
+the screen, darkened so the words stay readable — the same look a Hero section gives you, without
+adding one. Untick it and everything goes back. With no picture chosen the tick does nothing, so
+choose the picture first.
 
 **I added a Hero and the title, date and categories disappeared.** They do not any more, on a blog
 article or a case study: those two always show their own title, date and categories at the top, and a
