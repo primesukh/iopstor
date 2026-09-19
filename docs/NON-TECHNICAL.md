@@ -168,9 +168,9 @@ The sections available:
 | **Publish** | Draft or published, and the date (see §5). The small grey or green label in the top bar shows what is *saved* — it changes when you press Save, not before. |
 | **Web address** | Made from the title automatically. If another page of the same kind already uses that address, three random letters are added so yours still works — `testing-shc` — and the note under the box tells you so. **Edit** if you really need to change it; it asks first, because changing it breaks existing links. A handful of words — `admin`, `api`, `media`, `static`, `healthz` — belong to the website itself and cannot be used; if you pick one, Save says so and asks for another. Only where the word would be the *start* of the address: a blog post called "Admin" is fine, because blog posts sit under `/blog/`. |
 | **Summary** | A sentence or two. Shown in lists, and under the page in Google results. |
-| **Featured image** | The picture used in lists and when the page is shared. **Choose file** uploads on the spot. |
+| **Featured image** | The picture used in lists and when the page is shared, and — unless the page starts with a **Hero** section — the big picture at the top of the page itself. A Hero section draws its own title and its own picture, so on a page that has one this box only feeds the list card and the shared link. **Choose file** uploads on the spot. |
 | **Organise** | The parent page (for services) and any categories or tags — see below. It only appears for types that have one or the other. Nothing here asks you to number your pages — lists show the newest first on their own. |
-| **Details** | The extra boxes some kinds of content have — a case study's client, an event's dates, a datasheet's PDF. |
+| **Details** | The extra boxes some kinds of content have — a case study's client, an event's dates, a datasheet's PDF. Leave one blank and nothing at all shows for it on the page; there is no empty space left behind. |
 | **Search engine overrides**, **Advanced** | Closed by default. Leave them closed unless you know why you are opening them. |
 | **Delete** | At the very bottom, for administrators. It asks first. |
 
@@ -730,6 +730,23 @@ no picture puzzle and nothing stopping the same form being sent over and over. W
 being built and no junk has come through, that is the right balance: a puzzle on a quote form costs real
 enquiries. Tell whoever looks after the site the moment junk starts arriving and it can be blocked
 without you noticing any difference.
+
+**I chose a Featured image and it is not on the page.** Look at whether the page starts with a **Hero**
+section. A Hero draws its own heading and its own picture, so on a page that has one the picture you
+chose under **Featured image** is used for the list card and the shared link but not on the page itself
+— put the picture in the Hero section's own **Image** box instead, or remove the Hero and the page draws its own
+heading and show your picture underneath it. Case studies and events no longer start with a Hero, so
+there the picture shows straight away.
+
+**Case study pages look different.** They now read the way a blog post does — the title, the date, the
+picture across the full width, a line, then the writing. Before, a case study opened with an empty Hero
+section that hid the summary, the industry and solution labels, and the picture, which is why those never
+appeared. Nothing you wrote was lost.
+
+**The Client box is not in a grey panel any more.** That was asked for: the extra details — a case
+study's client, an event's dates, a datasheet's PDF — now read as ordinary page content instead of
+sitting in a highlighted box. The wording and the labels are exactly the same, and the same change
+applies everywhere those details show, not only on case studies.
 
 **Save says a word "is part of the website's own address".** A few words are used by the system itself
 — `admin`, `api`, `media`, `static`, `healthz` — so a page cannot take one as its address: it would

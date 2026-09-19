@@ -3,8 +3,11 @@
 {% set pt = post.post_type %}{% set meta_ = post.meta or {} %}
 {% set has_hero = post.blocks and post.blocks[0].type in ('hero', 'columns') %}
 {# An article reads down the page rather than across: title, date, picture full width, a rule, then
-   the writing. Every other type keeps the two-column head, with the picture beside the words. #}
-{% set article = pt.slug == 'post' %}
+   the writing. Every other type keeps the two-column head, with the picture beside the words.
+   A case study is an article too -- it is a customer's story, not a product sheet. Adding a slug
+   here is half the change: site.css keys the stacking off .pt-<slug>, so both .pt-post rules
+   (the dividing rule, and the picture's natural size) need the new one as well. #}
+{% set article = pt.slug in ('post', 'case_study') %}
 {# The eyebrow above the title is where you already are: the parent for a nested page, the content
    type otherwise. crumbs already holds that chain, so nothing new is looked up. #}
 {% set eyebrow = crumbs[-2][0] if crumbs|length > 2 else (pt.name if pt.url_prefix else '') %}
@@ -29,22 +32,28 @@
   {# The type's own fields, split by shape rather than by type name: short ones are the meta strip,
      long ones read as the article. That is what gives a case study its Challenge / Solution /
      Results sections without post.html knowing what a case study is. #}
-  {% set fields = (pt.field_schema or [])|selectattr('key', 'in', meta_)|list %}
+  {# A key an editor has cleared is still a key: meta_ keeps "client": "" long after the box was
+     emptied, and every section below used to draw its container first and find nothing to put in
+     it -- a grey band 32px tall with an empty <dl> inside. Filtering once here rather than
+     repeating the condition inside each loop means the band, the prose section and the spec table
+     all disappear together when there is nothing to say. 0 is a value and survives. #}
+  {% set filled = meta_|dictsort|rejectattr(1, 'in', [none, '', [], {}])|map(attribute=0)|list %}
+  {% set fields = (pt.field_schema or [])|selectattr('key', 'in', filled)|list %}
   {# price is not a fact about the product like SKU is, it is the ask: it rides on the Buy button
      above, the way _card.html pairs the two on an archive tile. #}
   {% set tiles = fields|rejectattr('type', 'in', ['json', 'kv', 'textarea'])|rejectattr('key', 'equalto', 'price')|list %}
   {% set prose = fields|selectattr('type', 'equalto', 'textarea')|list %}
-  {% if tiles %}<div class="meta-strip"><div class="wrap"><dl class="details">{% for f in tiles if meta_[f.key] not in (none, '', [], {}) %}
+  {% if tiles %}<div class="meta-strip"><div class="wrap"><dl class="details">{% for f in tiles %}
     <div><dt>{{ f.label }}</dt><dd>{% if f.type == 'media' %}<a href="{{ media_url(meta_[f.key]) }}" target="_blank" rel="noopener">Download</a>{% elif f.type == 'url' %}<a href="{{ meta_[f.key] }}" rel="noopener">{{ meta_[f.key] }}</a>{% elif f.key == 'price' %}{{ rupees(meta_[f.key]) }}{% else %}{{ meta_[f.key] }}{% endif %}</dd></div>
   {% endfor %}</dl></div></div>{% endif %}
-  {% if prose %}<div class="section"><div class="wrap"><div class="meta-prose">{% for f in prose if meta_[f.key] %}
+  {% if prose %}<div class="section"><div class="wrap"><div class="meta-prose">{% for f in prose %}
     <section><h2>{{ f.label }}</h2><p>{{ meta_[f.key] }}</p></section>
   {% endfor %}</div></div></div>{% endif %}
   {{ render_blocks(post.blocks or []) }}
   {# A kv field is a list of rows and keeps the order it was typed in; a json one is an object, whose
      key order jsonb does not keep. Both draw the same table. A json field holding the raw text of a
      mistyped value is neither, and draws nothing, as it did before. #}
-  {% for f in fields if f.type in ('kv', 'json') and meta_[f.key] %}
+  {% for f in fields if f.type in ('kv', 'json') %}
   <div class="section"><div class="wrap"><table class="specs"><caption>{{ f.label }}</caption><tbody>
     {%- if meta_[f.key] is mapping %}{% for k, v in meta_[f.key].items() %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}
     {%- elif meta_[f.key] is not string %}{% for r in meta_[f.key] %}<tr><th>{{ r.k }}</th><td>{{ r.v }}</td></tr>{% endfor %}{% endif %}

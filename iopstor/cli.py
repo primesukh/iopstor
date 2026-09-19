@@ -308,7 +308,12 @@ RESET = False  # set by `flask seed --reset-content`: overwrite blocks/excerpt/m
 def _post(pt, title, *, slug=None, parent=None, blocks=None, meta=None, terms=(), excerpt="", menu_order=0, featured=None):
     """Get-or-create a published post; never overwrites existing content unless RESET."""
     slug = slug or slugify(title)
-    blocks = blocks if blocks is not None else [{"type": "hero", "data": {"heading": title}}]
+    # No default hero, deliberately. post.html's own page head IS the design's detail header --
+    # breadcrumb, eyebrow, title, lead, the term chips and the featured picture beside them -- and
+    # it renders only while the first block is neither a hero nor a columns. A hero replaces the
+    # lot and carries a picture of its own, which is why the appliance photo never appeared, and
+    # then why no case study's ever did. A page that wants a hero passes one.
+    blocks = blocks or []
     post = db.one(db.table("posts").select("id").eq("post_type_id", pt["id"]).eq("slug", slug))
     if post is not None and RESET:
         changes = {"blocks": blocks, "excerpt": excerpt, "meta": meta or {}, "menu_order": menu_order}
@@ -369,9 +374,6 @@ def run_seed():
     for title, start in EVENTS:
         _post(types["event"], title, meta={"start_date": start})
     for i, (title, users, specs) in enumerate(PRODUCTS):
-        # No hero: post.html's own page head is the design's detail header -- eyebrow, title, lead,
-        # Request a quote / Buy, and the featured picture beside them. A hero replaces all of that
-        # and carries its own picture, which is why the appliance photo never appeared.
         _post(types["product"], title, menu_order=i, meta={"specs": [{"k": k, "v": v} for k, v in specs]},
               featured=media_id(TOWER_IMAGE if "Classic" in title else RACK_IMAGE),
               excerpt=f"Sized for {users}. Xeon, enterprise SSD and 10G networking, on ZFS.",

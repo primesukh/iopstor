@@ -2787,3 +2787,129 @@ def test_a_pointer_only_menu_rule_never_escapes_the_desktop_query():
     assert ".mega-g:hover+.mega-pane" in desktop
     # the shared closed default is NOT in there: both layouts start from it
     assert ".mega-pane{display:none}" not in desktop and ".mega-pane{display:none}" in css
+
+
+# --- a case study reads as an article -----------------------------------------------------------
+# post.html renders post.featured_media in exactly ONE place, inside the page head, and the page
+# head is skipped whole whenever the first block is a hero or a columns -- a hero draws its own
+# <h1> and carries its own picture, so two heads on one page is neither. Every case study was
+# seeded with a hero holding nothing but the title, which closed that gate on all of them: the
+# excerpt, the Industry/Solution chips and the "Main picture" an editor had chosen all vanished
+# and the empty hero replaced none of them. The three tests below are the ones that can only fail
+# silently -- a page that renders, and is simply missing things nobody notices for a year.
+
+def _case_study(blocks_=(), **kw):
+    return {"id": 1, "title": "KLPL — Logistics", "slug": "klpl", "path": "/case-studies/klpl",
+            "excerpt": "One platform for trading, accounts and reporting.", "blocks": list(blocks_),
+            "meta": {"client": "KLPL"}, "seo": {}, "children": [], "parent_id": None, "menu_order": 0,
+            "published_at": "2026-09-01T00:00:00+00:00",
+            "featured_media": {"url": "/media/2026/09/klpl.png", "alt": "The KLPL racks"},
+            "terms": [{"name": "Logistics", "slug": "logistics", "taxonomy": {"slug": "industry"}}],
+            "post_type": {"slug": "case_study", "name": "Case Studies", "url_prefix": "case-studies",
+                          "hierarchical": False, "has_pages": True,
+                          "field_schema": [{"key": "client", "label": "Client", "type": "text"}]},
+            **kw}
+
+
+def _render_post(app, monkeypatch, post):
+    """post.html through base.html, which is the only way the page head is exercised at all. The
+    three patches are exactly what public.py's app-wide context processor reaches for."""
+    from flask import render_template
+    from iopstor import db, public
+    monkeypatch.setattr(db, "settings", lambda: {})             # seo.site() reads these
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])        # the header and footer menus
+    monkeypatch.setattr(public, "_service_nav", lambda: None)   # the mega panel's own posts query
+    with app.test_request_context("/case-studies/klpl"):
+        return render_template("post.html", post=post, children=[], siblings=False, meta={}, jsonld=[],
+                               crumbs=[("Home", "/"), ("Case Studies", "/case-studies"), ("KLPL", "/case-studies/klpl")])
+
+
+def test_a_case_study_shows_the_main_picture_the_editor_chose(app, monkeypatch):
+    """The bug itself: featured_media set, and nothing on the page. Everything else the closed gate
+    swallowed is asserted beside it, because each one went missing for the same single reason and
+    would go missing again together."""
+    html = _render_post(app, monkeypatch, _case_study())
+    assert 'class="featured"' in html and "/media/2026/09/klpl.png" in html
+    assert 'alt="The KLPL racks"' in html                    # the alt text, not the title fallback
+    assert '<h1 class="page-title">' in html                 # the head's own title, not a hero's
+    assert "One platform for trading" in html                # the excerpt reads as the lead
+    assert '/industry/logistics' in html                     # and the term chips are back
+
+
+def test_a_case_study_stacks_like_an_article_rather_than_sitting_beside_its_picture(app, monkeypatch):
+    """`article` drives three things at once in post.html and the stacking half of it lives in
+    site.css, keyed off .pt-<slug>. A slug added to one and not the other renders stacked markup
+    with the 440px banner crop meant for a card, which looks deliberate and is not."""
+    html = _render_post(app, monkeypatch, _case_study())
+    assert "has-media" not in html          # single column: the picture goes under the words
+    assert '<p class="eyebrow">' not in html  # the breadcrumb already says "Case Studies"
+    assert "<time datetime=" in html        # an article is dated
+
+    css = _site_css()
+    assert ".pt-post .page-head,.pt-case_study .page-head{" in css
+    assert ".pt-post .page-media img,.pt-case_study .page-media img{" in css
+
+
+def test_a_hero_still_replaces_the_page_head_for_every_other_page(app, monkeypatch):
+    """The gate is not a bug -- it is what stops a hero-led page drawing two titles and two
+    pictures. Widening it to "show the featured picture anyway" is the fix that looks obvious and
+    puts an editor's Main picture on top of the hero's own. Case studies were taken OUT of the
+    hero, not the gate out of post.html."""
+    html = _render_post(app, monkeypatch, _case_study([{"type": "hero", "data": {"heading": "KLPL"}}]))
+    assert "/media/2026/09/klpl.png" not in html    # no second picture
+    assert '<h1 class="page-title">' not in html    # and no second title
+    assert html.count("<h1") == 1
+
+
+def test_the_seed_does_not_invent_a_hero_for_a_type_that_asked_for_no_blocks(monkeypatch):
+    """Where all of the above came from. _post() used to default blocks to a hero holding nothing
+    but the title, so any type whose seed entry passed no blocks= -- case studies and events --
+    was born with the page-head gate already closed. Products were written around it one call at
+    a time; the default is gone from the shared helper instead, so the next type added to the seed
+    cannot inherit the same bug a third time."""
+    from iopstor import cli, db
+    written = {}
+    monkeypatch.setattr(db, "table", lambda n: _FakeQ(n))
+    monkeypatch.setattr(db, "one", lambda q: None)                       # nothing exists yet
+    monkeypatch.setattr(db, "now_iso", lambda: "2026-09-19T00:00:00+00:00")
+    monkeypatch.setattr(db, "insert", lambda name, row: (written.update(row), {"id": 1})[1])
+
+    cli._post({"id": 7}, "KLPL — Logistics (Private Cloud)", meta={"client": "KLPL"})
+    assert written["blocks"] == []
+
+    # and a caller that does want one still gets exactly what it passed
+    cli._post({"id": 7}, "Storage", blocks=[{"type": "hero", "data": {"heading": "Storage"}}])
+    assert written["blocks"] == [{"type": "hero", "data": {"heading": "Storage"}}]
+
+
+def test_a_field_the_editor_cleared_takes_its_whole_section_with_it(app, monkeypatch):
+    """Emptying a box does not remove the key -- meta_ keeps "client": "" -- and every section in
+    post.html used to draw its container before looking at what went inside, so a cleared field
+    left a 32px band with an empty <dl> in it, and a cleared long field an empty section under
+    that. The container has to go, not just the row. 0 is a value and stays (user, 2026-09-19)."""
+    assert "meta-strip" in _render_post(app, monkeypatch, _case_study())      # the control
+
+    cleared = _render_post(app, monkeypatch, _case_study(meta={"client": ""}))
+    assert "meta-strip" not in cleared and "Client" not in cleared
+
+    prose_pt = dict(_case_study()["post_type"],
+                    field_schema=[{"key": "challenge", "label": "Challenge", "type": "textarea"}])
+    blank = _render_post(app, monkeypatch, _case_study(meta={"challenge": ""}, post_type=prose_pt))
+    assert "meta-prose" not in blank and "Challenge" not in blank
+
+    kept = _render_post(app, monkeypatch, _case_study(meta={"challenge": "Three systems."}, post_type=prose_pt))
+    assert "meta-prose" in kept and "Three systems." in kept
+
+    zero_pt = dict(_case_study()["post_type"],
+                   field_schema=[{"key": "rating", "label": "Rating", "type": "number"}])
+    assert ">0<" in _render_post(app, monkeypatch, _case_study(meta={"rating": 0}, post_type=zero_pt))
+
+
+def test_a_types_short_fields_are_page_content_rather_than_a_callout():
+    """The client asked for the value not to be highlighted (user, 2026-09-19): the grey band and
+    the white card are both gone, and the label/value pairing is what is left. The band's padding
+    stays -- it is the gap between the head and the writing -- so only the paint is removed."""
+    css = _site_css()
+    assert ".meta-strip{padding:32px 0}" in css          # no background
+    assert ".details>div{" not in css                    # no card around each pair
+    assert ".details dt{" in css and ".details dd{" in css   # the pairing itself is untouched
