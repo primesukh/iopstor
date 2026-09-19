@@ -6,7 +6,7 @@
     compared, never interpolated, the same rule hero.dark follows. A dark hero has no arrangement:
     its picture is the backdrop, not a column. -#}
 {% set art = (data.image or data.images) and not data.dark %}
-<section class="hero{{ ' hero-dark' if data.dark }}{{ ' hero-still' if data.still }}{{ (' hero-above' if data.arrange == 'above' else ' hero-below' if data.arrange == 'below' else ' hero-split') if art }}{{ cls }}"{{ sty }}{{ fe() }}>
+<section class="hero{{ ' hero-dark' if data.dark }}{{ ' hero-still' if data.still }}{{ ' hero-noglow' if data.noglow }}{{ (' hero-above' if data.arrange == 'above' else ' hero-below' if data.arrange == 'below' else ' hero-split') if art }}{{ cls }}"{{ sty }}{{ fe() }}>
   {%- if data.image and data.dark %}<img class="hero-bg" src="{{ media_url(data.image) }}" alt="" aria-hidden="true">{% endif %}
   <div class="wrap">
     <div class="hero-text">

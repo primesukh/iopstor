@@ -480,6 +480,12 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
    deliberately not .hero-media, whose animation IS the entrance. .hero-slide keeps its own
    slides2/slides3, so several pictures go on taking turns; the dots go on marking which. */
 .hero-still .hero-media::before,.hero-still .hero-media>img,.hero-still .hero-slides{animation:none}
+/* The wash itself, gone rather than stilled. Worth knowing the two are not the same control and
+   why both exist: `still` only stops the keyframes, and `glow` runs 0%/100% at opacity .7, so a
+   stilled glow sits at the element's own opacity 1 and reads as MORE present, not less. This one
+   takes the ::before out. Nothing to do on a dark hero -- there the picture is .hero-bg and
+   .hero-media is never rendered at all. */
+.hero-noglow .hero-media::before{display:none}
 .hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.18}
 .hero-dark>.wrap{position:relative}
 @media(max-width:700px){.hero{padding:48px 0 40px}.hero-dark{padding:64px 0 56px}}

@@ -3019,3 +3019,23 @@ def test_the_form_warns_when_an_opening_section_will_hide_the_featured_image(app
     # the draft wins over what is published, because the draft is what the editor is looking at
     assert flag([{"type": "rich_text", "data": {}}], draft={"blocks": [{"type": "hero", "data": {}}]}) is True
     assert flag([{"type": "hero", "data": {}}], draft={"blocks": [{"type": "rich_text", "data": {}}]}) is False
+
+
+def test_the_glow_behind_the_hero_picture_can_be_taken_out_not_just_stilled(app):
+    """Two controls, deliberately not one. `still` only stops the keyframes, and `glow` runs its
+    0%/100% at opacity .7 — so a STILLED glow sits at the element's own opacity 1 and reads as more
+    present, not less. Hiding it is therefore its own switch, and the two compose."""
+    _hero.app = app
+    assert "hero-noglow" in _hero_classes(_hero(noglow=True))
+    assert "hero-noglow" not in _hero_classes(_hero())
+    assert _hero_classes(_hero(still=True, noglow=True)) == ["hero", "hero-still", "hero-noglow", "hero-split"]
+
+    css = _site_css()
+    assert ".hero-noglow .hero-media::before{display:none}" in css
+    # the two rules are separate: stilling must not start hiding, or the pair stops composing
+    assert ".hero-still .hero-media::before,.hero-still .hero-media>img,.hero-still .hero-slides{animation:none}" in css
+    # and the glow is still there for a hero that asks for neither
+    assert "animation:glow 5s ease-in-out infinite" in css
+
+    from iopstor.blocks import BLOCKS, EDITOR
+    assert "noglow" in BLOCKS["hero"][1] and "noglow" in EDITOR["scalars"]
