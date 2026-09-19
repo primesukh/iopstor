@@ -83,6 +83,10 @@
       picture, so this image is used on list cards and when the page is shared — not on the page
       itself. Put the picture in that opening section, or remove it and the page will show this one.</small>{% endif %}
     <select name="featured_media_id" data-media="images" aria-label="Featured image"><option value="">— none —</option>{% for m in media if m.mime.startswith('image/') %}<option value="{{ m.id }}" {{ 'selected' if p.featured_media_id|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select>
+    {# Directly under the chooser, so "this picture" needs no explaining. It is shown whether or
+       not a picture is chosen: a control that hides itself is one an editor goes looking for. With
+       no picture it simply has nothing to draw -- post.html needs both. #}
+    <label class="inline"><input type="checkbox" name="head_banner" value="1" {{ 'checked' if head_banner }}> Show the title on this picture</label>
 
     {# Menu order is gone: everything shows newest first, and a number nobody understood was the only
        thing keeping this section on screen for a type with no parent and no taxonomies. #}

@@ -1004,6 +1004,24 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
    inside an article: a small one was blown up to 1200 wide and then had its top and bottom cut off.
    Here the browser sizes it from the file, and only shrinks it if it is wider than the column. */
 .pt-post .page-media img,.pt-case_study .page-media img{width:auto;height:auto;max-width:100%;max-height:none;object-fit:initial}
+/* "Put the image in the title just like hero section" (client, 2026-09-19). The head takes the
+   dark hero's band: the Featured image full-bleed behind it at .hero-bg's own opacity, the words
+   on top. Almost nothing new -- `band-dark` on the same element already turns the heading white
+   and restyles the breadcrumb and the lead (archive.html has done this since it was written), and
+   `.hero-bg` is reused exactly as hero.html uses it, which is why the two bands match without a
+   single measurement being copied between them.
+   THIS GROUP MUST STAY BELOW .pt-post .page-head (1001), which draws a 1px --line hairline across
+   the bottom -- a light rule under a black band. Both are (0,2,0), so it is a specificity tie and
+   source order is the only thing deciding it, exactly as .arch-head.band-dark (970) and the pad-*
+   group rely on. Moved up, it renders and reads as a bug in the markup.
+   The two rules below exist because band-dark does NOT cover them: .post-meta has no dark variant,
+   and band-dark's only chip rule is .band-dark .filters .chip, which is the archive's filter row. */
+.page-head.head-banner{position:relative;overflow:hidden;border-bottom:0;padding:96px 0 80px}
+.page-head.head-banner>.wrap{position:relative}
+.page-head.head-banner .post-meta{color:var(--muted-dark)}
+.page-head.head-banner .chip{background:none;border-color:var(--line-dark-2);color:var(--muted-dark)}
+.page-head.head-banner .chip:hover{border-color:var(--blue);color:var(--white)}
+@media(max-width:700px){.page-head.head-banner{padding:64px 0 56px}}
 a.chip{text-decoration:none}
 a.chip:hover{border-color:var(--blue);color:var(--blue)}
 .chip-industry{background:rgba(53,115,185,.1);border-color:transparent;color:var(--blue-hover)}
