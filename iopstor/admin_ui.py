@@ -280,6 +280,11 @@ def _form_body(pt, existing):
          "parent_id": f.get("parent_id") or None, "featured_media_id": f.get("featured_media_id") or None,
          "terms": [int(t) for t in f.getlist("terms")], "seo": {k: f.get(f"seo_{k}", "") for k in SEO_KEYS if f.get(f"seo_{k}")}}
     meta = dict(existing.get("meta") or {}) if existing else {}
+    # Reserved, underscored, and not a field_schema entry -- the same shape as a block's _id/_rich.
+    # Only touched when the form actually carried the control, so a type without long fields (and
+    # the JSON API, which never posts a form) can never blank it by omission.
+    if "details_at" in f:
+        meta["_details_at"] = f.get("details_at", "")
     for field in pt.get("field_schema") or []:
         raw = f.get(f"meta_{field['key']}", "")
         if field.get("type") == "kv":
@@ -375,9 +380,21 @@ def _form_context(pt, post, errors=None, conflict=None):
     # ponytail: rendered once, with the page. Adding or removing a Hero in the canvas does not
     # move it until the next load; it is a hint beside a box, not a gate on anything.
     leads_with_own_head = bool(content) and (content[0] or {}).get("type") in ("hero", "columns")
+    # Where the type's long fields sit among the sections. Offered only when the type HAS a long
+    # field, or it is a control over nothing. By position, not by section name: most blocks carry
+    # no `_id` (the editor mints it on edit), so naming them would leave most pages with nothing
+    # to choose -- see blocks.details_at(). "At the end" is kept alongside the last section's
+    # number because it MOVES as sections are added and the number does not.
+    details_spots = []
+    if any(f.get("type") == "textarea" for f in pt.get("field_schema") or []):
+        details_spots = [("top", "At the top"), ("", "After the short details")]
+        details_spots += [(str(i), f"After section {i} \u2014 {(EDITOR['names'].get(b.get('type')) or ('', b.get('type')))[1]}")
+                          for i, b in enumerate(content, 1)]
+        details_spots.append(("end", "At the very end"))
     return dict(pt=pt, post=post, errors=errors or {}, conflict=conflict, taxonomies=taxonomies, rt=_rt(pk),
                 has_draft=bool(draft), doc_state=(draft or {}).get("state") or "",
-                leads_with_own_head=leads_with_own_head,
+                leads_with_own_head=leads_with_own_head, details_spots=details_spots,
+                details_at=str((post or {}).get("meta", {}).get("_details_at") or ""),
                 parents=[p for p in siblings if p["id"] != pk] if pt["hierarchical"] else [],
                 taken_slugs=[s["slug"] for s in siblings if s["id"] != pk],
                 media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps(content, indent=2, ensure_ascii=False),

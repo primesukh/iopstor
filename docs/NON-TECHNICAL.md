@@ -170,7 +170,7 @@ The sections available:
 | **Summary** | A sentence or two. Shown in lists, and under the page in Google results. |
 | **Featured image** | The picture used in lists and when the page is shared, and — unless the page starts with a **Hero** section — the big picture at the top of the page itself. A Hero section draws its own title and its own picture, so on a page that has one this box only feeds the list card and the shared link — and the box says so, right above it, whenever that is the case. **Choose file** uploads on the spot. |
 | **Organise** | The parent page (for services) and any categories or tags — see below. It only appears for types that have one or the other. Nothing here asks you to number your pages — lists show the newest first on their own. |
-| **Details** | The extra boxes some kinds of content have — a case study's client, an event's dates, a datasheet's PDF. Leave one blank and nothing at all shows for it on the page; there is no empty space left behind. |
+| **Details** | The extra boxes some kinds of content have — a case study's client, an event's dates, a datasheet's PDF. Leave one blank and nothing at all shows for it on the page; there is no empty space left behind. Where a type has long boxes (Challenge, Solution, Results), **Where the long details go** decides where they land on the page — see below. |
 | **Search engine overrides**, **Advanced** | Closed by default. Leave them closed unless you know why you are opening them. |
 | **Delete** | At the very bottom, for administrators. It asks first. |
 
@@ -737,6 +737,14 @@ above them, or below them — **Hold the picture still**, which stops the gentle
 the faint blue halo pulsing, and **Hide the glow behind the picture**, which removes that halo
 completely. The picture still slides into place as the page loads either way, and
 several pictures still take turns. Leaving both alone keeps every hero exactly as it is now.
+
+**Challenge, Solution and Results are in the wrong place on the page.** They used to come out
+above everything you had written, which on a case study meant above the opening Hero. They are
+boxes in the panel rather than sections on the page, so you cannot drag them — instead, under
+**Details**, **Where the long details go** lets you pick: at the top, after the short details
+(where they have always been), after any one of your sections by name, or at the very end. If you
+delete the section you picked, they fall back to where they were before, so nothing ever
+disappears.
 
 **I chose a Featured image and it is not on the page.** Look at whether the page starts with a **Hero**
 section. A Hero draws its own heading and its own picture, so on a page that has one the picture you

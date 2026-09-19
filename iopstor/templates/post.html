@@ -43,13 +43,29 @@
      above, the way _card.html pairs the two on an archive tile. #}
   {% set tiles = fields|rejectattr('type', 'in', ['json', 'kv', 'textarea'])|rejectattr('key', 'equalto', 'price')|list %}
   {% set prose = fields|selectattr('type', 'equalto', 'textarea')|list %}
+  {#- The long fields are the only page content an editor cannot drag, because they are the type's
+      own boxes rather than sections of the page. So where they land is a setting: `details_at()`
+      reads the reserved `meta._details_at` and answers -1 (above the short-field strip), 0 (straight
+      after it, where they have always been, and the fallback for anything unrecognised) or n (after
+      n sections). Rendering the sections in two calls is what lets them sit in the middle.
+      The macro is declared HERE, before the strip, because Jinja binds a macro where it is written
+      and the -1 case calls it above that point. Its two values are passed in rather than closed
+      over, for the same reason. -#}
+  {% macro details(prose, meta_) %}{% if prose %}<div class="section"><div class="wrap"><div class="meta-prose">{% for f in prose %}
+    <section><h2>{{ f.label }}</h2><p>{{ meta_[f.key] }}</p></section>
+  {% endfor %}</div></div></div>{% endif %}{% endmacro %}
+  {% set blocks_ = post.blocks or [] %}
+  {% set cut = details_at(post) %}{% set n = cut if cut > 0 else 0 %}
+  {% if cut < 0 %}{{ details(prose, meta_) }}{% endif %}
   {% if tiles %}<div class="meta-strip"><div class="wrap"><dl class="details">{% for f in tiles %}
     <div><dt>{{ f.label }}</dt><dd>{% if f.type == 'media' %}<a href="{{ media_url(meta_[f.key]) }}" target="_blank" rel="noopener">Download</a>{% elif f.type == 'url' %}<a href="{{ meta_[f.key] }}" rel="noopener">{{ meta_[f.key] }}</a>{% elif f.key == 'price' %}{{ rupees(meta_[f.key]) }}{% else %}{{ meta_[f.key] }}{% endif %}</dd></div>
   {% endfor %}</dl></div></div>{% endif %}
-  {% if prose %}<div class="section"><div class="wrap"><div class="meta-prose">{% for f in prose %}
-    <section><h2>{{ f.label }}</h2><p>{{ meta_[f.key] }}</p></section>
-  {% endfor %}</div></div></div>{% endif %}
-  {{ render_blocks(post.blocks or []) }}
+  {% if cut == 0 %}{{ details(prose, meta_) }}{% endif %}
+  {{ render_blocks(blocks_[:n]) }}
+  {% if cut > 0 %}{{ details(prose, meta_) }}{% endif %}
+  {#- `path` continues rather than restarting: the markers it feeds are edit-only and post.html
+      never renders with edit=True, but a path that lies is true only until somebody reuses this. -#}
+  {{ render_blocks(blocks_[n:], path=n|string) }}
   {# A kv field is a list of rows and keeps the order it was typed in; a json one is an object, whose
      key order jsonb does not keep. Both draw the same table. A json field holding the raw text of a
      mistyped value is neither, and draws nothing, as it did before. #}
