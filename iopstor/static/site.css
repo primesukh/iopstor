@@ -935,6 +935,30 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .column>.section.divider{padding:16px 0}
 .column>.spacer+.section,.column>.divider+.section{padding-top:0}
 
+/* How much air a section keeps, set per section under its own gear (blocks.py PADS -> pad-*).
+   Only ever LESS than the design's own: adding air is a Spacer's job, and keeping the two apart is
+   what lets both exist (design.md 2026-09-10). 0 / 24 / 40 are all numbers already in this file.
+
+   THREE SELECTORS PER STEP, AND THE PLACEMENT IS THE MECHANISM. Every rule this has to beat is a
+   specificity TIE, so the group lives here, after the last padding rule in the file, and wins on
+   source order -- the same trick .column>.section.spacer plays just above:
+     .section.pad-*          (0,2,0)  beats .section (252) and .divider (926); ties .band-blue.section
+                                      (573) and .band-dark.section (591)
+     .hero.pad-*             (0,2,0)  .hero is NOT a .section, so the first selector never matches it;
+                                      ties nothing but beats .hero (442), .hero-dark (474) and the
+                                      max-width:700px pair (491) -- a media query adds no specificity
+     .column>.section.pad-*  (0,3,0)  ties .column>.section.t-* (293), .column>.section+.section (294)
+                                      and .column>.section.divider (935)
+   Move this group earlier and it silently loses to whichever of those it now precedes.
+
+   padding-block, not padding: .column>.section.t-* makes a toned section in a column a card, and the
+   shorthand would strip the 28px at its sides and put the words against the edge.
+   :not(.spacer) because a Spacer's Height IS its spacing -- pad-medium would otherwise win at
+   (0,2,0) and stand a Small spacer 16px tall plus 80px of padding, two controls on one gap. */
+.section.pad-none:not(.spacer),.hero.pad-none,.column>.section.pad-none:not(.spacer){padding-block:0}
+.section.pad-small:not(.spacer),.hero.pad-small,.column>.section.pad-small:not(.spacer){padding-block:24px}
+.section.pad-medium:not(.spacer),.hero.pad-medium,.column>.section.pad-medium:not(.spacer){padding-block:40px}
+
 /* --- archives and detail pages ----------------------------------------------------------------
    Two header treatments: the catalogue types get the black band (band-dark, the same class the
    stats block uses), the reading types get the white one. archive.html picks which. */

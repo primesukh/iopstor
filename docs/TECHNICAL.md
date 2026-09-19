@@ -350,7 +350,7 @@ The seed's pictures are looked up **by filename** through `cli.media_id()`, whic
 
 **Adding one** = an entry in `BLOCKS` + `templates/blocks/<type>.html`. The template must be wrapped in `<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">…` — `cls` is the layout classes, `sty` an inline width, `fe()` the edit marker (all three below); `render_blocks()` hands all three to every block template. Unknown types are rejected on save by `validate_blocks()`, which checks that every required field is present and non-empty.
 
-**Layout keys.** Five optional keys on any block's `data`, absent = the theme's own layout:
+**Layout keys.** Seven optional keys on any block's `data`, absent = the theme's own layout:
 
 | Key | Values | What it does |
 |---|---|---|
@@ -359,6 +359,8 @@ The seed's pictures are looked up **by filename** through `cli.media_id()`, whic
 | `width` | `wide` \| `full` \| a number of px | the section's content measure; `full` also breaks it out of the page column |
 | `fx` | `rise` \| `gradient` \| `sweep` | the section's motion, `FX` in the same file — see *Section effects* below |
 | `height` | `small` \| `medium` \| `large` \| `huge` | how tall a `spacer` stands, `HEIGHTS` in the same file; the pixels are in `site.css` |
+| `tone` | `grey` \| `dark` \| `blue` | the band the section sits on — see the paragraph below, which this table used to leave out |
+| `pad` | `none` \| `small` \| `medium` | how much air it keeps above and below, `PADS` in the same file; **never more than the default** |
 
 Two functions carry them onto the root `<section>`, both **whitelists** rather than passthroughs, because the values land in attributes — the same reason `col_widths()` is strict:
 
@@ -370,6 +372,30 @@ Two functions carry them onto the root `<section>`, both **whitelists** rather t
 ****`tone`** is the band a section sits on — `grey`, `dark` or `blue`, absent means the page's own white. The design alternates white and grey down the home page for rhythm and drops case studies onto black, and that is a per-section decision an editor makes, not something baked into a block type. Like `align` and `width` it is a **whitelist** in `section_class()`, because the value lands in a class attribute. Its rules sit *after* `.band-*` in `site.css`, so a tone an editor picks beats a block's own default (`stats` is dark, `cta` is blue) on source order rather than needing `!important`.
 
 `--w-def` is what makes that sentence true.** The shared rule is `.section>.wrap>*{max-width:var(--w,var(--w-def,none))}`, and it is (0,2,0); every block's own rule (`.rich-text`, `.testimonial`, `.specs`, `.faq details`, `.lead-form`) is (0,1,0) or (0,1,1) and loses to it. So the fallback `none` used to win outright and the designed measures never applied at all — a section was only ever as wide as `--w` said, and unset meant full width. Each of those blocks now declares its measure as `--w-def` on itself, which the shared rule reads *inside* the fallback. `--w` stays the override it is documented to be, and `--w:initial` in a column still falls through to the block's own measure.
+
+**`pad` is how much air a section keeps, and it only ever takes air away** (client, 2026-09-19).
+`none`/`small`/`medium` are 0/24/40px against `.section`'s 80px, and there is deliberately no step
+above the default: `design.md`'s 2026-09-10 row chose Spacer and Divider as block *types* over
+"spacing controls on every section's gear", and that still holds for **adding** space — a thing you
+can drag beats a dropdown. What a Spacer cannot do is remove air that is already there, which is
+all this is for. Add with a Spacer, remove with `pad`, and the two never overlap.
+
+**Its CSS is three selectors per step, and where the group sits is the mechanism.** Every rule it
+has to beat is a specificity *tie*, so it lives after the last padding rule in `site.css` and wins
+on source order — the same trick `.column>.section.spacer` plays. `.section.pad-*` (0,2,0) covers
+the ordinary case and ties the two `band-*` bands; `.column>.section.pad-*` (0,3,0) ties the column
+rules; and **`.hero.pad-*` exists because a hero is not a `.section`** — `hero.html` roots as
+`<section class="hero…">`, so the first selector never matches it and the picker would appear on a
+Hero and do nothing. Two more details: `padding-block`, not the shorthand, or a toned section in a
+column loses the side padding that makes it a card; and `:not(.spacer)`, because a Spacer's Height
+*is* its spacing and `pad-medium` would otherwise stand a Small spacer 16px tall plus 80px of air.
+Measured in one render: a text/divider/text stack goes from **225px between the paragraphs to 17px**
+(the 17 is `.rich-text p`'s own `1rem` bottom margin, not padding), a hero from `72/56` to `0/0` and
+from `48/40` to `0/0` under `max-width:700px`, and the column card keeps `sides=28px` at `block=0`.
+
+`canvas.css` carries one rule of its own: a divider at `pad-none` is a 1px `<hr>` and there is
+nothing to hover, so the editor keeps `padding-block:8px` (~17px, matching `sp-small`) that the
+published page does not get. Measured: page 0px/1px tall, canvas 8px/17px tall.
 
 All of them are in `_NON_TEXT_KEYS`, so "center", "950" and "rise" never reach `llms-full.txt`, the feed or admin search — `tone` joined them at the same time, having leaked its "grey" into all three since it was added. `align`, `align_box`, `width` and `tone` are deliberately **not** fields in `BLOCKS`: layout belongs to every section, so `admin.js` renders one set of controls for all types (§12.1) and `validate_blocks()` simply tolerates the extra keys. `fx` and `height` are the exceptions — `section_class()` emits both for any block, but only the blocks that *declare* them get the dropdown: `fx` on `stats` and `rich_text`, `height` on `spacer`. Widening either to another block is one word in that block's optional list. `.cta` and table cells keep their own `text-align`, so a centred section does not restyle a CTA band or a spec table.
 
@@ -1245,7 +1271,7 @@ The Payments tab shows the provider **read-only**. It comes from the `PAYMENT_PR
 
   Both sides match on the slug, not the string: `slugify()` in `admin.js` mirrors `db.slugify()`, so typing "All-Flash" when "all flash" exists offers the existing term instead of *Create*, and if the browser's snapshot is stale `db.ensure_term()` reuses the row anyway rather than making a second one. Enter in the search box `preventDefault()`s unconditionally — it sits inside `#post-form`, where a bare Enter would submit the post.
 - **Media pickers** — one `mediaWidget()` renders a thumbnail, a "choose existing" select and a file input that uploads to `/admin/media/upload` and appends the new row to *every* picker on the page. It is applied to `select[data-media]` (featured image, per-type `media` fields) and to media fields inside blocks, so there is one code path rather than three. Its third argument is a mime prefix that narrows both the list and the file input: `"image/"` (every image field, and `data-media="images"`), `"application/pdf"` (the `pdf` widget), `""` for anything the server accepts.
-- **Section settings** — `blockFields(block)` renders one section's non-inline fields, starting with the three layout controls every type shares (§6): *Align the content* → `data.align`, *Align the section* → `data.align_box`, and *Width* → `data.width`, whose select (Default / Wide / Full width) and number box both write that one key and clear each other — *Custom* is a disabled option shown only while a number is in play. They are type-agnostic, so they are built here rather than from `BLOCKS`, and picking *Default* or emptying the box **deletes** the key, so an untouched section stays byte-identical in the saved JSON. Then labelled inputs driven by `BLOCKS` + `EDITOR`, media pickers, and repeaters for `items`/`images`/`rows` — with two exceptions. `rich_text`'s `html` is skipped, because the canvas is where a document is edited and a second editor in a 23rem popover is a trap. And `fieldsOf()` sorts **repeaters last** whatever order `BLOCKS` declares them in: a repeater is as tall as it has rows, so a setting declared after one (a Numbers section's *Effect*, a Cards *heading*) sat below six rows of fields and was never found. It is what `⚙` opens in the popover (§12.1); there is no form-based content entry any more — the canvas and the popover are the only editors, and *Advanced* is the raw JSON. It mutates the block object in place, so **keys it does not render survive**, and an unknown block type falls back to an "edit it under Advanced" note. On submit `admin.js` serialises the array back into `textarea[name="blocks"]`, so `_form_body()` and `validate_blocks()` are untouched — the editor only ever writes the JSON a human could have typed. If that textarea holds unparseable JSON (a rejected save round-trip), the editor stands down, opens *Advanced* and says so.
+- **Section settings** — `blockFields(block)` renders one section's non-inline fields, starting with the five layout controls every type shares (§6): *Align the content* → `data.align`, *Align the section* → `data.align_box`, *Background* → `data.tone`, *Spacing* → `data.pad` (offered on every type but `spacer`, whose Height already is its spacing), and *Width* → `data.width`, whose select (Default / Wide / Full width) and number box both write that one key and clear each other — *Custom* is a disabled option shown only while a number is in play. They are type-agnostic, so they are built here rather than from `BLOCKS`, and picking *Default* or emptying the box **deletes** the key, so an untouched section stays byte-identical in the saved JSON. Then labelled inputs driven by `BLOCKS` + `EDITOR`, media pickers, and repeaters for `items`/`images`/`rows` — with two exceptions. `rich_text`'s `html` is skipped, because the canvas is where a document is edited and a second editor in a 23rem popover is a trap. And `fieldsOf()` sorts **repeaters last** whatever order `BLOCKS` declares them in: a repeater is as tall as it has rows, so a setting declared after one (a Numbers section's *Effect*, a Cards *heading*) sat below six rows of fields and was never found. It is what `⚙` opens in the popover (§12.1); there is no form-based content entry any more — the canvas and the popover are the only editors, and *Advanced* is the raw JSON. It mutates the block object in place, so **keys it does not render survive**, and an unknown block type falls back to an "edit it under Advanced" note. On submit `admin.js` serialises the array back into `textarea[name="blocks"]`, so `_form_body()` and `validate_blocks()` are untouched — the editor only ever writes the JSON a human could have typed. If that textarea holds unparseable JSON (a rejected save round-trip), the editor stands down, opens *Advanced* and says so.
 
 Rich fields inside the popover get `richText()`: a `contenteditable` box with a bold/italic/H2/H3/list/link/clear toolbar plus an *HTML* toggle for the raw markup; paste goes through the same `richPaste` filter as the canvas, so headings and lists survive and Word's markup does not.
 
