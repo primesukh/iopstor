@@ -785,6 +785,12 @@ study's client, an event's dates, a datasheet's PDF — now read as ordinary pag
 sitting in a highlighted box. The wording and the labels are exactly the same, and the same change
 applies everywhere those details show, not only on case studies.
 
+**A dropdown in a section's settings used to snap shut before I could choose.** Fixed
+(2026-09-19). The editor redraws the section as you change its settings, and it was doing that a
+moment after you merely *opened* a menu — the redraw pulled the menu shut under you. It now
+redraws only once you have actually chosen something. If you still see it, tell whoever looks
+after the site: it means the page is running an older copy of the editor and needs a reload.
+
 **Save says a word "is part of the website's own address".** A few words are used by the system itself
 — `admin`, `api`, `media`, `static`, `healthz` — so a page cannot take one as its address: it would
 never open, because the website would go looking for its own admin panel instead. Pick another word;
