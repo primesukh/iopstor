@@ -69,6 +69,13 @@
     <textarea name="excerpt" aria-label="{{ 'What they said' if is_quote else 'Summary' }}" placeholder="{{ 'The quote, in their words. This is what the card shows.' if is_quote else 'One or two sentences. Shown in lists, and as the description under the page in search results.' }}">{{ p.excerpt or '' }}</textarea>
 
     <h3>Featured image</h3>
+    {# The trap this closes: a page whose first section is a Hero draws its own heading and its own
+       picture, so post.html renders no page head at all and this box reaches only the cards and the
+       shared link. Said here, beside the box, because the box is where somebody chooses a picture
+       and then goes looking for it on the page. #}
+    {% if leads_with_own_head %}<small class="caveat">This page opens with a section that draws its own
+      heading and picture, so this image is used on list cards and when the page is shared — not on the
+      page itself. Put the picture in that opening section, or remove it and the page will show this one.</small>{% endif %}
     <select name="featured_media_id" data-media="images" aria-label="Featured image"><option value="">— none —</option>{% for m in media if m.mime.startswith('image/') %}<option value="{{ m.id }}" {{ 'selected' if p.featured_media_id|string == m.id|string }}>#{{ m.id }} {{ m.filename }}</option>{% endfor %}</select>
 
     {# Menu order is gone: everything shows newest first, and a number nobody understood was the only

@@ -81,6 +81,10 @@
 .pill.draft{background:#f0f2f5;color:var(--muted)}
 .pill.expired{background:var(--red-bg);color:var(--red)}
 .muted{color:var(--muted)}.admin small{color:var(--muted)}
+/* A note under a box that changes what the box DOES, rather than describing it ("Made from the
+   title."). Same shape as every other note in the form, read at text colour so it is not taken
+   for chrome and skipped. */
+.admin small.caveat{display:block;color:var(--ink-2);max-width:var(--reading);margin-top:2px}
 .admin details summary{cursor:pointer;font-weight:600}
 .admin .login-card{max-width:420px;margin:4rem auto}
 .admin .login-card h1{margin-bottom:.25rem}

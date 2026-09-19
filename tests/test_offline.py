@@ -2913,3 +2913,109 @@ def test_a_types_short_fields_are_page_content_rather_than_a_callout():
     assert ".meta-strip{padding:32px 0}" in css          # no background
     assert ".details>div{" not in css                    # no card around each pair
     assert ".details dt{" in css and ".details dd{" in css   # the pairing itself is untouched
+
+
+# --- the hero's two new switches ----------------------------------------------------------------
+# Both land in a class attribute, so both are whitelists rather than anything an editor types:
+# `still` is a checkbox and `arrange` is compared against three literals. The pair below is what
+# can only fail silently -- a class that stops matching, and a value that reaches the attribute.
+
+def _hero(**data):
+    from iopstor.blocks import render_blocks
+    with _hero.app.test_request_context("/"):
+        return render_blocks([{"type": "hero", "data": {"heading": "H", "image": 1, **data}}])
+
+
+def _hero_classes(html):
+    return re.search(r'<section class="([^"]*)"', html).group(1).split()
+
+
+def test_the_hero_picture_can_sit_beside_above_or_below_the_words(app):
+    """Three arrangements out of one grid: .hero>.wrap is already a single column, so "below" is the
+    markup on its own, "beside" is the two-column .hero-split it has always been, and only "above"
+    needs a rule. `order`, not a DOM swap, so the heading is still read first either way."""
+    _hero.app = app
+    assert "hero-split" in _hero_classes(_hero())                       # unchanged default
+    assert "hero-above" in _hero_classes(_hero(arrange="above"))
+    assert "hero-below" in _hero_classes(_hero(arrange="below"))
+    for pos in ("above", "below"):                                      # an arrangement is not a split
+        assert "hero-split" not in _hero_classes(_hero(arrange=pos))
+
+    # a dark hero has no arrangement -- its picture is the backdrop, not a column
+    assert _hero_classes(_hero(dark=True, arrange="above")) == ["hero", "hero-dark"]
+    # and with no picture there is nothing to arrange
+    assert _hero_classes(_hero(image=None, arrange="above")) == ["hero"]
+
+    css = _site_css()
+    assert ".hero-above .hero-media{order:-1}" in css
+    assert ".hero-split .hero-text,.hero-above .hero-text,.hero-below .hero-text{" in css
+
+
+def test_nothing_an_editor_types_reaches_the_hero_class_attribute(app):
+    """`arrange` is compared against three literals and never interpolated -- the same rule
+    hero.dark follows, and the reason section_class() exists. Anything else falls back to the
+    layout the hero has always had."""
+    _hero.app = app
+    for junk in ('" onload="x', "<script>", "above below", "ABOVE", "  above", "hero-dark"):
+        classes = _hero_classes(_hero(arrange=junk))
+        assert classes == ["hero", "hero-split"], f"{junk!r} produced {classes}"
+
+
+def test_holding_the_hero_still_stops_the_loops_and_keeps_the_entrance(app):
+    """The ask was "it settles, then holds still": the one-shot arrival plays, the two perpetual
+    loops do not. So the rule names the elements carrying `float` and `glow` and deliberately NOT
+    .hero-media, whose own animation IS the entrance -- and not .hero-slide, so several pictures
+    go on taking turns."""
+    _hero.app = app
+    assert "hero-still" in _hero_classes(_hero(still=True))
+    assert "hero-still" not in _hero_classes(_hero())
+
+    css = _site_css()
+    rule = ".hero-still .hero-media::before,.hero-still .hero-media>img,.hero-still .hero-slides{animation:none}"
+    assert rule in css
+    assert ".hero-still .hero-media{" not in css      # the entrance survives
+    assert ".hero-still .hero-slide{" not in css      # and so does the rotation
+    # the two loops it switches off are still there for a hero that does not ask
+    assert "animation:float 6s ease-in-out infinite" in css and "animation:glow 5s ease-in-out infinite" in css
+
+
+def test_both_new_hero_keys_are_scalars_not_prose(app):
+    """EDITOR["scalars"] is what the editor consults to decide which keys become shared, word-by-word
+    text. A flag left out of it is not just leaked into llms-full.txt and admin search -- it is
+    co-edited as prose by two browsers."""
+    from iopstor.blocks import BLOCKS, EDITOR, blocks_text
+    for key in ("still", "arrange"):
+        assert key in BLOCKS["hero"][1], f"{key} is not a declared hero field"
+        assert key in EDITOR["scalars"], f"{key} would be co-edited as prose"
+    assert "above" not in blocks_text([{"type": "hero", "data": {"heading": "H", "arrange": "above"}}])
+
+
+def test_the_form_warns_when_an_opening_section_will_hide_the_featured_image(app, monkeypatch):
+    """The trap this closes cost a real page: a Featured image was chosen, the page opened with a
+    Hero, and post.html's page head -- the only thing that renders that picture -- was skipped, so
+    nothing appeared and nothing said why. The flag is read off the WORKING content, so it follows
+    the unpublished draft the editor is looking at rather than what is live."""
+    from iopstor import db
+    from iopstor.admin_ui import _form_context
+
+    monkeypatch.setattr(db, "table", lambda n: _FakeQ(n))
+    monkeypatch.setattr(db, "rows", lambda q: [])
+    pt = {"id": 1, "slug": "case_study", "hierarchical": False, "taxonomies": [], "field_schema": []}
+
+    def flag(blocks, draft=None):
+        from flask import g
+        monkeypatch.setattr(db, "get_draft", lambda pk: draft)
+        with app.test_request_context("/admin/posts/7"):
+            g.user = {"id": "0f8b2c1a-0000-4000-8000-000000000001",   # _rt() reads the first 8 hex for a colour
+                      "email": "zz@zz-test.local", "name": "", "role": "admin"}
+            return _form_context(pt, {"id": 7, "blocks": blocks, "terms": []})["leads_with_own_head"]
+
+    assert flag([{"type": "hero", "data": {}}]) is True
+    assert flag([{"type": "columns", "data": {}}]) is True      # columns draws its own head too
+    assert flag([{"type": "rich_text", "data": {}}]) is False
+    assert flag([]) is False
+    assert flag([{"type": "rich_text", "data": {}}, {"type": "hero", "data": {}}]) is False   # only the FIRST
+
+    # the draft wins over what is published, because the draft is what the editor is looking at
+    assert flag([{"type": "rich_text", "data": {}}], draft={"blocks": [{"type": "hero", "data": {}}]}) is True
+    assert flag([{"type": "hero", "data": {}}], draft={"blocks": [{"type": "rich_text", "data": {}}]}) is False
