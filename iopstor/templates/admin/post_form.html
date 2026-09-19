@@ -114,6 +114,12 @@
       </label>
       {%- endif %}
     {% endfor %}
+    {%- if details_spots %}
+    <label>Where the long details go
+      <select name="details_at">{% for value, label in details_spots %}<option value="{{ value }}" {{ 'selected' if details_at == value }}>{{ label }}</option>{% endfor %}</select>
+    </label>
+    <small>Challenge, Solution and Results are boxes here rather than sections, so they cannot be dragged on the page. This is where they land.</small>
+    {%- endif %}
     {% endif %}
 
     <details class="ed-more"><summary>Search engine overrides</summary>

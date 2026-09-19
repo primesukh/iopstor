@@ -15,7 +15,7 @@ from werkzeug.exceptions import HTTPException
 
 from . import db, seo, storage
 from .admin_api import _http_error, _pg_error, page_args
-from .blocks import blocks_md, blocks_text, render_blocks
+from .blocks import blocks_md, blocks_text, details_at, render_blocks
 from .payments import GATEWAYS, gateway
 from .seo import md_url
 
@@ -142,6 +142,7 @@ def _template_globals():
     # service_nav stays a callable, not a value: this processor is app-wide, and an /admin page has
     # no use for a posts query.
     return {"site": seo.site(), "menu": db.get_menu, "render_blocks": render_blocks,
+            "details_at": details_at,
             "year": date.today().year, "service_nav": _service_nav}
 
 

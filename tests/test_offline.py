@@ -3039,3 +3039,87 @@ def test_the_glow_behind_the_hero_picture_can_be_taken_out_not_just_stilled(app)
 
     from iopstor.blocks import BLOCKS, EDITOR
     assert "noglow" in BLOCKS["hero"][1] and "noglow" in EDITOR["scalars"]
+
+
+# --- where a type's long fields land among the sections -----------------------------------------
+# Challenge / Solution / Results are the type's own boxes, not sections, so they are the one piece
+# of page content an editor cannot drag. `meta._details_at` says where they go and details_at()
+# turns it into a cut. Everything below is an ordering, which no assertion about markup existing
+# would catch -- the old bug was that they were ALWAYS above the hero, and every section rendered.
+
+def _prose_pt(**kw):
+    return {"id": 1, "slug": "case_study", "name": "Case Studies", "url_prefix": "case-studies",
+            "hierarchical": False, "has_pages": True,
+            "field_schema": [{"key": "client", "label": "Client", "type": "text"},
+                             {"key": "challenge", "label": "Challenge", "type": "textarea"}], **kw}
+
+
+def _ordered(app, monkeypatch, at, n_sections=3):
+    post = {"id": 1, "title": "T", "slug": "t", "path": "/x", "excerpt": "", "terms": [], "children": [],
+            "published_at": None, "featured_media": None, "seo": {}, "post_type": _prose_pt(),
+            "meta": {"client": "KLPL", "challenge": "It was hard.", "_details_at": at},
+            "blocks": [{"type": "rich_text", "data": {"html": f"<p>S{i}</p>"}} for i in range(1, n_sections + 1)]}
+    html = _render_post(app, monkeypatch, post)
+    body = html[html.find("<article"):html.find("</article>")]
+    return re.findall(r"meta-strip|meta-prose|<p>S[0-9]</p>", body)
+
+
+def test_the_long_details_land_where_the_setting_says(app, monkeypatch):
+    """Six positions and two fallbacks, asserted as an ORDER. A page that renders every part in the
+    wrong sequence passes any "is it there" check, which is exactly how they ended up above the
+    hero on every case study."""
+    S1, S2, S3, STRIP, PROSE = "<p>S1</p>", "<p>S2</p>", "<p>S3</p>", "meta-strip", "meta-prose"
+    assert _ordered(app, monkeypatch, "") == [STRIP, PROSE, S1, S2, S3]        # unchanged default
+    assert _ordered(app, monkeypatch, "top") == [PROSE, STRIP, S1, S2, S3]
+    assert _ordered(app, monkeypatch, "1") == [STRIP, S1, PROSE, S2, S3]
+    assert _ordered(app, monkeypatch, "2") == [STRIP, S1, S2, PROSE, S3]
+    assert _ordered(app, monkeypatch, "end") == [STRIP, S1, S2, S3, PROSE]
+    # a section that has since been deleted clamps; anything unrecognised reads as the default,
+    # so an older post and a mistyped value both render exactly as they did before this existed
+    assert _ordered(app, monkeypatch, "99") == [STRIP, S1, S2, S3, PROSE]
+    assert _ordered(app, monkeypatch, "nonsense") == [STRIP, PROSE, S1, S2, S3]
+    assert _ordered(app, monkeypatch, "") == _ordered(app, monkeypatch, None)
+
+
+def test_details_at_reads_the_setting_and_clamps_it():
+    """The cut on its own: -1 above the strip, 0 where they have always been, n after n sections."""
+    from iopstor.blocks import details_at
+    p = lambda at, n=3: {"blocks": [{"type": "rich_text"}] * n, "meta": {"_details_at": at}}
+    assert details_at(p("top")) == -1
+    assert details_at(p("")) == 0 and details_at(p(None)) == 0 and details_at(p("nope")) == 0
+    assert details_at(p("1")) == 1 and details_at(p("3")) == 3
+    assert details_at(p("end")) == 3
+    assert details_at(p("9")) == 3                      # the sections it counted past are gone
+    assert details_at(p("2", n=0)) == 0                 # and a page with none at all
+    assert details_at({}) == 0                          # no blocks, no meta
+
+
+def test_the_form_offers_a_spot_per_section_and_keeps_the_choice(app, monkeypatch):
+    """Offered only for a type that HAS a long field, or it is a control over nothing. And it must
+    survive a save it was not part of -- the JSON API posts no form, and blanking the setting on
+    every API write would move the content without anybody asking."""
+    from flask import g
+    from iopstor import db
+    from iopstor.admin_ui import _form_body, _form_context
+    monkeypatch.setattr(db, "table", lambda n: _FakeQ(n))
+    monkeypatch.setattr(db, "rows", lambda q: [])
+    monkeypatch.setattr(db, "get_draft", lambda pk: None)
+    post = {"id": 7, "blocks": [{"type": "hero", "data": {}}, {"type": "cta", "data": {}}],
+            "terms": [], "meta": {"_details_at": "1"}}
+
+    with app.test_request_context("/admin/posts/7"):
+        g.user = {"id": "0f8b2c1a-0000-4000-8000-000000000001", "email": "t@t", "name": "", "role": "admin"}
+        ctx = _form_context(_prose_pt(), post)
+        assert [v for v, _ in ctx["details_spots"]] == ["top", "", "1", "2", "end"]
+        assert "Hero" in ctx["details_spots"][2][1] and "Call to action" in ctx["details_spots"][3][1]
+        assert ctx["details_at"] == "1"
+        # a type with no long field is offered nothing
+        bare = dict(_prose_pt(), field_schema=[{"key": "client", "label": "Client", "type": "text"}])
+        assert _form_context(bare, post)["details_spots"] == []
+
+    with app.test_request_context("/admin/posts/7", method="POST",
+                                 data={"title": "T", "slug": "t", "status": "published", "details_at": "2"}):
+        assert _form_body(_prose_pt(), post)["meta"]["_details_at"] == "2"
+    with app.test_request_context("/admin/posts/7", method="POST",
+                                  data={"title": "T", "slug": "t", "status": "published"}):
+        assert _form_body(_prose_pt(), post)["meta"]["_details_at"] == "1"      # untouched, not blanked

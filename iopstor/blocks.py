@@ -338,6 +338,32 @@ def _fe(path):
     return fe
 
 
+DETAILS_TOP, DETAILS_END = "top", "end"
+
+
+def details_at(post):
+    """How many sections render before a type's long fields (a case study's Challenge / Solution /
+    Results), from the reserved `meta._details_at`.
+
+      -1  above the short-field strip, at the very top of the page
+       0  straight after that strip, where they have always been -- and the fallback for anything
+          unrecognised, so an older post and a mistyped value both render exactly as before
+       n  after n sections, clamped to how many there are
+
+    POSITIONAL, not by section identity, and that is a measurement rather than a preference: only
+    9 of 81 blocks in this database carry the `_id` the editor mints (it is minted on edit, so
+    seeded and untouched pages have none), so naming the section would have left most pages unable
+    to choose one at all. The cost is that dragging sections about does not drag this with them.
+    """
+    blocks = post.get("blocks") or []
+    at = str((post.get("meta") or {}).get("_details_at") or "")
+    if at == DETAILS_TOP:
+        return -1
+    if at == DETAILS_END:
+        return len(blocks)
+    return min(int(at), len(blocks)) if at.isdigit() else 0
+
+
 def render_blocks(blocks, edit=False, path="0"):
     """`path` is the data-b path of the FIRST block; its siblings increment the last part. The page
     itself starts at "0"; column 1 of block 2 renders with path "2.1.0"."""
