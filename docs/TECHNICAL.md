@@ -259,6 +259,15 @@ Twenty types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `col
 their own, in CSS (§12). Both keys stay, `images` wins when it holds two or more, so a hero that was
 saved before this exists is untouched.
 
+**Two switches over how the picture behaves** (client, 2026-09-19). `arrange` is a `choice` of three
+— `""` beside the words (the design's default, and what every hero saved before this keeps),
+`"above"`, `"below"` — and `still` is a checkbox that stops the picture moving once it has arrived.
+Both land in a class attribute and so neither is free text: `still` is a bool, and `arrange` is
+**compared** against the two literals in the template, never interpolated, so a value the editor
+never chose falls back to the beside layout rather than reaching the class
+(`test_nothing_an_editor_types_reaches_the_hero_class_attribute` feeds it six kinds of junk). A dark
+hero ignores `arrange` entirely — its picture is the backdrop, not a column.
+
 **Two keys in `data` are not fields and are not typed by anybody.** `_id` names a section for as long as it exists, and `_rich` records whether Quill can hold that section's markup without losing any of it (§12.1). They are written by the editor, travel with the block through `posts.blocks` and `post_drafts.blocks`, and exist so two browsers can agree about which section is which and about how it is edited (§12.3). `validate_blocks()` ignores extra `data` keys — it checks required fields and the type name, never an allow-list — and both are in `_NON_TEXT_KEYS` so `blocks_text()` skips them.
 
 Three types carry a variant switch, and all three are **checkboxes**, never free text: `hero.dark` (the full-bleed band, where `image` becomes a faded backdrop instead of the art beside the words), `testimonial.dark`, and `contact_form`'s existing `kind`. The template tests them against fixed values (`{{ ' hero-dark' if data.dark }}`, `{{ ' cf-grey' if data.kind in ('quote', 'career') }}`), so nothing an editor types can reach a class attribute — which is the same reason `section_class()` is a whitelist.
@@ -802,6 +811,23 @@ guards it, because a page-wide horizontal scroll is invisible to pytest and to a
 
 **The hero rotator is CSS.** `hero.images` renders `.hero-slides` with the picture count inline as `--n` and each `.hero-slide` carrying its turn as `--i`. Every slide runs the same loop over the whole cycle (`calc(var(--n) * 4.5s)`) delayed by `calc(var(--i) * 4.5s)`, so exactly one is showing at a time with the design's slide-in / slide-out either side of its turn. The dots are `<span>`s, not buttons: they report which picture is up and fill blue across its 4.5 seconds, and they are `aria-hidden` because they say nothing the pictures' `alt` text does not. **`.hero-dots` is a sibling of `.hero-slides`, not a child of it** — `.hero-slides` carries the `float` loop, so a dot inside it drifted up and down with the picture, and an indicator that bobs is hard to read against. Being absolutely positioned it now measures from `.hero-media` instead, which only has the one-shot entrance; the picture still floats and the dots hold still. Measured rather than eyeballed: with `.hero-slides` held at each end of its float, `.hero-dots` reports the same `getBoundingClientRect().top` while `.hero-slides` moves 9.6px. There is one keyframe set per count — `slides2`/`dot2` and `slides3`/`dot3` — because a slide's share of the cycle is written into the percentages; a fourth picture needs a fourth set, marked `ponytail:` in the file. Under `prefers-reduced-motion` the slides are stood down explicitly and the first picture is left showing: the mock's blanket `animation-duration:.01ms` would have parked every slide on its final frame, which is the hidden one.
 
+**Three hero arrangements out of one grid** (2026-09-19). `.hero>.wrap` is already a single column,
+so `hero-below` is what the markup does on its own and needs no rule at all; `hero-split` is the
+two-column `auto-fit` it has always been; only `hero-above` has anything to say, and it is
+`order:-1` on `.hero-media` rather than a DOM swap, so the heading is still *read* first however the
+picture is placed. The entrance (`rise` on the words) now lists all three, because the picture's own
+`heroin` never depended on the arrangement and a hero whose picture slides in while its words snap
+into place looks broken.
+
+**"Hold the picture still" stops the loops and keeps the arrival.** The ask was that the hero
+"settles, then holds still", so `.hero-still` names the two elements carrying `float` and the
+`::before` carrying `glow` — and deliberately **not** `.hero-media`, whose own animation *is* the
+entrance, and **not** `.hero-slide`, so several pictures go on taking turns. Measured in Firefox
+rather than reasoned from the cascade: with the class on, `getComputedStyle` reports
+`animationName` `none` for the picture and the glow and still `heroin` for the entrance; without it,
+`float`/`glow`/`heroin`. `prefers-reduced-motion` is unaffected — it is the last block in the file
+and says `!important`, so a reader who asks for stillness still gets all of it.
+
 **Section effects (`fx-*`)** are the four an editor can put on a Numbers or Rich text section (§6). All four run on the document timeline and play once as the page loads, in every browser. `fx-gradient` paints the section's big text — every heading, plus a Numbers figure, which is a `<strong>` and not a heading at all — with the brand gradient through `background-clip:text`, drifting on a plain time loop. The other three are one-shot entrances: `fx-rise` fades and lifts `>.wrap` (never the `<section>` itself, which would fade a dark band in from white), `fx-sweep` grows a marker-pen bar as the element's *own* `background-size` from `0 .3em` to `100% .3em`, and `fx-count` rolls a registered `@property --cv` through `counter()`.
 
 Three things about that group are not obvious:
@@ -1046,6 +1072,18 @@ Three things the CSS has to undo or lift:
   card's own white background and loses it.
 
 ### The admin shell
+
+**A note that changes what a box does, not one describing it.** `_form_context()` computes
+`leads_with_own_head` — the working content's first block is a `hero` or a `columns` — and
+`post_form.html` renders a `<small class="caveat">` above the Featured image picker when it is true,
+saying the picture will reach the list cards and the shared link but not the page. This is the one
+trap in the form that cost a real page: a picture was chosen, the page opened with a Hero, and
+`post.html` skipped the whole page head, so nothing appeared and nothing said why. It is read off
+`content`, the same value the editor loads, so it follows the **unpublished draft** rather than what
+is live. `.caveat` is `--ink-2` rather than `--muted` on purpose: the form's other notes ("Made from
+the title.") describe a box, and a note in chrome grey is skipped.
+**`# ponytail:`** it is rendered once with the page, so adding or removing a Hero in the canvas does
+not move it until the next load. It is a hint beside a box, not a gate on anything.
 
 `templates/admin/base.html` is a 248px black sidebar and a grey page canvas, not the old top nav. Three things about it are load-bearing:
 
