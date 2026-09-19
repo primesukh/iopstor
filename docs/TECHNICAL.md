@@ -272,9 +272,28 @@ keyframes, and `glow` runs its `0%`/`100%` at `opacity:.7`, so a *stilled* glow 
 element's own `opacity:1` and reads as more present, not less. `noglow` takes the `::before` out
 with `display:none`. The two compose.
 
+**Where a type's long fields land is a setting, and it lives in `meta` under a reserved key**
+(client, 2026-09-19). Challenge / Solution / Results are the type's own boxes, so they are the one
+piece of page content an editor cannot drag — they rendered between the short-field strip and the
+sections, full stop, which on a case study meant above the hero. `meta._details_at` now says where
+they go and `blocks.details_at(post)` turns it into a cut: `-1` above the strip, `0` straight after
+it (where they have always been, **and the fallback for anything unrecognised**, so an older post
+and a mistyped value both render exactly as before), or `n` after `n` sections, clamped to how many
+there are. `post.html` renders the sections in two `render_blocks()` calls around it.
+
+Three things about that key. It is **reserved and underscored**, the same shape as a block's `_id`
+and `_rich`, and it is invisible to everything that walks the type's fields — `post.html` and
+`_md_fields()` both iterate `field_schema`, so it is never rendered or written to a `.md` twin.
+It is **positional, not by section identity**, and that is a measurement rather than a preference:
+only 9 of 81 blocks in this database carry an `_id` (the editor mints one on edit, so a seeded or
+untouched page has none), so naming the section would have left most pages with nothing to choose.
+The cost is that dragging sections about does not drag this with them. And `_form_body()` writes it
+**only when the form actually carried the control**, so a type with no long field, and the JSON API
+which posts no form at all, can never blank it by omission.
+
 **Two keys in `data` are not fields and are not typed by anybody.** `_id` names a section for as long as it exists, and `_rich` records whether Quill can hold that section's markup without losing any of it (§12.1). They are written by the editor, travel with the block through `posts.blocks` and `post_drafts.blocks`, and exist so two browsers can agree about which section is which and about how it is edited (§12.3). `validate_blocks()` ignores extra `data` keys — it checks required fields and the type name, never an allow-list — and both are in `_NON_TEXT_KEYS` so `blocks_text()` skips them.
 
-Three types carry a variant switch, and all three are **checkboxes**, never free text: `hero.dark` (the full-bleed band, where `image` becomes a faded backdrop instead of the art beside the words), `testimonial.dark`, and `contact_form`'s existing `kind`. The template tests them against fixed values (`{{ ' hero-dark' if data.dark }}`, `{{ ' cf-grey' if data.kind in ('quote', 'career') }}`), so nothing an editor types can reach a class attribute — which is the same reason `section_class()` is a whitelist.
+Variant switches never take free text, and there are two shapes of them. **Checkboxes**, which is most: `hero.dark` (the full-bleed band, where `image` becomes a faded backdrop instead of the art beside the words), `hero.still`, `hero.noglow`, `testimonial.dark`, `stats.count_up`. And a **fixed `choice` compared against literals in the template**, which `hero.arrange` is — a value the editor never picked falls through to the default rather than reaching the class. Then `contact_form`'s existing `kind`. The template tests them against fixed values (`{{ ' hero-dark' if data.dark }}`, `{{ ' cf-grey' if data.kind in ('quote', 'career') }}`), so nothing an editor types can reach a class attribute — which is the same reason `section_class()` is a whitelist.
 
 `spacer` and `divider` are the two types that are not content, and both are shaped by what they do
 *not* carry. `spacer` declares one field, `height`, a **whitelist** (`HEIGHTS = ("small", "medium",
@@ -1098,6 +1117,12 @@ is live. `.caveat` is `--ink-2` rather than `--muted` on purpose: the form's oth
 the title.") describe a box, and a note in chrome grey is skipped.
 **`# ponytail:`** it is rendered once with the page, so adding or removing a Hero in the canvas does
 not move it until the next load. It is a hint beside a box, not a gate on anything.
+
+**The dropdown that sets it** is built in `_form_context()` as `details_spots`, from the *working*
+content so its section list matches what the editor is looking at, and offered **only for a type
+that has a long field** — otherwise it is a control over nothing. "At the very end" is kept
+alongside the last section's number on purpose: it moves as sections are added and the number does
+not.
 
 `templates/admin/base.html` is a 248px black sidebar and a grey page canvas, not the old top nav. Three things about it are load-bearing:
 

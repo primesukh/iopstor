@@ -51,6 +51,31 @@ A change can hit several rows; screenshot every row that matches.
 
 Two headless renders of the *identical* page differ by ~150k pixels here — a webfont race, each run re-fetching Google Fonts and sometimes painting first — so `compare -metric AE` between a before-run and an after-run proves nothing. Render both versions into **one** HTML file and screenshot it once: `render_blocks()` for each version of the block (or `git show main:iopstor/static/site.css` beside the working stylesheet), stacked under sticky black labels, with `<base href="http://localhost:5001/">` and a `<link>` to `site.css`. One render, one font state, so any difference is real. That is what caught a `max-width` on a `<section>` losing its page gutter that a cross-run diff had buried in noise (2026-09-15, `points`). The same `<base>` trick swaps another branch's stylesheet in, to prove whether a visual change is a regression or the design.
 
+## A page whose rows are not in the state you need yet
+
+A migration written and deliberately **not** applied, a Featured image nobody has set, a setting no live page
+uses — the page you have to photograph does not exist in the database, and you may not put it there. Render it
+instead: fetch the real row read-only, patch the field **in memory**, render through Flask, and shoot the file.
+
+```python
+post = db.hydrate(db.one(db.live(db.select_posts()).eq("slug", slug)))
+post["blocks"] = []                                   # what the unapplied migration will do
+with app.test_request_context("/" + post["path"].lstrip("/")):
+    html = render_template("post.html", post=post, children=[], siblings=False,
+                           crumbs=crumbs_for(post), meta=seo.build_meta(post), jsonld=seo.jsonld(post, crumbs_for(post)))
+html = html.replace("<head>", '<head><base href="http://localhost:5001/">', 1)
+```
+
+Nothing is written. Used on three consecutive PRs (2026-09-19) — the post-migration case-study layout, four hero
+arrangements, and the details-placement setting — which is why it is written down. The same shape renders an admin
+screen (below) and a block through `render_blocks()`.
+
+**An entrance animation makes the shot come back BLANK, and it does not look like a timing problem.** `rise` and
+`heroin` are `both`-filled and start at `opacity:0`, and `--screenshot` fires on `load`, so frame 0 is an empty
+white band and it reads as a broken change or a stylesheet that 404'd. Add
+`<style>.hero-text,.hero-media{animation-delay:-2s!important}</style>` to hold the end frame. It does not disturb a
+`getComputedStyle(...).animationName` probe in the same page, so one render can carry both.
+
 ## Anything that `import`s is served, never `file://`
 
 ES modules do not load from `file://` in Firefox, and the page renders its pre-script state with **no error in the shot** — it looks exactly like the script threw. A scratch page that loads `vendor/yjs.mjs`, `vendor/y-quill.mjs` or `vendor/quill.js` is served from the scratchpad — `python3 -m http.server 8137` in that directory, in the background — and shot at `http://127.0.0.1:8137/x.html`. Stop it **by port, never `pkill -f <pattern>`**: `-f` matches the whole command line, which includes the pattern in the very shell running the `pkill`, so it kills that shell (exit 144) and any edit in the same call is silently lost — seen twice on 2026-09-15.
