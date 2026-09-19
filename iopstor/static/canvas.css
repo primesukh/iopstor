@@ -65,6 +65,15 @@
    above still gives it the blue ring and the toolbar. */
 .iop-canvas .spacer{outline:1px dashed #e2e8f0;outline-offset:-1px}
 
+/* Same problem one step further on. A divider told to keep no air is a 1px <hr>: on the page that
+   is exactly what was asked for, in the editor there is nothing to put a pointer on -- and an
+   outline does not help, because the thing you cannot hit is the hover itself. The block's own
+   toolbar is ~1.6rem and sits INSIDE the section, and dragging means grabbing .iop-grab on it.
+   8px a side brings it to ~17px, which is sp-small's 16px -- the smallest section this project
+   already treats as workable. Canvas only: the published page still gets the 0 it was told.
+   (0,3,0), tying site.css's .section.pad-none:not(.spacer); canvas.css loads second, so it wins.) */
+.iop-canvas .divider.pad-none{padding-block:8px}
+
 /* placeholders for the blocks that cannot be edited on the page itself */
 .iop-ph{border:2px dashed var(--line);border-radius:12px;padding:1.6rem;text-align:center;color:var(--muted);background:#f8fafc}
 .iop-err{border:2px dashed #fecaca;border-radius:12px;padding:1.2rem;text-align:center;color:#b91c1c;background:#fef2f2}
