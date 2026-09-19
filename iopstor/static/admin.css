@@ -163,7 +163,13 @@
 .ed-peer.more{background:var(--muted)}
 /* Under 700 the bar is already back-link + pill + two seg groups + Save; the roster is the first
    thing that can go, and presence is still visible on the sections themselves. */
-@media(max-width:700px){.ed-peers,.ed-saved{display:none}}
+@media(max-width:700px){
+  .ed-peers,.ed-saved{display:none}
+  /* ...and the budget was already spent: Publish was being clipped at the right edge here BEFORE
+     the fourth width button existed. Let the bar take a second row rather than lose a control --
+     a clipped Save is worse than a taller bar, and this is the width nobody edits at anyway. */
+  .ed-bar{flex-wrap:wrap}
+}
 /* .notice-amber ships margin-top for the settings screens; in the editor it sits above the page and
    the column already has top padding, so the gap belongs underneath it instead. */
 .ed-main>.notice-amber{margin:0 0 1rem}
@@ -241,7 +247,12 @@
 .admin .seg button:hover{background:#f1f5f9}
 .admin .seg button.on{background:var(--accent);color:#fff}
 .ed-main:has(#doc-toolbar[hidden]) #canvas{border-radius:var(--radius)}
+/* The cards are their own view now, not a postscript under the frame -- Preview shows the page
+   and nothing else. When #canvas-wrap is hidden they ARE the pane, so they take the height and
+   scroll themselves; the margin only made sense while something sat above them. :has() is already
+   how this file asks about a hidden sibling (see the #doc-toolbar rule above). */
 #seo-card{margin-top:1rem}
+.ed-main:has(#canvas-wrap[hidden]) #seo-card{margin-top:0;flex:1;min-height:0;overflow:auto}
 .seo-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(19rem,1fr));gap:1rem}
 .seo-card{border:1px solid var(--line);border-radius:var(--radius);padding:1rem;background:#fff}
 .seo-card h4{margin:0 0 .7rem;font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}

@@ -2713,7 +2713,11 @@
      sees. Preview swaps the same iframe for a real render of post.html + base.html, built by the
      server from the form as it stands. A draft cannot be seen any other way: db.live() gates every
      public lookup on status='published'. */
-  var VIEW = "edit", DEVICE = 1440;
+  /* VIEW is edit-or-preview and nothing else: twelve reads of it mean exactly that, and three
+     are collaboration rather than rendering (peer markers, `edit:` on the wire, canWrite()).
+     Which HALF of Preview is on screen -- the page, or the search and share cards -- is a
+     sub-state, so all twelve keep their meaning and only the rendering below branches. */
+  var VIEW = "edit", DEVICE = 1440, PVPART = "page";
 
   function previewUrl(part) {
     return "/admin/preview?type=" + encodeURIComponent(SPEC.type || "page") +
@@ -2759,6 +2763,14 @@
   var pvUp = false, pvLast = null;
   function renderPreview() {
     if (!FRAME || VIEW !== "preview") return;
+    // Each half fetches only itself. Both are a full _form_body() + _preview_post() + build_meta()
+    // on the server and the page one is 8-11 Supabase round trips, so doing both on every beat --
+    // which is what this did -- was paying twice to show one thing.
+    if (PVPART === "seo") {
+      var c = document.getElementById("seo-card");
+      if (c) askPreview("card", function (html) { if (c.innerHTML !== html) c.innerHTML = html; });
+      return;
+    }
     askPreview("", function (html) {
       var d = pvUp && cdoc(), was = d && d.getElementById("main"),
           now = was && new DOMParser().parseFromString(html, "text/html").getElementById("main");
@@ -2782,8 +2794,6 @@
       };
       FRAME.srcdoc = html;
     });
-    var card = document.getElementById("seo-card");
-    if (card) askPreview("card", function (html) { if (card.innerHTML !== html) card.innerHTML = html; });
   }
 
   // One beat for every preview repaint, local or remote. It was already here at 500ms but wired
@@ -2815,7 +2825,10 @@
     var wrap = document.getElementById("canvas-wrap");
     if (!FRAME || !wrap) return;
     FRAME.style.height = wrap.style.height = wrap.style.flex = "";   // measure the layout, not the last fit
-    if (VIEW !== "preview") {
+    // ...and not while the cards are the pane: #canvas-wrap is hidden, so clientWidth is 0 and the
+    // scale would come out 0. pvParts() always runs BEFORE this, so by the time we measure on the
+    // way back the wrap is visible again.
+    if (VIEW !== "preview" || PVPART === "seo") {
       FRAME.style.width = FRAME.style.transform = "";
       return;
     }
@@ -2833,6 +2846,22 @@
     wrap.style.height = h + "px";                  // the unscaled frame must not stretch the wrap
   }
 
+  /* Which of Preview's two halves is showing. ALWAYS called before fitPreview(), never after:
+     with #canvas-wrap hidden its clientWidth is 0, fitPreview() computes scale(0), and the frame
+     comes back invisible. setView() already used that order for the toolbar; this keeps it. */
+  function pvParts() {
+    var seo = VIEW === "preview" && PVPART === "seo",
+        wrap = document.getElementById("canvas-wrap"),
+        card = document.getElementById("seo-card"),
+        dev = document.getElementById("pv-device");
+    if (wrap) wrap.hidden = seo;        // hidden, not emptied: cdoc() must keep answering, or the
+    if (card) card.hidden = !seo;       // presence and canWrite() paths work against nothing
+    if (dev) dev.hidden = VIEW !== "preview";
+    Array.prototype.forEach.call(document.querySelectorAll("#pv-device button"), function (b) {
+      b.classList.toggle("on", b.hasAttribute("data-pv") ? seo : (!seo && +b.getAttribute("data-w") === DEVICE));
+    });
+  }
+
   function setView(v) {
     VIEW = v;
     closeSlash();
@@ -2840,10 +2869,7 @@
       var n = document.getElementById(id);
       if (n) n.hidden = v !== "edit";
     });
-    ["pv-device", "seo-card"].forEach(function (id) {
-      var n = document.getElementById(id);
-      if (n) n.hidden = v !== "preview";
-    });
+    pvParts();
     Array.prototype.forEach.call(document.querySelectorAll("#view-mode button"), function (b) {
       b.classList.toggle("on", b.getAttribute("data-view") === v);
     });
@@ -2865,9 +2891,14 @@
     });
     if (dev) Array.prototype.forEach.call(dev.querySelectorAll("button"), function (b) {
       b.addEventListener("click", function () {
-        DEVICE = +b.getAttribute("data-w");
-        Array.prototype.forEach.call(dev.querySelectorAll("button"), function (x) { x.classList.toggle("on", x === b); });
+        var was = PVPART;
+        if (b.hasAttribute("data-pv")) PVPART = "seo";
+        else { PVPART = "page"; DEVICE = +b.getAttribute("data-w"); }
+        pvParts();          // unhide first, then measure -- see the comment on pvParts()
         fitPreview();
+        // A width change only rescales what is already there; swapping halves needs the other one
+        // fetched, and the page may have gone stale while the cards were up.
+        if (PVPART !== was) renderPreview();
       });
     });
     window.addEventListener("resize", fitPreview);

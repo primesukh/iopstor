@@ -3209,3 +3209,63 @@ def test_opening_a_dropdown_in_the_section_panel_does_not_repaint_the_section():
     assert "function (e) {" in handler, "the handler needs the event to read e.target"
     assert guard in handler, "the guard must live in the popover's own listener, not somewhere else"
     assert "canvasBlock(panelAt)" in handler and "markDirty()" in handler
+
+
+# --- the search and share cards are a view, not a postscript --------------------------------------
+# Preview shows the page and nothing else; the cards are the fourth button in the width row. The
+# switching lives in closures admin.js never exports, so these pin the shape and the browser
+# measurement is the evidence: page view 1 render + 0 cards, cards view 0 + 1, where both halves
+# used to be fetched on every beat.
+
+def _admin_js():
+    return (pathlib.Path(__file__).parent.parent / "iopstor" / "static" / "admin.js").read_text()
+
+
+def test_each_half_of_preview_fetches_only_itself():
+    """renderPreview() asked the server for the page AND the cards every time, in parallel, and
+    both are a full _form_body() + _preview_post() + build_meta() -- the page one 8-11 Supabase
+    round trips. Measured through the real buttons: 2 renders a beat became 1."""
+    js = _admin_js()
+    assert 'var VIEW = "edit", DEVICE = 1440, PVPART = "page";' in js
+
+    body = js[js.index("function renderPreview()"):]
+    body = body[:body.index("function fitPreview")]
+    assert 'if (PVPART === "seo") {' in body, "renderPreview no longer routes by half"
+    assert body.count("askPreview(") == 2, "one fetch per half, not both every time"
+    # the card fetch must be inside the seo branch, i.e. before the page fetch returns
+    assert body.index('askPreview("card"') < body.index('askPreview("", function'), \
+        "the card fetch drifted back out of the branch and runs unconditionally again"
+
+
+def test_the_cards_view_is_a_sub_state_so_the_twelve_VIEW_reads_keep_their_meaning():
+    """Three of the reads of VIEW are collaboration, not rendering -- peer markers, `edit:` on the
+    presence wire, and canWrite() disqualifying a previewing tab from autosaving. A fourth VIEW
+    value would have had to be audited into all of them; a sub-state leaves every one alone."""
+    js = _admin_js()
+    assert js.count('VIEW = ') == 2, "VIEW should still be written in exactly one place (plus its declaration)"
+    for collab in ('if (VIEW === "preview") return;', 'edit: VIEW !== "preview"',
+                   'if (!chan || VIEW === "preview") return false;'):
+        assert collab in js, f"a collaboration guard changed shape: {collab}"
+
+
+def test_returning_from_the_cards_cannot_leave_the_frame_scaled_to_nothing():
+    """#canvas-wrap hidden means clientWidth 0, so fitPreview() would compute scale(0) and the page
+    would come back invisible. pvParts() unhides first; the order is the fix, so pin the order."""
+    js = _admin_js()
+    assert 'if (VIEW !== "preview" || PVPART === "seo") {' in js, "fitPreview would measure a hidden wrap"
+
+    handler = js[js.index("function initPreview()"):]
+    handler = handler[:handler.index("window.addEventListener(\"resize\"")]
+    assert handler.index("pvParts();") < handler.index("fitPreview();"), \
+        "pvParts() must unhide BEFORE fitPreview() measures, or the frame returns at scale(0)"
+    assert 'if (b.hasAttribute("data-pv")) PVPART = "seo";' in handler
+    assert 'DEVICE = +b.getAttribute("data-w")' in handler
+    # the fourth button carries data-pv, never data-w, or DEVICE becomes NaN
+    form = (pathlib.Path(__file__).parent.parent / "iopstor" / "templates" / "admin" / "post_form.html").read_text()
+    assert '<button type="button" data-pv="seo">' in form
+    assert form.count('data-w="') == 3, "the width buttons should still be exactly three"
+
+    css = (pathlib.Path(__file__).parent.parent / "iopstor" / "static" / "admin.css").read_text()
+    assert ".ed-main:has(#canvas-wrap[hidden]) #seo-card{" in css, "the cards never take the pane"
+    # the bar was already clipping Publish at 700 before a fourth button existed; it wraps now
+    assert ".ed-bar{flex-wrap:wrap}" in css, "a fourth button with no room pushes Save off the bar"
