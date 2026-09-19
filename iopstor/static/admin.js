@@ -638,6 +638,10 @@
     canvasFull();
   }
   function markDirty() { dirty = true; stampIds(MODEL); reconcileOut(); nudgeSave(); }
+  /* A discrete action, as opposed to typing: put a boundary on the undo stack so this and the
+     click before it are two steps rather than one. Typing deliberately does NOT call this --
+     it coalesces by the manager's captureTimeout, the way Quill's own history always did. */
+  function markStep() { step(); markDirty(); }
 
   // An empty paragraph is the editor waiting for you, not content. Drop it on save — but keep
   // one that holds only a picture, a rule or a table, which has no text and is still real.
@@ -690,6 +694,20 @@
 
   var Y = null, YDOC = null, YB = null;        // the Yjs module, the shared document, its blocks array
   var YORIGIN = { mine: 1 };                   // our own transactions, recognised when they echo back
+  var UNDO = null;                             // Y.UndoManager over YB -- one undo for the whole page
+  /* Ours too, but NOT an edit anybody made: seeding the document and repairing a double-seed.
+     A separate origin rather than UNDO.clear(), and the difference is not cosmetic -- the seed is
+     on a four-second timer, so clearing was a wipe of whatever the editor had done in those four
+     seconds. Measured: a section moved at 4.0s left an empty undo stack. reconcileIn skips this
+     the same way it skips YORIGIN (both are us); trackedOrigins deliberately does not list it. */
+  var YSEED = { seed: 1 };
+  /* Quill keeps no history of its own: the Y.UndoManager owns it, which is what y-quill expects
+     when a Y.Text is the source of truth. maxStack 0 leaves Quill's own Ctrl+Z bindings in place
+     and permanently empty, so they are inert rather than fighting ours. This also removes two
+     faults nobody had reported: Quill's default userOnly:false recorded a PEER's delta on your
+     stack, so undo could revert a colleague's sentence and the binding broadcast the revert; and
+     mountQuill's seeding paste was recorded too, so undoing far enough emptied the block. */
+  var HISTORY_OFF = { maxStack: 0, userOnly: true };
   var SCALARS = {};                            // blocks.py _NON_TEXT_KEYS: never a text type
   var BINDS = [];                              // live QuillBindings, destroyed when the canvas is replaced
   var WAITING = [];                            // editors mounted before the shared text existed
@@ -850,6 +868,24 @@
     }
   }
 
+  /* "A new thing just happened." Called by the handful of discrete structural actions -- not by
+     typing, which is meant to coalesce. Without it, two clicks a moment apart merge into one undo
+     step; with it, they never do. It cannot split what one reconcileOut tick already merged (two
+     actions inside the same 120ms window reach Y as a single transaction), which is a real limit
+     and the reason the harness asserts step COUNTS and not just contents. */
+  function step() { if (UNDO) UNDO.stopCapturing(); }
+
+  function canUndo() { return !!(UNDO && UNDO.canUndo()); }
+  function canRedo() { return !!(UNDO && UNDO.canRedo()); }
+  /* The repaint comes free: an undo transaction carries the UndoManager as its origin, which is not
+     YORIGIN, so reconcileIn does not skip it -- it takes the same shape branch a peer's structural
+     edit takes, MODEL = fromY() and a full canvas render. Nothing here has to know about painting.
+     sharedChanged() is the autosave's "the document moved even though MODEL may not have": an undo
+     that lands back on the last-saved blocks would otherwise write nothing, and post_drafts.state
+     would keep the ops we just undid -- which initShared lets win on the next load. */
+  function undo() { if (canUndo()) { UNDO.undo(); sharedChanged(); } }
+  function redo() { if (canRedo()) { UNDO.redo(); sharedChanged(); } }
+
   var outPending = null;
   function reconcileOut() {
     if (!YDOC) return;
@@ -870,9 +906,36 @@
     eachBlock(MODEL, function (b) { if (idOf(b)) mine[idOf(b)] = b; });
     eachBlock(out, function (b) {
       var was = b && b.data && mine[b.data._id];
-      if (b && b.data && b.data._rich && was) b.data.html = was.data.html;
+      if (!b || !b.data || !b.data._rich) return;
+      if (was) return void (b.data.html = was.data.html);
+      /* Not in MODEL, so there is no mirror to read the formatting off -- which is exactly what
+         undoing a DELETE looks like: the block is back in the document and gone from here. Falling
+         through would leave b.data.html as Y.Text.toJSON(), the bare words, so undoing the deletion
+         of a formatted paragraph would quietly return it as plain text. converter() is the offscreen
+         Quill kept so a delta renders byte-identically to a mounted editor; mirrorProse already
+         reads a peer's words through it, and this is the same question asked about our own. */
+      var yt = ytextAt(b.data._id), conv = yt && converter();
+      if (!conv) return;
+      conv.setContents(yt.toDelta(), "silent");
+      b.data.html = semantic(conv);
     });
     return out;
+  }
+
+  /* The Y.Text for a block's html, by _id, wherever it sits (a column nests one level). */
+  function ytextAt(id) {
+    var found = null;
+    function walk(arr) {
+      for (var i = 0; i < arr.length && !found; i += 1) {
+        var m = arr.get(i), d = m && m.get && m.get("data");
+        if (!d || !d.get) continue;
+        if (d.get("_id") === id) { var h = d.get("html"); if (h && h.toDelta) found = h; return; }
+        var cols = d.get("cols");
+        if (cols && cols.length) for (var c = 0; c < cols.length && !found; c += 1) walk(cols.get(c));
+      }
+    }
+    walk(YB);
+    return found;
   }
 
   /* Focus wins. A remote value landing in the field somebody is typing in would replace it mid-word,
@@ -920,7 +983,7 @@
     box.style.cssText = "position:fixed;left:-99999px;top:0;width:640px;height:1px;overflow:hidden";
     box.setAttribute("aria-hidden", "true");
     document.body.appendChild(box);
-    convQ = new Q(box, { formats: QUILL_FORMATS, modules: { toolbar: false } });
+    convQ = new Q(box, { formats: QUILL_FORMATS, modules: { toolbar: false, history: HISTORY_OFF } });
     return convQ;
   }
 
@@ -942,7 +1005,7 @@
   }
 
   function reconcileIn(events, tx) {
-    if (!YB || tx.origin === YORIGIN) return;     // our own reconcileOut, echoing back
+    if (!YB || tx.origin === YORIGIN || tx.origin === YSEED) return;   // our own writes, echoing back
     var shape = false, blocks = {}, texts = {};
     events.forEach(function (e) {
       if (e.target instanceof Y.Array) { shape = true; return; }
@@ -1015,6 +1078,25 @@
     // After the state, not before: loading it is not somebody else's edit arriving, and reconcileIn
     // would answer it with a full repaint of a canvas that does not exist yet.
     YB.observeDeep(reconcileIn);
+    /* One undo for the whole page, and it has to belong to the DOCUMENT rather than to an editor.
+       Quill's history lives on a Quill instance: it dies on every repaint, it has never heard of
+       sections, and with its default userOnly:false it records a peer's delta and lets you revert
+       THAT -- broadcast to everyone, because the binding writes the inverse straight back into the
+       Y.Text. A Y.UndoManager is scoped to YB, so it survives repaints and covers structure and
+       prose alike (both live in this one document), and `trackedOrigins` means it only ever pops
+       ops that were ours. A colleague's sentence is not on this stack and cannot be.
+       Constructed AFTER applyUpdate on purpose: loading the stored state is not an edit, and a
+       manager built before it would open with the whole page as its first undo step.
+       captureTimeout is Quill's `delay` in a different hat -- continuous typing coalesces into one
+       step, which is the behaviour this editor already had. It does NOT separate discrete actions,
+       because reconcileOut's debounce makes transactions timer ticks rather than actions; step()
+       below is what puts a boundary where the action actually is. */
+    UNDO = new Y.UndoManager(YB, { trackedOrigins: new Set([YORIGIN]), captureTimeout: 500 });
+    // The buttons' only rule is whether there is anything on the stacks, so they have to be
+    // repainted when the stacks move -- including while somebody types, which no other event here
+    // would tell the toolbar about.
+    UNDO.on("stack-item-added", function () { syncBar(); });
+    UNDO.on("stack-item-popped", function () { syncBar(); });
     if (YB.length) return void (MODEL = fromY());   // the stored document wins over what this page drew
     /* No stored document. Seeding one from `blocks` is only safe if NOBODY ELSE already has one:
        two browsers that each seed give Yjs two independent histories of the same page, and merging
@@ -1095,7 +1177,9 @@
   function seedDoc() {
     if (!YDOC || YB.length) return;
     stampIds(MODEL);
-    YDOC.transact(function () { yList(YB, MODEL); }, YORIGIN);
+    // YSEED, not YORIGIN: writing the page into the document for the first time is not an edit,
+    // and it must not land on the undo stack -- undo on a freshly opened page would empty it.
+    YDOC.transact(function () { yList(YB, MODEL); }, YSEED);
     say("seeded the shared document from this page's sections.");
     shareWaiting();
   }
@@ -1115,7 +1199,7 @@
     say("removed " + dead.length + " duplicated section(s): two browsers had seeded this page.");
     YDOC.transact(function () {
       for (var k = dead.length - 1; k >= 0; k -= 1) YB.delete(dead[k], 1);
-    }, YORIGIN);
+    }, YSEED);                // a repair, not an edit -- and undoing it would put the twins back
     MODEL = fromY();
     canvasFull();
   }
@@ -1456,7 +1540,7 @@
     var r = listAt(at);
     if (!r.arr) return;
     r.arr.splice(r.i, 0, { type: "rich_text", data: { html: "" } });
-    markDirty();                    // mints the _id, so the section has a name to be touched by
+    markStep();                    // mints the _id, so the section has a name to be touched by
     touched(rootIdOf(at));
     canvasInsert(at, true);
   }
@@ -1570,7 +1654,7 @@
     probe.style.cssText = "position:absolute;left:-9999px;top:0";
     d.body.appendChild(probe);
     try {
-      var q = new Q(probe, { formats: QUILL_FORMATS, modules: { toolbar: false } });
+      var q = new Q(probe, { formats: QUILL_FORMATS, modules: { toolbar: false, history: HISTORY_OFF } });
       q.clipboard.dangerouslyPasteHTML(html, "silent");
       var after = marks(semantic(q));
       // A no-loss test, not an equality test: Quill wrapping a bare text node in <p> is fine, and
@@ -1602,7 +1686,7 @@
       node.setAttribute("data-legacy", "1");
       return false;
     }
-    var q = new Q(f, { formats: QUILL_FORMATS, modules: { toolbar: false } });
+    var q = new Q(f, { formats: QUILL_FORMATS, modules: { toolbar: false, history: HISTORY_OFF } });
     q.clipboard.dangerouslyPasteHTML(target[key] || "", "silent");   // silent: mounting is not an edit
     f.__quill = q;
     shareQuill(node, f, q, key);
@@ -1663,7 +1747,7 @@
       renumber();
       bars();
     }
-    markDirty();
+    markStep();
     select(siblingPath(path, to));
   }
 
@@ -1676,7 +1760,7 @@
     // makes the two indistinguishable to every merge decision below.
     eachBlock([copy], function (b) { if (b && b.data) delete b.data._id; });
     r.arr.splice(r.i + 1, 0, copy);
-    markDirty();
+    markStep();
     touched(rootIdOf(siblingPath(path, r.i + 1)));
     canvasInsert(siblingPath(path, r.i + 1));
   }
@@ -1692,7 +1776,7 @@
     if (node) node.remove();
     renumber();
     bars();
-    markDirty();
+    markStep();
     select(null);
   }
 
@@ -1806,6 +1890,9 @@
   function wireDoc() {
     var d = cdoc();
     if (!d) return;
+    // Once per document rather than once per element, and once per document is also once per full
+    // repaint -- srcdoc hands back a brand-new document each time, so this never stacks up.
+    d.addEventListener("keydown", undoKey);
     // The document this canvas held is gone; its bindings still observe Y types and would apply
     // deltas into dead Quill instances for the life of the tab.
     BINDS.splice(0).forEach(function (b) { try { b.destroy(); } catch (e) { /* already gone */ } });
@@ -1847,7 +1934,7 @@
         dst.splice(to, 0, src.arr.splice(src.i, 1)[0]);
         renumber();
         bars();
-        markDirty();
+        markStep();
         select(e.item.getAttribute("data-b"));
       }
     });
@@ -1927,7 +2014,7 @@
         if (ev === "click" && /^(SELECT|OPTION|INPUT|TEXTAREA|LABEL)$/.test(e.target.tagName)) return;
         clearTimeout(pending);
         pending = setTimeout(function () { if (panelAt) canvasBlock(panelAt); }, 250);
-        markDirty();
+        if (ev === "input") markDirty(); else markStep();   // picking from a list is an action; typing in the box is not
       });
     });
 
@@ -2206,7 +2293,7 @@
       return { key: t, icon: n[0], label: nameFor(t), text: n[2] || "" };
     }), function (t) {
       MODEL.splice(at, 0, { type: t, data: seedFor(t) });
-      markDirty();
+      markStep();
       canvasInsert(at);
     });
   }
@@ -2218,7 +2305,7 @@
     }), function (name) {
       var pair = (SPEC.layouts || []).filter(function (x) { return x[0] === name; })[0];
       if (!pair) return;
-      markDirty();
+      markStep();
       setBlocks(pair[1].map(function (t) { return { type: t, data: seedFor(t) }; }));
     });
   }
@@ -2228,6 +2315,35 @@
      document. Clicking a button moves focus out of the iframe, so the caret is remembered on
      every selection change and put back before the command runs. */
   var savedRange = null, savedField = null, syncBar = function () {};
+
+  /* Undo and redo, from wherever they are asked for -- the two buttons and the two keyboard
+     listeners all land here. syncBar() afterwards because the stacks have just moved and the
+     buttons' only rule is whether there is anything left on them. */
+  function doUndo() { undo(); syncBar(); }
+  function doRedo() { redo(); syncBar(); }
+
+  /* Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, and Ctrl+Y for the Windows habit -- the three Quill itself binds,
+     so nobody has to learn a new one. Returns true when it handled the key.
+     This has to be attached to BOTH documents: the canvas is an iframe, so a key pressed while
+     editing never reaches the parent, and one pressed in the right-hand panel never reaches the
+     canvas. keydown also runs before Quill's own beforeinput interceptor, so preventDefault() here
+     wins even where Quill still has a binding registered. */
+  function undoKey(e) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
+    var k = (e.key || "").toLowerCase();
+    if (k !== "z" && k !== "y") return false;
+    e.preventDefault();
+    if (k === "y" || e.shiftKey) doRedo(); else doUndo();
+    return true;
+  }
+
+  /* An ordinary form control has its own undo and people rely on it -- taking Ctrl+Z away from the
+     title or the slug to add it to the page would be a trade nobody asked for. The canvas has no
+     such fields: everything there is a contenteditable whose history now belongs to the document. */
+  function typingInAField(d) {
+    var a = d && d.activeElement;
+    return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+  }
 
   function fire(f) {
     var W = f.ownerDocument.defaultView;
@@ -2446,7 +2562,7 @@
        first place is precisely "it contains none of this", so they are switched off while the caret
        is in a Quill field rather than inserting something the next keystroke would silently drop.
        Sections that need a table or an embed keep the original editor, and keep these. */
-    var proseOnly = [];
+    var proseOnly = [], undoBtn = null, redoBtn = null;
     function b(label, title, fn, cls, free) {
       var x = el("button", { type: "button", "class": "tb" + (cls ? " " + cls : ""), title: title, text: label });
       hold(x);
@@ -2509,13 +2625,20 @@
         var r = listAt(at);
         if (!r.arr) return;
         r.arr.splice(r.i, 0, { type: t, data: seedFor(t) });
-        markDirty();
+        markStep();
         canvasInsert(at);
       });
     }
 
-    bar.appendChild(group([b("↶", "Undo", function () { var q = qHere(); if (q) q.history.undo(); else exec("undo"); }, "", true),
-                           b("↷", "Redo", function () { var q = qHere(); if (q) q.history.redo(); else exec("redo"); }, "", true)]));
+    /* One undo for the whole page, so these are NOT the caret's business -- they step the shared
+       document back whether you are in a paragraph, in a settings box or nowhere at all. They keep
+       `free`, which is what leaves them out of `cmds` and therefore out of syncBar's "is the caret
+       in a rich field" rule; their own rule is simply whether there is anything to undo. Before
+       this they were free AND unruled, so the control looked live in every state including the two
+       where it was a guaranteed no-op. */
+    undoBtn = b("↶", "Undo (Ctrl+Z)", doUndo, "", true);
+    redoBtn = b("↷", "Redo (Ctrl+Shift+Z)", doRedo, "", true);
+    bar.appendChild(group([undoBtn, redoBtn]));
     bar.appendChild(group([style, size]));
     bar.appendChild(group([bold, ital, und, strike, b("Tx", "Remove formatting", function () {
       var q = qHere();
@@ -2576,6 +2699,9 @@
       if (q && !qat) live = false;
       bar.classList.toggle("tb-off", !live);
       cmds.concat([style]).forEach(function (x) { x.disabled = !live; });
+      // ...and undo/redo answer to the document, not the caret. This is the whole of their rule.
+      if (undoBtn) undoBtn.disabled = !canUndo();
+      if (redoBtn) redoBtn.disabled = !canRedo();
       proseOnly.forEach(function (x) { x.disabled = !live || !!q; });
       // Size belongs to body text. A heading's size IS its level, so offering both there invites an
       // H2 that looks like an H4 — the outline Google reads and the one a reader sees disagreeing.
@@ -2655,7 +2781,7 @@
       r.arr.splice.apply(r.arr, [r.i, 1].concat(ins));
       focusOnLoad = siblingPath(path, r.i + ins.length - 1);
     }
-    markDirty();                                 // mints an _id for each section just inserted
+    markStep();                                 // mints an _id for each section just inserted
     ins.forEach(function (_, n) { touched(rootIdOf(siblingPath(path, r.i + (head ? 1 : 0) + n))); });
     canvasFull();
   }
@@ -2949,9 +3075,11 @@
       var next;
       try { next = JSON.parse(AREA.value || "[]"); } catch (e) { next = null; }
       if (!Array.isArray(next)) { alert("That is not a valid list of blocks — the editor is unchanged."); return; }
-      markDirty();
+      markStep();
       setBlocks(next);
     });
+    // The other half of the shortcut: the panel, the toolbar, anywhere outside the canvas iframe.
+    document.addEventListener("keydown", function (e) { if (!typingInAField(document)) undoKey(e); });
     document.addEventListener("input", function (e) {   // the title feeds the canvas page head
       if (e.target.id !== "post-title" && e.target.name !== "excerpt") return;
       markDirty();

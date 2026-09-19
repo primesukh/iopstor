@@ -219,7 +219,10 @@
 .admin .doc-toolbar input.tb-colour{width:1.9rem;height:1.9rem;padding:0;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer}
 .tb-b{font-weight:800}.tb-i{font-style:italic}.tb-u{text-decoration:underline}.tb-s{text-decoration:line-through}
 .doc-toolbar.tb-off{opacity:.45}
-.admin .doc-toolbar .tb:disabled,.admin .doc-toolbar select:disabled{cursor:not-allowed;background:transparent}
+/* A disabled control has to LOOK disabled. Until undo and redo got a truthful enabled state
+   nothing in this bar was ever disabled on its own -- the whole bar dimmed together through
+   .tb-off -- so this rule set a cursor and nothing a person would notice. */
+.admin .doc-toolbar .tb:disabled,.admin .doc-toolbar select:disabled{cursor:not-allowed;background:transparent;opacity:.35}
 /* the table picker: drag out rows x columns, the way Word and Docs do */
 .tb-grid{display:grid;grid-template-columns:repeat(10,1.35rem);gap:3px;margin:.6rem 0 .4rem;width:max-content;cursor:pointer}
 .tb-cell{height:1.35rem;border:1px solid #cbd5e1;border-radius:3px;background:#fff}
