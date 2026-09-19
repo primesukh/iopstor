@@ -983,7 +983,7 @@
     box.style.cssText = "position:fixed;left:-99999px;top:0;width:640px;height:1px;overflow:hidden";
     box.setAttribute("aria-hidden", "true");
     document.body.appendChild(box);
-    convQ = new Q(box, { formats: QUILL_FORMATS, modules: { toolbar: false, history: HISTORY_OFF } });
+    convQ = new (withSize(Q))(box, { formats: QUILL_FORMATS, modules: { toolbar: false, history: HISTORY_OFF } });
     return convQ;
   }
 
@@ -1613,7 +1613,31 @@
      read it back, and refuse if any tag or class went missing. Those blocks keep the editor they
      have always had. */
   var QUILL_FORMATS = ["bold", "italic", "underline", "strike", "link", "header", "list",
-                       "blockquote", "align", "color", "background", "image"];
+                       "blockquote", "align", "color", "background", "image", "size"];
+
+  /* Quill ships a size format and it was simply out of reach: its style attributor is built with
+     `whitelist:["10px","18px","32px"]`, and none of TEXT_SIZES is in that list, so every rem size
+     was dropped on the next keystroke. The whitelist is a property on a singleton, so widening it
+     is the whole registration. A STYLE attributor, not the class one, on purpose: it emits
+     style="font-size:…", which is exactly the span the legacy execCommand path already produces,
+     so the two paths keep agreeing about the same paragraph and quillKeeps()'s marks() -- which
+     compares tags and classes -- is untouched by any of this.
+     Called for EVERY Quill constructor, because there are two: the canvas iframe's and the
+     parent's offscreen converter(). One registered and not the other means a peer's paragraph
+     renders one way in the editor and another way through the converter, which is the same class
+     of fault as two copies of Yjs. Memoised on the constructor itself rather than in a module
+     variable, since the iframe's Q is a different object after every full repaint. */
+  function withSize(Q) {
+    if (!Q || Q.__iopSize) return Q;
+    try {
+      var SizeStyle = Q.import("attributors/style/size");
+      SizeStyle.whitelist = TEXT_SIZES.map(function (o) { return o[0]; })
+                                      .filter(function (v) { return v !== "normal"; });
+      Q.register(SizeStyle, true);
+      Q.__iopSize = 1;
+    } catch (e) { /* an older bundle without the attributor: Size stays as it was */ }
+    return Q;
+  }
 
   function quillCtor() { var w = FRAME && FRAME.contentWindow; return w && w.Quill; }
   function quillOf(f) { return f && f.__quill ? f.__quill : null; }
@@ -1654,7 +1678,7 @@
     probe.style.cssText = "position:absolute;left:-9999px;top:0";
     d.body.appendChild(probe);
     try {
-      var q = new Q(probe, { formats: QUILL_FORMATS, modules: { toolbar: false, history: HISTORY_OFF } });
+      var q = new (withSize(Q))(probe, { formats: QUILL_FORMATS, modules: { toolbar: false, history: HISTORY_OFF } });
       q.clipboard.dangerouslyPasteHTML(html, "silent");
       var after = marks(semantic(q));
       // A no-loss test, not an equality test: Quill wrapping a bare text node in <p> is fine, and
@@ -1686,7 +1710,7 @@
       node.setAttribute("data-legacy", "1");
       return false;
     }
-    var q = new Q(f, { formats: QUILL_FORMATS, modules: { toolbar: false, history: HISTORY_OFF } });
+    var q = new (withSize(Q))(f, { formats: QUILL_FORMATS, modules: { toolbar: false, history: HISTORY_OFF } });
     q.clipboard.dangerouslyPasteHTML(target[key] || "", "silent");   // silent: mounting is not an edit
     f.__quill = q;
     shareQuill(node, f, q, key);
@@ -2430,19 +2454,71 @@
      filter strips on the next round trip. So run the command with a marker size — which also clears
      any size already inside the selection — and swap the tags it produced for a real CSS size, or
      for nothing at all when the editor asked for Normal. */
+  /* Clear any inline size across the WHOLE line the caret is in, in a Quill field. q.format() would
+     only reach the selection; a heading has to lose the size everywhere along it or the part the
+     caret happened to cover is the only part that recovers. */
+  function clearSizeOnLine() {
+    var q = qHere();
+    if (!q) return;
+    var at = q.getSelection();
+    if (!at) return;
+    var pair = q.getLine(at.index), blot = pair && pair[0], off = pair && pair[1];
+    if (!blot) return;
+    var start = at.index - off;
+    q.formatText(start, blot.length(), "size", false, "user");
+    syncBar();
+  }
+
   function setSize(css) {
-    var d = cdoc();
-    execLine("fontSize", "7");
+    var d = cdoc(), q = qHere();
+    /* Quill owns the field: use its own format. Not qfmt(), which TOGGLES when the caret is already
+       in the value asked for -- right for a B button, wrong for a dropdown, where picking "Large"
+       must mean Large and never "not Large". With nothing selected Quill keeps this as the pending
+       format and the next words typed come out at that size, which is what bold and italic here
+       already do. */
+    if (q) {
+      q.focus();
+      if (!q.getSelection()) return;         // focus() landed no caret: do nothing rather than throw
+      q.format("size", css === "normal" ? false : css, "user");
+      return syncBar();
+    }
+    /* exec, NOT execLine. execLine widens a COLLAPSED caret to the whole line -- and to the whole
+       field when the content has no block wrapper, because caretBlock() returns the field itself
+       there. That widening was the reported bug: the surgery below used to collapse savedRange (a
+       live Range whose boundaries sit inside the <font> whose children are being moved out), and
+       nothing re-recorded it, so the SECOND pick -- "Large was too much, try Larger" -- found a
+       collapsed range and resized the lot. execCommand with a collapsed caret already styles what
+       gets typed next, so dropping execLine also makes this path agree with the Quill one above. */
+    exec("fontSize", "7");
     if (!d || !savedField) return;
+    var first = null, last = null;
     Array.prototype.forEach.call(savedField.querySelectorAll('font[size="7"]'), function (f) {
       var box = d.createElement("span");
       if (css === "normal") box = d.createDocumentFragment();
       else box.style.fontSize = css;
-      while (f.firstChild) box.appendChild(f.firstChild);
+      while (f.firstChild) {
+        last = f.firstChild;
+        if (!first) first = last;
+        box.appendChild(f.firstChild);
+      }
       f.parentNode.replaceChild(box, f);
     });
+    // Keep the words selected across the surgery. Without this the highlight vanishes the instant
+    // the size lands, and the next pick has nothing to work on -- which is the whole bug, not a
+    // cosmetic detail. Set before normalize(): the browser carries a live selection through a
+    // merge, and rememberSelection() afterwards stores wherever it ended up.
+    if (first && last) {
+      var r = d.createRange();
+      r.setStartBefore(first);
+      r.setEndAfter(last);
+      var sel = d.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
     savedField.normalize();
+    rememberSelection();
     fire(savedField);
+    syncBar();
   }
 
   // the inline size covering the caret, if the toolbar put one there
@@ -2590,7 +2666,14 @@
     style.addEventListener("change", function () {
       if (!style.value) return;
       // Quill's header format is a number, or false for body text.
-      if (!qfmt("header", style.value === "p" ? false : +style.value.slice(1))) applyLevel(style.value);
+      var lvl = style.value === "p" ? false : +style.value.slice(1);
+      if (!qfmt("header", lvl)) return applyLevel(style.value);
+      /* The Quill half of applyLevel's rule, which until Size worked in a Quill field had nothing
+         to do. applyLevel strips inline sizes when a line becomes a heading, for the reason its
+         comment gives -- the level IS the size, and with Size disabled on headings a leftover span
+         is a dead end with no way back out of it from the toolbar. qfmt() returns true here, so
+         applyLevel never runs on this path and the rule has to be applied to the line directly. */
+      if (lvl) clearSizeOnLine();
     });
 
     var size = el("select", { "class": "tb-style tb-size", title: "Text size" });
@@ -2705,8 +2788,15 @@
       proseOnly.forEach(function (x) { x.disabled = !live || !!q; });
       // Size belongs to body text. A heading's size IS its level, so offering both there invites an
       // H2 that looks like an H4 — the outline Google reads and the one a reader sees disagreeing.
-      // It is also off in a Quill field: a rem size is an inline style Quill has no format for.
-      size.disabled = !live || !!q || /^H[1-6]$/.test((caretBlock() || {}).tagName || "");
+      // It is NO LONGER off in a Quill field: Quill has a size format after all (withSize()), and
+      // "a rem size is an inline style Quill has no format for" was true only of its default
+      // whitelist. That clause disabled the control on every block Quill accepted, which is most
+      // of them, and is what "I can't change the size of normal text" was.
+      /* In a Quill field this test is inert and that is not an oversight: Quill mounts its own
+         div.ql-editor inside [data-f], so caretBlock() -- which walks up to the child of
+         savedField -- returns that DIV and never the h2 inside it. The Quill branch below applies
+         the same rule from now.header instead. Two places, one policy; leave both. */
+      size.disabled = !live || /^H[1-6]$/.test((caretBlock() || {}).tagName || "");
       if (HINT) HINT.innerHTML = live ? HINT_ON : "Click in the page to start editing.";
       if (!live) return;
       if (q) {                                    // Quill knows its own state; queryCommandState does not
@@ -2720,6 +2810,10 @@
           align[k].classList.toggle("on", k === (now.align || "left"));
         });
         style.value = now.header ? "h" + now.header : "p";
+        // This branch returns, so the legacy size.value line below is never reached from here --
+        // without this the control would show the last thing the caret met in a legacy block.
+        size.value = now.size || "normal";
+        size.disabled = !!now.header;        // the heading rule, from Quill rather than the DOM
         return;
       }
       try {

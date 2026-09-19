@@ -79,7 +79,7 @@ The procedures this repo repeats, as slash commands. Load the one that fits befo
 | `/migration` | the schema or a seeded row must change — write the `.sql`, never run it |
 | `/theme-check` | anything in `site.css`, a block template, `_card.html`, `admin.js` — screenshots at three widths |
 | `/after-merge` | the user says a PR is merged — pull, prune branches, audit `.claude/` (no graph rebuild) |
-| `/collab-check` | anything in the editor's shared document, presence, autosave or Preview changed — what node, a served page, the dev-server log and the draft rows can prove, and the two-browser list that only the user can |
+| `/collab-check` | anything in the editor's shared document, presence, autosave, Preview **or a toolbar control** changed — what node, a served page, the dev-server log, the draft rows and a real browser driven through the controls can prove, and the two-browser list that only the user can |
 
 ## Workflow (non-negotiable)
 

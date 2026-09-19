@@ -2112,6 +2112,57 @@ def test_the_draft_is_stored_unpruned_and_publish_still_prunes():
     assert "AREA.value = JSON.stringify(prune(MODEL), null, 2);" in js
 
 
+def test_a_text_size_is_a_real_quill_format_on_every_copy_of_quill():
+    """Reported as "I can't change the size of normal text". Quill ships a size format and it was
+    out of reach: `attributors/style/size` is import-only, and the `formats/size` in the default
+    registry is the CLASS attributor, whitelisted to small|large|huge. So BOTH halves are needed --
+    register the style attributor with our own whitelist, and name "size" in QUILL_FORMATS, which
+    is a strip-everything-else list. Either one alone and a rem size vanishes on the next keystroke.
+
+    The style attributor, not the class one, on purpose: it emits style="font-size:...", which is
+    byte-identical to what the legacy path writes, whereas .ql-size-* is defined only inside
+    vendor/quill.core.css and the public page loads no Quill CSS at all."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    assert '"image", "size"' in js                          # in the formats whitelist
+    assert 'Q.import("attributors/style/size")' in js       # the style one, never the class one
+    assert "SizeStyle.whitelist = TEXT_SIZES" in js         # our sizes, not Quill's 10/18/32px
+    # every constructor, or the canvas and the offscreen converter disagree about one paragraph
+    assert js.count("new (withSize(Q))(") == 3
+    assert js.count("new Q(") == 0
+
+
+def test_making_a_line_a_heading_clears_its_size_on_both_paths():
+    """applyLevel strips inline sizes when a line becomes a heading, and says why: the level IS the
+    size, and because Size is disabled on headings a leftover span is a dead end with no way back
+    out from the toolbar. In a Quill field qfmt("header") returns true, so applyLevel never runs --
+    the rule has to be applied to the line directly or the dead end is back, on most blocks."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    assert "if (lvl) clearSizeOnLine();" in js
+    assert '"size", false, "user"' in js                    # cleared across the line, not the selection
+    assert "q.formatText(start, blot.length()" in js        # the whole line, not just what is selected
+
+
+def test_the_size_control_is_offered_in_a_quill_field():
+    """The `!!q` clause disabled Size on every block Quill accepted -- most of them -- which is the
+    whole of the second fault. The heading half stays: the user called that acceptable."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    rule = [l for l in js.splitlines() if l.strip().startswith("size.disabled = !live")]
+    assert len(rule) == 1 and "!!q" not in rule[0], rule
+    assert "/^H[1-6]$/" in rule[0]                          # ...but a heading still is not offered one
+    assert "size.disabled = !!now.header;" in js            # and the Quill branch says so from Quill
+
+
+def test_setting_a_size_never_widens_to_the_line():
+    """The reported bug was the SECOND pick: setSize's node surgery collapsed the live savedRange,
+    nothing re-recorded it, and execLine widens a collapsed caret to the whole line -- to the whole
+    field when the content has no block wrapper. exec, not execLine; and the words stay selected."""
+    js = (pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "static" / "admin.js").read_text()
+    body = js[js.index("function setSize("):js.index("function caretSize(")]
+    assert "execLine(" not in body                          # the widening is gone, not guarded
+    assert 'exec("fontSize", "7")' in body
+    assert "sel.addRange(r)" in body and "rememberSelection();" in body
+
+
 def test_the_quill_verdict_is_read_at_mount_and_never_recomputed_there():
     """mountQuill runs once per peer per repaint. A "work it out if it is missing" fallback there is
     the per-peer gate again: three browsers opening one page all reach it at once and can disagree,

@@ -28,13 +28,42 @@ Every realtime request lands on `/admin/realtime/v1/longpoll` and there is no We
 
 `post_drafts.state` disagreeing with `post_drafts.blocks` is how #68's silent bind failure was found — the draft's `html` held words the `Y.Text` did not. `post_sessions.changes` is where an activity entry's `was`/`now` per section can be read before it becomes a row (#69). Read them with `db.rows()` from a `pipenv run python` one-liner; never write.
 
-## 6. What only two browsers can prove — hand it over under **Tests → Not verified**
+## 6. The editor driven for real — one browser, the whole page, results posted back
+
+The layer above proves the document; this proves the *controls*. Used in #99, #100, #104 and #105
+before it was written down, and it is the only thing that catches "the button did nothing" — a
+`setTimeout`, a stale selection, a repaint that undoes the click. Four assertions it has found that
+no other layer can: a dropdown closing itself, a preview fetching twice, an undo stack wiped by a
+timer, and a size spreading to the whole paragraph on the *second* pick.
+
+Serve the real `/admin/posts/<id>` from a scratch `create_app()` with the database stubbed
+(`db.table/rows/one/get_post/post_type/settings/get_menu/admin_counts/get_draft/get_media`,
+`admin_ui.current_user`, a `before_request` setting `session["access_token"]`, `session["csrf"]`
+and `g.user`). Inject `<script src="/probe.js">` from an `after_request` when `?probe=1`; the probe
+drives the UI with real `MouseEvent`/`KeyboardEvent`/`change` events, reads the result out of the
+DOM, and `navigator.sendBeacon`s lines to a `POST /probe-result` route that prints them. Launch
+`firefox --headless --profile <dir> <url>` **with no `--screenshot`** — that flag fires on `load`
+and the browser exits before any timer runs — and let it live ~25 s.
+
+Five traps, each of which has cost a run:
+
+- **The stub user needs a UUID-shaped `id`**, or `_rt(pk)` raises `invalid literal for int() with base 16` and every page is a 500.
+- **Read `probe.js` per request.** `PROBE = open(...).read()` at import serves the old probe after you edit it — the static-cache lie in a new hat.
+- **Act after ~6 s, not 4.** `seedDoc` is on a 4000 ms timer and a click at 4.0 s races it.
+- **A second Firefox against a profile already in use exits 0 and does nothing.** `pgrep -x firefox` and a fresh profile dir; never `pkill -f`.
+- **Assert what distinguishes the states.** A digest of class names cannot see a *move*; use the words. And count *steps*, not just contents, or a control that needs pressing twice passes.
+
+To read a closure variable, add a temporary `window.__X = function () { return <var>; };`, print it
+through the same POST, and **grep it out before committing**.
+
+## 7. What only two browsers can prove — hand it over under **Tests → Not verified**
 
 Two browsers, two accounts, one page:
 - both type in one paragraph — both sets of words survive; a legacy section (NAS's table, Contact Us, About Us) does not change under your caret, and their version arrives on blur
 - a colleague's paragraph shows in Preview; **Publish from Preview** publishes it
 - scroll a long page halfway in Preview, the colleague types — the words appear and the page does not move
 - A adds one word to B's sentence — A's Activity entry names only A's word; A deletes a section without typing, reloads, types again — **one** entry fifteen minutes later
+- **a size set by one editor arrives as a size** (2026-09-19): A selects two words and picks *Large*; B sees those words larger and the rest of the paragraph unchanged. The `Y.Text` carries a Quill delta so the attribute should ride along, but that is an argument and not a measurement — and it is also the check that would catch only one of the two Quill copies having the size format registered.
 - **undo never reaches the other person** (2026-09-19): B types a sentence, A presses ↶ — A's own last change is taken back and **B's sentence is untouched**; then A undoes past their own first change and ↶ goes grey rather than walking into B's work. This is the one behaviour a `Y.UndoManager`'s `trackedOrigins` exists to give and the one no single browser can prove; before it, Quill's default `userOnly:false` meant A's ↶ reverted B's words *and broadcast the revert*.
 - **nobody sees anybody**: `0009` not applied (`CHANNEL_ERROR`, single-player fallback, retries 2→30 s); the realtime container caching authorisation (restart it after a policy change); or the tenant-name trap (TECHNICAL §15) — a bare `403` on every join
 
