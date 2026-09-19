@@ -13,8 +13,9 @@ No browser extension is connected. Firefox headless is the default. Every comman
 
 1. **A server on a spare port** — the user's own is on 5000, never touch it. Run with the Bash tool's `run_in_background`, and stop it with TaskStop when done:
    ```bash
-   pipenv run flask run -p 5001
+   pipenv run flask run -p 5001 --debug
    ```
+   **`--debug`, or a template edited after the server started is served from the old cache** (2026-09-19). `.env`'s `FLASK_DEBUG=1` does not reach this invocation, so without the flag Jinja never re-reads a template: the stylesheet changes, the markup does not, and the shot shows a rule applying to a class that is not in the HTML — which reads as a specificity problem and is not one. `grep` the served page for what you added (`curl -s localhost:5001/<path> | grep -c '<your class>'`) before shooting; the log tells you too, since a debug server prints "Debugger is active".
    **Port 5001 is not reliably free.** A stale server from an earlier session serves *old* code, yours fails to bind with "Address already in use" in its log rather than on stdout, and the shot shows the unchanged page — a correct change looks unapplied (2026-09-11). `ss -ltnp | grep 500` first; pick 5002+ if something is there, and read the server log before trusting a shot.
 2. **Confirm it is up** (`{"ok": true}`):
    ```bash
