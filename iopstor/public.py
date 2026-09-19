@@ -15,7 +15,7 @@ from werkzeug.exceptions import HTTPException
 
 from . import db, seo, storage
 from .admin_api import _http_error, _pg_error, page_args
-from .blocks import blocks_md, blocks_text, details_at, render_blocks
+from .blocks import ARTICLE_TYPES, OWN_HEAD_BLOCKS, blocks_md, blocks_text, details_at, owns_head, render_blocks
 from .payments import GATEWAYS, gateway
 from .seo import md_url
 
@@ -142,7 +142,8 @@ def _template_globals():
     # service_nav stays a callable, not a value: this processor is app-wide, and an /admin page has
     # no use for a posts query.
     return {"site": seo.site(), "menu": db.get_menu, "render_blocks": render_blocks,
-            "details_at": details_at,
+            "details_at": details_at, "owns_head": owns_head, "article_types": ARTICLE_TYPES,
+            "own_head_blocks": OWN_HEAD_BLOCKS,
             "year": date.today().year, "service_nav": _service_nav}
 
 
@@ -238,11 +239,20 @@ def _md_fields(pt, meta):
 
 
 def _md_post(post, children):
-    """One post as a Markdown document. The h1 comes from the hero when the page starts with one,
-    exactly as post.html does it, so the twin has the same single h1 as the page it mirrors."""
+    """One post as a Markdown document, with exactly one top-level `#` however the page is built.
+
+    Two separate questions, and conflating them is the trap. `owns_head()` decides whether the HTML
+    page draws its own title, and is passed on to blocks_md() so a hero that is not the page's
+    heading writes `###` instead of `#` -- a hero further down used to open a second `#` under this
+    one on every type. Whether THIS function writes the title is the narrower question of whether a
+    hero is about to, and only a `hero` ever does: blocks_md() gives a `columns` block `##`. So a
+    columns-led page keeps its `#` here even though its HTML has no `<h1>` at all -- that is a real
+    defect in the page, and making the twin match it would only lose the heading twice."""
     pt, blocks = post["post_type"], post.get("blocks") or []
-    parts = [] if blocks and blocks[0].get("type") == "hero" else [f"# {post['title']}", post.get("excerpt") or ""]
-    parts += _md_fields(pt, post.get("meta") or {}) + [blocks_md(blocks)]
+    own_head = owns_head(pt["slug"], blocks)
+    hero_owns_h1 = not own_head and bool(blocks) and blocks[0].get("type") == "hero"
+    parts = [] if hero_owns_h1 else [f"# {post['title']}", post.get("excerpt") or ""]
+    parts += _md_fields(pt, post.get("meta") or {}) + [blocks_md(blocks, h1=not own_head)]
     if children:
         parts += ["## Related pages", _md_list(children)]
     return _md_doc(_front(title=post["title"], url=seo.site()["url"] + post["path"], type=pt["name"],

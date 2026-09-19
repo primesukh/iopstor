@@ -353,6 +353,33 @@ def _fe(path):
 DETAILS_TOP, DETAILS_END = "top", "end"
 
 
+# The two types that read down the page like a piece of writing rather than across like a product
+# sheet. site.css keys the stacking off .pt-<slug>, so a slug added here needs both .pt-post rules
+# widening too -- "both halves or neither" (design.md, 2026-09-19).
+ARTICLE_TYPES = ("post", "case_study")
+# The two block types that open a page with a heading and a picture of their own.
+OWN_HEAD_BLOCKS = ("hero", "columns")
+
+
+def owns_head(pt_slug, blocks):
+    """True when the page draws its OWN head -- title, date, term chips -- rather than letting an
+    opening hero or columns section stand in for it.
+
+    An article always does, even when a hero opens it: a hero draws a heading and a picture, but it
+    has no date and no chips and could not render them if it wanted to (hero.html never receives
+    `post`), so gating those on the hero lost them silently. Every other type keeps the old rule,
+    because a head above the banner there is simply two headings.
+
+    One function, three callers that MUST agree -- post.html, the .md twin (public._md_post) and the
+    editor canvas. They were three separate expressions and had already drifted: the twin tested
+    `hero` and not `columns`, so a columns-led page's Markdown carried a `#` its HTML did not.
+    """
+    # isinstance, not `or {}`: the canvas hands this straight off a browser-supplied JSON array,
+    # where the first element can be anything at all.
+    first = blocks[0] if blocks and isinstance(blocks[0], dict) else {}
+    return pt_slug in ARTICLE_TYPES or first.get("type") not in OWN_HEAD_BLOCKS
+
+
 def details_at(post):
     """How many sections render before a type's long fields (a case study's Challenge / Solution /
     Results), from the reserved `meta._details_at`.
@@ -376,9 +403,18 @@ def details_at(post):
     return min(int(at), len(blocks)) if at.isdigit() else 0
 
 
-def render_blocks(blocks, edit=False, path="0"):
+def render_blocks(blocks, edit=False, path="0", h1=True):
     """`path` is the data-b path of the FIRST block; its siblings increment the last part. The page
-    itself starts at "0"; column 1 of block 2 renders with path "2.1.0"."""
+    itself starts at "0"; column 1 of block 2 renders with path "2.1.0".
+
+    `h1=False` when the caller already opened a heading above this content, so a hero's heading does
+    not out-rank the page's own -- the same parameter, name and meaning blocks_md() has carried since
+    it was written. Only the block at path "0" can ever be the page's heading, so the flag is ANDed
+    with that rather than with the loop index: post.html renders the blocks in two calls split at
+    details_at(), and when the placement is the default the FIRST call is empty and the second one
+    holds block 0. Both pass the same flag and the path decides, so neither call has to know about
+    the other. It is also what stops a hero further down the page emitting a second <h1>, which it
+    did on every page that had one."""
     head, _, first = path.rpartition(".")
     out = []
     for i, b in enumerate(blocks):
@@ -400,11 +436,13 @@ def render_blocks(blocks, edit=False, path="0"):
             elif b["type"] == "columns":
                 # the one block that renders other blocks: each column is its own list, one level down
                 cols = b["data"].get("cols") or []
-                extra = {"col": lambda n, p=p, cols=cols: render_blocks(cols[n], edit, f"{p}.{n}.0"),
+                # h1=False: a hero can never nest (NEVER_NESTED), so this is a statement of the
+                # rule rather than a branch that fires.
+                extra = {"col": lambda n, p=p, cols=cols: render_blocks(cols[n], edit, f"{p}.{n}.0", h1=False),
                          "widths": col_widths(b["data"])}
             out.append(render_template(f"blocks/{b['type']}.html", data=b["data"], edit=edit,
                                        cls=section_class(b["data"]), sty=section_style(b["data"]),
-                                       fe=_fe(p) if edit else _no_fe, **extra))
+                                       fe=_fe(p) if edit else _no_fe, h1=h1 and p == "0", **extra))
         except Exception as e:
             if not edit:
                 raise  # a public page that cannot render should fail loudly, not hide it
@@ -485,11 +523,14 @@ def blocks_md(blocks, h1=True):
     # ponytail: a new entry in BLOCKS needs a branch here too, or its words never reach the .md.
     # test_blocks_md_covers_every_block() fails until it has one."""
     out = []
-    for b in blocks:
+    for i, b in enumerate(blocks):
         t, d = b.get("type"), b.get("data") or {}
         head = f"## {d['heading']}" if d.get("heading") else ""
         if t == "hero":
-            out += [d.get("eyebrow") or "", f"{'#' if h1 else '###'} {d.get('heading', '')}", d.get("subheading") or "",
+            # `not i` is the Markdown twin of render_blocks()'s `p == "0"`: only the block that
+            # OPENS the page can be its heading. A second hero further down used to open a second
+            # `#`, which is the same bug the HTML had.
+            out += [d.get("eyebrow") or "", f"{'#' if h1 and not i else '###'} {d.get('heading', '')}", d.get("subheading") or "",
                     _md_link(d.get("cta_label"), d.get("cta_url")), _md_link(d.get("cta2_label"), d.get("cta2_url"))]
         elif t == "rich_text":
             out.append(_html_md(d.get("html")))
