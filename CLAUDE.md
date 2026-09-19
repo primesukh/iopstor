@@ -30,7 +30,7 @@ iopstor/db.py            supabase-py clients + query helpers: table(), one(), ro
                          with_paths()/ancestors()/hydrate() (hierarchical URLs, has_pages), unique_slug(), ensure_term(), paginate(), admin_counts(), post_types()/settings() caches
 iopstor/auth.py          login/refresh/logout via GoTrue, verify_jwt() (local HS256), require_role(), create_auth_user()
 iopstor/storage.py       save_upload()/delete_media() → Supabase Storage bucket + media table; public_path() (= media.url), fetch() (the bytes back)
-iopstor/blocks.py        BLOCKS + EDITOR + LAYOUTS + NEVER_NESTED, validate_blocks(), section_class()/section_style(), render_blocks(), blocks_text(), blocks_md()
+iopstor/blocks.py        BLOCKS + EDITOR + LAYOUTS + NEVER_NESTED, validate_blocks(), section_class()/section_style(), render_blocks(), details_at() (where a type's long fields sit among the sections), blocks_text(), blocks_md()
 iopstor/seo.py           site(), build_meta(), jsonld(), md_url()
 iopstor/payments.py      PaymentGateway, DummyGateway, GATEWAYS
 iopstor/throttle.py      failed-password counter shared by every worker (sqlite on tmpfs); client_ip() reads a forwarding header only from a peer inside TRUSTED_PROXIES; connection() feeds the /admin/audit panel
