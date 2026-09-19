@@ -450,7 +450,9 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 /* Only the hero with art beside it moves. That is the one hero the design animates -- every
    other screen's opening band is still, and a headline that fades in on every page is a tic. */
 .hero-split .hero-text,.hero-above .hero-text,.hero-below .hero-text{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
-.hero h1{margin:0 0 20px;font-size:clamp(36px,5vw,60px);line-height:1.05;max-width:var(--w,820px);text-wrap:pretty}
+/* :is(h1,h2) because the hero's heading is demoted to an h2 when the page already has an h1
+   above it (an article always draws its own head). Rank changes, appearance must not. */
+.hero :is(h1,h2){margin:0 0 20px;font-size:clamp(36px,5vw,60px);line-height:1.05;max-width:var(--w,820px);text-wrap:pretty}
 .hero .lead{max-width:540px;margin-bottom:30px;text-wrap:pretty}
 .hero-media{position:relative;min-width:0;min-height:220px;display:flex;align-items:center;justify-content:center;animation:heroin .8s cubic-bezier(.2,.7,.2,1) both}
 .hero-media::before{content:"";position:absolute;inset:10% 0;border-radius:50%;background:radial-gradient(closest-side,rgba(53,115,185,.16),transparent);animation:glow 5s ease-in-out infinite}
@@ -472,7 +474,7 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
   animation:dot3 calc(var(--n) * 4.5s) linear calc(var(--i) * 4.5s) infinite}
 .hero-dots[style*="--n:2"] span{animation-name:dot2}
 .hero-dark{background:var(--black);color:#d1d6de;border-bottom:0;padding:96px 0 80px;overflow:hidden}
-.hero-dark h1{color:var(--white)}
+.hero-dark :is(h1,h2){color:var(--white)}
 .hero-dark .lead{color:#d1d6de;max-width:640px}
 /* "Hold the picture still": the two perpetual loops stop, the one-shot entrance does not. The
    picture still arrives the way the design draws it and then sits, which is what was asked for --

@@ -1325,6 +1325,10 @@
     body.append("blocks", JSON.stringify(MODEL));
     body.append("title", title ? title.value : "");
     body.append("excerpt", excerpt ? excerpt.value : "");
+    // the canvas needs the content type to know whether this page draws its own title above the
+    // sections (blocks.owns_head): a blog post and a case study always do, everything else only
+    // when no Hero or Columns section opens the page.
+    body.append("type", SPEC.type || "");
     for (var k in extra || {}) body.append(k, extra[k]);
     var mine = tokens[key] = (tokens[key] || 0) + 1;
     fetch("/admin/canvas", { method: "POST", body: body, credentials: "same-origin" })
@@ -2458,9 +2462,9 @@
     // Normal text means picking Normal text changes nothing and raises no change event.
     style.appendChild(el("option", { value: "", text: "\u2014", hidden: "hidden" }));
     /* All six levels, named as well as numbered so the list reads to an editor and to anyone who
-       thinks in H-tags. H1 is offered but is not the default for a reason: post.html already emits
-       the page title as the page's only <h1> (a hero block emits its own), so an H1 in body text is
-       a second one on the page. Use H2 to open a section. */
+       thinks in H-tags. H1 is offered but is not the default for a reason: the page already has
+       exactly one <h1> -- its title, or the Hero's heading when the Hero is what opens the page --
+       so an H1 in body text is a second one. Use H2 to open a section. */
     HEAD_LEVELS.forEach(function (o) { style.appendChild(el("option", { value: o[0], text: o[1] })); });
     // No hold() here: cancelling mousedown on a <select> suppresses the native popup, and the caret
     // is replayed from savedRange anyway. Nor does mousedown touch selectedIndex: from Firefox 137

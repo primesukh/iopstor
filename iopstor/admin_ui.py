@@ -19,7 +19,7 @@ from werkzeug.exceptions import HTTPException
 from . import db, display_name, seo, stress
 from .admin_api import apply_post
 from .auth import ROLES, _session_token, create_auth_user, current_user, delete_auth_user, login, set_password
-from .blocks import BLOCKS, EDITOR, LAYOUTS, _NON_TEXT_KEYS, at_path, blocks_text, render_blocks, validate_blocks, warranty_active
+from .blocks import BLOCKS, EDITOR, LAYOUTS, OWN_HEAD_BLOCKS, _NON_TEXT_KEYS, at_path, blocks_text, owns_head, render_blocks, validate_blocks, warranty_active
 from .throttle import clear as throttle_clear, client_ip, connection, from_office, record_failure, retry_after, wait_text
 from .storage import delete_media, save_upload
 
@@ -374,12 +374,14 @@ def _form_context(pt, post, errors=None, conflict=None):
     # The shared document itself, base64. Every editor of a page loads THIS rather than building
     # one from the blocks above: two browsers that each seeded their own would hand Yjs two
     # independent histories to merge, and every section would appear twice.
-    # post.html skips its whole page head -- and with it the featured picture -- when the first
-    # section draws its own title and picture. Read off `content`, so it follows the unpublished
-    # draft the editor is actually looking at rather than what is live.
+    # post.html leaves the featured picture off when the first section draws its own, so this box
+    # reaches only the cards and the shared link. The PICTURE only: on an article the rest of the
+    # head is drawn either way (blocks.owns_head), which is why this flag is not owns_head() and
+    # must not be folded into it. Read off `content`, so it follows the unpublished draft the editor
+    # is actually looking at rather than what is live.
     # ponytail: rendered once, with the page. Adding or removing a Hero in the canvas does not
     # move it until the next load; it is a hint beside a box, not a gate on anything.
-    leads_with_own_head = bool(content) and (content[0] or {}).get("type") in ("hero", "columns")
+    leads_with_own_head = bool(content) and (content[0] or {}).get("type") in OWN_HEAD_BLOCKS
     # Where the type's long fields sit among the sections. Offered only when the type HAS a long
     # field, or it is a control over nothing. By position, not by section name: most blocks carry
     # no `_id` (the editor mints it on edit), so naming them would leave most pages with nothing
@@ -697,13 +699,19 @@ def canvas():
         blocks = []
     if not isinstance(blocks, list):
         blocks = []
+    # The same question post.html asks, so the canvas draws the title where the page draws it. It
+    # used to be its own narrower expression here -- `== "hero"`, no `columns` -- which is why a
+    # columns-led page showed a heading stub in the editor that the real page never rendered.
+    # `type` comes off the form because this route has only what the browser sent it; admin.js
+    # reads it from #editor-data, where it already sat.
+    own_head = owns_head(request.form.get("type", ""), blocks)
     path = request.form.get("p")
     if path is not None:
         one = at_path(blocks, path)
-        return render_blocks([one], edit=True, path=path) if one else ""
-    return render_template("admin/canvas.html", body=render_blocks(blocks, edit=True),
+        return render_blocks([one], edit=True, path=path, h1=not own_head) if one else ""
+    return render_template("admin/canvas.html", body=render_blocks(blocks, edit=True, h1=not own_head),
                            title=request.form.get("title", ""), excerpt=request.form.get("excerpt", ""),
-                           has_hero=bool(blocks) and isinstance(blocks[0], dict) and blocks[0].get("type") == "hero")
+                           own_head=own_head)
 
 
 def _preview_post(pt, b, existing):
@@ -750,7 +758,7 @@ def preview():
     except Exception as e:
         # render_blocks(edit=False) re-raises by design. On the public site that is honest; here it
         # would blank the pane mid-edit, so say which section is not finished instead.
-        return render_template("admin/canvas.html", title=post["title"], excerpt="", has_hero=False,
+        return render_template("admin/canvas.html", title=post["title"], excerpt="", own_head=True,
                                body=Markup('<div class="wrap"><p class="iop-err">This page cannot be shown yet — '
                                            f'{escape(e)}</p></div>'))
 

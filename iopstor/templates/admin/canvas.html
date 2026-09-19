@@ -21,7 +21,7 @@
 </head>
 <body class="iop-canvas">
 <main id="main">
-  {% if not has_hero %}<div class="wrap page-head"><h1 class="page-title">{{ title or 'Untitled page' }}</h1>{% if excerpt %}<p class="lead">{{ excerpt }}</p>{% endif %}</div>{% endif %}
+  {% if own_head %}<div class="wrap page-head"><h1 class="page-title">{{ title or 'Untitled page' }}</h1>{% if excerpt %}<p class="lead">{{ excerpt }}</p>{% endif %}</div>{% endif %}
   {{ body }}
 </main>
 </body>

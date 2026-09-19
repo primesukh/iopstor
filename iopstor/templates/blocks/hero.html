@@ -11,7 +11,10 @@
   <div class="wrap">
     <div class="hero-text">
       {%- if data.eyebrow or edit %}<p class="eyebrow"{{ fe('eyebrow') }}>{{ data.eyebrow }}</p>{% endif %}
-      <h1{{ fe('heading') }}>{{ data.heading }}</h1>
+      {#- h1 only when nothing above drew one. render_blocks() answers that (it knows the block's
+          path and what the page head did); the hero cannot, because it never sees `post`. An h2
+          here is a demotion in rank only -- site.css styles .hero :is(h1,h2) identically. -#}
+      {% if h1 %}<h1{{ fe('heading') }}>{{ data.heading }}</h1>{% else %}<h2{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}
       {%- if data.subheading or edit %}<p class="lead"{{ fe('subheading') }}>{{ data.subheading }}</p>{% endif %}
       {%- if data.cta_url or data.cta2_url %}<p class="btns">
         {%- if data.cta_url %}<a class="btn" href="{{ data.cta_url }}"{{ fe('cta_label') }}>{{ data.cta_label or 'Learn more' }}</a>{% endif %}

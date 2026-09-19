@@ -1,18 +1,30 @@
 {% extends "base.html" %}
 {% block content %}
 {% set pt = post.post_type %}{% set meta_ = post.meta or {} %}
-{% set has_hero = post.blocks and post.blocks[0].type in ('hero', 'columns') %}
+{% set has_hero = post.blocks and post.blocks[0].type in own_head_blocks %}
 {# An article reads down the page rather than across: title, date, picture full width, a rule, then
    the writing. Every other type keeps the two-column head, with the picture beside the words.
-   A case study is an article too -- it is a customer's story, not a product sheet. Adding a slug
-   here is half the change: site.css keys the stacking off .pt-<slug>, so both .pt-post rules
-   (the dividing rule, and the picture's natural size) need the new one as well. #}
-{% set article = pt.slug in ('post', 'case_study') %}
+   A case study is an article too -- it is a customer's story, not a product sheet. The list is
+   blocks.ARTICLE_TYPES; adding a slug to it is half the change, because site.css keys the stacking
+   off .pt-<slug>, so both .pt-post rules (the dividing rule, and the picture's natural size) need
+   the new one as well. #}
+{% set article = pt.slug in article_types %}
+{#- An article draws its own head even when a hero opens the page. The gate below still protects the
+    two things a hero DOES draw -- the title and the picture -- but the date and the term chips have
+    no hero equivalent at all (hero.html never receives `post`), so gating them on the hero meant a
+    case study that opened with a banner silently lost both. Articles only: on a service or a page a
+    head above the banner is two headings, which is the whole reason the gate exists.
+    No empty-head guard is needed and that is not luck -- `crumbs` is length 1 only for path "/"
+    (public.py's crumbs_for), which is the home page, a `page` and never an article; an article type
+    has a url_prefix, so it always has a crumb trail and a title to put in the band.
+    The predicate itself lives in blocks.owns_head() because the .md twin and the editor canvas ask
+    the same question, and the three had already drifted apart. -#}
+{% set own_head = owns_head(pt.slug, post.blocks) %}
 {# The eyebrow above the title is where you already are: the parent for a nested page, the content
    type otherwise. crumbs already holds that chain, so nothing new is looked up. #}
 {% set eyebrow = crumbs[-2][0] if crumbs|length > 2 else (pt.name if pt.url_prefix else '') %}
 <article class="pt-{{ pt.slug }}">
-  {% if not has_hero %}
+  {% if own_head %}
   <div class="page-head{{ ' has-media' if post.featured_media and not article }}"><div class="wrap">
     <div class="page-head-text">
       {% if crumbs|length > 1 %}<nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav>{% endif %}
@@ -26,7 +38,9 @@
         {% if meta_.get('price') not in (none, '') %}<a class="btn ghost" href="{{ post.path }}/checkout">Buy &middot; {{ rupees(meta_.price) }}</a>{% endif %}
       </p>{% endif %}
     </div>
-    {% if post.featured_media %}<div class="page-media"><img class="featured" src="{{ post.featured_media.url }}" alt="{{ post.featured_media.alt or post.title }}"></div>{% endif %}
+    {#- the one part of the head a hero really does replace: it draws data.image itself, and a
+        featured picture here as well would be two pictures on the page. -#}
+    {% if post.featured_media and not has_hero %}<div class="page-media"><img class="featured" src="{{ post.featured_media.url }}" alt="{{ post.featured_media.alt or post.title }}"></div>{% endif %}
   </div></div>
   {% elif crumbs|length > 1 %}<div class="wrap crumb-bar"><nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav></div>{% endif %}
   {# The type's own fields, split by shape rather than by type name: short ones are the meta strip,
@@ -61,11 +75,14 @@
     <div><dt>{{ f.label }}</dt><dd>{% if f.type == 'media' %}<a href="{{ media_url(meta_[f.key]) }}" target="_blank" rel="noopener">Download</a>{% elif f.type == 'url' %}<a href="{{ meta_[f.key] }}" rel="noopener">{{ meta_[f.key] }}</a>{% elif f.key == 'price' %}{{ rupees(meta_[f.key]) }}{% else %}{{ meta_[f.key] }}{% endif %}</dd></div>
   {% endfor %}</dl></div></div>{% endif %}
   {% if cut == 0 %}{{ details(prose, meta_) }}{% endif %}
-  {{ render_blocks(blocks_[:n]) }}
+  {#- h1=not own_head: when the head above drew the title, a hero here is a section, not the
+     page's heading. Both calls pass the same flag and render_blocks() gives it only to the block at
+     path "0", so neither call has to know which of the two holds it. -#}
+  {{ render_blocks(blocks_[:n], h1=not own_head) }}
   {% if cut > 0 %}{{ details(prose, meta_) }}{% endif %}
   {#- `path` continues rather than restarting: the markers it feeds are edit-only and post.html
       never renders with edit=True, but a path that lies is true only until somebody reuses this. -#}
-  {{ render_blocks(blocks_[n:], path=n|string) }}
+  {{ render_blocks(blocks_[n:], path=n|string, h1=not own_head) }}
   {# A kv field is a list of rows and keeps the order it was typed in; a json one is an object, whose
      key order jsonb does not keep. Both draw the same table. A json field holding the raw text of a
      mistyped value is neither, and draws nothing, as it did before. #}

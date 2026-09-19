@@ -2850,12 +2850,25 @@ def test_a_case_study_stacks_like_an_article_rather_than_sitting_beside_its_pict
     assert ".pt-post .page-media img,.pt-case_study .page-media img{" in css
 
 
+HERO = [{"type": "hero", "data": {"heading": "A headline that says what you do"}}]
+
+
+def _service(blocks_=()):
+    """The same page shape on a type that is NOT an article, where a leading hero still stands in
+    for the whole head. Everything below turns on that one difference, so the two fixtures differ
+    in the post type and in nothing else."""
+    return _case_study(blocks_, title="Cloud", slug="cloud", path="/services/cloud",
+                       post_type={"slug": "service", "name": "Services", "url_prefix": "services",
+                                  "hierarchical": True, "has_pages": True, "field_schema": []})
+
+
 def test_a_hero_still_replaces_the_page_head_for_every_other_page(app, monkeypatch):
     """The gate is not a bug -- it is what stops a hero-led page drawing two titles and two
     pictures. Widening it to "show the featured picture anyway" is the fix that looks obvious and
     puts an editor's Main picture on top of the hero's own. Case studies were taken OUT of the
-    hero, not the gate out of post.html."""
-    html = _render_post(app, monkeypatch, _case_study([{"type": "hero", "data": {"heading": "KLPL"}}]))
+    hero, not the gate out of post.html -- and since 2026-09-19 they are out of the gate as well,
+    which is why this test is written on a service: it pins the behaviour for everything else."""
+    html = _render_post(app, monkeypatch, _service(HERO))
     assert "/media/2026/09/klpl.png" not in html    # no second picture
     assert '<h1 class="page-title">' not in html    # and no second title
     assert html.count("<h1") == 1
@@ -2866,11 +2879,115 @@ def test_a_hero_led_page_gives_its_breadcrumb_room_under_the_header(app, monkeyp
     else -- so it sat 10px under the header rule (measured at 1440: text top y=75 against y=123
     on a page with a .page-head). .crumb-bar carries the 48px that .page-head already had, which
     is why the class belongs on that branch only: adding it to both would double the gap."""
-    hero = _render_post(app, monkeypatch, _case_study([{"type": "hero", "data": {"heading": "KLPL"}}]))
+    hero = _render_post(app, monkeypatch, _service(HERO))
     assert '<div class="wrap crumb-bar">' in hero
-    assert "crumb-bar" not in _render_post(app, monkeypatch, _case_study())
+    assert "crumb-bar" not in _render_post(app, monkeypatch, _service())
     css = (pathlib.Path(__file__).resolve().parents[1] / "iopstor/static/site.css").read_text()
     assert ".crumb-bar{padding-block:48px 0}" in css
+
+
+def test_owns_head_is_the_one_answer_three_callers_share():
+    """post.html, the .md twin and the editor canvas all have to agree about this, and before it was
+    a function they did not: the twin tested `hero` and left `columns` out. A unit test here is
+    cheaper than the same case rendered three ways, and the last row is the canvas's -- it hands
+    this a JSON array straight off a browser, where the first element can be anything."""
+    from iopstor.blocks import owns_head
+    hero, cols = [{"type": "hero", "data": {}}], [{"type": "columns", "data": {}}]
+    assert owns_head("case_study", hero) is True      # an article draws its own head regardless
+    assert owns_head("post", cols) is True
+    assert owns_head("service", hero) is False        # everything else lets the section stand in
+    assert owns_head("service", cols) is False
+    assert owns_head("service", []) is True           # nothing to stand in
+    assert owns_head("service", ["not a dict"]) is True
+    assert owns_head("service", [None]) is True
+
+
+def test_only_the_hero_that_opens_the_page_writes_a_markdown_heading():
+    """The Markdown half of the same rule. blocks_md() used to give EVERY hero a `#` whenever h1
+    was allowed, so a page with two of them had two top-level headings in its twin."""
+    from iopstor.blocks import blocks_md
+    two = [{"type": "hero", "data": {"heading": "First"}},
+           {"type": "rich_text", "data": {"html": "<p>Body</p>"}},
+           {"type": "hero", "data": {"heading": "Second"}}]
+    md = blocks_md(two)
+    assert [ln for ln in md.splitlines() if ln.startswith("# ")] == ["# First"]
+    assert "### Second" in md
+
+
+def test_a_case_study_keeps_its_title_date_and_categories_when_a_hero_opens_it(app, monkeypatch):
+    """Reported as two case studies with different top designs -- one with a heading, a date and
+    its categories, one with only the client name. The cause was the hero gate: the date and the
+    chips render in exactly one place, inside the head it switched off, and hero.html has no
+    equivalent for either and never receives `post`, so nothing replaced them. An article now
+    always draws its own head. The picture is the one part that stays behind the old condition:
+    a hero draws data.image itself and two pictures is what design.md forbids by name."""
+    html = _render_post(app, monkeypatch, _case_study(HERO))
+    assert '<h1 class="page-title">' in html                  # its own title, above the banner
+    assert "<time datetime=" in html                          # the date, which the hero has none of
+    assert "/industry/logistics" in html                      # and the categories
+    assert "/media/2026/09/klpl.png" not in html              # but still not a second picture
+    assert html.count("<h1") == 1                             # and still exactly one h1
+
+
+def test_a_hero_that_is_not_the_pages_heading_is_demoted_rather_than_hidden(app, monkeypatch):
+    """The other half: the hero keeps its words and its size, and gives up only its rank. Without
+    the demotion an article with a hero has two h1s -- which is what a mid-page hero did on EVERY
+    type before this, the shape KLPL's own draft is in (rich_text, hero, rich_text)."""
+    html = _render_post(app, monkeypatch, _case_study(HERO))
+    assert "<h2" in html and "A headline that says what you do" in html
+    assert "<h1>A headline" not in html
+
+    mid = _render_post(app, monkeypatch, _service([{"type": "rich_text", "data": {"html": "<p>Hi</p>"}}] + HERO))
+    assert mid.count("<h1") == 1                              # the page's own, not the hero's
+    css = (pathlib.Path(__file__).resolve().parents[1] / "iopstor/static/site.css").read_text()
+    assert ".hero :is(h1,h2){" in css                         # or the demoted heading loses its size
+    assert ".hero-dark :is(h1,h2){" in css                    # and its colour on a dark banner
+
+
+def test_the_editor_canvas_draws_the_title_where_the_page_draws_it(client, monkeypatch):
+    """The canvas is the only thing an editor watches while they work, so a rule the page follows
+    and the canvas does not is worse than no rule. It used to compute its own narrower version --
+    `== "hero"`, no `columns` -- and had no idea what type it was rendering, so it hid the title
+    stub the moment a Hero went first whatever the page would actually do. It asks owns_head() now,
+    on the type admin.js sends from #editor-data."""
+    from iopstor import admin_ui, db
+    monkeypatch.setattr(admin_ui, "current_user", lambda: {"id": "u1", "email": "e@x.com", "role": "admin"})
+    monkeypatch.setattr(db, "post_types", lambda: [])
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "admin_counts", lambda: {})
+    with client.session_transaction() as sess:
+        sess["access_token"], sess["csrf"] = "t", "c"
+
+    def canvas(type_):
+        return client.post("/admin/canvas", data={
+            "csrf": "c", "title": "One platform", "excerpt": "",
+            "type": type_, "blocks": json.dumps(HERO)}).get_data(as_text=True)
+
+    article = canvas("case_study")
+    assert '<h1 class="page-title">One platform</h1>' in article   # the page keeps its title
+    assert "<h2" in article and "<h1>" not in article              # and the hero is demoted here too
+    other = canvas("service")
+    assert "page-title" not in other                               # everything else: hero is the head
+    assert "<h1" in other
+    assert "page-title" not in canvas("")                          # no type sent: today's behaviour
+
+
+def test_the_markdown_twin_opens_exactly_one_heading(app, monkeypatch):
+    """The twin had the same two-heading bug and one extra of its own: it tested `hero` and not
+    `columns`, so a columns-led page's Markdown carried a `#` its HTML did not. Both now ask
+    blocks.owns_head(), which is the point of that function existing.
+
+    The columns-led row is the one that is NOT a mirror: its HTML has no <h1> at all (a live
+    defect -- /contact-us), and the twin deliberately keeps its `#` rather than lose the heading
+    in both places. blocks_md() gives a columns block `##`, so nothing collides."""
+    from iopstor import db, public
+    monkeypatch.setattr(db, "settings", lambda: {})
+    with app.test_request_context("/"):
+        for post in (_case_study(), _case_study(HERO), _service(HERO),
+                     _service([{"type": "columns", "data": {"cols": [[]]}}])):
+            md = public._md_post(post, []).get_data(as_text=True)   # _md_doc() returns a Response
+            heads = [ln for ln in md.splitlines() if ln.startswith("# ")]
+            assert len(heads) == 1, (post["post_type"]["slug"], post["blocks"], heads)
 
 
 def test_the_seed_does_not_invent_a_hero_for_a_type_that_asked_for_no_blocks(monkeypatch):

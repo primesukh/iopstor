@@ -159,7 +159,7 @@ The sections available:
 | **Contact form** | An enquiry form. Choose *contact*, *quote* or *career* |
 | **Embed HTML** | For dropping in code from another service, like a map or a video |
 
-**Rule of thumb:** if a page starts with a Hero, the Hero supplies the page's main headline. Otherwise the page title is shown at the top, above whatever you have written.
+**Rule of thumb:** if a page starts with a Hero, the Hero supplies the page's main headline. Otherwise the page title is shown at the top, above whatever you have written. **Blog articles and case studies are the exception**, and always show their own title, date and categories at the top whatever you put first — a Hero on one of those is a banner further down the page, not the headline.
 
 **The panel on the right** holds everything about the page that is not the page:
 
@@ -168,7 +168,7 @@ The sections available:
 | **Publish** | Draft or published, and the date (see §5). The small grey or green label in the top bar shows what is *saved* — it changes when you press Save, not before. |
 | **Web address** | Made from the title automatically. If another page of the same kind already uses that address, three random letters are added so yours still works — `testing-shc` — and the note under the box tells you so. **Edit** if you really need to change it; it asks first, because changing it breaks existing links. A handful of words — `admin`, `api`, `media`, `static`, `healthz` — belong to the website itself and cannot be used; if you pick one, Save says so and asks for another. Only where the word would be the *start* of the address: a blog post called "Admin" is fine, because blog posts sit under `/blog/`. |
 | **Summary** | A sentence or two. Shown in lists, and under the page in Google results. |
-| **Featured image** | The picture used in lists and when the page is shared, and — unless the page starts with a **Hero** section — the big picture at the top of the page itself. A Hero section draws its own title and its own picture, so on a page that has one this box only feeds the list card and the shared link — and the box says so, right above it, whenever that is the case. **Choose file** uploads on the spot. |
+| **Featured image** | The picture used in lists and when the page is shared, and — unless the page starts with a **Hero** section — the big picture at the top of the page itself. A Hero draws its own picture, so on a page that has one this box only feeds the list card and the shared link, and the box says so right above it whenever that is the case. (On a blog article or a case study the title, date and categories still show; it is only the picture the Hero replaces.) **Choose file** uploads on the spot. |
 | **Organise** | The parent page (for services) and any categories or tags — see below. It only appears for types that have one or the other. Nothing here asks you to number your pages — lists show the newest first on their own. |
 | **Details** | The extra boxes some kinds of content have — a case study's client, an event's dates, a datasheet's PDF. Leave one blank and nothing at all shows for it on the page; there is no empty space left behind. Where a type has long boxes (Challenge, Solution, Results), **Where the long details go** decides where they land on the page — see below. |
 | **Search engine overrides**, **Advanced** | Closed by default. Leave them closed unless you know why you are opening them. |
@@ -778,11 +778,17 @@ delete the section you picked, they fall back to where they were before, so noth
 disappears.
 
 **I chose a Featured image and it is not on the page.** Look at whether the page starts with a **Hero**
-section. A Hero draws its own heading and its own picture, so on a page that has one the picture you
-chose under **Featured image** is used for the list card and the shared link but not on the page itself
-— put the picture in the Hero section's own **Image** box instead, or remove the Hero and the page draws its own
-heading and show your picture underneath it. Case studies and events no longer start with a Hero, so
-there the picture shows straight away.
+section. A Hero draws its own picture, so on a page that has one the picture you chose under
+**Featured image** is used for the list card and the shared link but not on the page itself — put the
+picture in the Hero section's own **Image** box instead, or remove the Hero and the page will show
+yours. Case studies and events no longer start with a Hero unless you add one, so there the picture
+usually shows straight away.
+
+**I added a Hero and the title, date and categories disappeared.** They do not any more, on a blog
+article or a case study: those two always show their own title, date and categories at the top, and a
+Hero you add becomes a banner below them. If the banner repeats the title word for word, change the
+Hero's own heading — the page is showing you both because you have written both. On every other kind
+of page a Hero at the very top is still the headline, and the page title is not repeated above it.
 
 **Case study pages look different.** They now read the way a blog post does — the title, the date, the
 picture across the full width, a line, then the writing. Before, a case study opened with an empty Hero
