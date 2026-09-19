@@ -28,7 +28,7 @@
     </div>
     {% if post.featured_media %}<div class="page-media"><img class="featured" src="{{ post.featured_media.url }}" alt="{{ post.featured_media.alt or post.title }}"></div>{% endif %}
   </div></div>
-  {% elif crumbs|length > 1 %}<div class="wrap"><nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav></div>{% endif %}
+  {% elif crumbs|length > 1 %}<div class="wrap crumb-bar"><nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav></div>{% endif %}
   {# The type's own fields, split by shape rather than by type name: short ones are the meta strip,
      long ones read as the article. That is what gives a case study its Challenge / Solution /
      Results sections without post.html knowing what a case study is. #}

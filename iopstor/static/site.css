@@ -983,6 +983,13 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .page-head-text{min-width:0}
 .page-head .breadcrumb{margin:0 0 16px}
 .page-head .chips{margin:0 0 20px}
+/* A page that leads with a hero or a columns section has no .page-head, so post.html draws the
+   breadcrumb on its own in a bare .wrap -- and .wrap is the side gutter and nothing else, which
+   left the crumb 10px under the header rule on every service, About, Careers and Contact page, and
+   on any case study whose first section is a hero. 48px is .page-head's own top padding, so the
+   crumb sits at the same height whichever of the two branches drew it. Nothing below: what follows
+   always brings its own top gap (.meta-strip 32px, the hero's padding, a .section for details). */
+.crumb-bar{padding-block:48px 0}
 .page-media img{max-width:440px;margin-inline:auto}
 /* An article stacks: title, date, then the picture across the whole column, then the rule that
    divides the head from the writing. The rule is the section's own bottom border, the same way the

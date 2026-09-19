@@ -2861,6 +2861,18 @@ def test_a_hero_still_replaces_the_page_head_for_every_other_page(app, monkeypat
     assert html.count("<h1") == 1
 
 
+def test_a_hero_led_page_gives_its_breadcrumb_room_under_the_header(app, monkeypatch):
+    """The hero branch draws the breadcrumb on its own, and .wrap is the side gutter and nothing
+    else -- so it sat 10px under the header rule (measured at 1440: text top y=75 against y=123
+    on a page with a .page-head). .crumb-bar carries the 48px that .page-head already had, which
+    is why the class belongs on that branch only: adding it to both would double the gap."""
+    hero = _render_post(app, monkeypatch, _case_study([{"type": "hero", "data": {"heading": "KLPL"}}]))
+    assert '<div class="wrap crumb-bar">' in hero
+    assert "crumb-bar" not in _render_post(app, monkeypatch, _case_study())
+    css = (pathlib.Path(__file__).resolve().parents[1] / "iopstor/static/site.css").read_text()
+    assert ".crumb-bar{padding-block:48px 0}" in css
+
+
 def test_the_seed_does_not_invent_a_hero_for_a_type_that_asked_for_no_blocks(monkeypatch):
     """Where all of the above came from. _post() used to default blocks to a hero holding nothing
     but the title, so any type whose seed entry passed no blocks= -- case studies and events --
