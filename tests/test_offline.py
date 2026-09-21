@@ -2962,6 +2962,28 @@ def test_an_empty_term_archive_still_knows_what_it_is(app, monkeypatch):
     assert "Nothing published here yet." in html
 
 
+def test_an_uploaded_logo_is_shown_whole_and_never_cropped():
+    """Reported from production: the logo arrived as "OPSTO", its I and R cut off. `.brand img` was
+    a FIXED 150x26 box with object-fit:cover, so it only ever fitted artwork at that box's own
+    5.77:1 and cropped the ends off anything wider -- and an editor can upload any logo they like.
+
+    Reproduced in a browser with a file already in this repo: website_assets/iopstor_logo-png1.png
+    is 180x26 (6.92:1) and the old rule rendered it at 5.77:1, which is the reported crop exactly.
+
+    This REVERSES a decision (design.md, 2026-09-10) taken because a fixed height alone let
+    whitespace baked into a PNG count as logo -- a 2172x724 upload rendered its wordmark at 8px.
+    That cost is real and is now carried by the editor instead: trim the file. What must not come
+    back is `cover`, which fails silently and cuts the brand in half."""
+    css = (pathlib.Path(__file__).resolve().parent.parent / "iopstor/static/site.css").read_text()
+    rule = [l for l in css.splitlines() if l.startswith(".brand img{")]
+    assert len(rule) == 1, rule
+    assert "object-fit:cover" not in rule[0]          # the crop, gone
+    assert "height:26px" in rule[0]                   # the header's rhythm is still fixed
+    assert "width:auto" in rule[0]                    # ...and the width follows the file
+    assert "max-width:200px" in rule[0]               # the guard the fixed width used to be
+    assert "object-fit:contain" in rule[0]            # so the max-width case shrinks, never crops
+
+
 def test_every_archive_head_is_the_light_one():
     """The mock draws Services, Case Studies, Partners and Products on #0a0d12 and Blog on white,
     and archive.html alternated to match. The client asked for the light one everywhere (2026-09-21):
