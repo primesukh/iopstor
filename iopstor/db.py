@@ -228,7 +228,11 @@ def slugify(text):
 # it can never load at all, which is how a page slugged "admin" used to save cleanly and then 404 for
 # ever with nothing to say why. Two readers: reserved() refuses it on save, and _indexable() keeps
 # anything that slipped in before out of every crawler-facing output.
-RESERVED_SEGMENTS = frozenset({"admin", "api", "media", "static", "healthz"})
+# `feed` and `sitemap` joined the list when those two crawler files dropped their extensions
+# (2026-09-21). Until then no entry was needed: slugify() turns a dot into a hyphen, so "/feed.xml"
+# was a path no post could ever be given. An extension-less one can be claimed by a page titled
+# "Feed", so it has to be spoken for here instead.
+RESERVED_SEGMENTS = frozenset({"admin", "api", "media", "static", "healthz", "feed", "sitemap"})
 
 
 def reserved(value):

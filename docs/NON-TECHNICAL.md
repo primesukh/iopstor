@@ -601,11 +601,21 @@ This was an explicit requirement, so it is built in rather than bolted on. Every
 
 The site publishes automatically, with no work from you:
 
-- `/sitemap.xml` — the list of every public page, for search engines
+- `/sitemap` — the list of every public page, for search engines
 - `/robots.txt` — the rules for crawlers
-- `/feed.xml` — an RSS feed of the site's news: **blog posts, case studies, events and datasheets**, newest first
+- `/feed` — an RSS feed of the site's news: **blog posts, case studies, events and datasheets**, newest first
 - `/llms.txt` and `/llms-full.txt` — a clean, plain-text version of the whole site, written for AI assistants to read
 - **a plain-text version of every single page** — add `.md` to any address and you get that page's words with no design around them. `/about-us` becomes `/about-us.md`, `/services/storage/nas` becomes `/services/storage/nas.md`, and the home page is `/index.md`. Section headings, lists, tables and specification rows all survive; only the styling is dropped
+
+The first two used to be `/sitemap.xml` and `/feed.xml`. The old addresses still work — anyone who
+bookmarked one, or any search engine that recorded it, is sent to the new one automatically — so
+nothing you have given out has broken. The remaining three keep their `.txt` endings on purpose:
+those are fixed names that search engines and AI tools look for by name, and renaming them would
+quietly stop them being found at all.
+
+One small consequence: **you can no longer name a page "Feed" or "Sitemap"**, because the site
+itself now answers on those two addresses. Nothing you have is affected — we checked, and no page
+uses either name.
 
 ### What appears in the RSS feed, and what never will
 

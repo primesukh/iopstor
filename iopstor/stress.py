@@ -291,7 +291,7 @@ def sitemap_urls(base):
     """Real public URLs to read: the target's sitemap, or just its home page if there is none."""
     status, _, err = None, None, None
     try:
-        req = urllib.request.Request(base + "/sitemap.xml", headers={"User-Agent": UA})
+        req = urllib.request.Request(base + "/sitemap", headers={"User-Agent": UA})
         with urllib.request.urlopen(req, timeout=REQ_TIMEOUT) as r:
             body = r.read().decode("utf-8", "replace")
         urls = re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", body)

@@ -50,7 +50,7 @@ PUBLIC_SETTINGS = ("site_name", "tagline", "logo_url", "social_links", "contact_
 PAGE_TTL = 30       # seconds; backstop only, the epoch is what actually invalidates
 PAGE_MAX = 512      # entries; campaign ?utm_* junk must not grow this without bound
 EDGE_TTL = 60       # seconds a shared cache may serve a page for -- agreed with the client
-FEED_MAX = 40       # items in /feed.xml
+FEED_MAX = 40       # items in /feed
 _page_cache = OrderedDict()     # key -> (expires, epoch, body, content_type)
 _refreshing = set()             # keys some thread is already re-rendering
 _refresh_lock = threading.Lock()
@@ -529,7 +529,7 @@ def media_file(key):
     return r
 
 
-@pub.get("/sitemap.xml")
+@pub.get("/sitemap")
 def sitemap():
     base = seo.site()["url"]
     urls = {base + "/": None}
@@ -559,7 +559,7 @@ def robots():
     # and the first file a scanner fetches, which made those two lines the only public statement that
     # this site has an admin at all (user, 2026-09-15). robots_extra still appends whatever the client
     # wants by hand.
-    lines = ["User-agent: *", "Allow: /", s["robots_extra"], f"Sitemap: {s['url']}/sitemap.xml"]
+    lines = ["User-agent: *", "Allow: /", s["robots_extra"], f"Sitemap: {s['url']}/sitemap"]
     return Response("\n".join(l for l in lines if l) + "\n", mimetype="text/plain")
 
 
@@ -589,7 +589,7 @@ def llms():
         lines += [f"- [{p['title']}]({s['url']}{md_url(p['path'])}){': ' + p['excerpt'] if p['excerpt'] else ''}" for p in posts]
         lines.append("")
     lines += ["## Machine-readable", "- Any page as Markdown: add .md to its URL (the home page is /index.md)",
-              f"- Full text: {s['url']}/llms-full.txt", f"- JSON API: {s['url']}/api/v1/posts", f"- Sitemap: {s['url']}/sitemap.xml"]
+              f"- Full text: {s['url']}/llms-full.txt", f"- JSON API: {s['url']}/api/v1/posts", f"- Sitemap: {s['url']}/sitemap"]
     return Response("\n".join(lines) + "\n", mimetype="text/plain")
 
 
@@ -651,7 +651,7 @@ def _feed_item(post, s):
     return "<item>" + "".join(parts) + "</item>"
 
 
-@pub.get("/feed.xml")
+@pub.get("/feed")
 def feed():
     """The site's news, not the blog's. Which types count is a row -- post_types.in_feed, beside
     in_sitemap -- because a content type is a row here and "is this news" is a property of one. The
@@ -674,7 +674,7 @@ def feed():
            f'<channel><title>{escape(s["name"])}</title><link>{s["url"]}/</link>'
            f'<description>{escape(s["tagline"])}</description><language>en</language>'
            f"<lastBuildDate>{format_datetime(built)}</lastBuildDate>"
-           f'<atom:link href="{s["url"]}/feed.xml" rel="self" type="application/rss+xml"/>'
+           f'<atom:link href="{s["url"]}/feed" rel="self" type="application/rss+xml"/>'
            f'{image}{"".join(_feed_item(p, s) for p in posts)}</channel></rss>')
     # application/xml, not application/rss+xml, so a browser renders it instead of downloading it.
     # No browser has had a feed viewer since Firefox 64 dropped its own, and a type none of them
@@ -686,6 +686,26 @@ def feed():
     # and Firefox and WebKit have said they will follow, so it would break inside two months. The
     # human-readable version of this list is the /blog archive, which already exists.
     return Response(xml, mimetype="application/xml")
+
+
+# The extension-less paths above are canonical; these two keep every address already subscribed to,
+# bookmarked, indexed or submitted to Search Console working. 301 rather than 302 because the move is
+# permanent and that is what makes a reader store the new URL instead of asking twice for ever.
+#
+# Only these two moved. `/robots.txt` cannot: RFC 9309 fixes it at that exact path, and a crawler
+# looks nowhere else. `/llms.txt` and `/llms-full.txt` are identified by their filename too -- the
+# convention is a file *named* llms.txt -- so renaming them means no agent finds them. The extension
+# is also what has kept all five collision-proof for free: slugify() turns a dot into a hyphen, so no
+# page an editor names can ever occupy "/feed.xml". `/feed` and `/sitemap` can be claimed, which is
+# why both are now in db.RESERVED_SEGMENTS.
+@pub.get("/feed.xml")
+def feed_xml():
+    return redirect("/feed", 301)
+
+
+@pub.get("/sitemap.xml")
+def sitemap_xml():
+    return redirect("/sitemap", 301)
 
 
 # ---- public JSON API -------------------------------------------------------

@@ -358,7 +358,7 @@ def test_a_type_without_pages_has_no_url_and_no_link(app):
 
     linked, bare = with_paths([row(True)])[0], with_paths([row(False)])[0]
     assert linked["path"] == "/partners/micron" and bare["path"] is None
-    assert _indexable(linked) and not _indexable(bare)          # out of sitemap.xml and llms.txt
+    assert _indexable(linked) and not _indexable(bare)          # out of the sitemap and llms.txt
 
     # A path the app owns is worse than no path: the page cannot load at all (Flask matches the admin
     # blueprint first), and publishing its address tells every crawler where the CMS is.
@@ -1042,7 +1042,7 @@ def test_the_admin_does_not_exist_outside_the_office(app):
     assert get("/admin/login", "172.18.0.4", CF_Connecting_IP="203.0.113.9").status_code == 404
 
     # the public site is untouched by any of it -- that is the whole point of the split
-    assert get("/sitemap.xml", "10.0.1.7", X_Forwarded_For="203.0.113.9").status_code == 200
+    assert get("/sitemap", "10.0.1.7", X_Forwarded_For="203.0.113.9").status_code == 200
 
     # and an empty ADMIN_NETWORKS is no restriction at all: development, and any deploy that has not set it
     app.config["ADMIN_NETWORKS"] = ()
@@ -2351,7 +2351,7 @@ class _FakeQ:
 
 
 def test_no_crawler_output_can_carry_an_address_the_app_owns(app, monkeypatch):
-    """The client's rule: sitemap.xml, feed.xml, llms.txt and llms-full.txt must never publish an admin
+    """The client's rule: the sitemap, the feed, llms.txt and llms-full.txt must never publish an admin
     or private-API address (user, 2026-09-15).
 
     The collision is seeded deliberately -- a page slugged "admin", a post type prefixed "admin", a
@@ -2387,13 +2387,13 @@ def test_no_crawler_output_can_carry_an_address_the_app_owns(app, monkeypatch):
     monkeypatch.setattr(db, "rows", lambda q: canned.get(q.name, []))
 
     bodies = {p: app.test_client().get(p).data.decode()
-              for p in ("/sitemap.xml", "/feed.xml", "/llms.txt", "/llms-full.txt", "/robots.txt")}
+              for p in ("/sitemap", "/feed", "/llms.txt", "/llms-full.txt", "/robots.txt")}
 
     for path, body in bodies.items():
         assert "/admin" not in body, f"{path} published an admin address"
         assert "/api/admin" not in body, f"{path} published the private API"
         assert "Hidden" not in body, f"{path} published a noindex page"
-        if path != "/feed.xml":
+        if path != "/feed":
             assert "/media/" not in body and "/static/" not in body, path
 
     # The feed is the one surface that carries a /media/ address on purpose: the channel logo, and an
@@ -2402,20 +2402,51 @@ def test_no_crawler_output_can_carry_an_address_the_app_owns(app, monkeypatch):
     # an address the app owns -- is about the addresses the feed offers as *pages*, which are <link>
     # and <guid>. (Nothing else here is exempt: llms-full.txt embeds ![](/media/…) for any real page
     # with a picture and only passes above because these canned posts have none.)
-    pages = [e.text for e in ElementTree.fromstring(bodies["/feed.xml"]).iter() if e.tag in ("link", "guid")]
+    pages = [e.text for e in ElementTree.fromstring(bodies["/feed"]).iter() if e.tag in ("link", "guid")]
     assert pages, "the feed published no page addresses at all"
     for u in pages:
         assert not db.reserved(urlsplit(u).path), f"the feed published an address the app owns: {u}"
 
     # the ordinary page is still there -- a gate that publishes nothing passes every assertion above
-    assert "http://test/blog/real" in bodies["/sitemap.xml"] and "http://test/blog/real" in bodies["/feed.xml"]
-    assert "http://test/industry/finance" in bodies["/sitemap.xml"]      # the innocent term archive survives
+    assert "http://test/blog/real" in bodies["/sitemap"] and "http://test/blog/real" in bodies["/feed"]
+    assert "http://test/industry/finance" in bodies["/sitemap"]      # the innocent term archive survives
     assert "/blog/real.md" in bodies["/llms.txt"]
 
     # the PUBLIC api stays advertised: it is read-only published content and that is what llms.txt is for
     assert "/api/v1/posts" in bodies["/llms.txt"]
     # and robots.txt no longer names the admin at all -- those lines were its only public mention
-    assert "Disallow" not in bodies["/robots.txt"] and "Sitemap: http://test/sitemap.xml" in bodies["/robots.txt"]
+    assert "Disallow" not in bodies["/robots.txt"] and "Sitemap: http://test/sitemap" in bodies["/robots.txt"]
+
+
+def test_the_old_dotted_crawler_paths_still_answer(app):
+    """/feed and /sitemap dropped their extensions (2026-09-21), and the addresses they replaced are
+    in feed readers, bookmarks and Search Console. Both redirect permanently rather than 404.
+
+    The two that did NOT move are the point of the second half: robots.txt is fixed at that exact
+    path by RFC 9309, and llms.txt is found by its filename, so renaming either would mean nothing
+    ever looks for it again. A later tidy-up that "finishes the job" breaks discovery silently, which
+    is why they are asserted to still be there rather than merely left alone."""
+    c = app.test_client()
+    for old, new in (("/feed.xml", "/feed"), ("/sitemap.xml", "/sitemap")):
+        r = c.get(old)
+        assert r.status_code == 301, f"{old} should redirect permanently, got {r.status_code}"
+        assert r.headers["Location"].endswith(new)
+
+    for fixed in ("/robots.txt", "/llms.txt", "/llms-full.txt"):
+        assert c.get(fixed).status_code == 200, f"{fixed} is named by a convention and cannot move"
+
+
+def test_the_paths_the_crawler_files_sit_on_cannot_be_taken_by_a_page(app):
+    """An extension used to make these safe for nothing: slugify() turns a dot into a hyphen, so
+    "/feed.xml" was an address no post could ever hold. Extension-less, a page titled "Feed" claims
+    it, shadows the real one and is unreachable itself -- the same failure `admin` and `api` have."""
+    from iopstor import db
+
+    assert db.slugify("feed.xml") == "feed-xml" and db.slugify("Feed") == "feed"   # why it is needed
+    for word in ("feed", "sitemap", "admin", "api", "media", "static", "healthz"):
+        assert db.reserved(word), f"{word} must be refused as a slug"
+        assert db.reserved(f"/{word}/anything"), f"/{word} must be refused as a first segment"
+    assert not db.reserved("feed-xml") and not db.reserved("sitemaps")   # near misses stay usable
 
 
 def test_the_feed_gives_a_reader_something_to_show(app, monkeypatch):
@@ -2463,7 +2494,7 @@ def test_the_feed_gives_a_reader_something_to_show(app, monkeypatch):
     monkeypatch.setattr(db, "table", lambda n: _FakeQ(n))
     monkeypatch.setattr(db, "rows", lambda q: canned.get(q.name, []))
 
-    resp = app.test_client().get("/feed.xml")
+    resp = app.test_client().get("/feed")
     # a browser renders application/xml and offers to SAVE application/rss+xml, because none of them
     # has had a feed viewer for years -- clicking "RSS" in the footer downloaded the file
     assert resp.mimetype == "application/xml"
@@ -2487,7 +2518,7 @@ def test_the_feed_gives_a_reader_something_to_show(app, monkeypatch):
     assert item.findtext(dc + "creator")        # the namespace resolves, i.e. xmlns:dc was declared
     # and the channel says when it last changed and where it lives
     assert channel.findtext("lastBuildDate") == "Tue, 15 Sep 2026 00:00:00 +0000"
-    assert channel.find(atom + "link").get("href") == "http://test/feed.xml"
+    assert channel.find(atom + "link").get("href") == "http://test/feed"
 
 
 def test_the_words_the_app_owns_are_refused_when_a_page_is_named(app, monkeypatch):
@@ -2600,7 +2631,7 @@ def test_run_load_hits_a_real_server_and_the_honeypot_leaves_no_row(tmp_path):
 
         def do_GET(self):
             tally["hits"] += 1
-            if self.path == "/sitemap.xml":
+            if self.path == "/sitemap":
                 body = (b"<urlset><url><loc>%s/</loc></url>"
                         b"<url><loc>%s/about</loc></url></urlset>"
                         % (self._base(), self._base()))
@@ -2687,7 +2718,7 @@ def test_a_multiprocess_run_completes(tmp_path, monkeypatch):
             pass
 
         def do_GET(self):
-            if self.path == "/sitemap.xml":
+            if self.path == "/sitemap":
                 b = b"<urlset><url><loc>http://127.0.0.1:%d/</loc></url></urlset>" % self.server.server_address[1]
             else:
                 b = b"ok"

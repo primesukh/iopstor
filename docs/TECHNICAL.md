@@ -214,8 +214,9 @@ Resulting scheme:
 /media/<bucket key>     an uploaded picture or PDF, served by the app (§8)
 ```
 
-`/media/` is a **reserved first segment** — one of five in `db.RESERVED_SEGMENTS` (`admin`, `api`,
-`media`, `static`, `healthz`), which is now enforced rather than merely noted. Flask matches a
+`/media/` is a **reserved first segment** — one of seven in `db.RESERVED_SEGMENTS` (`admin`, `api`,
+`media`, `static`, `healthz`, and `feed`/`sitemap` since 2026-09-21), which is now enforced rather
+than merely noted. Flask matches a
 blueprint's static prefix before `public.py`'s catch-all, so a page that claims one of these **cannot
 load at all**: a page slugged `admin` used to save cleanly and then 404 for ever with nothing to say
 why. `db.reserved()` refuses a new one at save time — a post's slug only when its type has no
@@ -807,7 +808,31 @@ slugged `admin`, a post type prefixed `admin`, a taxonomy slugged `admin` — be
 passes on a site containing none of those proves nothing; removing any one of the three gates makes
 `test_no_crawler_output_can_carry_an_address_the_app_owns` fail, which was checked one gate at a time.
 
-### `/feed.xml` — the site's news, not the blog's
+### The crawler files sit on slugs, not filenames — for the two that may
+
+`/feed` and `/sitemap` dropped their `.xml` (2026-09-21, asked for as *"cant we have proper slugs
+instead of file extension"*). `/feed.xml` and `/sitemap.xml` **301** to them, because those addresses
+are in feed readers, bookmarks and Search Console.
+
+**`/robots.txt`, `/llms.txt` and `/llms-full.txt` deliberately did not move, and a later tidy-up must
+not finish the job.** RFC 9309 fixes robots.txt at that exact path and a crawler looks nowhere else;
+the llms.txt convention is a file *named* `llms.txt`, so the filename **is** the discovery mechanism.
+Renaming either loses the feature silently — nothing errors, nothing ever fetches them again.
+`test_the_old_dotted_crawler_paths_still_answer` asserts all three still answer 200 for that reason.
+
+The cost of dropping an extension is a name an editor can no longer use, and it is worth seeing why
+there was no cost before: `slugify()` turns a dot into a hyphen (`feed.xml` → `feed-xml`), so
+`/feed.xml` was an address **no post could ever hold**. The extension was doing collision-safety for
+free. `/feed` can be claimed by a page titled *Feed*, which would shadow the real one and be
+unreachable itself, so both words joined `db.RESERVED_SEGMENTS` (§5) — the same machinery as `admin`
+and `api`. The live database was checked first and holds no post or `url_prefix` using either, so
+nothing became retroactively unsaveable. `test_the_paths_the_crawler_files_sit_on_cannot_be_taken_by_a_page`
+pins it, including the near misses (`feed-xml`, `sitemaps`) staying usable.
+
+`robots.txt`'s `Sitemap:` line and llms.txt's footer both point at `/sitemap`, and `base.html`'s
+autodiscovery `<link>` and footer at `/feed`. `stress.py` reads `/sitemap` to build its URL list.
+
+### `/feed` — the site's news, not the blog's
 
 **Which types the feed carries is a row, not a slug in code** (2026-09-21). It used to be
 `db.post_type(slug="post")`, one type found by name; it is now every type with
