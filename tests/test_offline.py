@@ -174,20 +174,25 @@ def test_layouts_expand_and_validate():
     assert b[0]["data"]["heading"] != "changed"  # seeds must be copied, not shared
 
 
-def test_even_rows_pick_a_count_that_divides_or_comes_closest():
+def test_even_rows_take_the_fewest_rows_then_the_fullest_last_row():
     """"Items per row -> Even rows" is the fix for a logo strip whose last line was half empty:
-    fourteen partners laid out 8 + 6. Nothing here touches the database."""
+    fourteen partners laid out 8 + 6. Fewest rows is the FIRST key (2026-09-21) -- a fifteenth
+    partner took the exact divisor 5 and made a two-line strip three lines. Nothing touches the database."""
     from iopstor.blocks import _cols, even_cols
 
     assert even_cols(14) == 7          # the case that started it: 7 + 7, not 8 + 6
-    assert even_cols(16) == 8          # exact divisor, and the LARGEST one -- not 4 + 4 + 4 + 4
-    assert even_cols(20) == 5          # 5 divides, 8 would leave 8 + 8 + 4
+    assert even_cols(15) == 8          # the fifteenth partner: 8 + 7 in two lines, not 5 + 5 + 5 in three
+    assert even_cols(16) == 8          # two rows either way, so the fuller last row wins -- not 4 x 4
+    assert even_cols(20) == 7          # 7 + 7 + 6 beats 5 x 4: an exact divisor is not worth a fourth row
     assert even_cols(13) == 7          # prime: no exact split, so the fullest last row wins (7 + 6)
     assert even_cols(6) == 6           # fewer than a row holds is one row of itself
     assert even_cols(0) is None        # nothing to lay out -> no class at all
-    for n in range(9, 60):             # it always picks the emptiest-last-row count 4..8 allows,
-        c = even_cols(n)               # which for 22 is 8 (8+8+6) -- no count in range does better
-        assert (-n % c) == min(-n % k for k in range(4, 9)), (n, c)
+    for n in range(9, 60):
+        c, counts = even_cols(n), range(4, 9)
+        rows = min(-(-n // k) for k in counts)              # no count in 4..8 does it in fewer rows,
+        assert -(-n // c) == rows, (n, c)                   # and of those that manage it in `rows`,
+        tied = [k for k in counts if -(-n // k) == rows]    # none leaves a fuller last row than this
+        assert (-n % c) == min(-n % k for k in tied), (n, c)
 
     # the editor's value is parsed, never trusted: it lands in a class name
     assert _cols({"per_row": "even"}, 14) == 7
@@ -195,6 +200,20 @@ def test_even_rows_pick_a_count_that_divides_or_comes_closest():
     assert _cols({}, 14) is None                      # unset -> the width decides, as before
     assert _cols({"per_row": "99"}, 14) is None       # out of the 2..8 range the CSS defines
     assert _cols({"per_row": "1; }"}, 14) is None     # anything typed is simply not a count
+
+
+def test_a_fifteenth_partner_puts_the_logo_strip_on_two_lines(app, monkeypatch):
+    """The report that changed the rule: adding Seagate turned a two-line logo strip into three.
+    The count comes from the posts the block actually returned, so this pins the whole chain --
+    fifteen partners in, `pl-cols-8` out, which is the class the CSS lays out as 8 + 7."""
+    from iopstor import blocks, db
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    partners = [{"id": n, "title": f"Partner {n}", "meta": {}, "path": None,
+                 "post_type": {"slug": "partner"}} for n in range(15)]
+    monkeypatch.setattr(blocks, "_post_list", lambda data: (partners, "partner"))
+    html = render_blocks([{"type": "post_list", "data": {"post_type": "partner", "per_row": "even"}}])
+    assert 'class="section pl pl-partner pl-cols-8' in html
 
 
 def test_menu_rows_rebuild_into_one_level_of_children():

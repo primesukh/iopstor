@@ -94,7 +94,7 @@ EDITOR = {
                 "height": [["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["huge", "Extra large"]],
                 "arrange": [["", "Beside the words"], ["above", "Above the words"], ["below", "Below the words"]],
                 "per_row": [["", "As many as fit the width"],
-                            ["even", "Even rows, worked out from how many there are"]]
+                            ["even", "Even rows, in as few lines as it can"]]
                            + [[str(n), f"{n} per row"] for n in range(2, 9)],
                 # "" is not "cards": it is the shape _acc() picks for the type, which is the
                 # accordion for a top-level services list and cards for everything else.
@@ -597,16 +597,19 @@ def blocks_md(blocks, h1=True):
 
 
 def even_cols(n, lo=4, hi=8):
-    """How many per row splits n items into rows of the same length -- or as close as n allows.
+    """How many per row lays n items out in the fewest rows, each row as full as n allows.
 
-    An exact divisor wins (14 -> 7, two rows of seven); the largest one, so 16 is 8+8 rather than
-    4+4+4+4. When n has no divisor in range (13 is prime) the count leaving the fullest last row
-    wins instead, which is 7 -> 7+6. Fewer than hi items are one row of themselves.
-    `-n % c` is the shortfall in the last row, 0 when c divides n; -c breaks the tie upward.
+    Fewest rows first (2026-09-21): a fifteenth partner used to take the exact divisor 5 and turn a
+    two-line strip into 5+5+5, when 8+7 is two lines. Among the counts that reach that row total the
+    fullest last row wins, so 14 is still 7+7 rather than 8+6 and 16 is still 8+8; only the counts
+    where an exact divisor costs a whole extra row change (20 was 5x4, is 7+7+6). Fewer than hi
+    items are one row of themselves.
+    `-(-n // c)` is the row count, `-n % c` the shortfall in the last row (0 when c divides n),
+    and -c breaks a remaining tie upward.
     """
     if n <= hi:
         return n or None
-    return min(range(lo, hi + 1), key=lambda c: (-n % c, -c))
+    return min(range(lo, hi + 1), key=lambda c: (-(-n // c), -n % c, -c))
 
 
 def _cols(data, n):

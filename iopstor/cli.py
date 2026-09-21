@@ -288,7 +288,7 @@ def home_blocks(media=lambda name: None):
                                        "eyebrow": "What our clients say",
                                        "heading": "Trusted by the teams who run on it"}},
         {"type": "post_list", "data": {"post_type": "partner", "limit": 24, "eyebrow": "Technology partners",
-                                       "per_row": "even"}},  # a logo wall with a half-empty last row reads as broken
+                                       "per_row": "even"}},  # the strip is meant to be quiet: fewest lines, last one as full as it can be
         {"type": "cta", "data": {"heading": "Don't just store data. Protect it.",
                                  "text": "Tell us the workload and the user count. We come back with a configuration and a one-time price, "
                                          "with no hidden or repetitive costs.",
