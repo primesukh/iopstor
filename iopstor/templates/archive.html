@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
 {% set slug = pt.slug if pt else '' %}
-{# Two header treatments, alternating for rhythm: the catalogue types get the black band, the
-   reading types (blog, events, datasheets) get the white one. band-dark is the same class the
-   stats block uses, so the heading colours come for free. #}
-{% set dark = slug in ('service', 'case_study', 'partner', 'product') %}
-<div class="arch-head{{ ' band-dark' if dark }}">
+{# One header treatment for every archive (client, 2026-09-21). The mock draws Services, Case
+   Studies, Partners and Products on #0a0d12 and Blog on white, and this alternated to match --
+   "two treatments for rhythm". The client asked for the light one everywhere instead: the dark
+   heads were the largest dark areas on an otherwise light site, and the rhythm read as an
+   inconsistency rather than as a rhythm. band-dark itself is untouched and still carries the
+   head banner and the Dark tone; nothing writes it here any more. #}
+<div class="arch-head">
   <div class="wrap">
     {% if crumbs|length > 1 %}<nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav>{% endif %}
     <h1 class="page-title">{{ title or site.name }}</h1>

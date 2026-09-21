@@ -784,6 +784,17 @@ picture in the Hero section's own **Image** box instead, or remove the Hero and 
 yours. Case studies and events no longer start with a Hero unless you add one, so there the picture
 usually shows straight away.
 
+**The Case Studies, Services, Partners and Products pages used to have a black banner at the
+top.** They don't any more — every section's page now opens the same light way Blog always did,
+which is what the rest of the site looks like. The row of figures on the home page (*17+ satisfied
+customers* and the rest) sits on the page now too, instead of on a black strip.
+
+**There is still a dark band on the home page — how do I change it?** That one is a setting on the
+section, not part of the design, so it is yours: open the home page, click the **⚙** on the *Case
+studies* section, and change **Tone** from *Dark* to *Grey* or *White*. The same applies to any
+section anywhere — including that row of figures, which you can put back on black the same way if
+you ever want to. There is one other dark block, on the NAS page.
+
 **The Industry and Solution pages look plain, not like the rest of the site.** They don't any
 more. Clicking a category chip — *Finance*, *Logistics*, *HCI* — now gives you a page built the same
 way **Case Studies** is: the dark banner at the top, the cards with their pictures and labels, and a

@@ -1,4 +1,5 @@
-{# always the dark band: on the design's pages a row of figures is the black strip under the hero.
+{# A row of figures on the page's own background (client, 2026-09-21; it was always the black
+   strip the design draws under the hero, and the light site won).
    Each figure carries its own classes, so an effect can be set once for the whole band under ⚙ or
    per row in Items — a row that sets nothing falls back to the section's. With counting on, the
    words either side of the number are left alone and only the digits are swapped: they stay in the
@@ -6,7 +7,7 @@
    own contenteditable all read them), and site.css hides that and rolls the counter into the empty
    .cr beside it — in place, so "Up to 5 PB" keeps its "Up to" and its "PB" still.
    section_class() does the whitelisting for a figure's own effect, as it does for the section. #}
-<section class="section band-dark{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap"><ul class="stats">
+<section class="section stats-band{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap"><ul class="stats">
 {%- for s in data['items'] %}
 {%- set c = count_up(s.value) if s.count_up or data.count_up else None %}
 {%- set icls = (section_class({'fx': s.fx or data.fx}) ~ (' fx-count' if c else '')).strip() %}
