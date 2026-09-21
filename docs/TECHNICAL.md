@@ -1955,6 +1955,10 @@ That makes the route's own validation wrong in one specific way, so `validate_bl
 
 **The proxy answers in the transport's own vocabulary, and that is load-bearing.** Its status switch handles exactly `{200, 204, 403, 410, 500}` and **throws** `unhandled poll status` on anything else, wedging the transport for the life of the tab. So the route refuses with **403** (which LongPoll reads as "stop") rather than `ui_required`'s redirect to the login page, and it collapses every upstream failure — a Kong 401 from a wrong anon key, a 502 while Realtime restarts, an unreachable gateway — to **500**, the one status it knows how to back off from, which then surfaces through our own `CHANNEL_ERROR` path. `ui_required` is also unusable for a second reason: it reads `csrf` out of `request.form`, and a Phoenix POST is a JSON body, so every send would 400. The csrf token rides the query string instead, alongside `eventsPerSecond`. The apikey is pinned server-side, which is **not** about hiding it — the anon key is a browser key by design and is still in `#editor-data`. It means the proxy always presents the key *we* chose: a caller cannot probe Kong's key-auth through it, and a service-role key that leaked somewhere could not be walked in through this route by a signed-in editor.
 
+**Because that vocabulary is so narrow, the browser cannot say what went wrong — so the proxy writes it down.** Every way a poll can fail reaches the console as one string, `channel error: connection lost`, and the reason is arithmetic rather than bad luck: LongPoll calls `onerror(403)` / `onerror(500)` with a **bare number**, and supabase-js's error normaliser tests `instanceof Error`, then `typeof === "string"`, then `typeof === "object"` — a number matches none of them and falls through to that literal. The client also switches on the **JSON body's** `status`, not the HTTP status, so a body that will not parse becomes `0` and shares the `500` branch. A guard refusal, a collapsed upstream failure and an empty reply are therefore indistinguishable in devtools; a *stall* prints `timeout` and a socket close prints `socket closed: <code>`, which is the only discrimination the console offers. This cost a production outage its diagnosis (2026-09-21), so `realtime_longpoll()` logs a `WARNING` on every failed poll: `realtime poll refused: no session|csrf` for its own guard, and `realtime poll: upstream <status> (http <status>) <first 200 bytes | OSError>` for everything beyond it.
+
+**It is keyed on the status inside the body, not the HTTP status, and that distinction is the whole value of the line.** Measured against a real Realtime: *every* poll is **HTTP 200** — `{"status":410}` on open, `{"status":204}` after its held 10.0s, and `{"status":403}` when the tenant cannot be found. The response status carries no information, which has two consequences. The obvious one: a log line keyed on it sees nothing wrong with the exact failure that broke production. The one behind it: `_QuietPolls` filters on `" 2\d\d"` in the access log, so it drops upstream refusals along with the successes — **the access log cannot show this class of fault at all**, and this `WARNING` is the only signal there is. A body that will not parse is read as `0`, mirroring the client's own `t = 0`. The comparison is against `{200, 204, 410}` and **not** `POLL_STATUSES`, because a `403` in the body is passed through untouched and is the fingerprint of the tenant-name fault in §15. The URL is never logged: the apikey and the Phoenix session token live in its query string, which is what `_QuietPolls` exists to keep out of the access log. A healthy poll logs nothing, which matters when the request rate tracks messages. Guarded by `test_every_failed_poll_says_why_in_the_log`, which carries the `200`/`{"status":403}` case by name and also asserts the silence on both healthy shapes.
+
 **A rich paragraph is the one field MODEL cannot read out of the shared document, and that left a hole in Preview.** A `Y.Text` holds a Quill delta; its `toString()` is only the plain words. So `html` has always been mirrored back into MODEL by a mounted Quill's `text-change` (`mountQuill`), and `reconcileIn()` skipped the key on purpose. But Preview has no Quill at all — `canvasFull()` short-circuits to `renderPreview()` and never wires the document — so a colleague's typing reached the shared document, the roster and the markers, and never reached MODEL. MODEL is what Preview renders (`formBody()` sets `blocks` from it) and what Publish submits, so the words were missing from the preview and publishing from there sent the page an edit behind. #68 saw half of this and disqualified a previewing tab from being the elected writer so it could not *save* a stale draft; it could still show one, and Publish was never gated that way.
 
 `mirrorProse()` closes it. When no mounted editor owns the field — `quillOf()` is null, which also correctly counts a field still waiting in the bind queue as owned, since `__quill` is set before the binding is — it converts `yt.toDelta()` with an **offscreen Quill of its own** and writes the result into MODEL. Deliberately not a hand-written delta-to-HTML renderer: the output has to be byte-identical to a mounted editor's or the two paths would disagree about the same paragraph, so it is the same vendored Quill, the same `QUILL_FORMATS` and the same `semantic()`. Measured rather than assumed — a heading, bold/italic/underline/strike, an escaped link, both list kinds, a blockquote and a doubled space came back **identical at 293 characters** in a real browser. That copy of Quill is loaded in the **parent** by `post_form.html` (canvas.html already loads one inside the iframe) and only when there is a room, because the frame in Preview is the previewed page and loads no Quill — which is exactly when the converter is needed. It repaints through `canvasBlock()`, which is right in both views: a preview document has no `[data-b]` to replace, so it falls through to `canvasFull()`, which *is* the render-the-preview path. No `markDirty()`: this is somebody else's edit arriving, not one of ours to stamp and rebroadcast.
@@ -2226,8 +2230,28 @@ error_code=TenantNotFound [error] TenantNotFound: Tenant not found: realtime
 
 So when presence stays dark and the browser console says `CHANNEL_ERROR`, check that first:
 `docker logs --tail 50 <stack>-realtime-1` and `select external_id from _realtime.tenants;`. The two
-strings must be equal. Fixing the container's tenant-name environment variable is the durable answer,
-because renaming the row alone is undone the next time the stack reseeds.
+strings must be equal.
+
+**It happened again on production on 2026-09-21, and fixing it corrected what this section used to
+say.** The advice here was to set the container's tenant-name environment variable. That is not what
+was done on dev and it is not what works: the two stacks' realtime containers have **byte-identical**
+environments (`APP_NAME=realtime`, `SEED_SELF_HOST=true`, only `DB_ENC_KEY` differs), and dev simply
+carries **two** tenant rows, `realtime-dev` and `realtime`, while production carried one. So the fix is
+a second row, and a second row is also the more durable of the two: `SEED_SELF_HOST` recreates
+`realtime-dev` whenever it is missing, so *renaming* it away brings it straight back and leaves the
+same two names unmatched.
+
+**Run it as `supabase_admin`, not `postgres`** — `_realtime` is owned by `supabase_admin` (the role
+the realtime container connects as) and `postgres` is not a member of it, so the write fails with a
+bare `42501: permission denied for table tenants`. Studio's SQL editor runs as `postgres`, so this one
+goes through `psql` inside the container.
+
+`migrations/repair_realtime_tenant.sql` is that repair — hand-run, once per stack, deliberately
+**not** a numbered step (`flask migrate` gates the app container, and a file that fails there is an
+outage rather than a warning; `repair_schema_migrations.sql` is the same shape). It copies the
+existing row rather than writing one out, because `jwt_secret` is encrypted with that container's own
+`DB_ENC_KEY` and a hand-written one is wrong in a way that shows up only as another silent refusal.
+Restart the realtime container afterwards — it caches authorisation per tenant.
 
 **The editor's collaboration needs nothing from the tunnel, and that is a deliberate reversal.** An
 earlier version of this section told you to add a second Public Hostname rule sending `^/realtime/`
@@ -2245,6 +2269,38 @@ per tenant. Verify with `curl -i https://www.iopstor.com/rest/v1/` returning the
 not PostgREST (nothing of Supabase is reachable), and, signed in as an editor, the browser's network
 tab showing polls to `/admin/realtime/v1/longpoll` — no WebSocket anywhere — with the console
 reaching `SUBSCRIBED`.
+
+**When it does not reach `SUBSCRIBED`, read the app's `WARNING` lines — not the console, and not the
+access log.** The console has one string for every transport failure and it names nothing; the access
+log cannot help either, because every poll is HTTP 200 whether it succeeded or not, so `_QuietPolls`
+drops the failures with the successes (§12.3). The `realtime poll:` warnings are the only signal:
+
+```sh
+docker logs --tail 300 <app container> 2>&1 | grep -iE 'realtime poll|WORKER TIMEOUT'
+```
+
+| Line | Where it is |
+|---|---|
+| `realtime poll refused: no session` | the editor's Flask session, not Supabase at all — the cookie or a sign-out elsewhere |
+| `realtime poll refused: csrf` | the tab's baked-in token no longer matches the session's; `session["csrf"]` cannot rotate under a live session, so the session was replaced |
+| `realtime poll: upstream 403 (http 200)` | Realtime refused the connection before any channel — the tenant-name trap above, and what production answered on 2026-09-21; `docker logs <stack>-realtime-1 \| grep -i tenant` |
+| `realtime poll: upstream 0 (http 404/502/503)` | Kong's `/realtime/v1/` route, or the realtime container — Kong's own error body has no `status` key, so it reads as `0` |
+| `realtime poll: upstream 500 (http 500) <OSError>` | the app cannot reach Kong — `SUPABASE_URL` must be the Kong **container name** on `dokploy-network`, never an `*.sslip.io` name |
+| nothing at all, but the browser fails | something between the browser and Flask; unlikely, because a stall would print `timeout` in the console rather than `connection lost` |
+
+The sharpest single check needs no browser — from **inside** the app container, which has python and
+no curl. Healthy is HTTP 200 with a `{"status":410,"token":…}` body; production answered HTTP 200 with
+`{"status":403}` on 2026-09-21, which is why the body is what you read (measured both ways that day):
+
+```sh
+docker exec <app container> python -c "
+import os,urllib.request,urllib.error
+u=os.environ['SUPABASE_URL']+'/realtime/v1/longpoll?vsn=2.0.0&apikey='+os.environ['SUPABASE_ANON_KEY']
+try:
+    r=urllib.request.urlopen(u,timeout=15); print(r.status, r.read()[:200])
+except urllib.error.HTTPError as e: print('HTTP', e.code, e.read()[:200])
+except Exception as e: print('ERR', repr(e))"
+```
 
 **The order of first deployment matters, and getting it wrong fails the deploy.** A database without
 `0000_bootstrap.sql` in it fails the `migrate` service, which exits 1 with `cli.py`'s message naming both

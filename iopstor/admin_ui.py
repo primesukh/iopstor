@@ -665,21 +665,43 @@ def realtime_longpoll():
     # not the pressure; the request count is. A real socket needs gevent, or a broker to fan out
     # across the thirty processes -- which is the trade design.md turned down.
     """
-    if current_user() is None or not session.get("csrf") or request.args.get("csrf") != session["csrf"]:
+    user = current_user()   # one call, not two: it verifies the JWT and reads a row per poll
+    if user is None or not session.get("csrf") or request.args.get("csrf") != session["csrf"]:
         # Phoenix's own refusal shape, and a real 403 so the transport stops instead of reconnecting.
+        # Which half tripped, because the browser cannot say -- see the log line further down.
+        current_app.logger.warning("realtime poll refused: %s", "no session" if user is None else "csrf")
         return jsonify({"status": 403}), 403, {"Cache-Control": "no-store"}
     url = (current_app.config["SUPABASE_URL"] + "/realtime/v1/longpoll?"
            + _rt_upstream_query(request.args, current_app.config["SUPABASE_ANON_KEY"]))
     req = urllib.request.Request(url, method=request.method,
                                  data=request.get_data() if request.method == "POST" else None,
                                  headers={"Content-Type": request.content_type or "application/json"})
+    note = ""
     try:
         with urllib.request.urlopen(req, timeout=RT_POLL_TIMEOUT) as r:
             body, status, ctype = r.read(), r.status, r.headers.get("Content-Type", "application/json")
     except urllib.error.HTTPError as e:   # Kong answered and said no: a dead route, a rejected key
         body, status, ctype = e.read(), e.code, e.headers.get("Content-Type", "application/json")
-    except OSError:                       # Kong unreachable, or the poll outlived RT_POLL_TIMEOUT
-        body, status, ctype = b'{"status":500}', 500, "application/json"
+    except OSError as e:                  # Kong unreachable, or the poll outlived RT_POLL_TIMEOUT
+        body, status, ctype, note = b'{"status":500}', 500, "application/json", repr(e)
+    try:
+        # THE STATUS THAT MATTERS IS IN THE BODY, NOT THE HTTP RESPONSE. Measured against a real
+        # Realtime: a poll is HTTP 200 whether it answers 410 on open, 204 after its held ten seconds,
+        # or 403 because the tenant could not be found. The browser reads this number and nothing else.
+        seen = json.loads(body).get("status", status)
+    except (ValueError, AttributeError):
+        seen = 0   # the client's own reading: a body it cannot parse is `t = 0`, its 500 branch
+    if seen not in (200, 204, 410):
+        # THE ONLY PLACE A FAILED POLL EVER SAYS WHY, and keying it on `status` would have missed the
+        # one that cost production a morning. The browser cannot say: LongPoll calls onerror() with a
+        # bare number, supabase-js's error normaliser has no branch for one, so a guard 403, a
+        # collapsed 500 and an unparseable body all print the same "channel error: connection lost".
+        # The access log cannot either -- every poll is HTTP 200, so _QuietPolls filters the failures
+        # out with the successes. `seen` and not POLL_STATUSES: a 403 in the body is passed through
+        # untouched below and is the fingerprint of the tenant-name fault in TECHNICAL 15. The url is
+        # never logged -- the apikey and the Phoenix session token are in its query string, which is
+        # the whole reason _QuietPolls exists.
+        current_app.logger.warning("realtime poll: upstream %s (http %s) %s", seen, status, note or body[:200])
     if status not in POLL_STATUSES:
         # 500 rather than the real code, and not 503: the LongPoll client switches on the status and
         # THROWS "unhandled poll status" on anything it does not know, which wedges the transport for
