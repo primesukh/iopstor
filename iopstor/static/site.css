@@ -81,13 +81,22 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
 .site-header .wrap{display:flex;align-items:center;gap:24px;min-height:64px}
 .brand{display:flex;align-items:center;gap:8px;color:var(--ink);text-decoration:none;font:800 20px/1 var(--head);letter-spacing:-.01em}
 /* The header is white, so its logo stays the client's own artwork. Only the footer, which is
-   still the dark band, knocks the PNG out to white. Both get the same fixed box, so swapping the
-   file in Settings cannot change how big the logo reads.
-   ponytail: cover crops to fill, which is what neutralises whitespace baked into an uploaded PNG;
-   a square or tall logo would lose its top and bottom. The box is 5.8:1 to match the wordmark the
-   client supplied in 2026-09 (2000x350); the older padded 2172x724 file still shows its middle 52%,
-   which contains the whole wordmark, so the rule survives either file. */
-.brand img{width:150px;height:26px;object-fit:cover;object-position:center;flex:none}
+   still the dark band, knocks the PNG out to white.
+   The whole logo is shown (client, 2026-09-21). This was a FIXED 150x26 box cropped with
+   object-fit:cover, and that was a considered choice, not an oversight: a fixed height alone lets
+   whitespace baked into a PNG count as logo, and the 2172x724 file an editor had uploaded rendered
+   its wordmark at 8px instead of 19px (design.md, 2026-09-10). But cover only ever fits artwork at
+   the box's own 5.77:1 -- anything wider loses its ends, which is what a newly uploaded logo did in
+   production: "IOPSTOR" arrived as "OPSTO".
+   So the height is fixed and the width follows the file. max-width is the guard the fixed width
+   used to be: a very wide logo is contained rather than allowed to push the nav, and `contain`
+   (not cover) decides what happens in that one case, so the worst outcome is a smaller logo and
+   never a cut one. The cost, and it is the reverted decision: a logo exported with wide empty
+   margins renders small, because those margins are now counted. Trim the file -- NON-TECHNICAL
+   says so beside the upload box.
+   ponytail: no server-side trim. Pillow is not in the venv and one CSS line is not worth a
+   dependency and an upload hook; revisit if editors keep uploading padded artwork. */
+.brand img{height:26px;width:auto;max-width:200px;object-fit:contain;object-position:left center;flex:none}
 .nav-toggle{display:none}
 .nav-toggle-label{display:none;margin-left:auto;width:44px;height:44px;align-items:center;justify-content:center;border:1px solid var(--line-2);border-radius:8px;cursor:pointer;color:var(--ink);font-size:18px;line-height:1}
 .site-nav{margin-left:auto}

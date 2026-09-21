@@ -784,6 +784,12 @@ picture in the Hero section's own **Image** box instead, or remove the Hero and 
 yours. Case studies and events no longer start with a Hero unless you add one, so there the picture
 usually shows straight away.
 
+**My logo looks cut off in the header.** It isn't any more — the logo is shown whole, whatever
+shape it is. One thing worth knowing when you upload a new one: **trim the empty space around it
+first.** The logo is sized by its height, so if the file has wide blank margins baked in, those
+margins are measured as part of the logo and the wordmark comes out smaller than it should. A file
+cropped tight to the artwork always looks right.
+
 **The Case Studies, Services, Partners and Products pages used to have a black banner at the
 top.** They don't any more — every section's page now opens the same light way Blog always did,
 which is what the rest of the site looks like. The row of figures on the home page (*17+ satisfied
