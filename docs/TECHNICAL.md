@@ -307,6 +307,16 @@ because `blocks_md()` joins with `\n\n` and can never make a setext heading), an
 `MD_SKIP` beside `embed_html`. `height` is in `_NON_TEXT_KEYS`, or `"medium"` would show up in
 `llms-full.txt`, the feed and admin search, the way `tone` did.
 
+**`blocks_text()` decodes entities before it returns** (2026-09-21). Its input is `contenteditable`
+HTML, so an editor typing *R&D* stores `R&amp;D`, and the `re.sub(r"<[^>]+>", " ", …)` tag strip does
+not touch an entity. Every consumer escapes what it gets — the feed's `<description>`, the audit word
+diff (`admin_ui.py`, which escapes before wrapping in `Markup`), `text` in `/api/v1/posts` — so all
+three rendered a literal **`R&amp;D`**. `unescape()` runs once at the source instead of three times at
+the callers. It also fixes a subtler one: a paragraph holding nothing but `&nbsp;` used to come back
+`"&nbsp;"`, truthy but blank, which won the `or` chain in `public._summary()` and suppressed the
+fallback behind it. Decoded, it is `\xa0`, which `.split()` drops as whitespace, so the result is `""`.
+`test_blocks_text_decodes_entities_so_nobody_escapes_them_twice` pins both halves.
+
 Their CSS is the trap. `.section{padding:80px 0}` means a section that declares nothing at all is
 already 160px tall, so both rule groups zero it first. Inside a Columns section the stacking gap is
 `padding-top` on the section that *follows* (`.column>.section+.section`, (0,3,0)), which a bare

@@ -475,7 +475,12 @@ def blocks_text(blocks):
 
     for b in blocks:
         walk(b.get("data", {}))
-    return " ".join(" ".join(out).split())
+    # Entities are decoded here, not left to the caller. The source is contenteditable HTML, so "R&D"
+    # is stored as "R&amp;D" and the tag strip above does not touch it -- every consumer then escaped
+    # it a second time and showed "R&amp;D": the feed's <description>, the audit diff, and `text` in
+    # the public API. Decoding at the source is also what makes a paragraph holding nothing but
+    # &nbsp; come back "" rather than truthy-but-blank, because .split() drops \xa0 as whitespace.
+    return " ".join(unescape(" ".join(out)).split())
 
 
 MD_SKIP = ("embed_html", "spacer")   # an iframe is a video or a map, and a gap is a gap: nothing to write down

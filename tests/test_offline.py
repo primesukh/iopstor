@@ -49,6 +49,16 @@ def test_blocks_text_flattens():
     assert txt == "Hello world Go Now"
 
 
+def test_blocks_text_decodes_entities_so_nobody_escapes_them_twice():
+    """The source is contenteditable HTML, so "R&D" is stored as "R&amp;D" and stripping tags leaves
+    the entity behind. Every consumer escapes what it gets — the feed's <description>, the audit diff,
+    `text` in the public API — so leaving it encoded here showed a literal "R&amp;D" on all three."""
+    assert blocks_text([{"type": "rich_text", "data": {"html": "<p>R&amp;D at 40&deg;C</p>"}}]) == "R&D at 40°C"
+    # and a paragraph holding nothing but a non-breaking space is empty, not truthy-but-blank --
+    # otherwise it wins an `or` chain and suppresses the fallback behind it (public._summary)
+    assert blocks_text([{"type": "rich_text", "data": {"html": "<p>&nbsp;</p>"}}]) == ""
+
+
 def test_blocks_md_keeps_the_shape_blocks_text_throws_away():
     """The .md twin of a page (and llms-full.txt) is only worth serving if it keeps headings,
     lists, tables and quotes — blocks_text() flattens all of that to one line."""
@@ -2433,7 +2443,7 @@ def test_the_feed_gives_a_reader_something_to_show(app, monkeypatch):
     picture = {"id": 7, "url": "/media/2026/09/cover.png", "mime": "image/png", "size": 4821, "alt": "A rack"}
     # the ordinary case the old feed handled worst: nobody wrote an excerpt, so there was nothing to say
     wordy = {"id": 11, "slug": "wordy", "title": "Wordy", "excerpt": "", "meta": {}, "seo": {},
-             "blocks": [{"type": "rich_text", "data": {"html": "<p>Eleven drives, one chassis, no downtime.</p>"}}],
+             "blocks": [{"type": "rich_text", "data": {"html": "<p>Eleven drives &amp; one chassis, no downtime.</p>"}}],
              "terms": [{"id": 1, "name": "Finance", "slug": "finance", "taxonomy": {"slug": "industry", "name": "Industry"}}],
              "children": [], "parent_id": None, "featured_media": picture, "post_type": news, "menu_order": 0,
              "updated_at": "2026-09-15T00:00:00+00:00", "published_at": "2026-09-01T00:00:00+00:00"}
@@ -2443,8 +2453,11 @@ def test_the_feed_gives_a_reader_something_to_show(app, monkeypatch):
     study = pt("case_study", "Case Studies", "case-studies", field_schema=[
         {"key": "client", "label": "Client", "type": "text"},
         {"key": "challenge", "label": "Challenge", "type": "textarea"}])
+    # its one block looks empty but is not: a lone &nbsp; used to win the `or` chain and suppress the
+    # field behind it, so the whole type shipped a blank description
     quiet = dict(wordy, id=12, slug="quiet", title="Quiet", post_type=study, featured_media=None, terms=[],
-                 blocks=[], meta={"client": "LKS", "challenge": "Nine sites, one night to cut over."})
+                 blocks=[{"type": "rich_text", "data": {"html": "<p>&nbsp;</p>"}}],
+                 meta={"client": "LKS", "challenge": "Nine sites, one night to cut over."})
 
     canned = {"settings": [], "post_types": [news, study], "posts": [wordy, quiet]}
     monkeypatch.setattr(db, "table", lambda n: _FakeQ(n))
@@ -2457,8 +2470,9 @@ def test_the_feed_gives_a_reader_something_to_show(app, monkeypatch):
     # the long field carries the summary; "LKS" is a label, not a sentence, so Client is not it
     assert study_item.findtext("description") == "Nine sites, one night to cut over."
 
-    # the sentence under the headline, taken off the page because the excerpt is empty
-    assert "Eleven drives" in item.findtext("description")
+    # the sentence under the headline, taken off the page because the excerpt is empty. ET decodes
+    # once on parse, so "&" here proves the entity was not escaped a second time on the way out
+    assert "Eleven drives & one chassis" in item.findtext("description")
     # the picture: absolute, and carrying the byte count the spec asks for
     enclosure = item.find("enclosure")
     assert enclosure.get("url") == "http://test/media/2026/09/cover.png"
