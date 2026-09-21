@@ -607,11 +607,13 @@ The site publishes automatically, with no work from you:
 - `/llms.txt` and `/llms-full.txt` — a clean, plain-text version of the whole site, written for AI assistants to read
 - **a plain-text version of every single page** — add `.md` to any address and you get that page's words with no design around them. `/about-us` becomes `/about-us.md`, `/services/storage/nas` becomes `/services/storage/nas.md`, and the home page is `/index.md`. Section headings, lists, tables and specification rows all survive; only the styling is dropped
 
-The first two used to be `/sitemap.xml` and `/feed.xml`. The old addresses still work — anyone who
-bookmarked one, or any search engine that recorded it, is sent to the new one automatically — so
-nothing you have given out has broken. The remaining three keep their `.txt` endings on purpose:
-those are fixed names that search engines and AI tools look for by name, and renaming them would
-quietly stop them being found at all.
+**`/sitemap` and `/feed` are now proper pages.** Click *Sitemap* or *RSS* in the footer and you get a
+designed page in the site's own style — the sitemap lists every page grouped by what it is, and the
+feed shows recent items as cards you can click. The raw versions machines read are still there at
+`/sitemap.xml` and `/feed.xml`, and each page links to its own, but you never need to look at those.
+
+The other three keep their `.txt` endings on purpose: those are fixed names that search engines and
+AI tools look for by name, and renaming them would quietly stop them being found at all.
 
 One small consequence: **you can no longer name a page "Feed" or "Sitemap"**, because the site
 itself now answers on those two addresses. Nothing you have is affected — we checked, and no page
@@ -776,12 +778,10 @@ and pages left it sitting on the same single entry, which looked broken and was 
 blog posts, case studies, events and datasheets, so publishing any of those shows up in it within a
 minute or two. Services, partners and testimonials are still deliberately left out.
 
-**Clicking RSS downloads a file instead of showing me anything.** It used to, and it no longer does —
-the feed now opens in the browser like the sitemap does. It will still look like raw code rather than
-a designed page, because that is what a feed is: a list meant for news readers and search engines to
-collect, not for people to read. **The page for people is `/blog`.** We deliberately did not dress
-the feed up, because the browser feature that would have done it is being switched off in Chrome in
-November 2026 and in the other browsers after that.
+**Clicking RSS downloads a file instead of showing me anything.** It used to. Now *RSS* and *Sitemap*
+in the footer both open a proper page in the site's own design. If you follow the small link on either
+page you reach the raw version machines read, and your browser will show that as code — that is
+normal and is what it is for.
 
 **An entry in the feed has a headline but nothing under it.** That post has no **Excerpt**, no words
 on the page and — if it is a case study — no **Challenge** filled in, so there is nothing to put

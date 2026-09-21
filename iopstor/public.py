@@ -529,7 +529,7 @@ def media_file(key):
     return r
 
 
-@pub.get("/sitemap")
+@pub.get("/sitemap.xml")
 def sitemap():
     base = seo.site()["url"]
     urls = {base + "/": None}
@@ -559,7 +559,7 @@ def robots():
     # and the first file a scanner fetches, which made those two lines the only public statement that
     # this site has an admin at all (user, 2026-09-15). robots_extra still appends whatever the client
     # wants by hand.
-    lines = ["User-agent: *", "Allow: /", s["robots_extra"], f"Sitemap: {s['url']}/sitemap"]
+    lines = ["User-agent: *", "Allow: /", s["robots_extra"], f"Sitemap: {s['url']}/sitemap.xml"]
     return Response("\n".join(l for l in lines if l) + "\n", mimetype="text/plain")
 
 
@@ -589,7 +589,7 @@ def llms():
         lines += [f"- [{p['title']}]({s['url']}{md_url(p['path'])}){': ' + p['excerpt'] if p['excerpt'] else ''}" for p in posts]
         lines.append("")
     lines += ["## Machine-readable", "- Any page as Markdown: add .md to its URL (the home page is /index.md)",
-              f"- Full text: {s['url']}/llms-full.txt", f"- JSON API: {s['url']}/api/v1/posts", f"- Sitemap: {s['url']}/sitemap"]
+              f"- Full text: {s['url']}/llms-full.txt", f"- JSON API: {s['url']}/api/v1/posts", f"- Sitemap: {s['url']}/sitemap.xml"]
     return Response("\n".join(lines) + "\n", mimetype="text/plain")
 
 
@@ -651,21 +651,28 @@ def _feed_item(post, s):
     return "<item>" + "".join(parts) + "</item>"
 
 
-@pub.get("/feed")
-def feed():
-    """The site's news, not the blog's. Which types count is a row -- post_types.in_feed, beside
+def _feed_posts():
+    """What the feed carries, for the XML and for the page a person gets. One selection, so the two
+    can never drift -- which is the whole reason it is a function and not two copies.
+
+    The site's news, not the blog's. Which types count is a row -- post_types.in_feed, beside
     in_sitemap -- because a content type is a row here and "is this news" is a property of one. The
     default while the column does not exist yet is the blog alone, which is what this used to do."""
-    s = seo.site()
     types = [t for t in db.post_types() if t.get("in_feed", t["slug"] == "post")]
-    posts = []
-    if types:
-        # Fetch past the cap and cut after filtering: _indexable() used to run on an already-truncated
-        # 20, so one noindex post quietly shortened the feed.
-        # ponytail: over-fetch 2x rather than loop. FEED_MAX noindex posts in a row would still come
-        # up short; page the query if that ever happens.
-        q = db.live(db.select_posts()).in_("post_type_id", [t["id"] for t in types]).order("published_at", desc=True).limit(FEED_MAX * 2)
-        posts = [p for p in db.with_paths(db.rows(q)) if _indexable(p)][:FEED_MAX]   # the feed is a crawler surface like any other
+    if not types:
+        return []
+    # Fetch past the cap and cut after filtering: _indexable() used to run on an already-truncated
+    # 20, so one noindex post quietly shortened the feed.
+    # ponytail: over-fetch 2x rather than loop. FEED_MAX noindex posts in a row would still come
+    # up short; page the query if that ever happens.
+    q = db.live(db.select_posts()).in_("post_type_id", [t["id"] for t in types]).order("published_at", desc=True).limit(FEED_MAX * 2)
+    return [p for p in db.with_paths(db.rows(q)) if _indexable(p)][:FEED_MAX]   # a crawler surface like any other
+
+
+@pub.get("/feed.xml")
+def feed():
+    s = seo.site()
+    posts = _feed_posts()
     built = max([db.parse_dt(p["updated_at"]) for p in posts], default=db.utcnow())
     image = (f"<image><url>{escape(seo._abs(s['logo'], s['url']))}</url><title>{escape(s['name'])}</title>"
              f"<link>{s['url']}/</link></image>") if s["logo"] else ""
@@ -674,38 +681,63 @@ def feed():
            f'<channel><title>{escape(s["name"])}</title><link>{s["url"]}/</link>'
            f'<description>{escape(s["tagline"])}</description><language>en</language>'
            f"<lastBuildDate>{format_datetime(built)}</lastBuildDate>"
-           f'<atom:link href="{s["url"]}/feed" rel="self" type="application/rss+xml"/>'
+           f'<atom:link href="{s["url"]}/feed.xml" rel="self" type="application/rss+xml"/>'
            f'{image}{"".join(_feed_item(p, s) for p in posts)}</channel></rss>')
-    # application/xml, not application/rss+xml, so a browser renders it instead of downloading it.
-    # No browser has had a feed viewer since Firefox 64 dropped its own, and a type none of them
-    # renders is treated as a file to save -- clicking "RSS" in the footer downloaded feed.xml.
-    # sitemap.xml has always answered application/xml for the same reason and has never been
-    # reported. Feed readers are unaffected: they parse the body, and the type they discover the
-    # feed BY is the <link rel="alternate" type="application/rss+xml"> in base.html, unchanged.
-    # ponytail: no XSLT stylesheet to make it a designed page -- Chrome removes XSLT on 2026-11-17
-    # and Firefox and WebKit have said they will follow, so it would break inside two months. The
-    # human-readable version of this list is the /blog archive, which already exists.
+    # application/xml, not application/rss+xml, so the raw file renders rather than downloading when
+    # somebody does open it directly. No browser has had a feed viewer since Firefox 64 dropped its
+    # own, and a type none of them renders is treated as a file to save. Readers are unaffected:
+    # they parse the body, and the type they discover the feed BY is the <link rel="alternate"
+    # type="application/rss+xml"> in base.html, which points here.
     return Response(xml, mimetype="application/xml")
 
 
-# The extension-less paths above are canonical; these two keep every address already subscribed to,
-# bookmarked, indexed or submitted to Search Console working. 301 rather than 302 because the move is
-# permanent and that is what makes a reader store the new URL instead of asking twice for ever.
+# ---- the same two files, for a person ---------------------------------------
+# The slug is the page and the extension is the file. /feed and /sitemap are what the footer links
+# and what somebody types; /feed.xml and /sitemap.xml are what a reader subscribes to and what
+# robots.txt advertises. That split is why neither needs an XSLT stylesheet, which was the obvious
+# way to decorate XML and is a dead end: Chrome removes XSLT on 2026-11-17 and Firefox and WebKit
+# have both said they intend to follow.
 #
-# Only these two moved. `/robots.txt` cannot: RFC 9309 fixes it at that exact path, and a crawler
-# looks nowhere else. `/llms.txt` and `/llms-full.txt` are identified by their filename too -- the
-# convention is a file *named* llms.txt -- so renaming them means no agent finds them. The extension
-# is also what has kept all five collision-proof for free: slugify() turns a dot into a hyphen, so no
-# page an editor names can ever occupy "/feed.xml". `/feed` and `/sitemap` can be claimed, which is
-# why both are now in db.RESERVED_SEGMENTS.
-@pub.get("/feed.xml")
-def feed_xml():
-    return redirect("/feed", 301)
+# A reader handed the page rather than the file still works, because base.html carries the
+# autodiscovery <link> on every page -- that is the mechanism readers use to find a feed from a
+# site's HTML, so /feed resolves to /feed.xml without the person knowing there was a difference.
 
 
-@pub.get("/sitemap.xml")
-def sitemap_xml():
-    return redirect("/sitemap", 301)
+def _page_meta(title, description, path):
+    """build_meta() for a page that is not a post. The one thing it gets wrong for these is the
+    Markdown twin: it offers `<path>.md` for anything not noindex, and only a post has one -- /feed.md
+    would be a 404 advertised in the head of every render."""
+    meta = seo.build_meta(title=title, description=description, path=path)
+    meta["markdown"] = ""
+    return meta
+
+
+@pub.get("/feed")
+def feed_page():
+    """The feed as a page. Renders through archive.html, which already draws exactly this -- a titled
+    head and a deck of cards -- so the news list is the site's own card for each type (a blog post's
+    date and picture, a case study's industry chips) rather than a second way of drawing a post."""
+    crumbs = [("Home", "/")]
+    s = seo.site()
+    return render_template("archive.html", posts=_feed_posts(), pt=None, page=1, has_next=False,
+                           crumbs=crumbs, filters=[], feed_url="/feed.xml",
+                           title=f"Latest from {s['name']}",
+                           description="Everything published recently — blog posts, case studies, events and "
+                                       "datasheets, newest first.",
+                           meta=_page_meta("Latest", f"Recently published from {s['name']}.", "/feed"),
+                           jsonld=seo.jsonld(crumbs=crumbs))
+
+
+@pub.get("/sitemap")
+def sitemap_page():
+    """Every public page, grouped by content type. _sections() is the same list llms.txt is built
+    from, so the page a person reads and the file an AI reads can never disagree about what exists."""
+    s = seo.site()
+    crumbs = [("Home", "/")]
+    return render_template("sitemap.html", sections=_sections(), crumbs=crumbs, xml_url="/sitemap.xml",
+                           title="Sitemap", description=f"Every page on {s['name']}, grouped by what it is.",
+                           meta=_page_meta("Sitemap", f"Every page on {s['name']}.", "/sitemap"),
+                           jsonld=seo.jsonld(crumbs=crumbs))
 
 
 # ---- public JSON API -------------------------------------------------------

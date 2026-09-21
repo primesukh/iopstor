@@ -2387,13 +2387,13 @@ def test_no_crawler_output_can_carry_an_address_the_app_owns(app, monkeypatch):
     monkeypatch.setattr(db, "rows", lambda q: canned.get(q.name, []))
 
     bodies = {p: app.test_client().get(p).data.decode()
-              for p in ("/sitemap", "/feed", "/llms.txt", "/llms-full.txt", "/robots.txt")}
+              for p in ("/sitemap.xml", "/feed.xml", "/llms.txt", "/llms-full.txt", "/robots.txt")}
 
     for path, body in bodies.items():
         assert "/admin" not in body, f"{path} published an admin address"
         assert "/api/admin" not in body, f"{path} published the private API"
         assert "Hidden" not in body, f"{path} published a noindex page"
-        if path != "/feed":
+        if path != "/feed.xml":
             assert "/media/" not in body and "/static/" not in body, path
 
     # The feed is the one surface that carries a /media/ address on purpose: the channel logo, and an
@@ -2402,38 +2402,53 @@ def test_no_crawler_output_can_carry_an_address_the_app_owns(app, monkeypatch):
     # an address the app owns -- is about the addresses the feed offers as *pages*, which are <link>
     # and <guid>. (Nothing else here is exempt: llms-full.txt embeds ![](/media/…) for any real page
     # with a picture and only passes above because these canned posts have none.)
-    pages = [e.text for e in ElementTree.fromstring(bodies["/feed"]).iter() if e.tag in ("link", "guid")]
+    pages = [e.text for e in ElementTree.fromstring(bodies["/feed.xml"]).iter() if e.tag in ("link", "guid")]
     assert pages, "the feed published no page addresses at all"
     for u in pages:
         assert not db.reserved(urlsplit(u).path), f"the feed published an address the app owns: {u}"
 
     # the ordinary page is still there -- a gate that publishes nothing passes every assertion above
-    assert "http://test/blog/real" in bodies["/sitemap"] and "http://test/blog/real" in bodies["/feed"]
-    assert "http://test/industry/finance" in bodies["/sitemap"]      # the innocent term archive survives
+    assert "http://test/blog/real" in bodies["/sitemap.xml"] and "http://test/blog/real" in bodies["/feed.xml"]
+    assert "http://test/industry/finance" in bodies["/sitemap.xml"]      # the innocent term archive survives
     assert "/blog/real.md" in bodies["/llms.txt"]
 
     # the PUBLIC api stays advertised: it is read-only published content and that is what llms.txt is for
     assert "/api/v1/posts" in bodies["/llms.txt"]
     # and robots.txt no longer names the admin at all -- those lines were its only public mention
-    assert "Disallow" not in bodies["/robots.txt"] and "Sitemap: http://test/sitemap" in bodies["/robots.txt"]
+    assert "Disallow" not in bodies["/robots.txt"] and "Sitemap: http://test/sitemap.xml" in bodies["/robots.txt"]
 
 
-def test_the_old_dotted_crawler_paths_still_answer(app):
-    """/feed and /sitemap dropped their extensions (2026-09-21), and the addresses they replaced are
-    in feed readers, bookmarks and Search Console. Both redirect permanently rather than 404.
+def test_the_slug_is_the_page_and_the_extension_is_the_file(app, monkeypatch):
+    """The sitemap and the feed each answer at two addresses on purpose (2026-09-21): /sitemap and
+    /feed are pages a person reads, /sitemap.xml and /feed.xml are the files a crawler and a reader
+    take. Getting these the wrong way round serves XML to the footer link, which is the bug that
+    started this, or HTML to a subscriber, which is worse.
 
-    The two that did NOT move are the point of the second half: robots.txt is fixed at that exact
-    path by RFC 9309, and llms.txt is found by its filename, so renaming either would mean nothing
-    ever looks for it again. A later tidy-up that "finishes the job" breaks discovery silently, which
-    is why they are asserted to still be there rather than merely left alone."""
+    The three that have no page are the other half. robots.txt is fixed at that exact path by RFC
+    9309 and llms.txt is found by its filename, so a later tidy-up that "finishes the job" and gives
+    them slugs too would break discovery silently -- no error, nothing ever fetching them again."""
+    from iopstor import db, public
+    # the three the app-wide context processor reaches for, as _render_post() does -- base.html draws
+    # the header and footer on both pages and neither is what this test is about
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    monkeypatch.setattr(public, "_service_nav", lambda: None)
+    monkeypatch.setattr(db, "post_types", lambda: [])        # no types: both pages render empty
+    monkeypatch.setattr(db, "rows", lambda q: [])
     c = app.test_client()
-    for old, new in (("/feed.xml", "/feed"), ("/sitemap.xml", "/sitemap")):
-        r = c.get(old)
-        assert r.status_code == 301, f"{old} should redirect permanently, got {r.status_code}"
-        assert r.headers["Location"].endswith(new)
+
+    for page, file in (("/feed", "/feed.xml"), ("/sitemap", "/sitemap.xml")):
+        assert c.get(page).mimetype == "text/html", f"{page} is the one a person opens"
+        assert c.get(file).mimetype == "application/xml", f"{file} is the one a machine takes"
 
     for fixed in ("/robots.txt", "/llms.txt", "/llms-full.txt"):
         assert c.get(fixed).status_code == 200, f"{fixed} is named by a convention and cannot move"
+
+    # the page points at its own file, so somebody who wants to subscribe can find it, and every
+    # page carries the autodiscovery link a reader follows when handed /feed instead of /feed.xml
+    assert "/feed.xml" in c.get("/feed").data.decode()
+    assert '<link rel="alternate" type="application/rss+xml"' in c.get("/feed").data.decode()
+    assert "/sitemap.xml" in c.get("/sitemap").data.decode()
 
 
 def test_the_paths_the_crawler_files_sit_on_cannot_be_taken_by_a_page(app):
@@ -2494,7 +2509,7 @@ def test_the_feed_gives_a_reader_something_to_show(app, monkeypatch):
     monkeypatch.setattr(db, "table", lambda n: _FakeQ(n))
     monkeypatch.setattr(db, "rows", lambda q: canned.get(q.name, []))
 
-    resp = app.test_client().get("/feed")
+    resp = app.test_client().get("/feed.xml")
     # a browser renders application/xml and offers to SAVE application/rss+xml, because none of them
     # has had a feed viewer for years -- clicking "RSS" in the footer downloaded the file
     assert resp.mimetype == "application/xml"
@@ -2518,7 +2533,7 @@ def test_the_feed_gives_a_reader_something_to_show(app, monkeypatch):
     assert item.findtext(dc + "creator")        # the namespace resolves, i.e. xmlns:dc was declared
     # and the channel says when it last changed and where it lives
     assert channel.findtext("lastBuildDate") == "Tue, 15 Sep 2026 00:00:00 +0000"
-    assert channel.find(atom + "link").get("href") == "http://test/feed"
+    assert channel.find(atom + "link").get("href") == "http://test/feed.xml"
 
 
 def test_the_words_the_app_owns_are_refused_when_a_page_is_named(app, monkeypatch):
@@ -2631,7 +2646,7 @@ def test_run_load_hits_a_real_server_and_the_honeypot_leaves_no_row(tmp_path):
 
         def do_GET(self):
             tally["hits"] += 1
-            if self.path == "/sitemap":
+            if self.path == "/sitemap.xml":
                 body = (b"<urlset><url><loc>%s/</loc></url>"
                         b"<url><loc>%s/about</loc></url></urlset>"
                         % (self._base(), self._base()))
@@ -2718,7 +2733,7 @@ def test_a_multiprocess_run_completes(tmp_path, monkeypatch):
             pass
 
         def do_GET(self):
-            if self.path == "/sitemap":
+            if self.path == "/sitemap.xml":
                 b = b"<urlset><url><loc>http://127.0.0.1:%d/</loc></url></urlset>" % self.server.server_address[1]
             else:
                 b = b"ok"

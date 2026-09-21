@@ -808,11 +808,40 @@ slugged `admin`, a post type prefixed `admin`, a taxonomy slugged `admin` — be
 passes on a site containing none of those proves nothing; removing any one of the three gates makes
 `test_no_crawler_output_can_carry_an_address_the_app_owns` fail, which was checked one gate at a time.
 
-### The crawler files sit on slugs, not filenames — for the two that may
+### The slug is the page, the extension is the file
 
-`/feed` and `/sitemap` dropped their `.xml` (2026-09-21, asked for as *"cant we have proper slugs
-instead of file extension"*). `/feed.xml` and `/sitemap.xml` **301** to them, because those addresses
-are in feed readers, bookmarks and Search Console.
+Two requests, one answer (2026-09-21): *"cant we have proper slugs instead of file extension"* and
+*"cant we have a decorated rss and sitemap for the user when they visit"*. The sitemap and the feed
+now answer at **two addresses with two jobs**:
+
+| Address | Serves | For |
+|---|---|---|
+| `/sitemap` | `sitemap.html` — every public page, grouped by type | a person; the footer links here |
+| `/sitemap.xml` | the `<urlset>` | crawlers; `robots.txt` advertises this |
+| `/feed` | `archive.html` — the feed's items as the site's own cards | a person; the footer links here |
+| `/feed.xml` | the RSS `<channel>` | readers; `<head>` autodiscovery points here |
+
+`test_the_slug_is_the_page_and_the_extension_is_the_file` pins all four, because getting them the
+wrong way round serves XML to the footer link — the bug that started this — or HTML to a subscriber,
+which is worse.
+
+**This is why neither needs an XSLT stylesheet**, which is the obvious way to decorate XML and a dead
+end: Chrome removes XSLT on **17 November 2026** (v158; Dev/Beta began disabling it in v154 on
+22 September) and Firefox and WebKit have both said they intend to follow. A real template in the
+site's own theme cannot expire.
+
+**A reader handed `/feed` instead of `/feed.xml` still works**, because `base.html` carries the
+autodiscovery `<link>` on every page — that is exactly the mechanism a reader uses to find a feed
+from a site's HTML, so the page resolves to the file without the person knowing there was a
+difference.
+
+Both pages route through `_page_meta()` rather than `seo.build_meta()` directly. The one thing
+`build_meta()` gets wrong for a page that is not a post is the Markdown twin: it offers `<path>.md`
+for anything not `noindex`, and `/feed.md` would be a 404 advertised in every render's `<head>`.
+
+`/feed` and `sitemap.html` are both built from the same selection as their file — `_feed_posts()` and
+`_sections()` — so the page a person reads and the file a machine takes can never disagree about what
+exists. `_sections()` is also what `llms.txt` is built from.
 
 **`/robots.txt`, `/llms.txt` and `/llms-full.txt` deliberately did not move, and a later tidy-up must
 not finish the job.** RFC 9309 fixes robots.txt at that exact path and a crawler looks nowhere else;
@@ -820,17 +849,25 @@ the llms.txt convention is a file *named* `llms.txt`, so the filename **is** the
 Renaming either loses the feature silently — nothing errors, nothing ever fetches them again.
 `test_the_old_dotted_crawler_paths_still_answer` asserts all three still answer 200 for that reason.
 
-The cost of dropping an extension is a name an editor can no longer use, and it is worth seeing why
-there was no cost before: `slugify()` turns a dot into a hyphen (`feed.xml` → `feed-xml`), so
-`/feed.xml` was an address **no post could ever hold**. The extension was doing collision-safety for
-free. `/feed` can be claimed by a page titled *Feed*, which would shadow the real one and be
-unreachable itself, so both words joined `db.RESERVED_SEGMENTS` (§5) — the same machinery as `admin`
-and `api`. The live database was checked first and holds no post or `url_prefix` using either, so
-nothing became retroactively unsaveable. `test_the_paths_the_crawler_files_sit_on_cannot_be_taken_by_a_page`
-pins it, including the near misses (`feed-xml`, `sitemaps`) staying usable.
+The cost of taking a slug is a name an editor can no longer use, and it is worth seeing why there
+was no cost before: `slugify()` turns a dot into a hyphen (`feed.xml` → `feed-xml`), so `/feed.xml`
+was an address **no post could ever hold**. The extension was doing collision-safety for free.
+`/feed` can be claimed by a page titled *Feed*, which would shadow the route and be unreachable
+itself, so both words joined `db.RESERVED_SEGMENTS` (§5) — the same machinery as `admin` and `api`.
+The live database was checked first and holds no post or `url_prefix` using either, so nothing became
+retroactively unsaveable. `test_the_paths_the_crawler_files_sit_on_cannot_be_taken_by_a_page` pins
+it, including the near misses (`feed-xml`, `sitemaps`) staying usable.
 
-`robots.txt`'s `Sitemap:` line and llms.txt's footer both point at `/sitemap`, and `base.html`'s
-autodiscovery `<link>` and footer at `/feed`. `stress.py` reads `/sitemap` to build its URL list.
+`robots.txt`'s `Sitemap:` line, llms.txt's footer and `stress.py`'s URL probe all point at
+`/sitemap.xml`; `base.html`'s autodiscovery `<link>` at `/feed.xml`; the **footer** at `/sitemap` and
+`/feed`, because that row is read by people.
+
+`sitemap.html` is a link list, not the deck of cards the archives draw: sixty pages as cards is a
+scroll, and somebody who opens a sitemap is looking for one page. It uses CSS **multi-column**
+(`.sm-groups`) rather than a grid — a grid puts the groups in rows, so the tallest in a row sets its
+height, and Services (22 entries) beside Main (1) left three-quarters of the first row empty. Groups
+are sorted alphabetically rather than in `_sections()`' `menu_order`: that order is the designed one
+for a menu and reads as no order at all on a flat list of 22.
 
 ### `/feed` — the site's news, not the blog's
 

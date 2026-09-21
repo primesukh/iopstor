@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{# The sitemap a person reads. The one an engine reads is /sitemap.xml, and both are built from the
+   same _sections() list, so the two cannot disagree about what the site contains.
+
+   A list, not the deck of cards the archives use: sixty pages as cards is a scroll, and what somebody
+   opening a sitemap wants is to find one page quickly. Grouped by content type, in the order the
+   types are defined, which is the same order llms.txt uses. #}
+{% block content %}
+<div class="arch-head">
+  <div class="wrap">
+    {% if crumbs|length > 1 %}<nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav>{% endif %}
+    <h1 class="page-title">{{ title }}</h1>
+    {% if description %}<p class="lead">{{ description }}</p>{% endif %}
+    {% if xml_url %}<p><a class="btn ghost" href="{{ xml_url }}">The version for search engines</a></p>{% endif %}
+  </div>
+</div>
+<section class="section"><div class="wrap">
+  <div class="sm-groups">
+    <div class="sm-group">
+      <h2>Main</h2>
+      <ul><li><a href="/">Home</a></li></ul>
+    </div>
+    {% for pt, posts in sections %}
+    <div class="sm-group">
+      {# the archive itself is a page too, when the type has one #}
+      <h2>{% if pt.url_prefix %}<a href="/{{ pt.url_prefix }}">{{ pt.name }}</a>{% else %}{{ pt.name }}{% endif %}</h2>
+      <ul>
+        {# alphabetical, not _sections()'s menu_order: that order is the designed one for a menu, and
+           on a flat list of 22 services it reads as no order at all. Same set either way. #}
+        {% for p in posts|sort(attribute='title') %}<li><a href="{{ p.path }}">{{ p.title }}</a></li>{% endfor %}
+      </ul>
+    </div>
+    {% else %}
+    <p class="lead">Nothing published yet.</p>
+    {% endfor %}
+  </div>
+</div></section>
+{% endblock %}

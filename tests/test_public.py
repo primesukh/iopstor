@@ -55,7 +55,7 @@ def test_sitemap_feed_llms_and_public_api(client, editor_headers):
                                                                           "blocks": [{"type": "faq", "data": {"items": [{"q": "Why?", "a": "Because."}]}}]})
     assert ok.status_code == 201, ok.json
     client.post("/api/admin/v1/posts", headers=editor_headers, json={"post_type": "post", "title": "zz-test Secret Draft"})
-    for path in ("/sitemap", "/feed", "/llms.txt", "/llms-full.txt", "/robots.txt", "/index.md"):
+    for path in ("/sitemap.xml", "/feed.xml", "/llms.txt", "/llms-full.txt", "/robots.txt", "/index.md", "/sitemap", "/feed"):
         r = client.get(path)
         assert r.status_code == 200, path
         assert b"zz-test-secret-draft" not in r.data and b"Secret Draft" not in r.data, path
@@ -63,13 +63,13 @@ def test_sitemap_feed_llms_and_public_api(client, editor_headers):
         # suite seeds the collision deliberately; here the point is that a real, seeded database
         # produces none of these by accident either.
         assert b"/admin" not in r.data and b"/api/admin" not in r.data, path
-    assert b"<loc>http://test/blog/zz-test-public-post</loc>" in client.get("/sitemap").data
-    assert b"<loc>http://test/industry/finance</loc>" in client.get("/sitemap").data
-    assert b"http://test/blog/zz-test-public-post" in client.get("/feed").data
+    assert b"<loc>http://test/blog/zz-test-public-post</loc>" in client.get("/sitemap.xml").data
+    assert b"<loc>http://test/industry/finance</loc>" in client.get("/sitemap.xml").data
+    assert b"http://test/blog/zz-test-public-post" in client.get("/feed.xml").data
     full = client.get("/llms-full.txt").data
     assert b"## zz-test Public Post" in full and b"Because." in full
     robots = client.get("/robots.txt").data
-    assert b"Sitemap: http://test/sitemap" in robots
+    assert b"Sitemap: http://test/sitemap.xml" in robots
     # robots.txt used to Disallow /admin, which was the only public statement that an admin exists --
     # and it protected nothing once /admin began answering 404 outside ADMIN_NETWORKS.
     assert b"Disallow" not in robots
