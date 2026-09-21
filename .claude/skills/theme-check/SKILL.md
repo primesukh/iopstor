@@ -27,6 +27,7 @@ No browser extension is connected. Firefox headless is the default. Every comman
    mkdir -p /tmp/claude-1000/shots /tmp/claude-1000/ffprofile
    firefox --headless --profile /tmp/claude-1000/ffprofile --window-size=1440,9000 --screenshot /tmp/claude-1000/shots/home-1440.png http://localhost:5001/
    ```
+   **Every picture on a public page is `loading="lazy"`, and a lazy image does not hold up `load` — so `--screenshot` can fire before any of them paints and the shot comes back with the layout right and every picture missing** (2026-09-21, the partner strip: correct row heights, fourteen blank cells, and the server log showing all fourteen fetched with a 200). It reads as a broken image path and is not one. Strip the attribute from a saved page before shooting it (`s.replace(' loading="lazy"', '')`), or shoot a page whose pictures are all above the fold and accept the risk.
    `390,14000` at phone width. `convert shot.png -trim -format "%wx%h\n" info:` gives the real content height; `convert shot.png -crop WxH+0+Y +repage band.png` cuts out the band to read.
 4. **The mock at the same width**, for the comparison:
    ```bash
