@@ -8,7 +8,29 @@
     <div>{% if data.eyebrow or edit %}<p class="eyebrow"{{ fe('eyebrow') }}>{{ data.eyebrow }}</p>{% endif %}{% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}</div>
     {% if data.link_url %}<a class="sec-link" href="{{ data.link_url }}"{{ fe('link_label') }}>{{ data.link_label or 'See all' }} &rarr;</a>{% endif %}
   </div>{% endif %}
-  <div class="cards">{% for p in posts %}{{ card(p, loop.index) }}{% else %}<p class="lead">Coming soon.</p>{% endfor %}</div>
+  {#- The accordion (List style, and the default for a top-level services list — blocks._acc()).
+      One open at a time with no script: the rows are radio buttons of one name, so the browser
+      already enforces "one", and site.css reads the state back with :has(). The order inside a row
+      is load-bearing — .acc-hr then .acc-body, and the input INSIDE its label — because that is
+      the shape those selectors match; a test pins it. No row starts checked: the section loads
+      with every row shut (client, 2026-09-21). The radio is the keyboard control (arrows walk the
+      group and open each row as they go), which is why it is hidden with opacity and not
+      display:none. open_tone is COMPARED against its literals here and never interpolated, the
+      same rule hero.arrange follows, so only acc-blue and acc-light can ever reach the attribute.
+      Deliberately reuses nothing from the card vocabulary: .chips, .card-img and
+      .card-n are all display:none under a bare .pl, and a pill called .chip would inherit that. -#}
+  {% if acc %}<div class="acc{% if data.open_tone == 'blue' %} acc-blue{% elif data.open_tone == 'light' %} acc-light{% endif %}">{% for p in posts %}<div class="acc-row">
+    <div class="acc-hr">
+      <h3><label class="acc-hd"><input type="radio" class="acc-t" name="acc-{{ pt_slug }}">{{ p.title }}</label></h3>
+      {%- if p.children %}<span class="acc-n">{{ p.children|length }} service{{ '' if p.children|length == 1 else 's' }}<i aria-hidden="true">&darr;</i></span>{% endif %}
+    </div>
+    <div class="acc-body"><div><div class="acc-in">
+      <div class="acc-blurb">{% if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}
+        {%- if p.path %}<a class="acc-all" href="{{ p.path }}">All {{ p.title }} &rarr;</a>{% endif %}</div>
+      {%- if p.children %}<div class="acc-kids">{% for c in p.children %}<a href="{{ c.path }}">{{ c.title }} &rarr;</a>{% endfor %}</div>{% endif %}
+    </div></div></div>
+  </div>{% else %}<p class="lead">Coming soon.</p>{% endfor %}</div>
+  {%- else %}<div class="cards">{% for p in posts %}{{ card(p, loop.index) }}{% else %}<p class="lead">Coming soon.</p>{% endfor %}</div>{% endif %}
   {#- A sliding row is a scroll container first and a carousel second: .cards scrolls natively, so the
       wheel, a trackpad and a finger all work with the page exactly as it is served. site.js adds the
       arrows, the dots and the drifting, and it is what removes `hidden` -- so with a script blocked
