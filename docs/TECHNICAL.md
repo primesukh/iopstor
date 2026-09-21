@@ -65,7 +65,7 @@ Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_w
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `post_types` | Content types **as data** | `slug`, `url_prefix`, `hierarchical`, `field_schema` (JSONB), `taxonomies` (JSONB), `jsonld_type`, `in_sitemap`, `has_pages` |
+| `post_types` | Content types **as data** | `slug`, `url_prefix`, `hierarchical`, `field_schema` (JSONB), `taxonomies` (JSONB), `jsonld_type`, `in_sitemap`, `in_feed`, `has_pages` |
 | `posts` | Every piece of content | `post_type_id`, `parent_id`, `slug`, `title`, `excerpt`, `blocks` (JSONB), `meta` (JSONB), `seo` (JSONB), `status`, `published_at`, `featured_media_id`, `author_id`, `menu_order` |
 | `taxonomies` / `terms` / `post_terms` | Classification, many-to-many | `terms` unique on `(taxonomy_id, slug)` |
 | `media` | Uploads | `key` (the path inside the bucket), `url` (**the path this site serves it at, `/media/<key>` — not the Storage address**), `mime`, `size`, `alt`, `uploaded_by` |
@@ -796,6 +796,54 @@ endpoints answer with content (sitemap 60 `<loc>`s, llms-full 19 KB) and **zero*
 slugged `admin`, a post type prefixed `admin`, a taxonomy slugged `admin` — because an assertion that
 passes on a site containing none of those proves nothing; removing any one of the three gates makes
 `test_no_crawler_output_can_carry_an_address_the_app_owns` fail, which was checked one gate at a time.
+
+### `/feed.xml` — the site's news, not the blog's
+
+**Which types the feed carries is a row, not a slug in code** (2026-09-21). It used to be
+`db.post_type(slug="post")`, one type found by name; it is now every type with
+`post_types.in_feed`, which `0016_feed_types.sql` adds beside `in_sitemap` and sets on `post`,
+`case_study`, `event` and `datasheet`. Services, partners and testimonials stay out on purpose: they
+are the catalogue, and they change without anything having happened.
+
+The report that started it was "the RSS feed doesn't update", and nothing was broken — the site has
+exactly one blog post, so a blog feed correctly never moved while case studies and testimonials were
+being published all week. The fix is that the feed is about the site. **Measured: 1 item → 11.**
+
+`feed()` reads the column with `t.get("in_feed", t["slug"] == "post")`, so on a database where the
+migration has not run the key is missing and the feed is the blog alone — exactly what it did before.
+The write path needs no such care: there is no Post Types screen, and `pick()` forwards only keys a
+caller actually sent, so `in_feed` in `PT_FIELDS` cannot reference a column that is not there yet.
+
+**`_summary()` is why an item now has anything under the headline.** `<description>` was
+`escape(p['excerpt'])` with nothing behind it, and most posts have no excerpt — the one blog post
+shipped a literal `<description/>`. The chain is SEO description → excerpt → `blocks_text()` → the
+type's `textarea` fields, clipped by `textwrap.shorten`. It is deliberately **not** `build_meta()`'s
+chain (§9 above), which ends at the site tagline: right for one page in `<head>`, wrong for forty
+items that would then share one sentence. The last step exists because **a case study keeps its prose
+in `meta`, not in `blocks`** — its Challenge and Results *are* the post and `blocks_text()` of it is
+`""`. `textarea` is the same test `_md_fields()` uses for "long enough to be its own section", so a
+`text` field like Client is skipped: "LKS" is not a summary. Empty is still a legal answer for a post
+with no excerpt, no body and no fields, and inventing a sentence would be worse than the blank.
+
+Items also carry `<guid isPermaLink="true">`, `<category>` for the type and each term,
+`<dc:creator>` (the organisation — author names are not in `POST_SELECT` and embedding them would
+touch every query on the site, and `jsonld()` already credits the same way) and an `<enclosure>` for
+the featured picture with the byte `length` the spec asks for. The channel gained `<language>`,
+`<lastBuildDate>` (max `updated_at`, `db.utcnow()` when empty), an `<atom:link rel="self">` and
+`<image>` from the `logo_url` setting; `<link>` is the site root rather than the hardcoded `/blog`.
+`pubDate` is `email.utils.format_datetime()`, stdlib RFC 2822 — the old
+`strftime('%a, %d %b %Y %H:%M:%S +0000')` emits non-English day and month names under a non-C locale
+and pinned `+0000` regardless of the value it was formatting.
+
+**Selection filters after fetching, not before.** `.limit(20)` used to run ahead of `_indexable()`,
+so one `noindex` post quietly shortened the feed; it now takes `FEED_MAX * 2` and slices to
+`FEED_MAX` after the gate (§17).
+
+`test_the_feed_gives_a_reader_something_to_show` guards the item shape, and parses with
+`ElementTree.fromstring` rather than grepping: a feed is rejected whole for being malformed and a
+forgotten `xmlns:` prefix is the usual reason. It cannot guard **which types** are included — `_FakeQ`
+answers every query with the same canned list whatever `.in_()` was given — so inclusion by type is a
+live `curl` fact, not a unit test.
 
 `base.html`'s `<head>` also carries the favicon (`static/favicon.svg`, the black square with the blue bar and white ring) and the two web fonts. The fonts come from Google Fonts on a `<link>`, which is the one external request the public site makes; `admin/canvas.html` repeats that link because it is a standalone document, and without it the editor canvas would preview the page in a different typeface from the page itself.
 
@@ -2009,6 +2057,15 @@ tests/test_public.py     hierarchical URLs + breadcrumbs, leads, redirects, site
 
 **`test_throttle_fails_open_and_believes_only_a_proxy_we_named`** covers `client_ip()` end to end: the counter failing open, the header winning from a peer inside `TRUSTED_PROXIES`, the **rightmost** `X-Forwarded-For` entry beating a spoofed one to its left, `CF-Connecting-IP` beating `X-Forwarded-For`, and — the half that is the security property — both of them being *ignored* from a peer outside the list, including after narrowing `TRUSTED_PROXIES` so the private peer no longer qualifies. It was `test_throttle_fails_open_and_reads_cloudflares_header` until the header stopped being read unconditionally.
 
+**Two things every canned-rows test has to know about `_FakeQ`** (the fake PostgREST chain the crawler
+and feed tests share). First, **it ignores every filter**: `__getattr__` returns `self`, so `.eq()`,
+`.in_()`, `.order()` and `.limit()` all no-op and `db.rows()` hands back the whole canned list for
+that table. A test can therefore prove what a route *renders*, never what its query *selects* — which
+rows a `WHERE` picks is a live fact. Second, **`post_types` and `settings` are cached in the process,
+not the request**, so canned rows lose to whatever an earlier test left in `db._proc_cache`; both
+crawler tests now call `db._proc_cache.clear()` first. Without it the feed's channel `<image>` picked
+up a real `logo_url` from a previous test and the suite failed only when run whole (2026-09-21).
+
 **The stress engine (`iopstor/stress.py`) is covered offline**: `test_validate_target_*` (scheme-only URL guard), `test_clamp_*`, `test_percentile_is_nearest_rank_in_ms`, `test_progress_store_roundtrips_and_stops` (the `/dev/shm` store on a `tmp_path` file), `test_nprocs_and_split` (the fan-out sizing and even split), `test_plan_caps_real_concurrency` (a huge entered number is scaled down so per-process threads stay ≤ `PER_PROC`), `test_merge_parts_sums_children` (the coordinator's sum of two part rows), and two measured ones: `test_run_load_hits_a_real_server_and_the_honeypot_leaves_no_row` stands up a throwaway `http.server`, runs `stress.start()` at it and asserts requests went, real pages answered 200 and every honeypot lead post was dropped without a row; `test_a_multiprocess_run_completes` forces the fan-out to real spawned processes and asserts both children reported through the `parts` table into a finished run. No Supabase, so they live in `test_offline.py`.
 
 **The testimonial row has four offline tests**, all monkeypatching `blocks._post_list` so no Supabase is needed:
@@ -2412,6 +2469,7 @@ Marked in code with `# ponytail:` comments.
 - **A restore is not pre-checked against what it references.** Putting back a version whose featured image or parent page has since been deleted fails on the foreign key and surfaces through `_pg_error` as a 502 page rather than a sentence.
 - **`/admin/audit` pages with offset/limit** like every other admin list. Deep pages get slower; keyset pagination if that day comes.
 - **The sliding row is hard-coded to one content type.** `render_blocks()` sets `rail = pt_slug == "testimonial"`; nothing else can ask for it. A "Sliding row" checkbox on the `post_list` block is the upgrade, and it is deliberately not built yet — a field costs validation, a seed entry, a label, an `EDITOR["widgets"]` line and a test, and exactly one type wants this.
+- **The feed over-fetches 2× rather than paging.** `feed()` asks for `FEED_MAX * 2` rows and slices to `FEED_MAX` after `_indexable()`, because filtering a list that was already truncated is what let one `noindex` post shorten the feed. `FEED_MAX` consecutive `noindex` posts would still come up short; page the query if that ever happens.
 - **`site.js` has no error boundary and no feature detection.** It is 45 lines against `scrollTo`, pointer events and `matchMedia`, all of which every browser the client's visitors use has had for years; if any of it throws, the row silently stays a plain native scroller, which is the state the page is served in anyway. That is the whole reason the controls ship `hidden` and the script unhides them.
 
 Shared editing (§12.3), all of them named in `admin.js`:

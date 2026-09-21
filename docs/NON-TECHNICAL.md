@@ -603,9 +603,23 @@ The site publishes automatically, with no work from you:
 
 - `/sitemap.xml` — the list of every public page, for search engines
 - `/robots.txt` — the rules for crawlers
-- `/feed.xml` — an RSS feed of the blog
+- `/feed.xml` — an RSS feed of the site's news: **blog posts, case studies, events and datasheets**, newest first
 - `/llms.txt` and `/llms-full.txt` — a clean, plain-text version of the whole site, written for AI assistants to read
 - **a plain-text version of every single page** — add `.md` to any address and you get that page's words with no design around them. `/about-us` becomes `/about-us.md`, `/services/storage/nas` becomes `/services/storage/nas.md`, and the home page is `/index.md`. Section headings, lists, tables and specification rows all survive; only the styling is dropped
+
+### What appears in the RSS feed, and what never will
+
+The feed is the site's news. A **blog post, case study, event or datasheet** goes into it the moment
+you publish it. A **service, technology partner or testimonial never does**, however often you edit
+one — those are the catalogue, not news, and a feed that announced them would cry wolf. The home page
+and the other standing pages stay out for the same reason. If you need that changed, it is a small
+job for whoever looks after the site; there is no setting for it on your screens.
+
+Each entry carries the headline, the date, the picture and the tags, and a short summary underneath.
+**That summary is the Excerpt you wrote**, or the page's own opening words if you left the Excerpt
+empty — and for a case study, its **Challenge**. If a post has none of those filled in, the entry is
+just a headline with nothing under it, which is worth knowing: filling in the Excerpt is what makes
+the entry read well wherever it is picked up.
 
 ### Why the `.md` versions matter
 
@@ -745,6 +759,16 @@ paragraph, the way Google Docs does (§4).
 ---
 
 ## 15. Quick answers
+
+**The RSS feed never updates.** Check what you published. Until now the feed listed **blog posts
+only**, and the site has exactly one of those — so a week of publishing case studies, testimonials
+and pages left it sitting on the same single entry, which looked broken and was not. It now carries
+blog posts, case studies, events and datasheets, so publishing any of those shows up in it within a
+minute or two. Services, partners and testimonials are still deliberately left out.
+
+**An entry in the feed has a headline but nothing under it.** That post has no **Excerpt**, no words
+on the page and — if it is a case study — no **Challenge** filled in, so there is nothing to put
+there. Write an Excerpt and it will read properly. Nothing is broken; there is simply nothing to show.
 
 **The services on the home page look different.** They do. The row of five cards is now a stack: one
 service per line, and pointing at a line — or tapping it on a phone — slides that one open to show its
