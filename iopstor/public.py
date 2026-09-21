@@ -290,8 +290,36 @@ def _filters(pt):
     return [{"name": t["name"], "url": f"/{tax['slug']}/{t['slug']}"} for t in terms]
 
 
-def render_archive(q, title, path, crumbs, description="", pt=None):
-    """q: a live select_posts(count='exact') query, already filtered."""
+def _archive_type(tax, posts):
+    """Which post type a TERM archive is an archive of. A term archive is the only one that does not
+    arrive knowing, and everything downstream keys off it: the head's band, the pl-<type> card rules
+    and the chip row (`_filters`) all read `pt`, and the breadcrumb needs a real archive to point at.
+
+    The posts are the truth and are free -- POST_SELECT_BY_TERM embeds each post's own post_type --
+    so a `category` holding products is a Products archive and one holding blog posts is a Blog
+    archive, which is the only taxonomy where the declaration is ambiguous (post AND product both
+    claim it). An EMPTY term has nothing to ask, so it falls back to whichever type declares the
+    taxonomy; and a taxonomy nothing declares gets None, which drops the crumb rather than pointing
+    it somewhere untrue.
+    # ponytail: a genuinely MIXED term styles as the type it has more of -- pl-<type> is on the
+    # container and the whole .pl-* group is ancestor-scoped. No content can reach it today.
+    """
+    seen = [p["post_type"] for p in (posts or []) if p.get("post_type")]
+    slugs = {t["slug"] for t in seen}
+    if len(slugs) == 1:
+        return seen[0]
+    if seen:
+        top = max(slugs, key=lambda sl: sum(1 for t in seen if t["slug"] == sl))
+        return next(t for t in seen if t["slug"] == top)
+    return next((t for t in db.post_types() if tax and tax["slug"] in (t.get("taxonomies") or [])), None)
+
+
+def render_archive(q, title, path, crumbs, description="", pt=None, tax=None):
+    """q: a live select_posts(count='exact') query, already filtered.
+
+    `tax` marks this as a term archive: `pt` is then worked out from the posts below rather than
+    handed in, and the middle crumb is built here for the same reason -- the answer needs the page
+    of posts, which does not exist until paginate() has run."""
     page = max(request.args.get("page", 1, type=int) or 1, 1)
     result = db.paginate(q.order("menu_order").order("published_at", desc=True), page, 20)
     if page > 1 and not result["items"]:
@@ -301,6 +329,14 @@ def render_archive(q, title, path, crumbs, description="", pt=None):
     # description was built into meta but never reached the template, so archive.html's lead
     # paragraph could not render and every term archive's prose was invisible.
     posts = db.with_paths(result["items"])
+    if tax is not None:
+        pt = _archive_type(tax, posts)
+        # Home / Case Studies / Finance. It used to be Home / Industry / Finance, and "/industry"
+        # is served by nothing -- a 404 in the breadcrumb and, through seo.jsonld(), in the
+        # BreadcrumbList handed to Google (design.md, known since 2026-09-15). jsonld() iterates
+        # this same list, so there is nothing to change in seo.py.
+        mid = [(pt["name"], "/" + pt["url_prefix"])] if pt and pt.get("url_prefix") else []
+        crumbs = [crumbs[0]] + mid + [crumbs[-1]]
     if _wants_md():
         nxt = f"- [Next page]({md_url(path)}?page={page + 1})" if has_next else ""
         return _md_page(title or seo.site()["name"], path, [description, _md_list(posts), nxt])
@@ -390,8 +426,9 @@ def resolve(path):
         term = db.one(db.table("terms").select("*").eq("taxonomy_id", tax["id"]).eq("slug", segs[1])) if tax else None
         if term:
             q = db.live(db.table("posts").select(db.POST_SELECT_BY_TERM, count="exact")).eq("post_terms.term_id", term["id"])
-            crumbs = [("Home", "/"), (tax["name"], "/" + tax["slug"]), (term["name"], full)]
-            return render_archive(q, term["name"], full, crumbs, term["description"])
+            # the middle crumb is render_archive's to build: it needs the posts to know the type
+            crumbs = [("Home", "/"), (term["name"], full)]
+            return render_archive(q, term["name"], full, crumbs, term["description"], tax=tax)
     abort(404)
 
 

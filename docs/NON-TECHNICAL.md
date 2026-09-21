@@ -784,6 +784,13 @@ picture in the Hero section's own **Image** box instead, or remove the Hero and 
 yours. Case studies and events no longer start with a Hero unless you add one, so there the picture
 usually shows straight away.
 
+**The Industry and Solution pages look plain, not like the rest of the site.** They don't any
+more. Clicking a category chip — *Finance*, *Logistics*, *HCI* — now gives you a page built the same
+way **Case Studies** is: the dark banner at the top, the cards with their pictures and labels, and a
+row of the other industries along the top so you can move between them without going back. The trail
+at the top also leads somewhere now: it says *Home / Case Studies / Finance*, and **Case Studies**
+takes you to the full list. It used to say *Industry*, which was not a page and went nowhere.
+
 **I deleted a section by mistake — can I get it back?** Yes. Press **↶** in the toolbar, or
 **Ctrl+Z** (**⌘Z** on a Mac). It brings back the section with its writing and its settings. The same
 works for a section you moved, copied or added, and for anything you changed under **⚙** — press it
