@@ -766,6 +766,13 @@ and pages left it sitting on the same single entry, which looked broken and was 
 blog posts, case studies, events and datasheets, so publishing any of those shows up in it within a
 minute or two. Services, partners and testimonials are still deliberately left out.
 
+**Clicking RSS downloads a file instead of showing me anything.** It used to, and it no longer does —
+the feed now opens in the browser like the sitemap does. It will still look like raw code rather than
+a designed page, because that is what a feed is: a list meant for news readers and search engines to
+collect, not for people to read. **The page for people is `/blog`.** We deliberately did not dress
+the feed up, because the browser feature that would have done it is being switched off in Chrome in
+November 2026 and in the other browsers after that.
+
 **An entry in the feed has a headline but nothing under it.** That post has no **Excerpt**, no words
 on the page and — if it is a case study — no **Challenge** filled in, so there is nothing to put
 there. Write an Excerpt and it will read properly. Nothing is broken; there is simply nothing to show.

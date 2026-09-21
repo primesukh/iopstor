@@ -2463,7 +2463,11 @@ def test_the_feed_gives_a_reader_something_to_show(app, monkeypatch):
     monkeypatch.setattr(db, "table", lambda n: _FakeQ(n))
     monkeypatch.setattr(db, "rows", lambda q: canned.get(q.name, []))
 
-    root = ElementTree.fromstring(app.test_client().get("/feed.xml").data.decode())
+    resp = app.test_client().get("/feed.xml")
+    # a browser renders application/xml and offers to SAVE application/rss+xml, because none of them
+    # has had a feed viewer for years -- clicking "RSS" in the footer downloaded the file
+    assert resp.mimetype == "application/xml"
+    root = ElementTree.fromstring(resp.data.decode())
     channel, atom, dc = root.find("channel"), "{http://www.w3.org/2005/Atom}", "{http://purl.org/dc/elements/1.1/}"
     item, study_item = channel.findall("item")
 

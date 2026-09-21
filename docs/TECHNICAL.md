@@ -849,6 +849,20 @@ and pinned `+0000` regardless of the value it was formatting.
 so one `noindex` post quietly shortened the feed; it now takes `FEED_MAX * 2` and slices to
 `FEED_MAX` after the gate (§17).
 
+**It answers `application/xml`, not `application/rss+xml`** (2026-09-21). Reported as *"when we go to
+RSS it downloads the file instead of viewing it"* — and that is exactly what a browser does with a
+type it cannot render. No browser has shipped a feed viewer since Firefox 64 removed its own, so
+`application/rss+xml` is an unknown type and becomes a file to save; `sitemap.xml` has always
+answered `application/xml` and was never reported, which is the in-repo precedent. Nothing else
+changes: readers parse the body, and the type they *discover* the feed by is the
+`<link rel="alternate" type="application/rss+xml">` in `base.html`, which is untouched.
+
+**An XSLT stylesheet is the obvious way to make that a designed page, and it is deliberately not
+built.** Chrome removes XSLT on **17 November 2026** (Chrome 158; Dev/Beta began disabling it in 154,
+22 September 2026), and Firefox and WebKit have both said they intend to follow — it would break
+within two months of being written. The human-readable version of this list is the `/blog` archive,
+which already exists.
+
 `test_the_feed_gives_a_reader_something_to_show` guards the item shape, and parses with
 `ElementTree.fromstring` rather than grepping: a feed is rejected whole for being malformed and a
 forgotten `xmlns:` prefix is the usual reason. It cannot guard **which types** are included — `_FakeQ`

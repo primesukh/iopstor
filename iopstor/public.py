@@ -676,7 +676,16 @@ def feed():
            f"<lastBuildDate>{format_datetime(built)}</lastBuildDate>"
            f'<atom:link href="{s["url"]}/feed.xml" rel="self" type="application/rss+xml"/>'
            f'{image}{"".join(_feed_item(p, s) for p in posts)}</channel></rss>')
-    return Response(xml, mimetype="application/rss+xml")
+    # application/xml, not application/rss+xml, so a browser renders it instead of downloading it.
+    # No browser has had a feed viewer since Firefox 64 dropped its own, and a type none of them
+    # renders is treated as a file to save -- clicking "RSS" in the footer downloaded feed.xml.
+    # sitemap.xml has always answered application/xml for the same reason and has never been
+    # reported. Feed readers are unaffected: they parse the body, and the type they discover the
+    # feed BY is the <link rel="alternate" type="application/rss+xml"> in base.html, unchanged.
+    # ponytail: no XSLT stylesheet to make it a designed page -- Chrome removes XSLT on 2026-11-17
+    # and Firefox and WebKit have said they will follow, so it would break inside two months. The
+    # human-readable version of this list is the /blog archive, which already exists.
+    return Response(xml, mimetype="application/xml")
 
 
 # ---- public JSON API -------------------------------------------------------
