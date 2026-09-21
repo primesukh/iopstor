@@ -2230,8 +2230,28 @@ error_code=TenantNotFound [error] TenantNotFound: Tenant not found: realtime
 
 So when presence stays dark and the browser console says `CHANNEL_ERROR`, check that first:
 `docker logs --tail 50 <stack>-realtime-1` and `select external_id from _realtime.tenants;`. The two
-strings must be equal. Fixing the container's tenant-name environment variable is the durable answer,
-because renaming the row alone is undone the next time the stack reseeds.
+strings must be equal.
+
+**It happened again on production on 2026-09-21, and fixing it corrected what this section used to
+say.** The advice here was to set the container's tenant-name environment variable. That is not what
+was done on dev and it is not what works: the two stacks' realtime containers have **byte-identical**
+environments (`APP_NAME=realtime`, `SEED_SELF_HOST=true`, only `DB_ENC_KEY` differs), and dev simply
+carries **two** tenant rows, `realtime-dev` and `realtime`, while production carried one. So the fix is
+a second row, and a second row is also the more durable of the two: `SEED_SELF_HOST` recreates
+`realtime-dev` whenever it is missing, so *renaming* it away brings it straight back and leaves the
+same two names unmatched.
+
+**Run it as `supabase_admin`, not `postgres`** — `_realtime` is owned by `supabase_admin` (the role
+the realtime container connects as) and `postgres` is not a member of it, so the write fails with a
+bare `42501: permission denied for table tenants`. Studio's SQL editor runs as `postgres`, so this one
+goes through `psql` inside the container.
+
+`migrations/repair_realtime_tenant.sql` is that repair — hand-run, once per stack, deliberately
+**not** a numbered step (`flask migrate` gates the app container, and a file that fails there is an
+outage rather than a warning; `repair_schema_migrations.sql` is the same shape). It copies the
+existing row rather than writing one out, because `jwt_secret` is encrypted with that container's own
+`DB_ENC_KEY` and a hand-written one is wrong in a way that shows up only as another silent refusal.
+Restart the realtime container afterwards — it caches authorisation per tenant.
 
 **The editor's collaboration needs nothing from the tunnel, and that is a deliberate reversal.** An
 earlier version of this section told you to add a second Public Hostname rule sending `^/realtime/`
