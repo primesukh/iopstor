@@ -341,6 +341,13 @@ card it has always been. Two more inert spans ride along and are switched on by 
 `.card-date` (an event's year and month, cut out of `meta.start_date`) and `.card-pdf` (a datasheet's
 outline mark).
 
+**A term archive is told which post type it is an archive of** (client, 2026-09-21). It was the one archive that was not, and `pt=None` reached further than it looks: `archive.html` derives `slug` from it, and `slug` drives the head's `band-dark`, the `pl-<type>` class that every card rule hangs off, and `_filters(pt)`. So `/industry/finance` had a white head where `/case-studies` has the black band, no sibling-term chips at all, and a card reduced to a box and an `<h3>` — `site.css` hides `.card-img`, `.card-n` and `.chips` under a bare `.pl` and it is each `.pl-<type>` rule that puts its own back, so a card outside its type keeps none of them. The same `None` is why the breadcrumb pointed at `/industry`, a path no route serves: with no type, the middle crumb was built from the taxonomy.
+
+**`_archive_type(tax, posts)` reads the posts, not the declaration**, and the reason is `category` — it is claimed by both `post` and `product` (`cli.py:56`, `:83`), so the declaration cannot answer on its own. The posts can, and for free: `POST_SELECT_BY_TERM` is `POST_SELECT` plus an inner join, so every row already carries its own `post_type`. An **empty** term has nothing to read, so it falls back to whichever type declares the taxonomy, and a taxonomy nothing declares yields `None`, which drops the middle crumb rather than pointing it somewhere untrue.
+
+**The crumb is built inside `render_archive()` and that placement is the point** — the answer needs the page of posts, which does not exist until `db.paginate()` has run, so the term route hands over `tax=` and stops building the middle crumb itself. Nothing in `seo.py` changed: `jsonld()` iterates this same list, so fixing the visible trail fixed the `BreadcrumbList` that all twelve live term archives were handing to Google. `_indexable()` never saw it — the bare taxonomy URL stayed out of the crawler files by construction, not by a gate, which is why it survived so long.
+# ponytail: `pl-<type>` is on the container and the whole `.pl-*` group is ancestor-scoped, so a genuinely MIXED term (only `category` could be one) styles as whichever type it has more of. No live term has any posts of two types.
+
 `render_archive()` hangs children off each row for a **hierarchical** type, the same `db.tree()` lookup
 `_post_list()` uses, so the services archive can draw its child tiles. `render_post()` does the mirror
 of it: a page with no children of its own but a parent gets its **siblings** instead, which is the

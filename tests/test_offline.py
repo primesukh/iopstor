@@ -2862,6 +2862,106 @@ def _case_study(blocks_=(), **kw):
             **kw}
 
 
+# --- a term archive knows what it is an archive of -----------------------------------------------
+# /industry/finance had a white head where /case-studies has the black band, a case study rendered
+# as a bare titled box, no chip row, and a breadcrumb pointing at /industry -- which no route
+# serves, and which seo.jsonld() was handing to Google in a BreadcrumbList (known since
+# 2026-09-15). One cause: it was the only archive that did not know its post type. Nothing here
+# rendered a term archive's HTML before, which is why none of it ever failed.
+
+CASE_PT = {"slug": "case_study", "name": "Case Studies", "url_prefix": "case-studies",
+           "hierarchical": False, "taxonomies": ["industry", "solution"]}
+BLOG_PT = {"slug": "post", "name": "Blog", "url_prefix": "blog", "hierarchical": False,
+           "taxonomies": ["category", "tag"]}
+PROD_PT = {"slug": "product", "name": "Products", "url_prefix": "products", "hierarchical": False,
+           "taxonomies": ["category"]}
+
+
+def test_which_post_type_a_term_archive_belongs_to():
+    """The posts are the truth and are free -- POST_SELECT_BY_TERM already embeds each post's own
+    post_type -- which matters because `category` is claimed by BOTH Blog and Products, so the
+    declaration alone cannot answer it. An empty term has nothing to ask and falls back to the
+    declaring type; a taxonomy nothing claims gets None, which drops the crumb rather than
+    pointing it somewhere untrue."""
+    from iopstor import db, public
+    industry, category = {"slug": "industry"}, {"slug": "category"}
+    def post(pt): return {"post_type": pt}
+
+    assert public._archive_type(industry, [post(CASE_PT), post(CASE_PT)])["slug"] == "case_study"
+    assert public._archive_type(category, [post(PROD_PT)])["slug"] == "product"   # posts, not the declaration
+    assert public._archive_type(category, [post(BLOG_PT)])["slug"] == "post"
+
+    import unittest.mock as m
+    with m.patch.object(db, "post_types", lambda: [BLOG_PT, PROD_PT, CASE_PT]):
+        assert public._archive_type(industry, [])["slug"] == "case_study"          # empty term
+        assert public._archive_type(category, [])["slug"] == "post"                # first to claim it
+        assert public._archive_type({"slug": "nobody"}, []) is None
+        # mixed: styled as the one it has more of, since pl-<type> is on the container
+        mixed = [post(BLOG_PT), post(PROD_PT), post(PROD_PT)]
+        assert public._archive_type(category, mixed)["slug"] == "product"
+
+
+def _render_term_archive(app, monkeypatch, posts, tax=None):
+    """The first thing in this suite to render archive.html. render_archive() is where the type is
+    worked out, so it is the unit under test -- only the database underneath it is stubbed."""
+    from iopstor import db, public
+    tax = tax or {"slug": "industry", "name": "Industry"}
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    monkeypatch.setattr(public, "_service_nav", lambda: None)
+    monkeypatch.setattr(db, "post_types", lambda: [BLOG_PT, PROD_PT, CASE_PT])
+    monkeypatch.setattr(db, "with_paths", lambda rows: rows)
+    monkeypatch.setattr(db, "paginate", lambda q, page, per: {"items": posts, "total": len(posts)})
+    monkeypatch.setattr(db, "one", lambda q: {"id": 1, "slug": tax["slug"], "name": tax["name"]})
+    monkeypatch.setattr(db, "rows", lambda q: [{"slug": "logistics", "name": "Logistics"},
+                                               {"slug": "finance", "name": "Finance"}])
+    class Q:
+        def order(self, *a, **k): return self
+    with app.test_request_context("/" + tax["slug"] + "/finance"):
+        return public.render_archive(Q(), "Finance", "/" + tax["slug"] + "/finance",
+                                     [("Home", "/"), ("Finance", "/" + tax["slug"] + "/finance")],
+                                     "", tax=tax)
+
+
+def _a_case_study(title="One platform"):
+    return {"id": 1, "title": title, "slug": "ft", "path": "/case-studies/ft", "excerpt": "",
+            "post_type": CASE_PT, "featured_media": None, "published_at": "2026-09-03T00:00:00+00:00",
+            "terms": [{"name": "Finance", "slug": "finance", "taxonomy": {"slug": "industry"}}]}
+
+
+def test_a_term_archive_looks_like_the_archive_it_filters(app, monkeypatch):
+    """Reported as "the subcategory page formatting isn't synced with the whole website". Every
+    symptom is one missing value: site.css hides .card-img/.card-n/.chips under a bare .pl and it
+    is each .pl-<type> rule that puts its own back, so with no type the card is reduced to its box
+    and an <h3>. The head's band and the chip row read the same `pt`."""
+    html = _render_term_archive(app, monkeypatch, [_a_case_study()])
+    assert 'class="arch-head band-dark"' in html          # the black band, as on /case-studies
+    assert "pl pl-case_study" in html                     # ...and the card rules that go with it
+    assert 'class="chip" href="/industry/logistics"' in html   # the sibling row, empty until now
+    assert "One platform" in html
+
+
+def test_a_term_archive_leads_back_to_the_archive_it_filters(app, monkeypatch):
+    """Home / Case Studies / Finance, not Home / Industry / Finance. /industry is served by
+    nothing -- a 404 in the trail and, through seo.jsonld() reading this same crumb list, in the
+    BreadcrumbList of all twelve live term archives. Known since 2026-09-15; reported by a reader
+    on 2026-09-21."""
+    html = _render_term_archive(app, monkeypatch, [_a_case_study()])
+    assert 'href="/case-studies"' in html
+    assert 'href="/industry"' not in html                 # the dead link, gone from the page
+    assert ">Finance<" in html
+
+
+def test_an_empty_term_archive_still_knows_what_it_is(app, monkeypatch):
+    """The Distribution page in the report: no posts, so there is nothing to read the type off and
+    the taxonomy's declaration has to answer instead. Without it an empty term keeps exactly the
+    white head and dead crumb this change is about."""
+    html = _render_term_archive(app, monkeypatch, [])
+    assert 'class="arch-head band-dark"' in html
+    assert 'href="/case-studies"' in html and 'href="/industry"' not in html
+    assert "Nothing published here yet." in html
+
+
 def _render_post(app, monkeypatch, post):
     """post.html through base.html, which is the only way the page head is exercised at all. The
     three patches are exactly what public.py's app-wide context processor reaches for."""
