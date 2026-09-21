@@ -44,7 +44,8 @@ A change can hit several rows; screenshot every row that matches.
 | a block's rule group | a page holding it on its own **and inside a Columns section** |
 | archive shapes (`pl-*`) | `/services`, `/products`, `/events`, `/datasheets`, `/case-studies`, `/partners` |
 | `post.html`, `_card.html` | one post of every type that renders differently: service, product (+ `/checkout`), blog, datasheet |
-| mega panel / mobile sheet | `/` at 1440 (hover cannot be captured — check the markup) and 390 |
+| mega panel / mobile sheet | `/` at 1440 (hover cannot be captured — see *A hover state*) and 390 |
+| anything that opens on `:hover` | `/` at 1440 **and** the cascade check in *A hover state* — a screenshot only ever shows the unhovered page |
 | `admin.css`, `canvas.css`, `admin.js` | **an admin screen CAN be shot without logging in** — see below; do that rather than describing a check for the user |
 | a block type that replaces markup that was `rich_text` | the page **before and after in one document** — see below — on the page and in its column |
 
@@ -85,6 +86,25 @@ ES modules do not load from `file://` in Firefox, and the page renders its pre-s
 PID=$(ss -lptnH 'sport = :8137' | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2); [ -n "$PID" ] && kill "$PID"
 ```
 
+## A hover state, and the transition it starts
+
+**`matchMedia('(hover:hover)').matches` is `false` in headless Firefox here** (measured 2026-09-21), so anything inside `@media(hover:hover)` is not even parsed into the run, and `:hover` cannot be forced from script. A screenshot of a page with a hover-driven panel or accordion always shows the unhovered state, and that is not a finding.
+
+To check what a real pointer gets, stand a class in for `:hover` in a **copy** of the stylesheet and let the browser resolve the same cascade — a media query adds no specificity, so the answer is the real one:
+
+```python
+css = css.replace("@media(hover:hover){", "@media all{").replace(".acc-row:hover", ".acc-row.hv")
+h   = h.replace('<link rel="stylesheet" href="/static/site.css">', "", 1)   # <- or the reading is worthless
+h   = h.replace("</head>", "<style>\n" + css + "\n</style></head>", 1)
+```
+
+Two traps, both of which produced a confident wrong reading before they were understood:
+
+- **Remove the real `<link>`.** Leave it and its own unmodified `:not(:has(… :hover))` guards keep answering "nothing is hovered", so the rule you are testing is overruled by the file you are testing.
+- **Read the custom property, not the resolved value.** Sampled synchronously after forcing layout, a property that is mid-transition still reports its **start** frame — `grid-template-rows` read `0px` on a row that had just been told to open, which looks exactly like a rule that did not apply. `getComputedStyle(el).getPropertyValue('--rows')` gives the answer the cascade actually produced.
+
+**Whether a transition is running at all** is `el.getAnimations().map(a => a.transitionProperty)`, synchronously after the state change and a forced reflow. That is the only way to prove a value delivered through `var()` still animates, which is worth proving whenever the open/closed look is carried by custom properties rather than written per selector.
+
 ## A moving thing, at a chosen moment
 
 A plain headless screenshot fires at an arbitrary point in an animation and usually catches frame 0. Save the page locally with `<base href="http://localhost:5001/">` injected and `<style>SELECTOR{animation-delay:-1.2s!important}</style>` before `</head>`, then shoot the file: a negative delay past the duration on a `both`-filled animation holds its end frame, a partial one holds a mid frame — the only deterministic way to verify an animated state. Firefox 140 has `@property` but not scroll-driven animations, so anything scroll-triggered renders as its fallback there and only a Chromium binary shows it (which one exists is in memory). Neither browser is the client's: a Firefox-only bug (no `var()` interpolation in a keyframe, 2026-09-10) is real, and a Chromium screenshot hides it.
@@ -115,7 +135,7 @@ is the only way to see the editor chrome, which lives inside an iframe.
 - **A rule that "just isn't applying"**: check brace balance before editing the rule — one orphan `}` on 2026-09-10 silently dropped the hero's padding while pytest stayed green (`test_stylesheets_are_balanced` guards it now) — and read `getComputedStyle` rather than the source.
 - **Fonts**: Manrope / IBM Plex Sans come from Google Fonts; offline they fall back and the screenshot lies about measure. Say so if the box has no internet.
 - **Reduced motion**: the hero rotator parks on the first picture under `prefers-reduced-motion`; a screenshot with the second picture showing is fine, one with none is not.
-- **The mock is the reference, the client's decisions win over it** (`.claude/docs/requirements.md`): white header with the logo in colour (2026-09-08); price on the Buy button (2026-09-09); the Contact page's quote form on the Careers grey panel, not the mock's black card (2026-09-10); footer socials as an icon row under the logo (2026-09-11); and **the brand blue is `#3573b9` while the mock is still `#008cf7`** (2026-09-18; it was `#4273b8` from 2026-09-12). Note the client's brand sheet prints `#1F6DB2` — the site deliberately uses the blue inside the logo artwork instead, so do not "correct" it — every side-by-side shows two blues, and that is the decision, not a regression. The header logo file is the client's own; the 2026-09 artwork is in `website_assets/iopstor-logo-2026.png` and is the site's logo once an administrator uploads it in Media and points Settings at it.
+- **The mock is the reference, the client's decisions win over it** (`.claude/docs/requirements.md`): white header with the logo in colour (2026-09-08); price on the Buy button (2026-09-09); the Contact page's quote form on the Careers grey panel, not the mock's black card (2026-09-10); footer socials as an icon row under the logo (2026-09-11); the archive heads are light where the mock draws four of them on `#0a0d12` (2026-09-21); the home page's "What we do" section is the client's own design option 1a — an accordion of service groups, not the mock's deck of cards (2026-09-21); and **the brand blue is `#3573b9` while the mock is still `#008cf7`** (2026-09-18; it was `#4273b8` from 2026-09-12). Note the client's brand sheet prints `#1F6DB2` — the site deliberately uses the blue inside the logo artwork instead, so do not "correct" it — every side-by-side shows two blues, and that is the decision, not a regression. The header logo file is the client's own; the 2026-09 artwork is in `website_assets/iopstor-logo-2026.png` and is the site's logo once an administrator uploads it in Media and points Settings at it.
 
 ## Report
 

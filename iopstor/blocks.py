@@ -31,7 +31,7 @@ BLOCKS = {  # type: (required fields, optional fields)
     "embed_html": (["html"], []),
     # link_label/link_url are the "All services →" link in the section header.
     "post_list": (["post_type"], ["heading", "eyebrow", "term", "limit", "top_level",
-                                  "link_label", "link_url", "per_row"]),  # queried at render time; top_level=true → parents only
+                                  "link_label", "link_url", "per_row", "list_style", "open_tone"]),  # queried at render time; top_level=true → parents only
     "spec_table": (["rows"], ["heading"]),  # rows: [{k, v}]
     # A term and its description on a ruled row -- the design's "ZFS features, in plain terms".
     # Deliberately spec_table's shape: same repeater, same labels, only the markup differs. Values are
@@ -65,7 +65,8 @@ EDITOR = {
                 "url": "url", "cta_url": "url", "button_url": "url", "limit": "number",
                 "top_level": "checkbox", "post_type": "post_type", "kind": "kind",
                 "cta2_url": "url", "link_url": "url", "dark": "checkbox", "still": "checkbox", "arrange": "choice", "noglow": "checkbox",
-                "count_up": "checkbox", "fx": "choice", "height": "choice", "per_row": "choice"},
+                "count_up": "checkbox", "fx": "choice", "height": "choice", "per_row": "choice",
+                "list_style": "choice", "open_tone": "choice"},
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
     "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label", "fx", "count_up"],
               "spec_table": ["k", "v"], "definitions": ["k", "v"], "points": ["text"],
@@ -81,7 +82,8 @@ EDITOR = {
                "link_label": "Header link text", "link_url": "Header link",
                "dark": "Dark background", "still": "Hold the picture still", "arrange": "Where the picture goes",
                "noglow": "Hide the glow behind the picture",
-               "count_up": "Count up from zero", "fx": "Effect", "per_row": "Items per row"},
+               "count_up": "Count up from zero", "fx": "Effect", "per_row": "Items per row",
+               "list_style": "List style", "open_tone": "Colour when open"},
     "kinds": ["contact", "quote", "career"],
     # options for the "choice" widget, keyed by field: [value, label] pairs, so the empty one can
     # say what it means. blocks.py FX is the whitelist these values are checked against.
@@ -93,7 +95,13 @@ EDITOR = {
                 "arrange": [["", "Beside the words"], ["above", "Above the words"], ["below", "Below the words"]],
                 "per_row": [["", "As many as fit the width"],
                             ["even", "Even rows, worked out from how many there are"]]
-                           + [[str(n), f"{n} per row"] for n in range(2, 9)]},
+                           + [[str(n), f"{n} per row"] for n in range(2, 9)],
+                # "" is not "cards": it is the shape _acc() picks for the type, which is the
+                # accordion for a top-level services list and cards for everything else.
+                "list_style": [["", "Automatic"], ["cards", "Cards"], ["accordion", "Accordion"]],
+                # the accordion's open row. Compared against these literals in the template, never
+                # interpolated -- the same rule hero.arrange follows.
+                "open_tone": [["", "Black"], ["blue", "Blue"], ["light", "Light grey"]]},
     # order the section picker offers them in, commonest first (Jinja's tojson sorts dict keys,
     # so BLOCKS' own order does not survive the trip to the browser)
     "order": ["hero", "rich_text", "cards", "columns", "spacer", "divider", "cta", "faq", "stats",
@@ -181,7 +189,7 @@ def layout(name):
 # verdict, stored rather than recomputed so every editor of a page agrees about it.
 _NON_TEXT_KEYS = {"url", "cta_url", "cta2_url", "button_url", "link_url", "icon", "image", "media_id", "file_media_id",
                   "post_type", "term", "limit", "kind", "top_level", "dark", "still", "arrange", "noglow", "pad", "type", "widths", "align", "align_box", "width",
-                  "tone", "fx", "count_up", "height", "per_row", "_id", "_rich"}
+                  "tone", "fx", "count_up", "height", "per_row", "list_style", "open_tone", "_id", "_rich"}
 EDITOR["scalars"] = sorted(_NON_TEXT_KEYS)
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
 _TEXT_ORDER = ("eyebrow", "heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company",
@@ -430,7 +438,7 @@ def render_blocks(blocks, edit=False, path="0", h1=True):
                 # from the row rather than the data. ponytail: one type is named. Make it a "Sliding
                 # row" checkbox on the block when a second type wants one.
                 extra = {"posts": posts, "pt_slug": pt_slug, "cols": _cols(b["data"], len(posts)),
-                         "rail": pt_slug == "testimonial"}
+                         "rail": pt_slug == "testimonial", "acc": _acc(b["data"], pt_slug)}
             elif b["type"] == "warranty_check":
                 extra = {"found": None if edit else _warranty()}  # the admin canvas gets the bare form, never a lookup
             elif b["type"] == "columns":
@@ -610,6 +618,15 @@ def _cols(data, n):
     if v == "even":
         return even_cols(n)
     return int(v) if v.isdigit() and 2 <= int(v) <= 8 else None
+
+
+def _acc(data, pt_slug):
+    """Is this list the accordion instead of the deck of cards? An editor's choice wins; "" is
+    Automatic, which is the services stack the design asks for (2026-09-21) and cards everywhere
+    else. Decided here rather than read out of the data, for the same reason `cols` and `rail` are:
+    pt_slug comes from the resolved post_types row, so nothing an editor typed reaches the markup."""
+    v = (data.get("list_style") or "").strip()
+    return v == "accordion" or (v == "" and pt_slug == "service" and bool(data.get("top_level")))
 
 
 def _post_list(data):

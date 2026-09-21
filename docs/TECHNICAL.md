@@ -329,6 +329,24 @@ deliberately **no "Sliding row" checkbox** on the block — one content type wan
 a field that still has to be validated, seeded, labelled and tested (`# ponytail:` in `blocks.py` names the
 upgrade path).
 
+**`acc` (2026-09-21) is the fourth computed extra**, and it is the second type of list this block can draw: the
+**services accordion**, the client's design option 1a. `_acc(data, pt_slug)` answers it, beside `_cols()` and for
+the same reason — the resolved type is part of the answer, so it cannot be something an editor typed. Unlike
+`rail` there *is* a control, because the client asked for one: `list_style`, a `choice` of `""` / `cards` /
+`accordion`. **`""` is Automatic, not "cards"** — it means *the accordion for a top-level services list and cards
+for everything else*, which is the whole reason the home page changed shape with no migration and no edit to the
+row. `list_style` is in `_NON_TEXT_KEYS` beside `per_row`, so it neither reaches `llms-full.txt` nor gets
+co-edited as prose. **`open_tone` is the second control** (same day, *"also give option to change the inside color
+as well (black)"*): a `choice` of `""` / `blue` / `light` that `post_list.html` **compares** against those two
+literals rather than interpolating — `hero.arrange`'s rule — so only `acc-blue` and `acc-light` can reach the
+class attribute. Also in `_NON_TEXT_KEYS`. `post_list.html` branches on `acc` and emits `.acc` instead of `.cards`; `.sec-head` (eyebrow,
+heading, "All services →") and the `rail-nav` foot are shared by both branches, and `blocks_md()` is untouched —
+the data is identical, so every `.md` twin is byte-for-byte what it was. §12's *The services accordion* has the
+markup contract and the CSS. Three ways it departs from the prototype on purpose: the row heading stays a real
+`<h3>` (a `<label>` may not contain heading content, so the `<h3>` wraps the label), the group's own page keeps a
+link (`All Storage →` — the card used to be that link), and every child is listed rather than `_card.html`'s
+four-then-`+N more`, because handling any number of services is the design's stated point.
+
 When `top_level` is set on a hierarchical type, `_post_list()` also hangs each parent's live children off `p["children"]` for the chips under the card, reusing `db.tree()` — already memoised for the request by the header's services panel, so on most pages it costs nothing.
 
 `archive.html`, `post.html` and `post_list.html` all draw their card from one macro, `templates/_card.html` — the same snippet used to be copied into three templates and drift between them.
@@ -1050,6 +1068,77 @@ The other three shapes size from `auto` tracks that stay inside a 390px card (da
 **A numeric `cards` icon is a counter, not an icon.** `card-icon num` drops the tinted tile for the design's mono blue number, and the deck tightens around it (`.cards:has(.card-icon.num)`).
 
 **Favicons.** `static/favicon.svg` plus PNGs at 16/32/48/180/192/512, generated from the SVG with **Inkscape** — `inkscape --export-type=png --export-width=N --export-height=N --export-filename=static/favicon-N.png static/favicon.svg`, once per size — and linked from both `base.html` and `admin/base.html` (only svg/16/32/180 are linked; 48/192/512 are kept for a web manifest that does not exist yet). Recolouring the mark means editing the SVG and re-running the six. **Not ImageMagick**, which these were generated with until 2026-09-12: `convert` has no usable SVG delegate here and falls back to its own MSVG rasteriser, whose antialiasing turns the ring into a blob at 16-48px and quantises the result to a 256-colour palette. Inkscape renders each size natively in RGBA; compare before replacing the tool again.
+
+### The services accordion
+
+The home page's "What we do" section, from the client's design option 1a (2026-09-21, `requirements.md`). One row
+per top-level service, **one open at a time**, hover or tap; the open row goes to `--black` with white heading, the
+group's blurb in `--muted-dark` and its sub-services as outlined pills. `blocks._acc()` decides which lists get it
+(§6); everything below is `site.css`, and **there is no script** — this is not a second use of `site.js`.
+
+**The open row's palette is six custom properties on `.acc`**, not colours written into the open rule: `--o-bg`,
+`--o-nm`, `--o-mt`, `--o-kid`, `--o-kln`, `--o-lnk`. That is what makes *Colour when open* three declarations
+(`.acc.acc-blue`, `.acc.acc-light`) instead of a second copy of the open-selector group, and it carries the pills
+and the group link with it, since both sit inside the row and read `--o-kid`/`--o-kln`/`--o-lnk` directly. **Do not
+put a literal colour back into the open rule** — a test greps for `--bg:var(--black)` and fails, because a
+hard-coded black there silently ignores the editor's choice.
+
+**The state machine is a radio group.** One `input.acc-t` per row, all sharing a `name`, so the browser itself
+enforces "one open at a time" and nothing here counts rows — unlike the mega panel's `nth-of-type` switch there is
+no ceiling on how many services fit. The input sits **inside** its `<label>`, which is why the markup needs no
+`id`s at all and two accordions on one page cannot steal each other's labels. `:has()` reads the state back onto
+the row, and five custom properties (`--rows`, `--bg`, `--nm`, `--mt`, `--chev`) carry the open look so it is
+written once rather than per selector.
+
+Six things are load-bearing, and a test pins the shape:
+
+- **`.acc-t` is hidden with `position:absolute;opacity:0`, never `display:none`.** It *is* the keyboard control —
+  the arrow keys walk a radio group and check as they go, which opens each row in turn — and `display:none` takes
+  it out of the tab order entirely. The header's `.mg-toggle` may be `display:none` because it is pointer-only and
+  its `<label>` is the whole control.
+- **`:focus-within` is in the open selector list.** A closed body is `grid-template-rows:0fr` over an
+  `overflow:hidden` child, which hides the child links *without* removing them from the tab order — the same
+  pairing `.mega-pane` uses.
+- **There is no "close the others" rule, on purpose.** The checked row's selector is guarded with
+  `.acc:not(:has(.acc-row:hover))`, so while a pointer is anywhere in the accordion it simply stops matching and
+  the row falls back to the closed default. A close-all rule would be `.acc:has(.acc-row:hover) .acc-row` at
+  (0,4,0) and would out-specify `.acc-row:hover` at (0,2,0) — the row under the pointer would never open.
+- **The hover rule sits in `@media(hover:hover)`.** A touch browser leaves `:hover` on the last thing tapped, and
+  a stuck hover would hold every other row shut.
+- **The hit area is `::after{inset:0}` on the label inside `.acc-hr`, not on `.acc-row`.** Against the row it
+  would lie over the open body and swallow the child links, which are the one thing there you are meant to click.
+- **No row is `checked` in the markup and nothing opens one by position** (client, 2026-09-21: *"first section
+  should be closed as well if the mouse is not over any services"*). The first pass pre-opened row 1 and backed it
+  with a `.acc:not(:has(.acc-t:checked)) .acc-row:first-child` fallback for the case where two accordions on one
+  page share a radio name and steal each other's state; both are gone, and all-shut being the ordinary state makes
+  that collision a non-event instead of something to rule around. The markup's missing `checked` is only half of
+  it — a `:first-child` back in the open group would restore the behaviour silently, so a test reads that group
+  and refuses the word.
+
+The accordion **borrows nothing from the card vocabulary**. `.pl .card-img,.pl .card-n,.pl .chips,.card-foot` are
+`display:none` under a bare `.pl` and each `.pl-<slug>` rule is what puts its own back — the section is still
+`class="pl pl-service"`, so a pill called `.chip` would arrive invisible. Every class is `acc-*`.
+
+Measured in Firefox 140 headless, on the served page, reading `getAnimations()` and `getComputedStyle` rather than
+trusting a picture — the values come through `var()`, and whether that still transitions was the open question:
+
+| checking a row | result |
+|---|---|
+| running transitions | `grid-template-rows` on `.acc-body`, `background-color` on `.acc-row`, `color` on the `h3`, `transform` on the chevron |
+| open body / closed body | `103.2px` / `0px` |
+| open row background / heading | `rgb(10,13,18)` / `rgb(255,255,255)` |
+
+and the cascade, with `:hover` stood in for by a class (a media query adds no specificity, so the result is the
+one a real pointer gets) and the unmodified stylesheet removed so its own `:not(:has(:hover))` guards could not
+answer for it: **as served, all five rows `0fr`**; row 1 checked and nothing hovered → row 1 `1fr`, the other four
+`0fr`; **row 3 hovered while row 1 is still checked → row 1 `0fr`, row 3 `1fr`**, everything else `0fr`. Never
+more than one row open, and none at all until the reader does something.
+
+`(hover:hover)` reports **false** in headless Firefox, so a hover state cannot be screenshotted at all here — the
+class stand-in above is the only way to see it, and a plain shot of the page always shows the checked state.
+
+The transitions are in the `prefers-reduced-motion` block at the end of the file, which had only ever stood down
+`animation`; these are transitions, so the row still opens and closes, it just arrives.
 
 ### The sliding row
 
@@ -1914,6 +2003,23 @@ nav, and a `partner` list getting neither — it asserts the dots box ships **em
 and `test_a_post_with_no_page_still_reaches_the_md_twin`. What none of them can cover is the drift, hover-pause,
 click-drag, the wheel and a real finger: those are measured in a browser (§12 *The sliding row*) and listed as
 user-only in the PR, the way `/collab-check` does it.
+
+**The services accordion has six offline tests** (2026-09-21), the same `blocks._post_list` monkeypatch:
+`test_only_a_top_level_services_list_is_an_accordion_by_default` (`_acc()` as a unit, including `""` meaning
+*Automatic* rather than *cards*), `test_the_services_accordion_renders_one_openable_row_per_group` (one radio per
+row, **exactly one** `checked`, every child listed, the group's own link, and the count agreeing with itself in
+both its singular and plural form), `test_the_accordion_borrows_nothing_from_the_card_vocabulary` (no `chip`,
+`card-img`, `card-n` or `cards` class can appear on a section that is still `pl pl-service`),
+`test_the_accordions_sibling_order_is_what_the_css_matches` (the input inside its label, `.acc-hr` before
+`.acc-body`, the `overflow:hidden` child, and the CSS pins: no `display:none` on the radio, the `hover:hover`
+guard, `.acc-body` named in the reduced-motion block), and
+`test_every_other_list_still_renders_the_deck_of_cards` and
+`test_the_open_rows_colour_is_a_choice_and_only_its_own_literals_reach_the_class` (the two literals, a hostile
+value falling back to the default, and the palette staying on `.acc`). What they cannot cover is the pointer: the hover cascade
+and the transitions are measured in a browser and tabulated in §12 *The services accordion*.
+**A helper named `_service` already existed** in `test_offline.py` (a post with blocks, for the page-head tests);
+a second one shadowed it and broke three unrelated tests before it was renamed `_svc_group`. Check the file for
+the name before adding a fixture.
 
 Everything except `test_offline.py` is marked `live` and skips when `.env` has no Supabase.
 

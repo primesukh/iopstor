@@ -833,6 +833,71 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
   .column .pl[class*="pl-cols-"] .cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
 }
 
+/* --- post_list as an accordion (List style; the default for a top-level services list) ---------
+   The client's design option 1a (2026-09-21): one row per service group, one open at a time, hover
+   or tap, the open one on black. It is a radio group, so the browser itself enforces the "one" and
+   nothing here counts rows -- unlike the mega panel there is no ceiling on how many groups fit.
+   Four things are load-bearing:
+   1. .acc-t is hidden with opacity, NEVER display:none. It IS the keyboard control -- the arrow
+      keys walk a radio group and check as they go, which opens each row in turn -- and
+      display:none takes it out of the tab order. The header's .mg-toggle may be display:none
+      because it is pointer-only and its label is the whole control.
+   2. :focus-within opens a row. A closed body is 0fr + overflow:hidden, which hides the child
+      links without removing them from the tab order -- the same pairing the mega panel uses.
+   3. The hover rule sits in @media(hover:hover). A touch browser leaves :hover on the last thing
+      tapped, and a stuck hover on one row would keep every other row shut.
+   4. There is no "close the others" rule, on purpose: the checked row's own selector is guarded
+      with :not(:has(.acc-row:hover)), so while a pointer is inside the accordion it simply stops
+      matching and the row falls back to the closed default. A close-all rule would out-specify
+      the rule meant to open the hovered one.
+   Every class is acc-*: .chips, .card-img, .card-n and .card-foot are all display:none under a
+   bare .pl and each .pl-<slug> puts its own back, so a pill called .chip would arrive invisible. */
+/* The open row's palette lives on .acc, so a variant is three lines rather than a second copy of
+   the open-selector group below. Editors pick it with "Colour when open" (client, 2026-09-21);
+   only these two class names can ever be written, because post_list.html compares the value. */
+.acc{background:var(--white);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  --o-bg:var(--black);--o-nm:var(--white);--o-mt:var(--muted-dark);--o-kid:var(--white);--o-kln:var(--line-dark-2);--o-lnk:var(--blue-light)}
+.acc.acc-blue{--o-bg:var(--blue);--o-mt:var(--blue-tint);--o-kln:var(--blue-light);--o-lnk:var(--white)}
+.acc.acc-light{--o-bg:var(--grey);--o-nm:var(--black);--o-mt:var(--muted);--o-kid:var(--ink);--o-kln:var(--line-2);--o-lnk:var(--blue)}
+.acc-row{--rows:0fr;--bg:var(--white);--nm:var(--black);--mt:var(--muted);--chev:rotate(0);
+  background:var(--bg);border-top:1px solid var(--line);transition:background .3s}
+.acc-row:first-child{border-top:0}
+.acc-t{position:absolute;opacity:0;pointer-events:none;margin:0}
+.acc-hr{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:22px 28px}
+.acc-hr h3{margin:0;font:800 clamp(20px,2.4vw,26px)/1.2 var(--head);color:var(--nm);transition:color .3s}
+/* the label holds the name, and its ::after is the hit area -- the whole header strip and only the
+   header strip. inset:0 against the row instead would lie over the open body and swallow the
+   child links, which are the one thing on the row you are meant to be able to click. */
+.acc-hd{cursor:pointer}
+.acc-hd::after{content:"";position:absolute;inset:0}
+.acc-n{font:400 13px/1 var(--body);color:var(--mt);white-space:nowrap;transition:color .3s}
+.acc-n i{display:inline-block;margin-left:10px;font-style:normal;transform:var(--chev);transition:transform .3s}
+.acc-body{display:grid;grid-template-rows:var(--rows);transition:grid-template-rows .35s cubic-bezier(.2,.7,.2,1)}
+.acc-body>div{overflow:hidden}
+.acc-in{padding:0 28px 26px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;align-items:start}
+.acc-blurb{display:flex;flex-direction:column;align-items:flex-start;gap:12px;max-width:480px}
+.acc-blurb p{margin:0;font:400 16px/1.6 var(--body);color:var(--mt)}
+.acc-all{font:600 14px/1 var(--body);color:var(--o-lnk);text-decoration:none}
+.acc-all:hover{color:var(--nm)}
+.acc-kids{display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start}
+.acc-kids a{padding:10px 14px;border:1px solid var(--o-kln);border-radius:8px;color:var(--o-kid);font:500 14px/1.3 var(--body);white-space:nowrap;text-decoration:none;transition:border-color .15s,color .15s}
+.acc-kids a:hover{border-color:var(--o-lnk);color:var(--o-lnk)}
+/* Open: the checked row while nothing is hovered, and any row the keyboard is inside. Nothing else
+   -- no row is checked in the markup, so the section loads with every row shut and opens only under
+   a pointer or a tap (client, 2026-09-21: "first section should be closed as well if the mouse is
+   not over any services"). That also makes two accordions on one page a non-event: they share a
+   radio name, so clicking in one unchecks the other, and all-shut is now the ordinary state. */
+.acc:not(:has(.acc-row:hover)) .acc-row:has(.acc-t:checked),
+.acc-row:focus-within{--rows:1fr;--bg:var(--o-bg);--nm:var(--o-nm);--mt:var(--o-mt);--chev:rotate(180deg)}
+@media(hover:hover){
+  .acc-row:hover{--rows:1fr;--bg:var(--o-bg);--nm:var(--o-nm);--mt:var(--o-mt);--chev:rotate(180deg)}
+}
+.acc-row:has(.acc-t:focus-visible){outline:2px solid var(--blue);outline-offset:-2px}
+@media(max-width:700px){
+  .acc-hr{padding:18px}
+  .acc-in{padding:0 18px 22px}
+}
+
 /* An archive holds however many posts happen to be published, so its grid is auto-FILL: the empty
    tracks stay, and one blog post keeps a tile's width instead of stretching into a billboard across
    the page. A deck inside a page is auto-fit, because there the editor chose the count. 300px is the
@@ -1093,4 +1158,6 @@ a.chip:hover{border-color:var(--blue);color:var(--blue)}
      real digits stats.html wrote come back out of hiding. */
   .stats li.fx-count .cr::before{content:none}
   .stats li.fx-count .cv{position:static;width:auto;height:auto;overflow:visible;clip-path:none}
+  /* the accordion is transitions, not keyframes: the row still opens and closes, it just arrives */
+  .acc-row,.acc-hr h3,.acc-n,.acc-n i,.acc-body,.acc-kids a{transition:none!important}
 }

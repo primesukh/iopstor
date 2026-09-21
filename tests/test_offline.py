@@ -3652,3 +3652,133 @@ def test_returning_from_the_cards_cannot_leave_the_frame_scaled_to_nothing():
     assert ".ed-main:has(#canvas-wrap[hidden]) #seo-card{" in css, "the cards never take the pane"
     # the bar was already clipping Publish at 700 before a fourth button existed; it wraps now
     assert ".ed-bar{flex-wrap:wrap}" in css, "a fourth button with no room pushes Save off the bar"
+
+
+# --- the services accordion (design option 1a) ----------------------------------------------------
+# The home page's "What we do" section stopped being a deck of cards and became an accordion of
+# service groups. The shape is decided in blocks._acc() and the state machine is pure CSS, so what
+# can break silently is: the wrong list turning into one, a card class sneaking into the markup and
+# arriving invisible under the bare .pl rules, and the sibling order the :has() selectors match.
+
+def _svc_group(title="Storage", excerpt="Software-defined NAS.", path="/services/storage", kids=2):
+    return {"id": 1, "title": title, "excerpt": excerpt, "meta": {}, "path": path, "terms": [],
+            "children": [{"title": f"Child {i}", "path": f"{path}/child-{i}"} for i in range(kids)],
+            "featured_media": None, "published_at": None, "post_type": {"slug": "service"}}
+
+
+def _render_list(app, monkeypatch, posts, slug, **data):
+    from iopstor import db
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug_: [])
+    monkeypatch.setattr(blocks, "_post_list", lambda d: (posts, slug))
+    with app.test_request_context():
+        return render_blocks([{"type": "post_list", "data": {"post_type": slug, **data}}])
+
+
+def test_only_a_top_level_services_list_is_an_accordion_by_default():
+    """The shape comes from the resolved post type, the way `rail` and `cols` do, so nothing an
+    editor types reaches the markup. "" is Automatic, not "cards": that is what lets the home page
+    change with no edit to the row, and the dropdown is what overrides it either way."""
+    from iopstor.blocks import _acc
+    assert _acc({"top_level": True}, "service") is True          # the home page's block, untouched
+    assert _acc({}, "service") is False                          # a flat list of every service: cards
+    assert _acc({"top_level": True}, "product") is False         # only services get it by default
+    assert _acc({"list_style": "accordion"}, "product") is True  # ...but the editor can ask for it
+    assert _acc({"list_style": "cards", "top_level": True}, "service") is False
+    assert _acc({"list_style": " accordion "}, "post") is True   # a value stored with stray spaces
+
+
+def test_the_services_accordion_renders_one_openable_row_per_group(app, monkeypatch):
+    """One radio of one name per row is what makes "one open at a time" the browser's job instead
+    of a script's. NONE of them starts checked: the client asked for the section to load with every
+    row shut ("first section should be closed as well if the mouse is not over any services"), and
+    a `checked` here is the one thing that would quietly undo that."""
+    posts = [_svc_group(), _svc_group("AI", "On-prem GPUs.", "/services/ai", kids=1)]
+    html = _render_list(app, monkeypatch, posts, "service", top_level=True)
+
+    assert html.count('class="acc-row"') == 2
+    assert html.count('class="acc-t"') == 2
+    assert "checked" not in html and 'name="acc-service"' in html
+    # the group's own page keeps a link -- the card used to be one, and losing that silently
+    # would be a regression, not a design choice
+    assert 'href="/services/storage">All Storage' in html
+    assert 'href="/services/storage/child-0">Child 0' in html
+    # every child, not _card.html's four-then-"+N more": handling any number is the design's point
+    assert "chip-more" not in html and "+1 more" not in html
+    # the count agrees with itself in both numbers
+    assert ">2 services<" in html and ">1 service<" in html
+
+
+def test_the_accordion_borrows_nothing_from_the_card_vocabulary(app, monkeypatch):
+    """.chips, .card-img, .card-n and .card-foot are all display:none under a bare .pl, and each
+    .pl-<slug> rule is what puts its own back. A pill called .chip would therefore arrive invisible
+    on a section that is still class="pl pl-service". Every class here is acc-*."""
+    html = _render_list(app, monkeypatch, [_svc_group()], "service", top_level=True)
+    assert "pl pl-service" in html            # the section's own classes are unchanged
+    for dead in ('class="cards"', "card-img", "card-n", 'class="chip', "chips-kids"):
+        assert dead not in html, f"{dead} is switched off by the bare .pl rules"
+
+
+def test_the_accordions_sibling_order_is_what_the_css_matches(app, monkeypatch):
+    """Three dependencies in one shape: the radio sits INSIDE its label (so no ids are needed and
+    two accordions cannot steal each other's), the header strip precedes the body (the hit area is
+    ::after on the label, scoped to .acc-hr), and the body wraps an overflow:hidden child that the
+    0fr/1fr grid row collapses. Reorder any of them and the section opens nothing."""
+    html = _render_list(app, monkeypatch, [_svc_group()], "service", top_level=True)
+    row = html.split('class="acc-row"')[1]
+    assert row.index('class="acc-hr"') < row.index('class="acc-body"')
+    label = row[row.index('class="acc-hd"'):]
+    assert label.index('class="acc-t"') < label.index("</label>")
+    assert '<h3><label class="acc-hd">' in html, "the heading must stay a real h3 around the label"
+    assert '<div class="acc-body"><div><div class="acc-in">' in html
+
+    css = _site_css()
+    assert ".acc-body{display:grid;grid-template-rows:var(--rows)" in css
+    assert ".acc-body>div{overflow:hidden}" in css
+    assert ".acc-hd::after{content:\"\";position:absolute;inset:0}" in css
+    # the radio is the keyboard control: arrows walk the group and open each row as they go
+    assert ".acc-t{position:absolute;opacity:0;" in css and ".acc-t{display:none" not in css
+    assert ".acc-row:focus-within{" in css
+    # nothing may open a row before the pointer arrives -- a :first-child fallback in this group is
+    # exactly the rule the client asked to be gone, and the markup's missing `checked` is only half
+    opens = css[css.index(".acc:not(:has(.acc-row:hover))"):]
+    assert "first-child" not in opens[:opens.index("}") + 1]
+    # a touch browser leaves :hover on the last thing tapped, which would jam every other row shut
+    assert "@media(hover:hover){\n  .acc-row:hover{" in css
+    # transitions, not keyframes -- the reduced-motion block had only ever stood down animations,
+    # and it is the last block in the file for the reason design.md gives
+    still = css[css.rindex("@media(prefers-reduced-motion"):]
+    assert ".acc-body" in still and "transition:none!important" in still
+
+
+def test_every_other_list_still_renders_the_deck_of_cards(app, monkeypatch):
+    """The ask was the home page's services section and nothing else. A products list, a flat
+    services list and a services list told to use cards all stay exactly as they were."""
+    for posts, slug, data in (([_svc_group()], "service", {"list_style": "cards", "top_level": True}),
+                              ([_svc_group()], "service", {}),
+                              ([_svc_group(path="/products/x")], "product", {"top_level": True})):
+        html = _render_list(app, monkeypatch, posts, slug, **data)
+        assert '<div class="cards">' in html and "acc-row" not in html
+
+
+def test_the_open_rows_colour_is_a_choice_and_only_its_own_literals_reach_the_class(app, monkeypatch):
+    """The client asked to be able to change the open row's black ("also give option to change the
+    inside color as well"). It is a `choice` compared against literals in the template, the rule
+    `hero.arrange` follows, so nothing typed into the box can ever land in the attribute — and the
+    palette lives on `.acc` as custom properties, so a variant is three declarations rather than a
+    second copy of the open-selector group."""
+    def cls(tone):
+        html = _render_list(app, monkeypatch, [_svc_group()], "service", top_level=True,
+                            open_tone=tone)
+        return html.split('<div class="acc')[1].split('"')[0]
+
+    assert cls("") == "" and cls("blue") == " acc-blue" and cls("light") == " acc-light"
+    assert cls('x"><script>') == "", "anything but the two literals renders the default"
+
+    css = _site_css()
+    assert ".acc.acc-blue{--o-bg:" in css and ".acc.acc-light{--o-bg:" in css
+    # the open rule reads the palette rather than naming a colour, or a variant would need its own
+    assert "--bg:var(--o-bg);--nm:var(--o-nm);--mt:var(--o-mt)" in css
+    assert "--bg:var(--black)" not in css, "a hard-coded black here ignores Colour when open"
+    # the pills and the group link sit inside the open row, so they switch with it
+    assert "color:var(--o-kid)" in css and "color:var(--o-lnk)" in css
