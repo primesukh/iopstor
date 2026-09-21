@@ -585,11 +585,20 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .faq details[open] summary::after{content:"\2212"}
 .faq details>div{padding-top:12px;color:var(--muted);font-size:15.5px;line-height:1.7}
 
-/* stats: always inside .band-dark, so a figure is white on black */
+/* stats: on the page's own background since 2026-09-21, so a figure is ink on white. It used to
+   be white on black -- stats.html wrote band-dark itself -- and the colours below are the whole of
+   what that class was doing for it. .stats-band carries the slim padding band-dark.section gave it;
+   without a rule of its own the band would inherit .section's 80px and the strip would double in
+   height. An editor can still put the row on a dark tone from the gear panel, and the two
+   overrides at the end are what keep the figures legible when they do -- without them Tone: Dark
+   is a control that silently makes the numbers invisible. */
 .stats{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px}
 .stats li{border-left:2px solid var(--blue);padding-left:18px}
-.stats strong{display:block;font:800 40px/1 var(--head);color:var(--white);letter-spacing:-.02em}
-.stats li>span{display:block;margin-top:8px;font-size:14px;line-height:1.5;color:var(--muted-dark)}   /* > : a counted figure carries a span of its own */
+.stats strong{display:block;font:800 40px/1 var(--head);color:var(--ink);letter-spacing:-.02em}
+.stats li>span{display:block;margin-top:8px;font-size:14px;line-height:1.5;color:var(--muted)}   /* > : a counted figure carries a span of its own */
+.stats-band.section{padding:40px 0}
+.t-dark .stats strong,.band-dark .stats strong{color:var(--white)}
+.t-dark .stats li>span,.band-dark .stats li>span{color:var(--muted-dark)}
 .band-dark.section{padding:40px 0}
 
 /* testimonial */

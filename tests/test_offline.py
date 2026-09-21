@@ -547,7 +547,7 @@ def test_section_effects_are_a_whitelist(app, monkeypatch):
 
     data = {**EDITOR["seed"]["stats"], "count_up": True, "fx": "rise"}
     html = render_blocks([{"type": "stats", "data": data}])
-    assert 'class="section band-dark fx-rise"' in html
+    assert 'class="section stats-band fx-rise"' in html
     assert html.count('<li class="fx-rise fx-count"') == 3      # the section's effect reaches every figure
     # the digits are really in the HTML, not only in a CSS counter: crawlers and copy-paste read them
     assert '<span class="cv">99</span><span class="cr"></span>.999%' in html and 'style="--to:99"' in html
@@ -2935,7 +2935,7 @@ def test_a_term_archive_looks_like_the_archive_it_filters(app, monkeypatch):
     is each .pl-<type> rule that puts its own back, so with no type the card is reduced to its box
     and an <h3>. The head's band and the chip row read the same `pt`."""
     html = _render_term_archive(app, monkeypatch, [_a_case_study()])
-    assert 'class="arch-head band-dark"' in html          # the black band, as on /case-studies
+    assert 'class="arch-head"' in html                    # the same head /case-studies has
     assert "pl pl-case_study" in html                     # ...and the card rules that go with it
     assert 'class="chip" href="/industry/logistics"' in html   # the sibling row, empty until now
     assert "One platform" in html
@@ -2957,9 +2957,37 @@ def test_an_empty_term_archive_still_knows_what_it_is(app, monkeypatch):
     the taxonomy's declaration has to answer instead. Without it an empty term keeps exactly the
     white head and dead crumb this change is about."""
     html = _render_term_archive(app, monkeypatch, [])
-    assert 'class="arch-head band-dark"' in html
+    assert 'class="arch-head"' in html
     assert 'href="/case-studies"' in html and 'href="/industry"' not in html
     assert "Nothing published here yet." in html
+
+
+def test_every_archive_head_is_the_light_one():
+    """The mock draws Services, Case Studies, Partners and Products on #0a0d12 and Blog on white,
+    and archive.html alternated to match. The client asked for the light one everywhere (2026-09-21):
+    on a site that is otherwise light those were the largest dark areas, and the rhythm read as an
+    inconsistency. `band-dark` itself stays -- the head banner and the Dark tone still use it -- so
+    what this pins is that the ARCHIVE stopped writing it."""
+    tpl = (pathlib.Path(__file__).resolve().parent.parent / "iopstor/templates/archive.html").read_text()
+    assert '<div class="arch-head">' in tpl          # no conditional, no second treatment
+    markup = re.sub(r"\{#.*?#\}", "", tpl, flags=re.S)   # the comment still explains band-dark
+    assert "band-dark" not in markup
+    css = (pathlib.Path(__file__).resolve().parent.parent / "iopstor/static/site.css").read_text()
+    assert ".band-dark{" in css        # still there for the head banner and the Dark tone
+
+
+def test_a_row_of_figures_reads_on_the_light_band_and_on_a_dark_one():
+    """Two things go wrong when a block stops carrying `band-dark` and neither is the colour of the
+    background. The figures were `--white`, so on the new light band they would be invisible; and
+    `band-dark.section` was what gave the strip its slim 40px, so without a rule of its own it
+    inherits `.section`'s 80px and doubles in height. The last pair is the one a screenshot would
+    not catch: an editor can still set Tone: Dark on this block, and without an override that
+    control would silently make the numbers unreadable."""
+    css = (pathlib.Path(__file__).resolve().parent.parent / "iopstor/static/site.css").read_text()
+    assert ".stats strong{display:block;font:800 40px/1 var(--head);color:var(--ink)" in css
+    assert ".stats-band.section{padding:40px 0}" in css
+    assert ".t-dark .stats strong,.band-dark .stats strong{color:var(--white)}" in css
+    assert ".t-dark .stats li>span,.band-dark .stats li>span{color:var(--muted-dark)}" in css
 
 
 def _render_post(app, monkeypatch, post):
