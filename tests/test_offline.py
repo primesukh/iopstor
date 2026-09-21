@@ -2825,19 +2825,26 @@ def test_a_top_level_menu_item_that_holds_others_collapses_the_same_way():
 
 def test_a_pointer_only_menu_rule_never_escapes_the_desktop_query():
     """`:hover` latches on a touch screen and `:focus-within` fires when a link inside takes focus, so
-    a drop-down opened by pointer jams open on a phone. The "nothing hovered, so show the first group"
-    rule is worse: at (0,4,0) it out-specifies the phone's plain `.mega-pane{display:none}`, so group
-    one would be stuck open. All of them live behind min-width:961px, and the closed default is the
-    only thing the two layouts share."""
+    a drop-down opened by pointer jams open on a phone. Both panels open that way, and both rules
+    live behind min-width:961px; the closed default is the only thing the two layouts share.
+
+    The panes no longer switch on hover at all (2026-09-21: every service group is its own column
+    and all of them show at once), so the rule this test used to guard hardest -- "nothing hovered,
+    so show the first group", which at (0,4,0) out-specified the phone's plain
+    `.mega-pane{display:none}` and jammed group one open -- is gone rather than disabled. What is
+    left to protect is that no NEW pointer rule for the panel lands outside the query."""
     css = _site_css()
     assert "@media(min-width:961px){.nav-mega:hover>.mega,.nav-mega:focus-within>.mega{display:block}}" in css
     assert "@media(min-width:961px){.site-nav li:hover>.sub,.site-nav li:focus-within>.sub{display:block}}" in css
+    assert "@media(min-width:961px){.mega-pane{display:block}}" in css
+    # the shared closed default sits outside every query: both layouts start from it
+    assert "\n.mega-pane{display:none}\n" in css
 
-    desktop = css.split("@media(min-width:961px){\n")[1].split("\n}")[0]
-    assert ".mega-cats:not(:has(:hover,:focus)) .mega-g:nth-of-type(1)+.mega-pane{display:block}" in desktop
-    assert ".mega-g:hover+.mega-pane" in desktop
-    # the shared closed default is NOT in there: both layouts start from it
-    assert ".mega-pane{display:none}" not in desktop and ".mega-pane{display:none}" in css
+    # every rule that opens a pane or a drop-down by pointer, anywhere in the file, must be inside
+    # a min-width query -- the panel's own :hover on a link is fine, opening something is not
+    for line in css.split("\n"):
+        if re.search(r"(:hover|:focus-within)[^{]*\{[^}]*display:block", line):
+            assert "min-width:961px" in line, f"a pointer-only rule escaped the desktop query: {line}"
 
 
 # --- a case study reads as an article -----------------------------------------------------------
@@ -3782,3 +3789,120 @@ def test_the_open_rows_colour_is_a_choice_and_only_its_own_literals_reach_the_cl
     assert "--bg:var(--black)" not in css, "a hard-coded black here ignores Colour when open"
     # the pills and the group link sit inside the open row, so they switch with it
     assert "color:var(--o-kid)" in css and "color:var(--o-lnk)" in css
+
+
+# --- the services menu, one column per group (design, 2026-09-21) ---------------------------------
+# The panel used to be a 260px list of group names beside ONE pane, switched by :hover. It is now
+# five columns with every service on show, each with a glyph. Three things can only break quietly:
+# a map entry naming a <symbol> that is not in the sprite (an empty 32px box, no error anywhere),
+# something an editor types reaching the `use href` attribute, and the phone's disclosure chain
+# losing its adjacency to the new column wrapper.
+
+def _base_html():
+    return (pathlib.Path(__file__).parent.parent / "iopstor" / "templates" / "base.html").read_text()
+
+
+def test_every_icon_the_services_menu_can_ask_for_is_in_the_sprite():
+    """A slug mapped to a <symbol> that does not exist renders a 32px tinted square with nothing in
+    it, and neither the browser nor pytest says a word. The whitelist and the sprite are two files,
+    so this is the only thing keeping them honest."""
+    from iopstor.public import ICON_IDS, SERVICE_ICONS
+    sprite = set(re.findall(r'<symbol id="svc-([a-z0-9-]+)"', _base_html()))
+
+    assert sprite, "base.html no longer carries the sprite"
+    missing = sorted(i for i in ICON_IDS if i not in sprite)
+    assert not missing, f"named by SERVICE_ICONS but not drawn: {missing}"
+    # the five seeded groups and all seventeen children are covered, i.e. nothing falls back to dot
+    assert len(SERVICE_ICONS) == 22 and "dot" in sprite
+
+
+def test_a_services_icon_is_whitelisted_and_falls_back_rather_than_going_blank():
+    """The value lands in a `use href="#svc-..."` attribute, so it follows section_class()'s rule:
+    an editor's Icon box wins only when it names one we ship. Anything else -- a typo, a hostile
+    string, a service nobody mapped -- gets the design's choice for that slug, then a plain dot."""
+    from iopstor.public import service_icon
+    assert service_icon({"slug": "nas", "meta": {}}) == "nas"
+    assert service_icon({"slug": "storage", "meta": None}) == "g-storage"
+    assert service_icon({"slug": "nas", "meta": {"icon": " VPS "}}) == "vps"     # trimmed, lowered
+    assert service_icon({"slug": "nas", "meta": {"icon": '"><script>'}}) == "nas"
+    assert service_icon({"slug": "nas", "meta": {"icon": "no-such-icon"}}) == "nas"
+    assert service_icon({"slug": "something-new", "meta": {}}) == "dot"
+
+
+def _render_menu(app, monkeypatch):
+    """base.html's header with a real services tree behind it — _render_post switches the panel off,
+    so nothing rendered this markup before."""
+    from flask import render_template
+    from iopstor import db, public
+    groups = [{"title": "Storage", "path": "/services/storage", "slug": "storage", "meta": {},
+               "excerpt": "ZFS storage.",
+               "children": [{"title": "NAS", "path": "/services/storage/nas", "slug": "nas", "meta": {}},
+                            {"title": "DAS", "path": "/services/storage/das", "slug": "das", "meta": {}}]},
+              {"title": "Cloud", "path": "/services/cloud", "slug": "cloud", "meta": {}, "excerpt": "",
+               "children": [{"title": "VPS", "path": "/services/cloud/vps", "slug": "vps", "meta": {}}]}]
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [{"label": "Services", "url": "/services", "children": []}])
+    monkeypatch.setattr(db, "post_type", lambda slug=None, **kw: {"url_prefix": "services"})
+    monkeypatch.setattr(db, "tree", lambda slug: groups)
+    monkeypatch.setattr(public, "_service_nav", public._service_nav)   # the real one, on stubs
+    with app.test_request_context("/"):
+        return render_template("post.html", post={"title": "x", "blocks": [], "meta": {}, "terms": [],
+                                                  "post_type": {"slug": "page", "name": "Pages"},
+                                                  "featured_media": None, "excerpt": "", "published_at": None},
+                               children=[], siblings=False, meta={}, jsonld=[], crumbs=[("Home", "/")])
+
+
+def test_the_services_panel_is_one_column_per_group_with_every_service_showing(app, monkeypatch):
+    """The design's point is that nothing has to be pointed at to be read. One .mega-col per group,
+    every child inside it, and each one carrying its glyph."""
+    html = _render_menu(app, monkeypatch)
+    assert html.count('<div class="mega-col">') == 2
+    assert '<use href="#svc-g-storage">' in html and '<use href="#svc-g-cloud">' in html
+    assert '<use href="#svc-nas">' in html and '<use href="#svc-vps">' in html
+    assert '/services/storage/nas' in html and '/services/cloud/vps' in html
+    # the group head is still a link to the group's own page -- the design draws it as a label, and
+    # dropping the link would quietly remove the only way into /services/storage from the menu
+    assert '<a class="mega-g" href="/services/storage">' in html
+    # the design has no blurb in the menu; the home page's accordion is where that line lives now
+    assert "ZFS storage." not in html
+    assert 'class="mega-foot"' in html
+
+
+def test_the_phone_disclosure_chain_survives_the_column_wrapper(app, monkeypatch):
+    """`.mg-toggle:checked+.mg-row+.mega-g+.mega-pane` is adjacent all the way, and a `~` would open
+    every group below the tapped one. Wrapping a group in .mega-col keeps the four inside one
+    parent; putting the wrapper anywhere between them would break the phone and nothing else."""
+    html = _render_menu(app, monkeypatch)
+    col = html.split('<div class="mega-col">')[1]
+    order = [col.index(x) for x in ('class="mg-toggle"', 'class="mg-row"', 'class="mega-g"', 'class="mega-pane"')]
+    assert order == sorted(order)
+    assert ".mg-toggle:checked+.mg-row+.mega-g+.mega-pane{display:block}" in _site_css()
+
+
+def test_the_icon_sprite_is_hidden_by_a_class_because_hidden_does_not_work_on_svg():
+    """The UA rule for `hidden` is HTML-namespaced, so an inline <svg hidden> still reserves
+    300x150 — the same trap the footer's social sprite hit. A class and a CSS rule, or the top of
+    every page gains a blank band."""
+    css = _site_css()
+    assert '<svg class="svg-sprite" aria-hidden="true">' in _base_html()
+    assert ".svg-sprite{display:none}" in css
+    # the footer's social sprite is the other one, and it has carried its own rule since 2026-09-11
+    assert ".site-footer svg[hidden]{display:none}" in css
+
+
+def test_the_menus_shadows_stay_below_the_header_bar():
+    """Both panels hang off the header, and an unspread `0 Npx 2Npx` shadow reaches back UP to its
+    own top edge -- onto the bar -- which is what made the open panel read as a separate surface
+    (client, 2026-09-21). Measured at 1440: the last ten rows of the header washed 250 -> 246 with
+    no spread and 255 -> 253 with it, and the Company card 251 -> 246 against 255 -> 254. A
+    negative spread is the whole fix, so a tidy-up that drops it is the thing to catch."""
+    css = _site_css()
+    for sel in (".mega{", ".site-nav .sub{"):
+        rule = css[css.index(sel):].split("}")[0]
+        shadow = rule.split("box-shadow:")[1].split(";")[0]
+        assert "-" in shadow.split("rgba")[0], f"{sel} lost its negative spread: {shadow}"
+    # the header's own hairline needs no rule: an abspos top:100% resolves against the padding box,
+    # so the open panel already covers it. A rule here would look like a fix and do nothing.
+    # Comments stripped first -- the reason above is written in the stylesheet and says the words.
+    # Scoped to the header: the phone's two disclosure rows clear their own border legitimately.
+    assert ".site-header:has(" not in re.sub(r"/\*.*?\*/", "", css, flags=re.S)

@@ -563,19 +563,20 @@ A serial number already on file is the one thing the browser cannot know by itse
 
 **Settings** holds the things that appear everywhere: site name, tagline, logo, contact email and phone, address, social links, and the Google Analytics ID.
 
-**About the logo.** Whichever picture you choose, the logo appears at the same size in the header and
-at the bottom of every page — the site does not shrink or stretch it to suit the file. It fills that
-space, which means blank margins inside your picture are trimmed off rather than counted as part of
-the logo: you no longer have to crop a file perfectly for it to look right. The one thing to avoid is
-artwork that is as tall as it is wide with the design running right to the edges, because the top and
-bottom of a picture like that will be cut off. A wide, letterbox-shaped logo is what the space is cut
-for.
+**About the logo.** Whichever picture you choose, the logo is given the same amount of room in the
+header and at the bottom of every page, and it is fitted **whole** into that room — nothing is ever
+cut off, whatever shape the file is. The one thing that matters is how the file is exported: blank
+margins around the wordmark are now counted as part of the picture, so a file saved with a lot of
+empty space around the logo will look small. **Trim it before uploading** and it fills the space
+properly. A wide, letterbox-shaped logo with little margin is what the space is cut for.
 
 **Menus** has its own screen now. Each row is one link: a label, where it goes, and whether it sits at the top level or drops down under the item above it. Drag the handle on the left to reorder, **+ Add item** for a new one, **✕** to remove one. Save writes the whole menu at once. One level of drop-down is all the site shows.
 
 **Menus** control the header and footer navigation. The header menu supports one level of drop-down, which is how *Company* expands.
 
-**The Services menu builds itself.** Hovering *Services* in the header opens a wide panel: your top-level services down the left, and whichever one you are pointing at expands on the right with its summary and its sub-services. You do not edit that panel anywhere — it is your Services pages. Change a service's **title** and the panel's wording changes; change its **Summary** (the box in the right-hand panel of the page editor) and the sentence under the name changes; add a sub-service under a service and it appears as a new tile. Publishing or unpublishing a service adds or removes it. The panel stays on whichever service you are pointing at while you move across to click one of its sub-services, and it holds however many services you have. The same list fills the *Services* column in the footer.
+**The Services menu builds itself.** Hovering *Services* in the header opens a wide panel with one column per top-level service and **every** sub-service listed underneath it, each with a small picture beside its name. Nothing has to be pointed at to be read. You do not edit that panel anywhere — it is your Services pages. Change a service's **title** and the panel's wording changes; add a sub-service under a service and it appears in that column; publishing or unpublishing one adds or removes it. The name at the top of a column is still a link to that service's own page, and along the bottom are *All services* and *Not sure which fits? Request a quote*. It holds however many services you have — the columns simply get narrower, and on a narrow screen the menu becomes a list you tap open one group at a time. The same list fills the *Services* column in the footer.
+
+**Choosing the little picture beside a service.** Each service has an **Icon** box in the right-hand panel of the page editor. Leave it empty and the site picks a sensible picture for that service on its own, which is what every service does today. To change one, type one of these names into the box: `nas`, `das`, `sas`, `aws`, `proxmox`, `vmware`, `daas`, `staas`, `vps`, `lxc`, `serverless`, `s3`, `draas`, `ai`, `sql`, `tally`, `sap`, `dot`. Anything else in the box is ignored rather than showing an empty square.
 
 Two things follow from that. A service with no Summary shows its name and its sub-services but no sentence, so it is worth writing one. And the panel has room for eight top-level services; a ninth would not get its own tab.
 
@@ -751,6 +752,12 @@ description and all of its sub-services, closing whichever was open before. They
 so what you see on arriving is a tidy list of five lines. Nothing had to be re-typed and nothing was lost: it is the same five services, from the
 same Services pages, and the *All services →* link is still on the right of the heading. If you prefer
 the cards back, open the section's **⚙** and set **List style** to *Cards*.
+
+**The Services menu looks different.** It does. Instead of a list of the five group names that you
+had to point at one by one, it now opens as five columns with every service on show at once, each
+with a small picture beside its name. Nothing was re-typed — it is the same Services pages, and the
+column headings still lead to the group's own page. If a service should have a different picture,
+there is an **Icon** box on its page; section 9 lists the names it takes.
 
 **Is there a practice version of the site?** Yes — the one used while the site was being built. It is a
 completely separate copy: content does not travel between the two in either direction, so a page you want

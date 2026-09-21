@@ -34,6 +34,37 @@
 {% endif %}</head>
 <body>
 {% set svc = service_nav() %}
+{% if svc %}{#- The services menu's glyphs, one <symbol> each, drawn once per page and pointed at
+   with <use>. The design ships them as a script (assets/icons.js) that writes SVG per item; the
+   public site has one script and this is not it, so they are markup. Stroke properties are set in
+   site.css on the <svg> that uses them, the way admin/base.html's sprite does it -- and `hidden`
+   would NOT hide this, because the UA rule for it is HTML-namespaced (design.md 9). -#}
+<svg class="svg-sprite" aria-hidden="true"><defs>
+<symbol id="svc-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></symbol>
+<symbol id="svc-nas" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><circle cx="7" cy="7" r=".6"/><circle cx="7" cy="17" r=".6"/></symbol>
+<symbol id="svc-das" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></symbol>
+<symbol id="svc-sas" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+<symbol id="svc-aws" viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1-.6-7.95A6 6 0 0 1 18 9a3.5 3.5 0 0 1 .5 7"/><path d="M12 12v8"/><path d="M9 15l3-3 3 3"/></symbol>
+<symbol id="svc-proxmox" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></symbol>
+<symbol id="svc-vmware" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></symbol>
+<symbol id="svc-daas" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+<symbol id="svc-staas" viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1-.6-7.95A6 6 0 0 1 18 9a3.5 3.5 0 0 1 .5 7"/><rect x="8" y="13" width="8" height="5" rx="1"/></symbol>
+<symbol id="svc-vps" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h.01M7 12h.01M7 15h.01M11 9h6M11 12h6M11 15h4"/></symbol>
+<symbol id="svc-lxc" viewBox="0 0 24 24"><path d="M4 8l8-4 8 4-8 4-8-4z"/><path d="M4 8v8l8 4 8-4V8"/><path d="M12 12v8"/></symbol>
+<symbol id="svc-serverless" viewBox="0 0 24 24"><path d="M13 2L5 14h6l-1 8 8-12h-6l1-8z"/></symbol>
+<symbol id="svc-s3" viewBox="0 0 24 24"><path d="M4 7l8-4 8 4v10l-8 4-8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/></symbol>
+<symbol id="svc-draas" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></symbol>
+<symbol id="svc-ai" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l1.5 1.5M18 6l-1.5 1.5M6 18l1.5-1.5M18 18l-1.5-1.5"/></symbol>
+<symbol id="svc-sql" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="2.5"/><path d="M4 5v6c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5V5"/><path d="M4 11v6c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-6"/></symbol>
+<symbol id="svc-tally" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></symbol>
+<symbol id="svc-sap" viewBox="0 0 24 24"><path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-6h6v6"/></symbol>
+<symbol id="svc-g-storage" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+<symbol id="svc-g-hcm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><rect x="3" y="10" width="18" height="5" rx="1.5"/><rect x="3" y="16" width="18" height="5" rx="1.5"/></symbol>
+<symbol id="svc-g-cloud" viewBox="0 0 24 24"><path d="M7 19a4.5 4.5 0 0 1-.7-8.95A6.5 6.5 0 0 1 18.5 9.5 4 4 0 0 1 18 19H7z"/></symbol>
+<symbol id="svc-g-ai" viewBox="0 0 24 24"><path d="M9 4a3 3 0 0 0-3 3v1a3 3 0 0 0-2 3 3 3 0 0 0 2 3v1a3 3 0 0 0 3 3h1V4H9z"/><path d="M15 4a3 3 0 0 1 3 3v1a3 3 0 0 1 2 3 3 3 0 0 1-2 3v1a3 3 0 0 1-3 3h-1V4h1z"/></symbol>
+<symbol id="svc-g-soft" viewBox="0 0 24 24"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6M14 4l-4 16"/></symbol>
+</defs></svg>
+{% endif %}
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-header">
   <div class="wrap">
@@ -49,9 +80,16 @@
               own foot, and Company's URL IS its first child (/about-us). -#}
           {%- if has_kids %}<input type="checkbox" id="nv-{{ loop.index }}" class="nv-toggle"><label class="nv-row" for="nv-{{ loop.index }}">{{ i.label }}<span class="nv-chev" aria-hidden="true">&#9662;</span></label>{% endif %}<a href="{{ i.url }}">{{ i.label }}{% if has_kids %} <span aria-hidden="true">&#9662;</span>{% endif %}</a>
           {%- if is_mega %}<div class="mega"><div class="wrap">
-            <div class="mega-cats">{% for g in svc.groups %}{#- the checkbox and its label come BEFORE the group link, so `.mega-g + .mega-pane` stays adjacent and the desktop panel's hover rules are untouched; site.css has the whole reason -#}
-              <input type="checkbox" id="mg-{{ loop.index }}" class="mg-toggle"><label class="mg-row" for="mg-{{ loop.index }}">{{ g.title }}<span class="mg-chev" aria-hidden="true">&#9662;</span></label><a class="mega-g" href="{{ g.path }}"><span class="n">{{ '%02d' % loop.index }}</span>{{ g.title }}<span class="arrow" aria-hidden="true">&rarr;</span></a><div class="mega-pane"><h3>{{ g.title }}</h3>{% if g.excerpt %}<p class="blurb">{{ g.excerpt }}</p>{% endif %}<div class="mega-tiles">{% for c in g.children %}<a href="{{ c.path }}">{{ c.title }}<span class="arrow" aria-hidden="true">&rarr;</span></a>{% endfor %}</div></div>{% endfor %}</div>
-            <div class="mega-foot"><a href="{{ i.url }}">All services &rarr;</a><a class="q" href="/contact-us">Request a quote &rarr;</a></div>
+            {#- One column per service group, every service visible at once -- the client's design,
+                2026-09-21. The four parts stay in the SAME adjacent order inside the column
+                (checkbox, label, group link, pane), because the phone's disclosure is still
+                `.mg-toggle:checked+.mg-row+.mega-g+.mega-pane` and a `~` would open every group
+                below the tapped one. The column wrapper is what lets the grid place a group
+                without counting rows, so there is no ceiling on how many services fit. -#}
+            <div class="mega-cats">{% for g in svc.groups %}<div class="mega-col">
+              <input type="checkbox" id="mg-{{ loop.index }}" class="mg-toggle"><label class="mg-row" for="mg-{{ loop.index }}">{{ g.title }}<span class="mg-chev" aria-hidden="true">&#9662;</span></label><a class="mega-g" href="{{ g.path }}"><svg class="mg-ic" aria-hidden="true"><use href="#svc-{{ g.icon }}"></use></svg>{{ g.title }}</a><div class="mega-pane"><div class="mega-tiles">{% for c in g.children %}<a href="{{ c.path }}"><span class="mt-ic" aria-hidden="true"><svg><use href="#svc-{{ c.icon }}"></use></svg></span><span>{{ c.title }}</span></a>{% endfor %}</div></div>
+            </div>{% endfor %}</div>
+            <div class="mega-foot"><a class="q" href="{{ i.url }}">All services &rarr;</a><a href="/contact-us">Not sure which fits? Request a quote &rarr;</a></div>
           </div></div>
           {%- elif i.children %}<ul class="sub">{% for c in i.children %}<li><a href="{{ c.url }}">{{ c.label }}</a></li>{% endfor %}</ul>{% endif %}</li>{% endfor %}
         <li class="nav-cta"><a href="/contact-us">Contact us</a></li>

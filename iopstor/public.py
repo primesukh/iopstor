@@ -124,6 +124,35 @@ def _page_cache_release(exc=None):
         _refreshing.discard(g.page_key)
 
 
+# The glyph beside each service in the header panel, keyed by slug. These are the design's own
+# seventeen item icons and five group icons (`assets/icons.js` in the client's design project,
+# 2026-09-21), and the ids match the <symbol>s in base.html's sprite. This is presentation, not
+# content: a service whose slug is not here -- a new one, or a renamed one -- gets `dot` and the
+# menu still reads correctly, and an editor overrides any of them by typing one of these names
+# into the service's **Icon** box.
+# ponytail: a slug map rather than 22 rows of content. Set meta.icon on every service and delete it.
+SERVICE_ICONS = {
+    "storage": "g-storage", "hyper-converged-media": "g-hcm", "cloud": "g-cloud",
+    "ai": "g-ai", "software-based": "g-soft",
+    "nas": "nas", "das": "das", "sas": "sas", "aws-integration-dr": "aws",
+    "proxmox": "proxmox", "vmware": "vmware",
+    "desktop-as-a-service": "daas", "storage-as-a-service": "staas", "vps": "vps",
+    "linux-containers": "lxc", "serverless": "serverless", "s3-bucket-solutions": "s3",
+    "disaster-recovery-as-a-service-draas": "draas", "on-prem-ai-servers": "ai",
+    "sql-server": "sql", "tally": "tally", "sap": "sap",
+}
+ICON_IDS = frozenset(SERVICE_ICONS.values()) | {"dot"}
+
+
+def service_icon(post):
+    """Which <symbol> one service points at. The editor's Icon box wins when it names one we ship,
+    otherwise the design's own choice for that slug, otherwise a neutral dot. Whitelisted either
+    way, because the value lands in a `use href="#svc-..."` attribute -- the same rule
+    section_class() follows for anything an editor types that reaches markup."""
+    want = ((post.get("meta") or {}).get("icon") or "").strip().lower()
+    return want if want in ICON_IDS else SERVICE_ICONS.get(post.get("slug"), "dot")
+
+
 def _service_nav():
     """The Services menu: the archive URL, and the live top-level services with their children.
     Drives the header's mega panel and the footer's Services column. None when there are none.
@@ -134,6 +163,13 @@ def _service_nav():
     if pt is None:
         return None
     groups = db.tree("service")
+    # the icon is attached here rather than worked out in Jinja, so the whitelist is one function.
+    # db.tree() is memoised per request and shared with the archive and post_list; adding a key it
+    # does not read is safe, and doing it twice writes the same value.
+    for g in groups:
+        g["icon"] = service_icon(g)
+        for c in g["children"]:
+            c["icon"] = service_icon(c)
     return {"url": "/" + pt["url_prefix"], "groups": groups} if groups else None
 
 
