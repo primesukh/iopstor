@@ -1664,7 +1664,7 @@ def test_a_status_the_poll_transport_cannot_read_becomes_a_500(app, monkeypatch,
     r = c.get("/admin/realtime/v1/longpoll?csrf=tok&vsn=2.0.0")
     assert r.status_code == 500, "401 would be an unhandled poll status in the browser"
     assert json.loads(r.get_data())["status"] == 500
-    assert "upstream 401" in caplog.text, "collapsing the status must not also lose it"
+    assert "http 401" in caplog.text, "collapsing the status must not also lose it"
 
 
 def test_every_failed_poll_says_why_in_the_log(app, monkeypatch, caplog):
@@ -1690,14 +1690,14 @@ def test_every_failed_poll_says_why_in_the_log(app, monkeypatch, caplog):
     assert "refused: csrf" in caplog.text, "a stale tab and a dead session are not the same fault"
 
     caplog.clear()
-
-    def refused(*a, **k):
-        raise urllib.error.HTTPError("http://kong/realtime/v1/longpoll", 403, "Forbidden", {}, None)
-
-    monkeypatch.setattr(admin_ui.urllib.request, "urlopen", refused)
+    # The one that cost production a morning: Realtime could not find its tenant, and said so as
+    # HTTP 200 with {"status":403} in the BODY. Every poll is HTTP 200 -- 410 on open, 204 after the
+    # held ten seconds, 403 here -- so keying this on the response status would see nothing wrong,
+    # and _QuietPolls filters the line out of the access log with the successes.
+    monkeypatch.setattr(admin_ui.urllib.request, "urlopen", lambda *a, **k: _reply(b'{"status":403}'))
     r = c.get("/admin/realtime/v1/longpoll?csrf=right&vsn=2.0.0")
-    assert r.status_code == 403, "403 is in POLL_STATUSES and goes to the browser as it came"
-    assert "upstream 403" in caplog.text
+    assert r.status_code == 200, "the proxy passes Phoenix's own refusal through as it came"
+    assert "upstream 403 (http 200)" in caplog.text, "a tenant it cannot find must not be silent"
 
     caplog.clear()
     monkeypatch.setattr(admin_ui.urllib.request, "urlopen",
@@ -1707,18 +1707,23 @@ def test_every_failed_poll_says_why_in_the_log(app, monkeypatch, caplog):
     assert "ConnectionRefusedError" in caplog.text, "an unreachable Kong must not look like a real 500"
 
     caplog.clear()
-    monkeypatch.setattr(admin_ui.urllib.request, "urlopen", lambda *a, **k: _ok())
-    assert c.get("/admin/realtime/v1/longpoll?csrf=right&vsn=2.0.0").status_code == 200
+    # ...and both halves of a healthy poll stay quiet, because the request rate tracks messages
+    for healthy in (b'{"status":410,"token":"t","messages":[]}', b'{"status":204,"token":"t","messages":[]}'):
+        monkeypatch.setattr(admin_ui.urllib.request, "urlopen", lambda *a, **k: _reply(healthy))
+        assert c.get("/admin/realtime/v1/longpoll?csrf=right&vsn=2.0.0").status_code == 200
     assert "realtime poll" not in caplog.text, "a working poll runs several times a second; it stays quiet"
 
 
-class _ok:
-    """A held poll that answered: 410 is what Phoenix returns when it hands back a session token."""
+class _reply:
+    """An upstream answer. Always HTTP 200: Realtime puts the status the browser reads in the body."""
 
     status, headers = 200, {"Content-Type": "application/json"}
 
+    def __init__(self, body):
+        self.body = body
+
     def read(self):
-        return b'{"status":410,"token":"t","messages":[]}'
+        return self.body
 
     def __enter__(self):
         return self
