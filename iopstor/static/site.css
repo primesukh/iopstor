@@ -88,15 +88,25 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
    its wordmark at 8px instead of 19px (design.md, 2026-09-10). But cover only ever fits artwork at
    the box's own 5.77:1 -- anything wider loses its ends, which is what a newly uploaded logo did in
    production: "IOPSTOR" arrived as "OPSTO".
-   So the height is fixed and the width follows the file. max-width is the guard the fixed width
-   used to be: a very wide logo is contained rather than allowed to push the nav, and `contain`
-   (not cover) decides what happens in that one case, so the worst outcome is a smaller logo and
-   never a cut one. The cost, and it is the reverted decision: a logo exported with wide empty
-   margins renders small, because those margins are now counted. Trim the file -- NON-TECHNICAL
-   says so beside the upload box.
-   ponytail: no server-side trim. Pillow is not in the venv and one CSS line is not worth a
-   dependency and an upload hook; revisit if editors keep uploading padded artwork. */
-.brand img{height:26px;width:auto;max-width:200px;object-fit:contain;object-position:left center;flex:none}
+   So the box stays exactly the 150x26 the design always had and only the FIT changed, cover ->
+   contain: the logo is fitted inside that footprint instead of filling it and losing its ends.
+   Whichever edge runs out first decides -- a wordmark wider than 5.77:1 is capped by the width and
+   comes out under 26px tall, a squarer one is capped by the height. Measured against the header
+   this replaced, a 7.5:1 logo renders 150x19.9 where the cropped rule gave 150x19.3, so the logo
+   reads at the size it always did and simply is not cut any more.
+   The first version of this fix used max-width:200px, which was an unnecessary widening: it let a
+   wide logo render a third larger than the design's own footprint, and it looked it (client,
+   2026-09-21).
+   The cost, and it is the reverted 2026-09-10 decision: a logo exported with wide empty margins
+   renders small, because those margins are counted again. Trim the file -- NON-TECHNICAL says so
+   beside the upload box.
+   The padded case is not hypothetical and is worth knowing before anyone "fixes" this back: the
+   file still configured on the practice site is that 2172x724 one, whose wordmark is 271 of its
+   724 rows, and under contain it renders 78x10. Trimmed artwork is the answer, not cover.
+   ponytail: no server-side trim, which is what would satisfy both shapes. Pillow is genuinely not
+   installed (checked 2026-09-21) and one CSS line is not worth a dependency plus an upload hook;
+   revisit if editors keep uploading padded artwork. */
+.brand img{height:26px;width:auto;max-width:150px;object-fit:contain;object-position:left center;flex:none}
 .nav-toggle{display:none}
 .nav-toggle-label{display:none;margin-left:auto;width:44px;height:44px;align-items:center;justify-content:center;border:1px solid var(--line-2);border-radius:8px;cursor:pointer;color:var(--ink);font-size:18px;line-height:1}
 .site-nav{margin-left:auto}

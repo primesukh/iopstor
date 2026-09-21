@@ -2980,8 +2980,10 @@ def test_an_uploaded_logo_is_shown_whole_and_never_cropped():
     assert "object-fit:cover" not in rule[0]          # the crop, gone
     assert "height:26px" in rule[0]                   # the header's rhythm is still fixed
     assert "width:auto" in rule[0]                    # ...and the width follows the file
-    assert "max-width:200px" in rule[0]               # the guard the fixed width used to be
-    assert "object-fit:contain" in rule[0]            # so the max-width case shrinks, never crops
+    # 150x26 is the design's own footprint, unchanged -- only the FIT is different. 200 was tried
+    # first and let a wide logo render a third bigger than the design; the client saw it.
+    assert "max-width:150px" in rule[0]
+    assert "object-fit:contain" in rule[0]            # fitted inside the box, never filling it
 
 
 def test_every_archive_head_is_the_light_one():
