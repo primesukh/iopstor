@@ -1644,7 +1644,7 @@ def test_the_access_log_keeps_the_polls_out_but_not_their_failures(app):
     assert line('"GET /admin/posts?q=/admin/realtime/v1/longpoll?x HTTP/1.1" 200 -')
 
 
-def test_a_status_the_poll_transport_cannot_read_becomes_a_500(app, monkeypatch):
+def test_a_status_the_poll_transport_cannot_read_becomes_a_500(app, monkeypatch, caplog):
     """The browser's LongPoll switches on the status and THROWS "unhandled poll status" on anything
     outside {200,204,403,410,500}, which wedges the transport for the life of the tab. So a Kong 401
     from a wrong anon key, or a 502 while Realtime restarts, has to arrive as the one status it knows
@@ -1664,6 +1664,67 @@ def test_a_status_the_poll_transport_cannot_read_becomes_a_500(app, monkeypatch)
     r = c.get("/admin/realtime/v1/longpoll?csrf=tok&vsn=2.0.0")
     assert r.status_code == 500, "401 would be an unhandled poll status in the browser"
     assert json.loads(r.get_data())["status"] == 500
+    assert "upstream 401" in caplog.text, "collapsing the status must not also lose it"
+
+
+def test_every_failed_poll_says_why_in_the_log(app, monkeypatch, caplog):
+    """The browser prints ONE string for every way this can fail. LongPoll calls onerror() with a bare
+    number, and supabase-js's normaliser has no branch for a number, so a guard 403, a collapsed 500
+    and an unparseable body all reach the console as "channel error: connection lost". A production
+    outage was unreadable for exactly this reason. The log is the only place the difference survives,
+    so each refusal has to write it down -- including the upstream 403 the proxy passes through
+    untouched, which is the tenant-name fault in TECHNICAL 15 and used to go by in silence."""
+    import urllib.error
+
+    from iopstor import admin_ui
+
+    c = app.test_client()
+    c.get("/admin/realtime/v1/longpoll?vsn=2.0.0")
+    assert "refused: no session" in caplog.text
+
+    caplog.clear()
+    monkeypatch.setattr(admin_ui, "current_user", lambda: {"id": "u", "role": "admin"})
+    with c.session_transaction() as s:
+        s["csrf"] = "right"
+    c.get("/admin/realtime/v1/longpoll?csrf=wrong&vsn=2.0.0")
+    assert "refused: csrf" in caplog.text, "a stale tab and a dead session are not the same fault"
+
+    caplog.clear()
+
+    def refused(*a, **k):
+        raise urllib.error.HTTPError("http://kong/realtime/v1/longpoll", 403, "Forbidden", {}, None)
+
+    monkeypatch.setattr(admin_ui.urllib.request, "urlopen", refused)
+    r = c.get("/admin/realtime/v1/longpoll?csrf=right&vsn=2.0.0")
+    assert r.status_code == 403, "403 is in POLL_STATUSES and goes to the browser as it came"
+    assert "upstream 403" in caplog.text
+
+    caplog.clear()
+    monkeypatch.setattr(admin_ui.urllib.request, "urlopen",
+                        lambda *a, **k: (_ for _ in ()).throw(ConnectionRefusedError(111, "refused")))
+    r = c.get("/admin/realtime/v1/longpoll?csrf=right&vsn=2.0.0")
+    assert r.status_code == 500
+    assert "ConnectionRefusedError" in caplog.text, "an unreachable Kong must not look like a real 500"
+
+    caplog.clear()
+    monkeypatch.setattr(admin_ui.urllib.request, "urlopen", lambda *a, **k: _ok())
+    assert c.get("/admin/realtime/v1/longpoll?csrf=right&vsn=2.0.0").status_code == 200
+    assert "realtime poll" not in caplog.text, "a working poll runs several times a second; it stays quiet"
+
+
+class _ok:
+    """A held poll that answered: 410 is what Phoenix returns when it hands back a session token."""
+
+    status, headers = 200, {"Content-Type": "application/json"}
+
+    def read(self):
+        return b'{"status":410,"token":"t","messages":[]}'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
 
 
 def test_the_editors_colour_is_the_same_in_every_worker():

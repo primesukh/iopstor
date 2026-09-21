@@ -903,6 +903,12 @@ either of you losing a word. A few sections are still one-at-a-time and say so w
 the rows inside a Cards, FAQ, Numbers, Specification, Definitions or Key points section are shared as a group rather than one by
 one. See *Seeing who else is on the page* in §4.
 
+**Their initials never appear, even though we are both on the page.** Say so to whoever looks after the
+server. There is nothing to switch on and nothing you can have done wrong — and the website now keeps a
+note of the reason each time it happens, so it can be looked up rather than guessed at. Everything else
+on the page carries on working while this is off: your own writing, saving and publishing are unaffected;
+you simply will not see each other's typing until it is fixed.
+
 **Where did the Instagram link in the footer go?** It is still there, as an icon. The social links used to
 appear as web addresses in the *Contact* column at the bottom of the page; they now sit under the logo as a
 row of icons instead, so you can add all of your profiles without that column turning into a list of web
