@@ -86,6 +86,10 @@ POST_TYPES = [  # slug, name, url_prefix, hierarchical, jsonld_type, taxonomies,
         {"key": "specs", "label": "Specifications", "type": "kv", "required": False},
         {"key": "datasheet_media_id", "label": "Datasheet PDF", "type": "media", "required": False}], True),
 ]
+# What /feed.xml carries: the types that publish news. Services, partners and testimonials are the
+# catalogue -- they change without anything having happened. A set here rather than a ninth element
+# on every tuple above; migrations/0016_feed_types.sql says the same thing to an existing database.
+FEED_TYPES = {"post", "case_study", "event", "datasheet"}
 TAXONOMIES = {
     "industry": ("Industry", ["Finance", "Education", "Post Production", "Services", "Distribution", "Travel", "Logistics"]),
     "solution": ("Solution", ["Virtualization", "Big Data", "Media", "Private Cloud", "HCI"]),
@@ -337,7 +341,8 @@ def run_seed():
     types = {}
     for slug, name, prefix, hier, ld, taxes, schema, pages in POST_TYPES:
         types[slug] = _get_or_create("post_types", {"slug": slug}, dict(name=name, url_prefix=prefix, hierarchical=hier, jsonld_type=ld,
-                                                                       taxonomies=taxes, field_schema=schema, has_pages=pages))
+                                                                       taxonomies=taxes, field_schema=schema, has_pages=pages,
+                                                                       in_feed=slug in FEED_TYPES))
     db.uncache("post_types")
     terms = {}
     for slug, (name, names) in TAXONOMIES.items():

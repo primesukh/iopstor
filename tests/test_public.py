@@ -55,7 +55,7 @@ def test_sitemap_feed_llms_and_public_api(client, editor_headers):
                                                                           "blocks": [{"type": "faq", "data": {"items": [{"q": "Why?", "a": "Because."}]}}]})
     assert ok.status_code == 201, ok.json
     client.post("/api/admin/v1/posts", headers=editor_headers, json={"post_type": "post", "title": "zz-test Secret Draft"})
-    for path in ("/sitemap.xml", "/feed.xml", "/llms.txt", "/llms-full.txt", "/robots.txt", "/index.md"):
+    for path in ("/sitemap.xml", "/feed.xml", "/llms.txt", "/llms-full.txt", "/robots.txt", "/index.md", "/sitemap", "/feed"):
         r = client.get(path)
         assert r.status_code == 200, path
         assert b"zz-test-secret-draft" not in r.data and b"Secret Draft" not in r.data, path

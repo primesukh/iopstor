@@ -1094,6 +1094,22 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .band-dark .filters .chip{border-color:var(--line-dark-2);color:var(--muted-dark)}
 .band-dark .filters .chip:hover{border-color:var(--blue);color:var(--white)}
 .arch-body{background:var(--grey);padding:56px 0 48px}
+/* the sitemap page: a link list per content type, not the deck of cards an archive draws. Sixty
+   pages as cards is a scroll, and somebody who opens a sitemap is looking for one page.
+   Multi-column, not grid. A grid puts the groups in rows, so the tallest in a row sets its height --
+   Services has 22 entries and Main has 1, which left three-quarters of the first row empty and
+   pushed everything after it below the fold (measured at 1440: 5839px of page). Columns flow
+   instead, so a short group is followed by the next one rather than by whitespace. break-inside
+   keeps a group whole, and the count collapses to one on a phone with no media query of its own. */
+.sm-groups{columns:3 260px;column-gap:32px}
+.sm-group{break-inside:avoid;margin:0 0 32px}
+.sm-group h2{font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+.sm-group h2 a{color:inherit;text-decoration:none}
+.sm-group h2 a:hover{color:var(--blue)}
+.sm-group ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.sm-group a{text-decoration:none}
+.sm-group li a{color:var(--ink);font-size:15px}
+.sm-group li a:hover{color:var(--blue)}
 
 /* a detail page's head: words left, featured image right when there is one */
 .page-head>.wrap{display:grid;gap:48px;align-items:center}

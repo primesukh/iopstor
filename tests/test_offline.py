@@ -7,6 +7,8 @@ import re
 import shutil
 import subprocess
 from copy import deepcopy
+from urllib.parse import urlsplit
+from xml.etree import ElementTree
 
 import pytest
 
@@ -45,6 +47,16 @@ def test_render_blocks_uses_template(app, monkeypatch):
 def test_blocks_text_flattens():
     txt = blocks_text([{"type": "rich_text", "data": {"html": "<p>Hello <b>world</b></p>"}}, {"type": "cta", "data": {"heading": "Go", "button_label": "Now", "button_url": "/x"}}])
     assert txt == "Hello world Go Now"
+
+
+def test_blocks_text_decodes_entities_so_nobody_escapes_them_twice():
+    """The source is contenteditable HTML, so "R&D" is stored as "R&amp;D" and stripping tags leaves
+    the entity behind. Every consumer escapes what it gets — the feed's <description>, the audit diff,
+    `text` in the public API — so leaving it encoded here showed a literal "R&amp;D" on all three."""
+    assert blocks_text([{"type": "rich_text", "data": {"html": "<p>R&amp;D at 40&deg;C</p>"}}]) == "R&D at 40°C"
+    # and a paragraph holding nothing but a non-breaking space is empty, not truthy-but-blank --
+    # otherwise it wins an `or` chain and suppresses the fallback behind it (public._summary)
+    assert blocks_text([{"type": "rich_text", "data": {"html": "<p>&nbsp;</p>"}}]) == ""
 
 
 def test_blocks_md_keeps_the_shape_blocks_text_throws_away():
@@ -346,7 +358,7 @@ def test_a_type_without_pages_has_no_url_and_no_link(app):
 
     linked, bare = with_paths([row(True)])[0], with_paths([row(False)])[0]
     assert linked["path"] == "/partners/micron" and bare["path"] is None
-    assert _indexable(linked) and not _indexable(bare)          # out of sitemap.xml and llms.txt
+    assert _indexable(linked) and not _indexable(bare)          # out of the sitemap and llms.txt
 
     # A path the app owns is worse than no path: the page cannot load at all (Flask matches the admin
     # blueprint first), and publishing its address tells every crawler where the CMS is.
@@ -1030,7 +1042,7 @@ def test_the_admin_does_not_exist_outside_the_office(app):
     assert get("/admin/login", "172.18.0.4", CF_Connecting_IP="203.0.113.9").status_code == 404
 
     # the public site is untouched by any of it -- that is the whole point of the split
-    assert get("/sitemap.xml", "10.0.1.7", X_Forwarded_For="203.0.113.9").status_code == 200
+    assert get("/sitemap", "10.0.1.7", X_Forwarded_For="203.0.113.9").status_code == 200
 
     # and an empty ADMIN_NETWORKS is no restriction at all: development, and any deploy that has not set it
     app.config["ADMIN_NETWORKS"] = ()
@@ -2339,7 +2351,7 @@ class _FakeQ:
 
 
 def test_no_crawler_output_can_carry_an_address_the_app_owns(app, monkeypatch):
-    """The client's rule: sitemap.xml, feed.xml, llms.txt and llms-full.txt must never publish an admin
+    """The client's rule: the sitemap, the feed, llms.txt and llms-full.txt must never publish an admin
     or private-API address (user, 2026-09-15).
 
     The collision is seeded deliberately -- a page slugged "admin", a post type prefixed "admin", a
@@ -2347,6 +2359,10 @@ def test_no_crawler_output_can_carry_an_address_the_app_owns(app, monkeypatch):
     nothing, and each of the three reaches the sitemap by a different route: the post's own path, the
     archive prefix, and the term archive. Only the first passes through _indexable() at all."""
     from iopstor import db
+
+    # post_types and settings are cached in the process, not just the request, so without this the
+    # canned rows below lose to whatever an earlier test left behind.
+    db._proc_cache.clear()
 
     def pt(slug, prefix, **kw):
         return {"id": abs(hash(slug)) % 999, "slug": slug, "name": slug.title(), "url_prefix": prefix,
@@ -2376,8 +2392,20 @@ def test_no_crawler_output_can_carry_an_address_the_app_owns(app, monkeypatch):
     for path, body in bodies.items():
         assert "/admin" not in body, f"{path} published an admin address"
         assert "/api/admin" not in body, f"{path} published the private API"
-        assert "/media/" not in body and "/static/" not in body, path
         assert "Hidden" not in body, f"{path} published a noindex page"
+        if path != "/feed.xml":
+            assert "/media/" not in body and "/static/" not in body, path
+
+    # The feed is the one surface that carries a /media/ address on purpose: the channel logo, and an
+    # <enclosure> per item with a featured picture. Both are where this app serves its pictures from,
+    # so a substring test over the whole body asks the wrong question of it. The rule -- never publish
+    # an address the app owns -- is about the addresses the feed offers as *pages*, which are <link>
+    # and <guid>. (Nothing else here is exempt: llms-full.txt embeds ![](/media/…) for any real page
+    # with a picture and only passes above because these canned posts have none.)
+    pages = [e.text for e in ElementTree.fromstring(bodies["/feed.xml"]).iter() if e.tag in ("link", "guid")]
+    assert pages, "the feed published no page addresses at all"
+    for u in pages:
+        assert not db.reserved(urlsplit(u).path), f"the feed published an address the app owns: {u}"
 
     # the ordinary page is still there -- a gate that publishes nothing passes every assertion above
     assert "http://test/blog/real" in bodies["/sitemap.xml"] and "http://test/blog/real" in bodies["/feed.xml"]
@@ -2388,6 +2416,124 @@ def test_no_crawler_output_can_carry_an_address_the_app_owns(app, monkeypatch):
     assert "/api/v1/posts" in bodies["/llms.txt"]
     # and robots.txt no longer names the admin at all -- those lines were its only public mention
     assert "Disallow" not in bodies["/robots.txt"] and "Sitemap: http://test/sitemap.xml" in bodies["/robots.txt"]
+
+
+def test_the_slug_is_the_page_and_the_extension_is_the_file(app, monkeypatch):
+    """The sitemap and the feed each answer at two addresses on purpose (2026-09-21): /sitemap and
+    /feed are pages a person reads, /sitemap.xml and /feed.xml are the files a crawler and a reader
+    take. Getting these the wrong way round serves XML to the footer link, which is the bug that
+    started this, or HTML to a subscriber, which is worse.
+
+    The three that have no page are the other half. robots.txt is fixed at that exact path by RFC
+    9309 and llms.txt is found by its filename, so a later tidy-up that "finishes the job" and gives
+    them slugs too would break discovery silently -- no error, nothing ever fetching them again."""
+    from iopstor import db, public
+    # the three the app-wide context processor reaches for, as _render_post() does -- base.html draws
+    # the header and footer on both pages and neither is what this test is about
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    monkeypatch.setattr(public, "_service_nav", lambda: None)
+    monkeypatch.setattr(db, "post_types", lambda: [])        # no types: both pages render empty
+    monkeypatch.setattr(db, "rows", lambda q: [])
+    c = app.test_client()
+
+    for page, file in (("/feed", "/feed.xml"), ("/sitemap", "/sitemap.xml")):
+        assert c.get(page).mimetype == "text/html", f"{page} is the one a person opens"
+        assert c.get(file).mimetype == "application/xml", f"{file} is the one a machine takes"
+
+    for fixed in ("/robots.txt", "/llms.txt", "/llms-full.txt"):
+        assert c.get(fixed).status_code == 200, f"{fixed} is named by a convention and cannot move"
+
+    # the page points at its own file, so somebody who wants to subscribe can find it, and every
+    # page carries the autodiscovery link a reader follows when handed /feed instead of /feed.xml
+    assert "/feed.xml" in c.get("/feed").data.decode()
+    assert '<link rel="alternate" type="application/rss+xml"' in c.get("/feed").data.decode()
+    assert "/sitemap.xml" in c.get("/sitemap").data.decode()
+
+
+def test_the_paths_the_crawler_files_sit_on_cannot_be_taken_by_a_page(app):
+    """An extension used to make these safe for nothing: slugify() turns a dot into a hyphen, so
+    "/feed.xml" was an address no post could ever hold. Extension-less, a page titled "Feed" claims
+    it, shadows the real one and is unreachable itself -- the same failure `admin` and `api` have."""
+    from iopstor import db
+
+    assert db.slugify("feed.xml") == "feed-xml" and db.slugify("Feed") == "feed"   # why it is needed
+    for word in ("feed", "sitemap", "admin", "api", "media", "static", "healthz"):
+        assert db.reserved(word), f"{word} must be refused as a slug"
+        assert db.reserved(f"/{word}/anything"), f"/{word} must be refused as a first segment"
+    assert not db.reserved("feed-xml") and not db.reserved("sitemaps")   # near misses stay usable
+
+
+def test_the_feed_gives_a_reader_something_to_show(app, monkeypatch):
+    """An <item> used to be a title, a link and <description/> -- the excerpt, which is empty on most
+    posts, with nothing behind it. This pins the four things a reader actually draws: a summary that
+    falls back to the page itself, the picture, what the post is about, and a channel that says when
+    it last changed.
+
+    Parsed rather than grepped, because a feed is rejected whole for being malformed and a forgotten
+    xmlns: prefix is the usual reason -- fromstring() is the cheapest check that never existed here.
+
+    What this CANNOT show: that in_feed picks the right types. _FakeQ answers every query with the
+    same canned list whatever .in_() was given, so inclusion and exclusion by type are a live fact
+    (curl), not a unit test."""
+    from iopstor import db
+
+    db._proc_cache.clear()      # as above: the caches outlive the request
+
+    def pt(slug, name, prefix, **kw):
+        return {"id": abs(hash(slug)) % 999, "slug": slug, "name": name, "url_prefix": prefix,
+                "in_sitemap": True, "in_feed": True, "has_pages": True, "hierarchical": False,
+                "field_schema": [], **kw}
+
+    news = pt("post", "Blog", "blog")
+    picture = {"id": 7, "url": "/media/2026/09/cover.png", "mime": "image/png", "size": 4821, "alt": "A rack"}
+    # the ordinary case the old feed handled worst: nobody wrote an excerpt, so there was nothing to say
+    wordy = {"id": 11, "slug": "wordy", "title": "Wordy", "excerpt": "", "meta": {}, "seo": {},
+             "blocks": [{"type": "rich_text", "data": {"html": "<p>Eleven drives &amp; one chassis, no downtime.</p>"}}],
+             "terms": [{"id": 1, "name": "Finance", "slug": "finance", "taxonomy": {"slug": "industry", "name": "Industry"}}],
+             "children": [], "parent_id": None, "featured_media": picture, "post_type": news, "menu_order": 0,
+             "updated_at": "2026-09-15T00:00:00+00:00", "published_at": "2026-09-01T00:00:00+00:00"}
+
+    # a case study keeps its prose in meta, not in blocks -- blocks_text() of it is "", and the
+    # description was blank for the whole type until the field_schema step existed
+    study = pt("case_study", "Case Studies", "case-studies", field_schema=[
+        {"key": "client", "label": "Client", "type": "text"},
+        {"key": "challenge", "label": "Challenge", "type": "textarea"}])
+    # its one block looks empty but is not: a lone &nbsp; used to win the `or` chain and suppress the
+    # field behind it, so the whole type shipped a blank description
+    quiet = dict(wordy, id=12, slug="quiet", title="Quiet", post_type=study, featured_media=None, terms=[],
+                 blocks=[{"type": "rich_text", "data": {"html": "<p>&nbsp;</p>"}}],
+                 meta={"client": "LKS", "challenge": "Nine sites, one night to cut over."})
+
+    canned = {"settings": [], "post_types": [news, study], "posts": [wordy, quiet]}
+    monkeypatch.setattr(db, "table", lambda n: _FakeQ(n))
+    monkeypatch.setattr(db, "rows", lambda q: canned.get(q.name, []))
+
+    resp = app.test_client().get("/feed.xml")
+    # a browser renders application/xml and offers to SAVE application/rss+xml, because none of them
+    # has had a feed viewer for years -- clicking "RSS" in the footer downloaded the file
+    assert resp.mimetype == "application/xml"
+    root = ElementTree.fromstring(resp.data.decode())
+    channel, atom, dc = root.find("channel"), "{http://www.w3.org/2005/Atom}", "{http://purl.org/dc/elements/1.1/}"
+    item, study_item = channel.findall("item")
+
+    # the long field carries the summary; "LKS" is a label, not a sentence, so Client is not it
+    assert study_item.findtext("description") == "Nine sites, one night to cut over."
+
+    # the sentence under the headline, taken off the page because the excerpt is empty. ET decodes
+    # once on parse, so "&" here proves the entity was not escaped a second time on the way out
+    assert "Eleven drives & one chassis" in item.findtext("description")
+    # the picture: absolute, and carrying the byte count the spec asks for
+    enclosure = item.find("enclosure")
+    assert enclosure.get("url") == "http://test/media/2026/09/cover.png"
+    assert enclosure.get("type") == "image/png" and enclosure.get("length") == "4821"
+    # what it is, and what it is about
+    assert {c.text for c in item.findall("category")} == {"Blog", "Finance"}
+    assert item.find("guid").get("isPermaLink") == "true"
+    assert item.findtext(dc + "creator")        # the namespace resolves, i.e. xmlns:dc was declared
+    # and the channel says when it last changed and where it lives
+    assert channel.findtext("lastBuildDate") == "Tue, 15 Sep 2026 00:00:00 +0000"
+    assert channel.find(atom + "link").get("href") == "http://test/feed.xml"
 
 
 def test_the_words_the_app_owns_are_refused_when_a_page_is_named(app, monkeypatch):

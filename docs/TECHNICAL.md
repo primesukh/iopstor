@@ -65,7 +65,7 @@ Eleven tables from `migrations/0001_initial.sql`, plus `warranties` from `0003_w
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `post_types` | Content types **as data** | `slug`, `url_prefix`, `hierarchical`, `field_schema` (JSONB), `taxonomies` (JSONB), `jsonld_type`, `in_sitemap`, `has_pages` |
+| `post_types` | Content types **as data** | `slug`, `url_prefix`, `hierarchical`, `field_schema` (JSONB), `taxonomies` (JSONB), `jsonld_type`, `in_sitemap`, `in_feed`, `has_pages` |
 | `posts` | Every piece of content | `post_type_id`, `parent_id`, `slug`, `title`, `excerpt`, `blocks` (JSONB), `meta` (JSONB), `seo` (JSONB), `status`, `published_at`, `featured_media_id`, `author_id`, `menu_order` |
 | `taxonomies` / `terms` / `post_terms` | Classification, many-to-many | `terms` unique on `(taxonomy_id, slug)` |
 | `media` | Uploads | `key` (the path inside the bucket), `url` (**the path this site serves it at, `/media/<key>` — not the Storage address**), `mime`, `size`, `alt`, `uploaded_by` |
@@ -214,8 +214,9 @@ Resulting scheme:
 /media/<bucket key>     an uploaded picture or PDF, served by the app (§8)
 ```
 
-`/media/` is a **reserved first segment** — one of five in `db.RESERVED_SEGMENTS` (`admin`, `api`,
-`media`, `static`, `healthz`), which is now enforced rather than merely noted. Flask matches a
+`/media/` is a **reserved first segment** — one of seven in `db.RESERVED_SEGMENTS` (`admin`, `api`,
+`media`, `static`, `healthz`, and `feed`/`sitemap` since 2026-09-21), which is now enforced rather
+than merely noted. Flask matches a
 blueprint's static prefix before `public.py`'s catch-all, so a page that claims one of these **cannot
 load at all**: a page slugged `admin` used to save cleanly and then 404 for ever with nothing to say
 why. `db.reserved()` refuses a new one at save time — a post's slug only when its type has no
@@ -306,6 +307,16 @@ line and move it, since its `<hr>` is a direct child of `.wrap` and so is picked
 because `blocks_md()` joins with `\n\n` and can never make a setext heading), and `spacer` is in
 `MD_SKIP` beside `embed_html`. `height` is in `_NON_TEXT_KEYS`, or `"medium"` would show up in
 `llms-full.txt`, the feed and admin search, the way `tone` did.
+
+**`blocks_text()` decodes entities before it returns** (2026-09-21). Its input is `contenteditable`
+HTML, so an editor typing *R&D* stores `R&amp;D`, and the `re.sub(r"<[^>]+>", " ", …)` tag strip does
+not touch an entity. Every consumer escapes what it gets — the feed's `<description>`, the audit word
+diff (`admin_ui.py`, which escapes before wrapping in `Markup`), `text` in `/api/v1/posts` — so all
+three rendered a literal **`R&amp;D`**. `unescape()` runs once at the source instead of three times at
+the callers. It also fixes a subtler one: a paragraph holding nothing but `&nbsp;` used to come back
+`"&nbsp;"`, truthy but blank, which won the `or` chain in `public._summary()` and suppressed the
+fallback behind it. Decoded, it is `\xa0`, which `.split()` drops as whitespace, so the result is `""`.
+`test_blocks_text_decodes_entities_so_nobody_escapes_them_twice` pins both halves.
 
 Their CSS is the trap. `.section{padding:80px 0}` means a section that declares nothing at all is
 already 160px tall, so both rule groups zero it first. Inside a Columns section the stacking gap is
@@ -796,6 +807,129 @@ endpoints answer with content (sitemap 60 `<loc>`s, llms-full 19 KB) and **zero*
 slugged `admin`, a post type prefixed `admin`, a taxonomy slugged `admin` — because an assertion that
 passes on a site containing none of those proves nothing; removing any one of the three gates makes
 `test_no_crawler_output_can_carry_an_address_the_app_owns` fail, which was checked one gate at a time.
+
+### The slug is the page, the extension is the file
+
+Two requests, one answer (2026-09-21): *"cant we have proper slugs instead of file extension"* and
+*"cant we have a decorated rss and sitemap for the user when they visit"*. The sitemap and the feed
+now answer at **two addresses with two jobs**:
+
+| Address | Serves | For |
+|---|---|---|
+| `/sitemap` | `sitemap.html` — every public page, grouped by type | a person; the footer links here |
+| `/sitemap.xml` | the `<urlset>` | crawlers; `robots.txt` advertises this |
+| `/feed` | `archive.html` — the feed's items as the site's own cards | a person; the footer links here |
+| `/feed.xml` | the RSS `<channel>` | readers; `<head>` autodiscovery points here |
+
+`test_the_slug_is_the_page_and_the_extension_is_the_file` pins all four, because getting them the
+wrong way round serves XML to the footer link — the bug that started this — or HTML to a subscriber,
+which is worse.
+
+**This is why neither needs an XSLT stylesheet**, which is the obvious way to decorate XML and a dead
+end: Chrome removes XSLT on **17 November 2026** (v158; Dev/Beta began disabling it in v154 on
+22 September) and Firefox and WebKit have both said they intend to follow. A real template in the
+site's own theme cannot expire.
+
+**A reader handed `/feed` instead of `/feed.xml` still works**, because `base.html` carries the
+autodiscovery `<link>` on every page — that is exactly the mechanism a reader uses to find a feed
+from a site's HTML, so the page resolves to the file without the person knowing there was a
+difference.
+
+Both pages route through `_page_meta()` rather than `seo.build_meta()` directly. The one thing
+`build_meta()` gets wrong for a page that is not a post is the Markdown twin: it offers `<path>.md`
+for anything not `noindex`, and `/feed.md` would be a 404 advertised in every render's `<head>`.
+
+`/feed` and `sitemap.html` are both built from the same selection as their file — `_feed_posts()` and
+`_sections()` — so the page a person reads and the file a machine takes can never disagree about what
+exists. `_sections()` is also what `llms.txt` is built from.
+
+**`/robots.txt`, `/llms.txt` and `/llms-full.txt` deliberately did not move, and a later tidy-up must
+not finish the job.** RFC 9309 fixes robots.txt at that exact path and a crawler looks nowhere else;
+the llms.txt convention is a file *named* `llms.txt`, so the filename **is** the discovery mechanism.
+Renaming either loses the feature silently — nothing errors, nothing ever fetches them again.
+`test_the_old_dotted_crawler_paths_still_answer` asserts all three still answer 200 for that reason.
+
+The cost of taking a slug is a name an editor can no longer use, and it is worth seeing why there
+was no cost before: `slugify()` turns a dot into a hyphen (`feed.xml` → `feed-xml`), so `/feed.xml`
+was an address **no post could ever hold**. The extension was doing collision-safety for free.
+`/feed` can be claimed by a page titled *Feed*, which would shadow the route and be unreachable
+itself, so both words joined `db.RESERVED_SEGMENTS` (§5) — the same machinery as `admin` and `api`.
+The live database was checked first and holds no post or `url_prefix` using either, so nothing became
+retroactively unsaveable. `test_the_paths_the_crawler_files_sit_on_cannot_be_taken_by_a_page` pins
+it, including the near misses (`feed-xml`, `sitemaps`) staying usable.
+
+`robots.txt`'s `Sitemap:` line, llms.txt's footer and `stress.py`'s URL probe all point at
+`/sitemap.xml`; `base.html`'s autodiscovery `<link>` at `/feed.xml`; the **footer** at `/sitemap` and
+`/feed`, because that row is read by people.
+
+`sitemap.html` is a link list, not the deck of cards the archives draw: sixty pages as cards is a
+scroll, and somebody who opens a sitemap is looking for one page. It uses CSS **multi-column**
+(`.sm-groups`) rather than a grid — a grid puts the groups in rows, so the tallest in a row sets its
+height, and Services (22 entries) beside Main (1) left three-quarters of the first row empty. Groups
+are sorted alphabetically rather than in `_sections()`' `menu_order`: that order is the designed one
+for a menu and reads as no order at all on a flat list of 22.
+
+### `/feed` — the site's news, not the blog's
+
+**Which types the feed carries is a row, not a slug in code** (2026-09-21). It used to be
+`db.post_type(slug="post")`, one type found by name; it is now every type with
+`post_types.in_feed`, which `0016_feed_types.sql` adds beside `in_sitemap` and sets on `post`,
+`case_study`, `event` and `datasheet`. Services, partners and testimonials stay out on purpose: they
+are the catalogue, and they change without anything having happened.
+
+The report that started it was "the RSS feed doesn't update", and nothing was broken — the site has
+exactly one blog post, so a blog feed correctly never moved while case studies and testimonials were
+being published all week. The fix is that the feed is about the site. **Measured: 1 item → 11.**
+
+`feed()` reads the column with `t.get("in_feed", t["slug"] == "post")`, so on a database where the
+migration has not run the key is missing and the feed is the blog alone — exactly what it did before.
+The write path needs no such care: there is no Post Types screen, and `pick()` forwards only keys a
+caller actually sent, so `in_feed` in `PT_FIELDS` cannot reference a column that is not there yet.
+
+**`_summary()` is why an item now has anything under the headline.** `<description>` was
+`escape(p['excerpt'])` with nothing behind it, and most posts have no excerpt — the one blog post
+shipped a literal `<description/>`. The chain is SEO description → excerpt → `blocks_text()` → the
+type's `textarea` fields, clipped by `textwrap.shorten`. It is deliberately **not** `build_meta()`'s
+chain (§9 above), which ends at the site tagline: right for one page in `<head>`, wrong for forty
+items that would then share one sentence. The last step exists because **a case study keeps its prose
+in `meta`, not in `blocks`** — its Challenge and Results *are* the post and `blocks_text()` of it is
+`""`. `textarea` is the same test `_md_fields()` uses for "long enough to be its own section", so a
+`text` field like Client is skipped: "LKS" is not a summary. Empty is still a legal answer for a post
+with no excerpt, no body and no fields, and inventing a sentence would be worse than the blank.
+
+Items also carry `<guid isPermaLink="true">`, `<category>` for the type and each term,
+`<dc:creator>` (the organisation — author names are not in `POST_SELECT` and embedding them would
+touch every query on the site, and `jsonld()` already credits the same way) and an `<enclosure>` for
+the featured picture with the byte `length` the spec asks for. The channel gained `<language>`,
+`<lastBuildDate>` (max `updated_at`, `db.utcnow()` when empty), an `<atom:link rel="self">` and
+`<image>` from the `logo_url` setting; `<link>` is the site root rather than the hardcoded `/blog`.
+`pubDate` is `email.utils.format_datetime()`, stdlib RFC 2822 — the old
+`strftime('%a, %d %b %Y %H:%M:%S +0000')` emits non-English day and month names under a non-C locale
+and pinned `+0000` regardless of the value it was formatting.
+
+**Selection filters after fetching, not before.** `.limit(20)` used to run ahead of `_indexable()`,
+so one `noindex` post quietly shortened the feed; it now takes `FEED_MAX * 2` and slices to
+`FEED_MAX` after the gate (§17).
+
+**It answers `application/xml`, not `application/rss+xml`** (2026-09-21). Reported as *"when we go to
+RSS it downloads the file instead of viewing it"* — and that is exactly what a browser does with a
+type it cannot render. No browser has shipped a feed viewer since Firefox 64 removed its own, so
+`application/rss+xml` is an unknown type and becomes a file to save; `sitemap.xml` has always
+answered `application/xml` and was never reported, which is the in-repo precedent. Nothing else
+changes: readers parse the body, and the type they *discover* the feed by is the
+`<link rel="alternate" type="application/rss+xml">` in `base.html`, which is untouched.
+
+**An XSLT stylesheet is the obvious way to make that a designed page, and it is deliberately not
+built.** Chrome removes XSLT on **17 November 2026** (Chrome 158; Dev/Beta began disabling it in 154,
+22 September 2026), and Firefox and WebKit have both said they intend to follow — it would break
+within two months of being written. The human-readable version of this list is the `/blog` archive,
+which already exists.
+
+`test_the_feed_gives_a_reader_something_to_show` guards the item shape, and parses with
+`ElementTree.fromstring` rather than grepping: a feed is rejected whole for being malformed and a
+forgotten `xmlns:` prefix is the usual reason. It cannot guard **which types** are included — `_FakeQ`
+answers every query with the same canned list whatever `.in_()` was given — so inclusion by type is a
+live `curl` fact, not a unit test.
 
 `base.html`'s `<head>` also carries the favicon (`static/favicon.svg`, the black square with the blue bar and white ring) and the two web fonts. The fonts come from Google Fonts on a `<link>`, which is the one external request the public site makes; `admin/canvas.html` repeats that link because it is a standalone document, and without it the editor canvas would preview the page in a different typeface from the page itself.
 
@@ -2009,6 +2143,15 @@ tests/test_public.py     hierarchical URLs + breadcrumbs, leads, redirects, site
 
 **`test_throttle_fails_open_and_believes_only_a_proxy_we_named`** covers `client_ip()` end to end: the counter failing open, the header winning from a peer inside `TRUSTED_PROXIES`, the **rightmost** `X-Forwarded-For` entry beating a spoofed one to its left, `CF-Connecting-IP` beating `X-Forwarded-For`, and — the half that is the security property — both of them being *ignored* from a peer outside the list, including after narrowing `TRUSTED_PROXIES` so the private peer no longer qualifies. It was `test_throttle_fails_open_and_reads_cloudflares_header` until the header stopped being read unconditionally.
 
+**Two things every canned-rows test has to know about `_FakeQ`** (the fake PostgREST chain the crawler
+and feed tests share). First, **it ignores every filter**: `__getattr__` returns `self`, so `.eq()`,
+`.in_()`, `.order()` and `.limit()` all no-op and `db.rows()` hands back the whole canned list for
+that table. A test can therefore prove what a route *renders*, never what its query *selects* — which
+rows a `WHERE` picks is a live fact. Second, **`post_types` and `settings` are cached in the process,
+not the request**, so canned rows lose to whatever an earlier test left in `db._proc_cache`; both
+crawler tests now call `db._proc_cache.clear()` first. Without it the feed's channel `<image>` picked
+up a real `logo_url` from a previous test and the suite failed only when run whole (2026-09-21).
+
 **The stress engine (`iopstor/stress.py`) is covered offline**: `test_validate_target_*` (scheme-only URL guard), `test_clamp_*`, `test_percentile_is_nearest_rank_in_ms`, `test_progress_store_roundtrips_and_stops` (the `/dev/shm` store on a `tmp_path` file), `test_nprocs_and_split` (the fan-out sizing and even split), `test_plan_caps_real_concurrency` (a huge entered number is scaled down so per-process threads stay ≤ `PER_PROC`), `test_merge_parts_sums_children` (the coordinator's sum of two part rows), and two measured ones: `test_run_load_hits_a_real_server_and_the_honeypot_leaves_no_row` stands up a throwaway `http.server`, runs `stress.start()` at it and asserts requests went, real pages answered 200 and every honeypot lead post was dropped without a row; `test_a_multiprocess_run_completes` forces the fan-out to real spawned processes and asserts both children reported through the `parts` table into a finished run. No Supabase, so they live in `test_offline.py`.
 
 **The testimonial row has four offline tests**, all monkeypatching `blocks._post_list` so no Supabase is needed:
@@ -2412,6 +2555,7 @@ Marked in code with `# ponytail:` comments.
 - **A restore is not pre-checked against what it references.** Putting back a version whose featured image or parent page has since been deleted fails on the foreign key and surfaces through `_pg_error` as a 502 page rather than a sentence.
 - **`/admin/audit` pages with offset/limit** like every other admin list. Deep pages get slower; keyset pagination if that day comes.
 - **The sliding row is hard-coded to one content type.** `render_blocks()` sets `rail = pt_slug == "testimonial"`; nothing else can ask for it. A "Sliding row" checkbox on the `post_list` block is the upgrade, and it is deliberately not built yet — a field costs validation, a seed entry, a label, an `EDITOR["widgets"]` line and a test, and exactly one type wants this.
+- **The feed over-fetches 2× rather than paging.** `feed()` asks for `FEED_MAX * 2` rows and slices to `FEED_MAX` after `_indexable()`, because filtering a list that was already truncated is what let one `noindex` post shorten the feed. `FEED_MAX` consecutive `noindex` posts would still come up short; page the query if that ever happens.
 - **`site.js` has no error boundary and no feature detection.** It is 45 lines against `scrollTo`, pointer events and `matchMedia`, all of which every browser the client's visitors use has had for years; if any of it throws, the row silently stays a plain native scroller, which is the state the page is served in anyway. That is the whole reason the controls ship `hidden` and the script unhides them.
 
 Shared editing (§12.3), all of them named in `admin.js`:

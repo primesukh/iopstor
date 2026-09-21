@@ -13,6 +13,9 @@
     <h1 class="page-title">{{ title or site.name }}</h1>
     {% if description %}<p class="lead">{{ description }}</p>{% endif %}
     {% if filters %}<nav class="filters" aria-label="Filter">{% for f in filters %}<a class="chip" href="{{ f.url }}">{{ f.name }}</a>{% endfor %}</nav>{% endif %}
+    {# only /feed passes this: the same list as a file you can subscribe to. Every other archive
+       leaves it unset and the line does not exist. #}
+    {% if feed_url %}<p><a class="btn ghost" href="{{ feed_url }}">Subscribe by RSS</a></p>{% endif %}
   </div>
 </div>
 <section class="section arch-body pl pl-{{ slug }}"><div class="wrap">
