@@ -1,9 +1,11 @@
 """Public site: catch-all page resolver, SEO endpoints (sitemap/robots/llms/feed), and the read-only JSON API."""
 import json
+import textwrap
 import threading
 import time
 from collections import OrderedDict
 from datetime import date
+from email.utils import format_datetime
 from io import BytesIO
 from pathlib import PurePosixPath
 
@@ -48,6 +50,7 @@ PUBLIC_SETTINGS = ("site_name", "tagline", "logo_url", "social_links", "contact_
 PAGE_TTL = 30       # seconds; backstop only, the epoch is what actually invalidates
 PAGE_MAX = 512      # entries; campaign ?utm_* junk must not grow this without bound
 EDGE_TTL = 60       # seconds a shared cache may serve a page for -- agreed with the client
+FEED_MAX = 40       # items in /feed.xml
 _page_cache = OrderedDict()     # key -> (expires, epoch, body, content_type)
 _refreshing = set()             # keys some thread is already re-rendering
 _refresh_lock = threading.Lock()
@@ -600,18 +603,79 @@ def llms_full():
     return Response("\n---\n\n".join(parts), mimetype="text/plain")
 
 
+def _summary(post, limit=400):
+    """The sentence a feed reader shows under the headline: what the editor wrote for search engines,
+    then the excerpt, then the beginning of the page, then the type's own long fields.
+
+    Deliberately not build_meta()'s chain, which ends at the site tagline. That is right for one page
+    in <head> and wrong here -- it would give forty items the same sentence. Ending at the content
+    instead is what stops the empty <description/> an excerpt-less post used to ship.
+
+    The last step exists because a case study keeps its prose in meta, not in blocks: its challenge
+    and its results ARE the post, and blocks_text() of it is "". `textarea` is the same test
+    _md_fields() uses to decide a field is long enough to be a section of its own -- a `text` field
+    like Client is a label, and "LKS" is not a summary of anything.
+
+    Still empty is a real answer: a post with no excerpt, no body and no fields has nothing to say,
+    and inventing a sentence for it would be worse than the blank a reader already handles."""
+    fields = post["post_type"].get("field_schema") or []
+    meta = post.get("meta") or {}
+    text = ((post.get("seo") or {}).get("description") or post.get("excerpt")
+            or blocks_text(post.get("blocks") or [])
+            or " ".join(str(meta.get(f["key"]) or "") for f in fields if f.get("type") == "textarea"))
+    return textwrap.shorten(text, limit, placeholder=" …") if text.strip() else ""
+
+
+def _feed_item(post, s):
+    """One <item>. post_type, featured_media and terms are already embedded by db.POST_SELECT, so a
+    richer item costs no extra query."""
+    media = post.get("featured_media") or {}
+    parts = [f"<title>{escape(post['title'])}</title>",
+             f"<link>{s['url']}{post['path']}</link>",
+             # isPermaLink is the default, but saying it lets a reader treat the URL as the identity
+             # rather than guessing. The path never changes, so the item is stable across rebuilds.
+             f'<guid isPermaLink="true">{s["url"]}{post["path"]}</guid>',
+             f"<pubDate>{format_datetime(db.parse_dt(post['published_at']))}</pubDate>",
+             # The organisation, not a person: author names are not in POST_SELECT and embedding them
+             # would touch every query on the site. jsonld() credits the same way (author=org).
+             f"<dc:creator>{escape(s['name'])}</dc:creator>",
+             f"<description>{escape(_summary(post))}</description>",
+             f"<category>{escape(post['post_type']['name'])}</category>"]
+    parts += [f'<category domain="{escape(t["taxonomy"]["slug"])}">{escape(t["name"])}</category>'
+              for t in post.get("terms") or [] if t.get("taxonomy")]
+    if media.get("url") and media.get("mime"):
+        # length is required by the RSS spec and readers do read it; media.size is the byte count
+        # storage.save_upload() recorded.
+        parts.append(f'<enclosure url="{escape(seo._abs(media["url"], s["url"]))}" type="{escape(media["mime"])}"'
+                     f' length="{int(media.get("size") or 0)}"/>')
+    return "<item>" + "".join(parts) + "</item>"
+
+
 @pub.get("/feed.xml")
 def feed():
+    """The site's news, not the blog's. Which types count is a row -- post_types.in_feed, beside
+    in_sitemap -- because a content type is a row here and "is this news" is a property of one. The
+    default while the column does not exist yet is the blog alone, which is what this used to do."""
     s = seo.site()
-    blog = db.post_type(slug="post")
-    posts = db.with_paths(db.rows(db.live(db.select_posts()).eq("post_type_id", blog["id"]).order("published_at", desc=True).limit(20))) if blog else []
-    posts = [p for p in posts if _indexable(p)]   # the feed is a crawler surface like any other
-    items = "".join(
-        f"<item><title>{escape(p['title'])}</title><link>{s['url']}{p['path']}</link><guid>{s['url']}{p['path']}</guid>"
-        f"<pubDate>{db.parse_dt(p['published_at']).strftime('%a, %d %b %Y %H:%M:%S +0000')}</pubDate><description>{escape(p['excerpt'])}</description></item>"
-        for p in posts)
-    xml = (f'<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>{escape(s["name"])} blog</title><link>{s["url"]}/blog</link>'
-           f'<description>{escape(s["tagline"])}</description>{items}</channel></rss>')
+    types = [t for t in db.post_types() if t.get("in_feed", t["slug"] == "post")]
+    posts = []
+    if types:
+        # Fetch past the cap and cut after filtering: _indexable() used to run on an already-truncated
+        # 20, so one noindex post quietly shortened the feed.
+        # ponytail: over-fetch 2x rather than loop. FEED_MAX noindex posts in a row would still come
+        # up short; page the query if that ever happens.
+        q = db.live(db.select_posts()).in_("post_type_id", [t["id"] for t in types]).order("published_at", desc=True).limit(FEED_MAX * 2)
+        posts = [p for p in db.with_paths(db.rows(q)) if _indexable(p)][:FEED_MAX]   # the feed is a crawler surface like any other
+    built = max([db.parse_dt(p["updated_at"]) for p in posts], default=db.utcnow())
+    image = (f"<image><url>{escape(seo._abs(s['logo'], s['url']))}</url><title>{escape(s['name'])}</title>"
+             f"<link>{s['url']}/</link></image>") if s["logo"] else ""
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">'
+           f'<channel><title>{escape(s["name"])}</title><link>{s["url"]}/</link>'
+           f'<description>{escape(s["tagline"])}</description><language>en</language>'
+           f"<lastBuildDate>{format_datetime(built)}</lastBuildDate>"
+           f'<atom:link href="{s["url"]}/feed.xml" rel="self" type="application/rss+xml"/>'
+           f'{image}{"".join(_feed_item(p, s) for p in posts)}</channel></rss>')
     return Response(xml, mimetype="application/rss+xml")
 
 

@@ -1127,7 +1127,7 @@ FIELD = {"blocks": "The writing on the page", "title": "Title", "slug": "Web add
          "remarks_public": "Show the remarks to the customer", "from_path": "Old address",
          "to_url": "Goes to", "code": "Redirect type", "hits": "Times followed",
          "url_prefix": "Address starts with", "field_schema": "Its own fields",
-         "has_pages": "Gets pages of its own", "in_sitemap": "Offered to search engines"}
+         "has_pages": "Gets pages of its own", "in_sitemap": "Offered to search engines", "in_feed": "Included in the RSS feed"}
 
 # post statuses and lead statuses both live in a `status` column, and the words are the ones the
 # Posts and Leads screens already use -- an editor should never meet "in_progress" here either
