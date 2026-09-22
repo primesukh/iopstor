@@ -415,8 +415,11 @@
     var n = SPEC && SPEC.ui.names && SPEC.ui.names[type];
     return (n && n[1]) || BLOCK_NAMES[type] || (type.charAt(0).toUpperCase() + type.slice(1)).replace(/_/g, " ");
   }
-  function labelFor(field) {
-    return SPEC.ui.labels[field] || (field.charAt(0).toUpperCase() + field.slice(1)).replace(/_/g, " ");
+  // "<block>.<field>" beats the bare key, exactly as widgetFor() above: `dark` is a field on both
+  // hero and testimonial and means something different on each.
+  function labelFor(type, field) {
+    return SPEC.ui.labels[type + "." + field] || SPEC.ui.labels[field] ||
+           (field.charAt(0).toUpperCase() + field.slice(1)).replace(/_/g, " ");
   }
   var REPEATERS = ["items", "images", "rows", "cols"];   // blocks.py REPEATERS
   function fieldsOf(type) {
@@ -480,7 +483,7 @@
     function draw() {
       list.innerHTML = "";
       data[key].forEach(function (row, i) {
-        var cells_ = cells ? cells(row, i) : subs.map(function (s) { return labelled(labelFor(s), false, fieldInput(type, s, row)); });
+        var cells_ = cells ? cells(row, i) : subs.map(function (s) { return labelled(labelFor(type, s), false, fieldInput(type, s, row)); });
         var controls = el("span", { "class": "rep-controls" }, [
           btn("↑", "Move up", function () { if (i) { data[key].splice(i - 1, 0, data[key].splice(i, 1)[0]); draw(); } }),
           btn("↓", "Move down", function () { if (i < data[key].length - 1) { data[key].splice(i + 1, 0, data[key].splice(i, 1)[0]); draw(); } }),
@@ -493,7 +496,7 @@
         ]);
         list.appendChild(el("div", { "class": "rep-row" }, cells_.concat([controls])));
       });
-      list.appendChild(btn("+ Add " + labelFor(key).toLowerCase().replace(/s$/, ""), "Add a row", function () {
+      list.appendChild(btn("+ Add " + labelFor(type, key).toLowerCase().replace(/s$/, ""), "Add a row", function () {
         var row = {};
         subs.forEach(function (s) { row[s] = ""; });
         data[key].push(make ? make() : row);
@@ -501,7 +504,7 @@
       }));
     }
     draw();
-    return el("div", {}, [el("strong", { text: labelFor(key) }), list]);
+    return el("div", {}, [el("strong", { text: labelFor(type, key) }), list]);
   }
 
   /* Alignment belongs to every section, so it is not a field in BLOCKS: one control here covers all
@@ -544,9 +547,17 @@
     });
     return labelled("Spacing", false, sel);
   }
-  function tonePick(data) {
-    var sel = el("select");
-    TONES.forEach(function (t) { sel.appendChild(el("option", {value: t[0], text: t[1]})); });
+  function tonePick(block) {
+    var sel = el("select"), data = block.data;
+    /* An empty tone emits no class, so on a hero with the tick on the first option does not mean
+       "the page's white" -- it means "whatever the tick already did", which is black. Saying so
+       here is cheaper than special-casing an empty value inside section_class(), which every block
+       shares. ponytail: read once, when the panel is built -- toggling the tick with the panel open
+       leaves this label a beat stale until it is reopened. */
+    var ticked = block.type === "hero" && data.dark;
+    TONES.forEach(function (t) {
+      sel.appendChild(el("option", {value: t[0], text: (!t[0] && ticked) ? "Black \u2014 from the band above" : t[1]}));
+    });
     sel.value = data.tone || "";
     sel.addEventListener("change", function () {
       if (sel.value) data.tone = sel.value; else delete data.tone;
@@ -584,7 +595,7 @@
     } else {
       body.appendChild(alignPick("Align the content", "align", block.data));
       body.appendChild(alignPick("Align the section", "align_box", block.data));
-      body.appendChild(tonePick(block.data));
+      body.appendChild(tonePick(block));
       body.appendChild(widthPick(block.data));
       // not on a spacer: its Height is its spacing, and two controls on one gap is the trap
       if (block.type !== "spacer") body.appendChild(padPick(block.data));
@@ -603,7 +614,7 @@
         } else if (SPEC.ui.items[block.type] && (f.key === "items" || f.key === "images" || f.key === "rows")) {
           body.appendChild(repeater(block.type, f.key, block.data));
         } else {
-          body.appendChild(labelled(labelFor(f.key), f.required, fieldInput(block.type, f.key, block.data)));
+          body.appendChild(labelled(labelFor(block.type, f.key), f.required, fieldInput(block.type, f.key, block.data)));
         }
       });
     }

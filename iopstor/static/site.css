@@ -302,7 +302,11 @@ main{min-height:60vh}
    page for rhythm, which is why this is a setting and not baked into each block. */
 .t-grey{background:var(--grey)}
 .t-blue{background:var(--blue);color:var(--white)}
-.t-blue h2,.t-blue h3{color:var(--white)}
+.t-blue h1,.t-blue h2,.t-blue h3{color:var(--white)}
+/* .eyebrow is var(--blue) -- on the blue band that is the band itself, so the little label above a
+   heading vanished. Nothing hit it before an editor could put this tone on any section: cta.html is
+   the only other blue band and it draws no eyebrow. */
+.t-blue .eyebrow{color:var(--white)}
 .t-dark{background:var(--black);color:var(--muted-dark)}
 .t-dark h1,.t-dark h2,.t-dark h3{color:var(--white)}
 .t-dark .card{background:var(--black-3);border-color:var(--line-dark)}
@@ -359,6 +363,10 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .btn:hover{background:var(--blue-hover);color:var(--white)}
 .btn.dark{background:var(--black)}
 .btn.dark:hover{background:var(--blue)}
+/* Same story as .eyebrow above: cta.html hardcodes `btn dark` on its blue band, so a plain .btn
+   never met one until the Background dropdown could put t-blue on any section. BEFORE .btn.ghost on
+   purpose -- equal specificity, so a ghost button keeps its transparent fill on the blue band. */
+.t-blue .btn{background:var(--black)}
 /* on the blue band the generic dark-button hover IS the background, so the button vanishes under
    the pointer. There it goes the other way, which is what the design does. */
 .band-blue .btn.dark:hover,.t-blue .btn.dark:hover{background:var(--white);color:var(--black)}
@@ -515,9 +523,15 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .hero-dots span{height:4px;width:14px;border-radius:999px;background-color:var(--line);background-image:linear-gradient(var(--blue),var(--blue));background-repeat:no-repeat;background-size:0 100%;
   animation:dot3 calc(var(--n) * 4.5s) linear calc(var(--i) * 4.5s) infinite}
 .hero-dots[style*="--n:2"] span{animation-name:dot2}
-.hero-dark{background:var(--black);color:#d1d6de;border-bottom:0;padding:96px 0 80px;overflow:hidden}
-.hero-dark :is(h1,h2){color:var(--white)}
-.hero-dark .lead{color:#d1d6de;max-width:640px}
+.hero-dark{background:var(--black);border-bottom:0;padding:96px 0 80px;overflow:hidden}
+.hero-dark .lead{max-width:640px}
+/* Light text, on whichever band is dark. This used to hang off .hero-dark -- the tick -- which made
+   the tick answer two questions at once: how the section is laid out, and what colour it is. The
+   Background dropdown can now overrule the second, so hero.html works out `lit` from the tick AND
+   the tone and writes this class; see the comment on the tone rules below. */
+.hero-lit{color:#d1d6de}
+.hero-lit :is(h1,h2){color:var(--white)}
+.hero-lit .lead{color:#d1d6de}
 /* "Hold the picture still": the two perpetual loops stop, the one-shot entrance does not. The
    picture still arrives the way the design draws it and then sits, which is what was asked for --
    so this names the two elements that carry `float` and the ::before that carries `glow`, and
@@ -532,6 +546,20 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .hero-noglow .hero-media::before{display:none}
 .hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.18}
 .hero-dark>.wrap{position:relative}
+/* The hero is the ONE block that draws its own band, and .hero/.hero-dark sit here, 180 lines after
+   the tone group at the top of this file -- same specificity, later in the source, so a tone an
+   editor picked lost to them and the section's own "Background" dropdown did nothing on a hero
+   (client, 2026-09-22). These put back the rule that group's comment states. Do not move a hero
+   background above them, and do not "tidy" them away as duplicates of .t-*: they are the same
+   colours at (0,2,0) precisely so the dropdown wins. The `dark` tick owns the LAYOUT -- the
+   full-width band, no bottom border, the picture as a backdrop -- and the dropdown owns the colour,
+   which is what makes a banded hero in grey or blue possible at all.
+   Background only, and that is the point of the split above: the *colour* of the text follows
+   .hero-lit, which the template computes from the tick and the tone together, so no combination of
+   the two needs a rule of its own here. */
+.hero.t-grey{background:var(--grey)}
+.hero.t-blue{background:var(--blue)}
+.hero.t-dark{background:var(--black)}
 @media(max-width:700px){.hero{padding:48px 0 40px}.hero-dark{padding:64px 0 56px}}
 
 /* Prose typed in the admin's document editor. Everything an editor can produce with the

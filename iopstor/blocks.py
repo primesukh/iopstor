@@ -85,7 +85,13 @@ EDITOR = {
                "term": "Term slug", "eyebrow": "Small label above the heading",
                "cta2_label": "Second button text", "cta2_url": "Second button link",
                "link_label": "Header link text", "link_url": "Header link",
-               "dark": "Dark background", "still": "Hold the picture still", "arrange": "Where the picture goes",
+               "dark": "Dark background",
+               # "<block>.<field>" beats the bare key, like "widgets" above. On a hero the tick is
+               # the LAYOUT -- the full-width band, the picture as a backdrop -- and the section's
+               # own Background dropdown decides the colour; on a testimonial it really is just the
+               # colour, so the bare label stays right there.
+               "hero.dark": "Full-width band, picture behind the words",
+               "still": "Hold the picture still", "arrange": "Where the picture goes",
                "noglow": "Hide the glow behind the picture",
                "count_up": "Count up from zero", "fx": "Effect", "per_row": "Items per row",
                "list_style": "List style", "open_tone": "Colour when open"},

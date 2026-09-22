@@ -478,10 +478,14 @@ def test_dark_is_a_checkbox_not_a_class_name(app, monkeypatch):
         plain = render_blocks([{"type": "hero", "data": {"heading": "Hi"}}])
         dark = render_blocks([{"type": "hero", "data": {"heading": "Hi", "dark": True}}])
         nasty = render_blocks([{"type": "hero", "data": {"heading": "Hi", "dark": '" onload="x'}}])
+        # `tone` decides the band's colour and so feeds `lit` too -- it is compared against
+        # literals, never interpolated, which is the rule every hero switch follows
+        toned = render_blocks([{"type": "hero", "data": {"heading": "Hi", "tone": '" onload="x'}}])
 
-    assert "hero-dark" not in plain
-    assert 'class="hero hero-dark"' in dark
-    assert 'class="hero hero-dark"' in nasty and "onload" not in nasty
+    assert "hero-dark" not in plain and "hero-lit" not in plain
+    assert 'class="hero hero-dark hero-lit"' in dark          # the tick with no tone IS a dark band
+    assert 'class="hero hero-dark hero-lit"' in nasty and "onload" not in nasty
+    assert 'class="hero"' in toned and "onload" not in toned and "hero-lit" not in toned
 
     # ...and neither the flag nor a URL is words on the page, so neither reaches llms-full.txt
     assert blocks_text([{"type": "hero", "data": {"eyebrow": "Label", "heading": "Hi",
@@ -3455,7 +3459,7 @@ def test_a_hero_that_is_not_the_pages_heading_is_demoted_rather_than_hidden(app,
     assert mid.count("<h1") == 1                              # the page's own, not the hero's
     css = (pathlib.Path(__file__).resolve().parents[1] / "iopstor/static/site.css").read_text()
     assert ".hero :is(h1,h2){" in css                         # or the demoted heading loses its size
-    assert ".hero-dark :is(h1,h2){" in css                    # and its colour on a dark banner
+    assert ".hero-lit :is(h1,h2){" in css                     # and its colour on any dark band
 
 
 def test_the_editor_canvas_draws_the_title_where_the_page_draws_it(client, monkeypatch):
@@ -3584,8 +3588,9 @@ def test_the_hero_picture_can_sit_beside_above_or_below_the_words(app):
     for pos in ("above", "below"):                                      # an arrangement is not a split
         assert "hero-split" not in _hero_classes(_hero(arrange=pos))
 
-    # a dark hero has no arrangement -- its picture is the backdrop, not a column
-    assert _hero_classes(_hero(dark=True, arrange="above")) == ["hero", "hero-dark"]
+    # a dark hero has no arrangement -- its picture is the backdrop, not a column. hero-lit rides
+    # along because the tick with no tone IS a dark band; the band's colour is asserted below.
+    assert _hero_classes(_hero(dark=True, arrange="above")) == ["hero", "hero-dark", "hero-lit"]
     # and with no picture there is nothing to arrange
     assert _hero_classes(_hero(image=None, arrange="above")) == ["hero"]
 
@@ -4159,3 +4164,59 @@ def test_the_menus_shadows_stay_below_the_header_bar():
     # Comments stripped first -- the reason above is written in the stylesheet and says the words.
     # Scoped to the header: the phone's two disclosure rows clear their own border legitimately.
     assert ".site-header:has(" not in re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+
+
+# --- the hero's band answers to the Background dropdown --------------------------------------------
+# The ⚙ has a control literally labelled "Background" (admin.js tonePick) which writes data.tone and
+# reaches the class attribute through section_class() -- and on a hero it changed nothing, because
+# .hero/.hero-dark re-declare `background` ~180 lines after the .t-* group at the same specificity.
+# Measured in a browser before and after: About Us is 0 pixels different at 1440 (no page carries a
+# hero tone), and all eight tick x tone combinations are legible where two of them were not.
+
+def test_a_hero_that_is_lit_follows_the_band_not_the_tick(app):
+    """`dark` is the LAYOUT -- the full-width band, the picture as a backdrop -- and the tone is the
+    colour. Whether the text has to be light is a third question, and hero.html answers it once for
+    both the class and the second button's variant. Before this it was read off the tick, so a
+    ticked hero set to Light grey kept a white heading and a white-on-white outline button, and an
+    unticked one set to Dark kept black text and a black-on-black one."""
+    _hero.app = app
+    for dark, tone, lit in [(True, None, True), (True, "grey", False), (True, "dark", True), (True, "blue", True),
+                            (False, None, False), (False, "grey", False), (False, "dark", True), (False, "blue", True)]:
+        data = {"dark": dark, "cta2_url": "/x"}
+        if tone:
+            data["tone"] = tone
+        html = _hero(**data)
+        assert ("hero-lit" in _hero_classes(html)) is lit, f"dark={dark} tone={tone} should be lit={lit}"
+        # the outline button reads the same answer, or it is invisible on half of these
+        assert ("ghost-dark" in html) is lit, f"dark={dark} tone={tone}: the second button disagrees"
+    # the tone still reaches the attribute beside the layout class, which is what the CSS hooks
+    assert _hero_classes(_hero(dark=True, tone="grey")) == ["hero", "hero-dark", "t-grey"]
+
+
+def test_the_tone_group_beats_the_hero_and_the_blue_band_is_usable(app):
+    """The stylesheet says a tone an editor picked beats the block's own default "on source order".
+    The hero is the one block that broke that, because its band is declared in the blocks group
+    below. These four pin the repair; deleting them as duplicates puts the dead control back."""
+    css = _site_css()
+    for rule in (".hero.t-grey{background:", ".hero.t-blue{background:", ".hero.t-dark{background:"):
+        assert rule in css, f"the hero's band stopped answering to the tone: {rule}"
+        assert css.index(".hero-dark{") < css.index(rule), \
+            f"{rule} must come after .hero-dark or it loses at equal specificity"
+    assert ".hero-lit{" in css and ".hero-lit .lead{" in css
+    # nothing else on a blue band could be read: .eyebrow and .btn are both var(--blue)
+    assert ".t-blue h1," in css, "a hero's heading is an h1, and .t-blue only covered h2/h3"
+    assert ".t-blue .eyebrow{" in css
+    assert css.index(".t-blue .btn{") < css.index(".btn.ghost{"), \
+        "before .btn.ghost at equal specificity, or a ghost button is filled black on the blue band"
+
+
+def test_a_field_on_two_block_types_can_be_labelled_for_each(app):
+    """`dark` is a field on hero and on testimonial, and it means something different on each: the
+    hero's is the layout, the testimonial's really is just the colour. EDITOR["widgets"] already had
+    the "<block>.<field>" convention; labels now take it too."""
+    from iopstor.blocks import EDITOR
+    assert EDITOR["labels"]["hero.dark"] != EDITOR["labels"]["dark"]
+    assert "dark" in EDITOR["labels"], "the bare key still answers for the testimonial"
+    js = _admin_js()
+    assert 'SPEC.ui.labels[type + "." + field] || SPEC.ui.labels[field]' in js
+    assert "function labelFor(field)" not in js, "a call site still passes no type"
