@@ -532,7 +532,7 @@
 
   /* The band a section sits on. Same shape as alignPick: picking the blank option deletes the key,
      so an untouched section stays byte-identical in the saved JSON. */
-  var TONES = [["", "Page background"], ["grey", "Light grey"], ["dark", "Dark"], ["blue", "Blue"]];
+  var TONES = [["page", "Page background"], ["grey", "Light grey"], ["dark", "Dark"], ["blue", "Blue"]];
 
   /* How much air the section keeps, and only ever less than the design's own -- adding space is a
      Spacer, which is a thing you can drag. Same shape as tonePick: the blank option deletes the key.
@@ -549,19 +549,15 @@
   }
   function tonePick(block) {
     var sel = el("select"), data = block.data;
-    /* An empty tone emits no class, so on a hero with the tick on the first option does not mean
-       "the page's white" -- it means "whatever the tick already did", which is black. Saying so
-       here is cheaper than special-casing an empty value inside section_class(), which every block
-       shares. ponytail: read once, when the panel is built -- toggling the tick with the panel open
-       leaves this label a beat stale until it is reopened. */
-    var ticked = block.type === "hero" && data.dark;
-    TONES.forEach(function (t) {
-      sel.appendChild(el("option", {value: t[0], text: (!t[0] && ticked) ? "Black \u2014 from the band above" : t[1]}));
-    });
-    sel.value = data.tone || "";
-    sel.addEventListener("change", function () {
-      if (sel.value) data.tone = sel.value; else delete data.tone;
-    });
+    TONES.forEach(function (t) { sel.appendChild(el("option", {value: t[0], text: t[1]})); });
+    /* "Page background" is stored, not the absence of a value (blocks.py TONES), so picking it can
+       overrule a band the block draws itself -- which a hero with the tick on does. An absent tone
+       still means "leave that band alone", so it shows as whatever the block is ALREADY on rather
+       than claiming white: that is only ever the ticked hero, every other block with no tone is on
+       the page background and says so. ponytail: the tick is read when the panel is built, so
+       toggling it with the panel open leaves the shown value a beat behind until it is reopened. */
+    sel.value = data.tone || ((block.type === "hero" && data.dark) ? "dark" : "page");
+    sel.addEventListener("change", function () { data.tone = sel.value; });
     return labelled("Background", false, sel);
   }
 

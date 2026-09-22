@@ -4180,8 +4180,10 @@ def test_a_hero_that_is_lit_follows_the_band_not_the_tick(app):
     ticked hero set to Light grey kept a white heading and a white-on-white outline button, and an
     unticked one set to Dark kept black text and a black-on-black one."""
     _hero.app = app
-    for dark, tone, lit in [(True, None, True), (True, "grey", False), (True, "dark", True), (True, "blue", True),
-                            (False, None, False), (False, "grey", False), (False, "dark", True), (False, "blue", True)]:
+    for dark, tone, lit in [(True, None, True), (True, "page", False), (True, "grey", False),
+                            (True, "dark", True), (True, "blue", True),
+                            (False, None, False), (False, "page", False), (False, "grey", False),
+                            (False, "dark", True), (False, "blue", True)]:
         data = {"dark": dark, "cta2_url": "/x"}
         if tone:
             data["tone"] = tone
@@ -4198,7 +4200,8 @@ def test_the_tone_group_beats_the_hero_and_the_blue_band_is_usable(app):
     The hero is the one block that broke that, because its band is declared in the blocks group
     below. These four pin the repair; deleting them as duplicates puts the dead control back."""
     css = _site_css()
-    for rule in (".hero.t-grey{background:", ".hero.t-blue{background:", ".hero.t-dark{background:"):
+    for rule in (".hero.t-page{background:", ".hero.t-grey{background:",
+                 ".hero.t-blue{background:", ".hero.t-dark{background:"):
         assert rule in css, f"the hero's band stopped answering to the tone: {rule}"
         assert css.index(".hero-dark{") < css.index(rule), \
             f"{rule} must come after .hero-dark or it loses at equal specificity"
@@ -4208,6 +4211,24 @@ def test_the_tone_group_beats_the_hero_and_the_blue_band_is_usable(app):
     assert ".t-blue .eyebrow{" in css
     assert css.index(".t-blue .btn{") < css.index(".btn.ghost{"), \
         "before .btn.ghost at equal specificity, or a ghost button is filled black on the blue band"
+    # scoped to the hero on purpose: a CTA or a Numbers strip set to Page background keeps the band
+    # its own template writes, which is what it does today
+    assert "\n.t-page{" not in css, "t-page must not reach every block -- see the comment on the rule"
+
+
+def test_page_background_is_a_value_and_not_the_absence_of_one(app):
+    """The tick blacks a hero's band out on its own, so "Page background" can only put the white
+    back if it is something the editor SAID -- an absent tone has to go on meaning "leave the
+    block's own band alone", or every hero saved before this turns white on deploy."""
+    from iopstor.blocks import TONES, section_class
+    assert TONES[0] == "page" and "" not in TONES
+    assert section_class({"tone": "page"}) == " t-page"
+    assert section_class({}) == "", "an absent tone still emits nothing"
+    js = _admin_js()
+    assert '[["page", "Page background"]' in js, "the dropdown has to store it, not clear the key"
+    assert "data.tone = sel.value;" in js and "delete data.tone" not in js
+    # an untouched ticked hero shows the band it is actually on, rather than claiming white
+    assert 'data.tone || ((block.type === "hero" && data.dark) ? "dark" : "page")' in js
 
 
 def test_a_field_on_two_block_types_can_be_labelled_for_each(app):

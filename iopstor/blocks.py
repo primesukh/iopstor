@@ -285,7 +285,12 @@ def count_up(value):
     return int(m.group(1)), v[:m.start()], m.group(1), v[m.end():]
 
 
-TONES = ("grey", "dark", "blue")   # the bands a section can sit on; absent = the page's own white
+# The bands a section can sit on. `absent` means "nothing chosen, so the block's own default" --
+# which for most blocks IS the page's white, but for a hero with the band tick it is black. "page"
+# is therefore a VALUE and not the empty string: it is an editor saying "the page background",
+# which is a different statement from never having touched the control, and only an explicit one
+# can overrule the block's own band (client, 2026-09-22).
+TONES = ("page", "grey", "dark", "blue")
 ALIGNS = ("left", "center", "right")
 WIDTHS = {"wide": "w-wide", "full": "w-full"}   # "width" also takes a number of pixels; see section_style()
 FX = ("rise", "gradient", "sweep")   # the motion an editor can put on a section; counting figures up is its own checkbox

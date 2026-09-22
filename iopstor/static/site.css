@@ -556,7 +556,13 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
    which is what makes a banded hero in grey or blue possible at all.
    Background only, and that is the point of the split above: the *colour* of the text follows
    .hero-lit, which the template computes from the tick and the tone together, so no combination of
-   the two needs a rule of its own here. */
+   the two needs a rule of its own here.
+   t-page is the fourth, and it is why "Page background" is a stored value rather than an empty one
+   (blocks.py TONES): the tick blacks the band out on its own, so only an explicit pick can put the
+   page's white back, and an absent tone has to go on meaning "leave the block's own band alone" or
+   every hero saved before today would turn white. It is scoped to .hero deliberately -- a CTA or a
+   Numbers strip set to Page background keeps the band its own template writes, exactly as now. */
+.hero.t-page{background:var(--white)}
 .hero.t-grey{background:var(--grey)}
 .hero.t-blue{background:var(--blue)}
 .hero.t-dark{background:var(--black)}

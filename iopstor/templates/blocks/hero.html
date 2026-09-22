@@ -11,7 +11,7 @@
     unticked one set to Dark kept black. The tick owns the layout, this owns the colour, and both
     the class below and the second button's variant read it -- `tone` is compared against literals,
     never interpolated, the same rule `arrange` and `dark` follow. -#}
-{% set lit = data.tone in ('dark', 'blue') or (data.dark and data.tone != 'grey') %}
+{% set lit = data.tone in ('dark', 'blue') or (data.dark and data.tone not in ('grey', 'page')) %}
 <section class="hero{{ ' hero-dark' if data.dark }}{{ ' hero-lit' if lit }}{{ ' hero-still' if data.still }}{{ ' hero-noglow' if data.noglow }}{{ (' hero-above' if data.arrange == 'above' else ' hero-below' if data.arrange == 'below' else ' hero-split') if art }}{{ cls }}"{{ sty }}{{ fe() }}>
   {%- if data.image and data.dark %}<img class="hero-bg" src="{{ media_url(data.image) }}" alt="" aria-hidden="true">{% endif %}
   <div class="wrap">
