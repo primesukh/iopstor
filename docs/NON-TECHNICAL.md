@@ -239,7 +239,7 @@ on the right included — so you can never fill in a picture or a table box and 
 
 ### Adding a section
 
-**Press `/` on an empty line.** A short list appears under the cursor. Type a few letters to narrow it — “num” finds Numbers, “quo” finds Customer quote — and press Enter. The section drops in right there, already filled with stand-in wording, and the cursor lands on a fresh line underneath so you can carry on writing.
+**Press `/` on an empty line.** A short list appears under the cursor. Type a few letters to narrow it — “num” finds Numbers, “quo” finds Customer quote — then use **↑** and **↓** if you want one further down, and press Enter. The section drops in right there, already filled with stand-in wording, **in place of the empty line you typed `/` on** — and the cursor lands in the section's own heading, so the first thing you type is the title of what you just added. A fresh blank line is left underneath for carrying on. If there were words above or below the line you typed `/` on, they stay where they were: what was above keeps its own block, what was below becomes the blank line under the new section.
 
 You can also use **+ Section** on the toolbar, which opens the same list with a description of each one. The same menu has *“Start from a layout…”* if you would rather begin from a ready-made Product, Service or Landing page and replace the wording.
 
@@ -772,6 +772,18 @@ paragraph, the way Google Docs does (§4).
 ---
 
 ## 15. Quick answers
+
+**A new blank line appears but I cannot type in it — I have to click it first.** Fixed. Clicking one
+of the *“Type here, or press / for a section”* strips, and opening a page that has nothing on it yet,
+both put the cursor straight into the new line, so you can start typing immediately. It had stopped
+working when the writing area was rebuilt for two-people-at-once editing, and it only ever affected
+the newer writing areas — which is most of them.
+
+**I press `/`, pick a section, and it appears *underneath* an empty line instead of replacing it.**
+Fixed. The empty line you typed `/` on is now the line the section takes the place of, so you no
+longer have to go back and delete it. Pressing Enter in that list also used to add a blank line to
+your paragraph on its way past; it does not any more. And **↑** and **↓** now move through the list,
+so Enter takes whichever one is highlighted rather than always the first.
 
 **I cannot edit the two founders on About Us, and I cannot put them on another page.** You can now. Those two name cards used to be part of the paragraph above them rather than a section of their own, which is why clicking a name only let you retype it and there was no way to add a third person or a photograph. They are a **People** section now: open the section's **⚙** and each person has *Name*, *Role* and *Image*, **+ Add item** puts another one in, and you can drop a People section on any page from **+ Section** or by pressing `/`. The page looks exactly as it did. One thing to know: this only takes effect on About Us once your developer has applied the change to the live content — until then the page still shows the old, uneditable pair.
 

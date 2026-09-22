@@ -4,6 +4,17 @@
 (function () {
   "use strict";
 
+  /* The highlighted row in an .iop-slash list. Shared by the terms picker and the "/" section menu,
+     which draw the same markup: .iop-slash-row rather than list.children, because the "/" menu can
+     also be holding a "Nothing matches" paragraph. */
+  function moveRow(list, step) {
+    var rows = list && list.querySelectorAll(".iop-slash-row"), at = -1, i;
+    if (!rows || !rows.length) return;
+    for (i = 0; i < rows.length; i++) if (rows[i].classList.contains("on")) at = i;
+    if (at > -1) rows[at].classList.remove("on");
+    rows[Math.max(0, Math.min(rows.length - 1, at + step))].classList.add("on");
+  }
+
   var el = function (tag, attrs, kids) {
     var n = document.createElement(tag);
     for (var k in attrs || {}) { if (k === "text") { n.textContent = attrs[k]; } else { n.setAttribute(k, attrs[k]); } }
@@ -204,14 +215,6 @@
       return r;
     }
 
-    function move(step) {
-      if (!list) return;
-      var rows = list.children, at = -1, i;
-      for (i = 0; i < rows.length; i++) if (rows[i].classList.contains("on")) at = i;
-      if (at > -1) rows[at].classList.remove("on");
-      rows[Math.max(0, Math.min(rows.length - 1, at + step))].classList.add("on");
-    }
-
     input.addEventListener("input", draw);
     input.addEventListener("blur", close);
     input.addEventListener("keydown", function (e) {
@@ -220,7 +223,7 @@
         if (list) list.querySelector(".on").click();
       } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
-        move(e.key === "ArrowDown" ? 1 : -1);
+        moveRow(list, e.key === "ArrowDown" ? 1 : -1);
       } else if (e.key === "Escape") {
         close();
       } else if (e.key === "Backspace" && !input.value && picked.length) {
@@ -1550,7 +1553,12 @@
     var f = node && Array.prototype.filter.call(node.querySelectorAll("[data-f]"), function (x) {
       return x.closest("[data-b]") === node;      // not a nested block's first field
     })[0];
-    if (!f) return;
+    if (!f) return select(path);      // a divider, or a fresh columns block: no field of its own
+    /* Quill mounts div.ql-editor INSIDE [data-f], so the field itself is never contenteditable and
+       never focusable -- f.focus() is a no-op and a range at (f, 0) sits outside the editable, which
+       is why the caret had to be placed with the mouse before anything could be typed. */
+    var q = quillOf(f);
+    if (q) { q.focus(); q.setSelection(0, 0); return select(path); }
     f.focus();
     var r = d.createRange(), sel = d.defaultView.getSelection();
     r.selectNodeContents(f);
@@ -1652,8 +1660,12 @@
        (verified in the vendored build, not in the docs). Left alone, _html_md()'s unescape() puts
        U+00A0 through the .md twins and the public page never wraps. A real non-breaking space is
        emitted as the character, not the entity, so this does not touch one. */
-    return q.getSemanticHTML().replace(/&nbsp;/g, " ");
+    return semanticPart(q, 0, q.getLength());
   }
+
+  // The same, over one stretch of the document: getSemanticHTML(index, length) is the real signature
+  // in the vendored build, and splitAt() needs the half of a paragraph that is staying behind.
+  function semanticPart(q, i, n) { return q.getSemanticHTML(i, n).replace(/&nbsp;/g, " "); }
 
   // Quill rewrites <b> as <strong> and <i> as <em>, which _html_md() has always treated as the same
   // thing. Without this the gate refuses a block for a difference nobody can see.
@@ -2851,17 +2863,37 @@
   }
 
   function splitAt(node, f, line, type) {
-    var path = node.getAttribute("data-b"), r = listAt(path), before = [], after = [], seen = false;
-    Array.prototype.forEach.call(f.childNodes, function (n) {
-      if (n === line) { seen = true; return; }
-      (seen ? after : before).push(n);
-    });
-    function html(list) {
-      var box = f.ownerDocument.createElement("div");
-      list.forEach(function (n) { box.appendChild(n.cloneNode(true)); });
-      return box.innerHTML;
+    var path = node.getAttribute("data-b"), r = listAt(path), q = quillOf(f), head = "", tail = "";
+    if (q) {
+      /* The DOM walk below cannot see this one: Quill's lines live inside div.ql-editor, not as
+         children of the field, so `line` was never found and every "/" landed in the insert-after
+         branch with the whole editor cloned into data.html. Both halves go through Quill instead --
+         the tail because root.innerHTML would publish <span class="ql-ui"> and render a bulleted
+         list numbered (see semantic()), and the head because yData() refuses to write `html` on a
+         prose block and the binding's setContents() would put the "/" line straight back on the
+         repaint. Deleting it here travels: through the binding into the Y.Text, and back into MODEL
+         by mountQuill's own text-change mirror. */
+      var sel = q.getSelection(), pair = sel && q.getLine(sel.index);
+      var blot = (pair && pair[0]) || quillCtor().find(line);
+      var at = blot ? q.getIndex(blot) : 0, end = at + (blot ? blot.length() : 0);
+      if (end < q.getLength()) tail = semanticPart(q, end, q.getLength() - end);
+      // "api", not "user": the text-change mirror writes MODEL before it looks at the source, and
+      // the early return there keeps our own delete from re-opening the "/" menu.
+      if (at) { q.deleteText(at, q.getLength() - at, "api"); head = semantic(q); }
+    } else {
+      var before = [], after = [], seen = false;
+      Array.prototype.forEach.call(f.childNodes, function (n) {
+        if (n === line) { seen = true; return; }
+        (seen ? after : before).push(n);
+      });
+      var html = function (list) {
+        var box = f.ownerDocument.createElement("div");
+        list.forEach(function (n) { box.appendChild(n.cloneNode(true)); });
+        return box.innerHTML;
+      };
+      head = line === f ? "" : html(before);
+      tail = line === f ? "" : html(after);
     }
-    var head = line === f ? "" : html(before), tail = line === f ? "" : html(after);
     var ins = [{ type: type, data: seedFor(type) }];
     // On the page the trailing paragraph is where you carry on writing, so it always goes in. In a
     // column it would just be an empty box under the thing you placed, so it goes in only when the
@@ -2869,13 +2901,16 @@
     if (tail || !isNested(path)) ins.push({ type: "rich_text", data: { html: tail } });
     if (!r.arr) return;
     touched(rootIdOf(path));                     // the paragraph being split is changed either way
+    // The caret goes into the section just placed, not into the paragraph under it: you asked for a
+    // Hero, so the next thing you type is its heading. The trailing paragraph is still there to
+    // carry on in. A column has no trailing paragraph and already did this; now the two agree.
     if (head) {
       r.arr[r.i].data.html = head;
       r.arr.splice.apply(r.arr, [r.i + 1, 0].concat(ins));
-      focusOnLoad = siblingPath(path, r.i + ins.length);
+      focusOnLoad = siblingPath(path, r.i + 1);
     } else {                                     // the "/" line was the whole paragraph: replace it
       r.arr.splice.apply(r.arr, [r.i, 1].concat(ins));
-      focusOnLoad = siblingPath(path, r.i + ins.length - 1);
+      focusOnLoad = siblingPath(path, r.i);
     }
     markStep();                                 // mints an _id for each section just inserted
     ins.forEach(function (_, n) { touched(rootIdOf(siblingPath(path, r.i + (head ? 1 : 0) + n))); });
@@ -2906,18 +2941,29 @@
       if (!shown.length) list.appendChild(el("p", { "class": "muted", text: "Nothing matches." }));
     }
     function pick(type) { closeSlash(); splitAt(node, f, line, type); }
+    function stop(e) { e.preventDefault(); e.stopPropagation(); }
     function key(e) {
       if (!slashBox) return;
-      if (e.key === "Escape") { closeSlash(); return; }
-      if (e.key === "Enter" && shown.length) { e.preventDefault(); pick(shown[0].key); return; }
+      if (e.key === "Escape") { stop(e); closeSlash(); return; }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { stop(e); moveRow(list, e.key === "ArrowDown" ? 1 : -1); return; }
+      // .on rather than shown[0], so the arrows above decide what Enter takes
+      if (e.key === "Enter" && shown.length) { stop(e); list.querySelector(".iop-slash-row.on").click(); return; }
       setTimeout(function () {                    // let the keystroke land in the line first
         if (!slashBox) return;
         if ((line.textContent || "").charAt(0) !== "/") { closeSlash(); return; }
         draw();
       }, 0);
     }
-    d.addEventListener("keydown", key);
-    slashOff = function () { d.removeEventListener("keydown", key); };
+    /* Capture, and stopPropagation on the four keys the menu owns. Quill's Keyboard listens on its
+       own div.ql-editor, which is closer to the target than this document -- in the bubble phase
+       handleEnter had already inserted a newline by the time preventDefault() ran here, so Enter
+       split the paragraph instead of choosing from the menu. Everything else still falls through,
+       which is what types the filter. Nothing else on THIS document wants those four: undoKey is the
+       only other keydown listener here and it is ctrl/meta-only, and the two Escape handlers
+       (panelKey, modal's esc) are on the PARENT document, which an event inside the iframe never
+       reached in the first place. */
+    d.addEventListener("keydown", key, true);
+    slashOff = function () { d.removeEventListener("keydown", key, true); };
     document.body.appendChild(list);
     draw();
   }

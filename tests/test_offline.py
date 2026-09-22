@@ -2357,7 +2357,11 @@ def test_the_editor_persists_semantic_html_and_never_inner_html():
     # undone, and the two halves cannot drift apart into different functions where one gets forgotten.
     # (Not "root.innerHTML is absent" -- the comment explaining why it must not be used says it too,
     # so that assertion would be reading prose rather than behaviour.)
-    assert 'return q.getSemanticHTML().replace(/&nbsp;/g, " ");' in js
+    # splitAt() needs half a paragraph, so the expression takes a range -- still one expression, and
+    # semantic() is now the whole-document call of it rather than a second copy.
+    assert 'function semanticPart(q, i, n) { return q.getSemanticHTML(i, n).replace(/&nbsp;/g, " "); }' in js
+    assert 'return semanticPart(q, 0, q.getLength());' in js
+    assert js.count("q.getSemanticHTML(") == 1, "a second caller of getSemanticHTML could forget the &nbsp;"
 
 
 class _FakeQ:
@@ -4159,3 +4163,53 @@ def test_the_menus_shadows_stay_below_the_header_bar():
     # Comments stripped first -- the reason above is written in the stylesheet and says the words.
     # Scoped to the header: the phone's two disclosure rows clear their own border legitimately.
     assert ".site-header:has(" not in re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+
+
+# --- the field is not the editable element ---------------------------------------------------------
+# Quill mounts div.ql-editor INSIDE [data-f], and three pieces of the editor were written before it
+# did. All three are closures admin.js never exports, so these pin the shape and a browser run is the
+# evidence: before, a new paragraph took no typing at all and "/" + Enter left the empty paragraph
+# behind with the cloned editor in its data.html; after, both do what docs/TECHNICAL.md already said.
+
+def test_the_caret_goes_where_quill_is_not_where_the_field_is():
+    """f.focus() on [data-f] is a no-op -- no contenteditable, no tabindex -- and a range at (f, 0)
+    sits outside the editable, so Quill's own selection stayed null and nothing could be typed until
+    the editor clicked the paragraph with a mouse."""
+    js = _admin_js()
+    body = js[js.index("function focusBlock(path)"):]
+    body = body[:body.index("var paintPeers")]
+    assert "quillOf(f)" in body, "focusBlock must ask whether Quill owns this field"
+    assert "q.setSelection(0, 0)" in body, "Quill places its own caret; f.focus() cannot"
+    assert body.index("quillOf(f)") < body.index("f.focus();"), \
+        "the Quill branch has to come first, or the dead f.focus() runs anyway"
+
+
+def test_the_slash_menu_sees_enter_before_quill_does():
+    """Quill's Keyboard listens on its own div.ql-editor, which is closer to the target than the
+    canvas document -- in the bubble phase handleEnter had already inserted a newline by the time the
+    menu called preventDefault(), so Enter split the paragraph instead of choosing a section."""
+    js = _admin_js()
+    body = js[js.index("function openSlash(node, f, line)"):]
+    body = body[:body.index("function bindSlash")]
+    assert 'd.addEventListener("keydown", key, true);' in body, "the menu's keydown must be capture-phase"
+    assert 'd.removeEventListener("keydown", key, true);' in body, "and must be removed with the same flag"
+    assert "e.stopPropagation();" in body, "Quill must not see the keys the menu owns"
+    assert 'moveRow(list,' in body, "the arrows reuse the terms picker's helper rather than a second copy"
+    assert '.iop-slash-row.on' in body, "Enter takes the lit row, not shown[0]"
+
+
+def test_the_half_of_a_paragraph_that_stays_leaves_through_quill():
+    """splitAt() walked f.childNodes for the "/" line, which on a Quill field is a <p> one level
+    further down and was never found -- so every "/" took the insert-after branch with the whole
+    div.ql-editor cloned into data.html. Writing data.html would not have been enough either:
+    yData() refuses that key on a prose block and the binding's setContents() puts the "/" line
+    straight back on the repaint."""
+    js = _admin_js()
+    body = js[js.index("function splitAt(node, f, line, type)"):]
+    body = body[:body.index("function openSlash")]
+    assert "quillOf(f)" in body, "splitAt must branch on who owns the field"
+    assert 'q.deleteText(at, q.getLength() - at, "api")' in body, \
+        "the head has to leave through Quill, or the Y.Text still holds it"
+    assert "semanticPart(q, end," in body, \
+        "the tail is semantic HTML: root.innerHTML renders a bulleted list numbered"
+    assert "f.childNodes" in body, "the legacy (data-legacy) branch still walks the field's children"
