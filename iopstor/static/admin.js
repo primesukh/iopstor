@@ -1438,11 +1438,22 @@
     // dedupe(), setBlocks(), the structural branch -- and a preview render is a whole page off the
     // database. setView() calls renderPreview() directly, so ENTERING preview is still instant.
     if (VIEW === "preview") return previewSoon();   // whatever changed, preview is what is on screen
+    /* srcdoc hands back a document scrolled to the top and nothing else puts it back, so every
+       structural change threw the editor to the top of the page -- inserting a section, deleting
+       one, a peer's edit. It was invisible on a block WITH a field, because focusBlock() then
+       focuses one and the browser scrolls it into view; a divider, a spacer and an embed have no
+       field to focus, so there it is the whole story (measured: 1694 -> 0 on a page eight
+       paragraphs long). Read now, not in onload: by then the old document is gone. Only from the
+       edit canvas -- the preview is a different page, with a header above the body, so its offset
+       means nothing here. `pvUp` is exactly that question and renderPreview() already asks it. */
+    var old = !pvUp && cdoc(), y = old ? old.defaultView.scrollY : 0;
     pvUp = false;                      // the frame is about to hold the edit canvas, not a preview
     ask("full", {}, function (html) {
       FRAME.onload = function () {
         FRAME.onload = null;
         wireDoc();
+        // before focusBlock: a caret that is off screen after this still wins, by scrolling itself in
+        if (y) { var w = cdoc(); if (w) w.defaultView.scrollTo(0, y); }
         if (focusOnLoad) { focusBlock(focusOnLoad); focusOnLoad = null; }
         syncBar();                       // the old caret died with the old document; say so
       };

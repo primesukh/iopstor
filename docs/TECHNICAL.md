@@ -1658,6 +1658,21 @@ but the editing surface leads with writing:
 - The gaps between sections are **click-to-type**: clicking one splices in an empty `rich_text`
   and focuses it. One mechanic instead of a separate "+" affordance, and it means there is never
   nowhere to put the caret.
+- **A full repaint puts the page back where you were looking** (client, 2026-09-22). `canvasFull()`
+  replaces `srcdoc`, and a fresh document is scrolled to the top — so every structural change threw
+  the editor there: inserting a section, deleting one, a peer's edit. It went unreported for months
+  because it is invisible on a block *with* a field: `focusBlock()` focuses one and the browser
+  scrolls it into view on the way. **`divider`, `spacer` and `embed_html` have no `[data-f]` of their
+  own** (the three templates with no `fe('…')` call), so there was nothing to focus and nothing to
+  scroll, and adding a divider halfway down a page jumped to the top of it. `canvasFull()` now reads
+  `cdoc().defaultView.scrollY` **before** the swap — by `onload` the old document is gone — and
+  restores it in `onload` *before* `focusBlock()`, so a caret that is still off screen scrolls itself
+  in and wins. Only when the frame is holding the edit canvas: `pvUp` is that question and
+  `renderPreview()` already asks it, because a preview is a different page with a header above the
+  body and its offset means nothing here. Measured on an eight-paragraph page: 1694 → 0 before,
+  1694 → 1718 after, and a Hero inserted at 890 comes back at 976 with the caret in its first field.
+  `test_a_full_repaint_puts_the_page_back_where_the_editor_was_looking` pins it, and asserts the
+  three fieldless types by reading the templates, so a fourth one cannot arrive unnoticed.
 - **`focusBlock()` asks who owns the field before it places that caret** (client, 2026-09-22). Quill
   mounts `div.ql-editor` *inside* `[data-f]` and `bindField()` returns before `setEditable()`, so the
   field itself is never `contenteditable` and never focusable: `f.focus()` was a no-op and a range at

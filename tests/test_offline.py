@@ -4213,3 +4213,24 @@ def test_the_half_of_a_paragraph_that_stays_leaves_through_quill():
     assert "semanticPart(q, end," in body, \
         "the tail is semantic HTML: root.innerHTML renders a bulleted list numbered"
     assert "f.childNodes" in body, "the legacy (data-legacy) branch still walks the field's children"
+
+
+def test_a_full_repaint_puts_the_page_back_where_the_editor_was_looking():
+    """srcdoc hands back a document scrolled to the top. Every structural change goes through
+    canvasFull(), so inserting a section, deleting one or a peer's edit threw the editor to the top
+    of the page -- hidden on a block with a field, because focusBlock() then focuses one and the
+    browser scrolls it into view, and plain to see on a divider, a spacer or an embed, which have no
+    field at all. Measured in a real browser: 1694 -> 0 before, 1694 -> 1718 after."""
+    js = _admin_js()
+    body = js[js.index("function canvasFull()"):]
+    body = body[:body.index("function blocksIn(box)")]
+    assert "var old = !pvUp && cdoc()" in body, \
+        "the scroll must be read from the OLD document, and only when it is the edit canvas"
+    assert "defaultView.scrollTo(0, y)" in body, "and put back after the swap"
+    assert body.index("scrollTo(0, y)") < body.index("focusBlock(focusOnLoad)"), \
+        "restore first: a caret that is still off screen then scrolls itself in and wins"
+    # the three block types with no [data-f] of their own are what made it visible
+    tpl = pathlib.Path(__file__).parent.parent / "iopstor" / "templates" / "blocks"
+    bare = sorted(f.stem for f in tpl.glob("*.html") if "fe('" not in f.read_text())
+    assert bare == ["divider", "embed_html", "spacer"], \
+        f"a block type gained or lost its own editable field: {bare} -- focusBlock() has nothing to focus on these"

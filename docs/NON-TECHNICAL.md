@@ -779,6 +779,12 @@ both put the cursor straight into the new line, so you can start typing immediat
 working when the writing area was rebuilt for two-people-at-once editing, and it only ever affected
 the newer writing areas — which is most of them.
 
+**I add a Divider and the page jumps to the top.** Fixed. Adding or removing a section redraws the
+whole page, and the redraw used to start at the top — for most sections you never saw it, because the
+cursor landed in the new section and the page followed it back down. A Divider, a Spacer and an
+Embed have nothing to type in, so there was nothing to follow and you were left at the top. The page
+now stays where you were looking, whatever you add.
+
 **I press `/`, pick a section, and it appears *underneath* an empty line instead of replacing it.**
 Fixed. The empty line you typed `/` on is now the line the section takes the place of, so you no
 longer have to go back and delete it. Pressing Enter in that list also used to add a blank line to
