@@ -239,7 +239,7 @@ on the right included — so you can never fill in a picture or a table box and 
 
 ### Adding a section
 
-**Press `/` on an empty line.** A short list appears under the cursor. Type a few letters to narrow it — “num” finds Numbers, “quo” finds Customer quote — then use **↑** and **↓** if you want one further down, and press Enter. The section drops in right there, already filled with stand-in wording, **in place of the empty line you typed `/` on** — and the cursor lands in the section's own heading, so the first thing you type is the title of what you just added. A fresh blank line is left underneath for carrying on. If there were words above or below the line you typed `/` on, they stay where they were: what was above keeps its own block, what was below becomes the blank line under the new section.
+**Press `/` on an empty line.** A short list appears under the cursor. Type a few letters to narrow it — “num” finds Numbers, “quo” finds Customer quote — then use **↑** and **↓** if you want one further down, and press Enter. The section drops in right there, already filled with stand-in wording, **in place of the empty line you typed `/` on** — and the cursor lands in the section's own heading, so the first thing you type is the title of what you just added. Nothing else is added: no blank line underneath. If there were words above or below the line you typed `/` on, they stay where they were — what was above keeps its own block, and what was below becomes a paragraph under the new section. To write under the section, click the *“Type here, or press / for a section”* line that appears between any two sections, including under the last one.
 
 You can also use **+ Section** on the toolbar, which opens the same list with a description of each one. The same menu has *“Start from a layout…”* if you would rather begin from a ready-made Product, Service or Landing page and replace the wording.
 
@@ -778,6 +778,14 @@ of the *“Type here, or press / for a section”* strips, and opening a page th
 both put the cursor straight into the new line, so you can start typing immediately. It had stopped
 working when the writing area was rebuilt for two-people-at-once editing, and it only ever affected
 the newer writing areas — which is most of them.
+
+**Adding a section leaves an empty gap underneath it.** Not any more. Every section you added with
+`/` used to come with a blank paragraph under it, back when the cursor landed there. It never showed
+on the website — an empty paragraph is dropped when you publish — but it left a band of white space
+in the editor. Now only your own words follow a section: if you press `/` in the middle of a
+paragraph, whatever was below the line carries on underneath, and if there was nothing below it,
+nothing is added. The *“Type here, or press / for a section”* line between sections is how you write
+under one.
 
 **I add a Divider and the page jumps to the top.** Fixed. Adding or removing a section redraws the
 whole page, and the redraw used to start at the top — for most sections you never saw it, because the

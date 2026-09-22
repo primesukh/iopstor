@@ -4215,6 +4215,24 @@ def test_the_half_of_a_paragraph_that_stays_leaves_through_quill():
     assert "f.childNodes" in body, "the legacy (data-legacy) branch still walks the field's children"
 
 
+def test_a_slash_insert_adds_a_paragraph_only_when_the_split_left_words_behind():
+    """`if (tail || !isNested(path))` put an empty rich_text under every section inserted on a
+    full-width page -- "somewhere to carry on writing", from when the caret landed in it. The caret
+    goes into the section now, prune() dropped that paragraph again on Publish, and bars() already
+    draws a click-to-type strip in every gap including the one under the last section, so it was a
+    band of whitespace that bought nothing (client, 2026-09-22). The tail is the editor's own words
+    and still becomes a paragraph."""
+    js = _admin_js()
+    body = js[js.index("function splitAt(node, f, line, type)"):]
+    body = body[:body.index("function openSlash")]
+    assert 'if (tail) ins.push({ type: "rich_text"' in body, \
+        "a paragraph follows the section only when the split left words behind"
+    assert "!isNested(path)" not in body, "the full-width page no longer has a rule of its own here"
+    # both branches point the caret at the section, so neither depends on ins.length
+    assert "focusOnLoad = siblingPath(path, r.i + 1);" in body
+    assert "focusOnLoad = siblingPath(path, r.i);" in body
+
+
 def test_a_full_repaint_puts_the_page_back_where_the_editor_was_looking():
     """srcdoc hands back a document scrolled to the top. Every structural change goes through
     canvasFull(), so inserting a section, deleting one or a peer's edit threw the editor to the top

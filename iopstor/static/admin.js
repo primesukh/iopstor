@@ -2906,15 +2906,17 @@
       tail = line === f ? "" : html(after);
     }
     var ins = [{ type: type, data: seedFor(type) }];
-    // On the page the trailing paragraph is where you carry on writing, so it always goes in. In a
-    // column it would just be an empty box under the thing you placed, so it goes in only when the
-    // split actually left text behind. The caret then lands on the section itself.
-    if (tail || !isNested(path)) ins.push({ type: "rich_text", data: { html: tail } });
+    /* A paragraph after the section ONLY when the split left words behind -- those words are the
+       editor's and have to go somewhere. An empty one used to be added on a full-width page as
+       "somewhere to carry on writing" (client, 2026-09-22: stop); it was never content, `prune()`
+       dropped it again on Publish, and it bought nothing bars() does not -- every gap, the one under
+       the last section included, is already a click-to-type strip. The column rule is now the only
+       rule. */
+    if (tail) ins.push({ type: "rich_text", data: { html: tail } });
     if (!r.arr) return;
     touched(rootIdOf(path));                     // the paragraph being split is changed either way
-    // The caret goes into the section just placed, not into the paragraph under it: you asked for a
-    // Hero, so the next thing you type is its heading. The trailing paragraph is still there to
-    // carry on in. A column has no trailing paragraph and already did this; now the two agree.
+    // The caret goes into the section just placed: you asked for a Hero, so the next thing you type
+    // is its heading. Both branches point at it, whether or not a tail paragraph follows it.
     if (head) {
       r.arr[r.i].data.html = head;
       r.arr.splice.apply(r.arr, [r.i + 1, 0].concat(ins));
