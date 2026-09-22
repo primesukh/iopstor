@@ -52,6 +52,9 @@ Five traps, each of which has cost a run:
 - **Act after ~6 s, not 4.** `seedDoc` is on a 4000 ms timer and a click at 4.0 s races it.
 - **A second Firefox against a profile already in use exits 0 and does nothing.** `pgrep -x firefox` and a fresh profile dir; never `pkill -f`.
 - **Assert what distinguishes the states.** A digest of class names cannot see a *move*; use the words. And count *steps*, not just contents, or a control that needs pressing twice passes.
+- **Stub `admin_ui._rt` with `room: ""`, or no Quill mounts and you are testing the legacy editor.** With no Supabase the channel never opens, `canWrite()` returns false, and `mountQuill` marks every prose block `data-legacy` — which is the one shape where the caret and `/` bugs of PR #116 did *not* reproduce. An empty room makes `initCollab()` return early and leaves `canWrite()` at its single-player default of `true`; `initShared()` runs either way, so the `Y.Doc` and the `QuillBinding` are still real and only the election is missing (say so under **Not verified**).
+- **Quill does not see a DOM edit until its own tick.** `execCommand("insertText", …)` is how the probe types — an API `insertText` leaves `q.getSelection()` where real typing would have moved it, and the `/` hook reads that selection, so the menu never opens. But `q.getLength()` is still the old length in the same synchronous step, and `setSelection` past it throws *"Index or size is negative or greater than the allowed amount"*. Type in one step, position in the next.
+- **To read `MODEL`, add `window.__probe = { model: …, cdoc: cdoc, slash: … }` above the `DOMContentLoaded` block** — one line, marked `PROBE-ONLY`, and `grep -n "__probe"` before committing.
 
 To read a closure variable, add a temporary `window.__X = function () { return <var>; };`, print it
 through the same POST, and **grep it out before committing**.
