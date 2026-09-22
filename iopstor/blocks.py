@@ -28,6 +28,10 @@ BLOCKS = {  # type: (required fields, optional fields)
     "faq": (["items"], ["heading"]),  # items: [{q, a}] → also emits FAQPage JSON-LD
     "stats": (["items"], ["count_up", "fx"]),  # items: [{value, label, fx, count_up}] — a figure can override the section
     "testimonial": (["quote", "author"], ["role", "company", "dark"]),
+    # The founder pair on About Us: a picture, a name and a job title, repeated. It was written as a
+    # rich_text carrying its own classes, which Quill drops -- the same reason points and definitions
+    # exist (section 12.3). The picture is optional: with none, .ava draws the design's hatched circle.
+    "people": (["items"], ["heading"]),  # items: [{name, role, media_id}]
     "embed_html": (["html"], []),
     # link_label/link_url are the "All services →" link in the section header.
     "post_list": (["post_type"], ["heading", "eyebrow", "term", "limit", "top_level",
@@ -70,6 +74,7 @@ EDITOR = {
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
     "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label", "fx", "count_up"],
               "spec_table": ["k", "v"], "definitions": ["k", "v"], "points": ["text"],
+              "people": ["name", "role", "media_id"],
               "gallery": ["media_id", "alt"], "hero": ["media_id", "alt"],
               "columns": []},  # a column is a list of blocks, not a row of fields: the panel only adds/moves/removes it
     # friendlier labels; anything missing is the key with underscores as spaces
@@ -105,7 +110,7 @@ EDITOR = {
     # order the section picker offers them in, commonest first (Jinja's tojson sorts dict keys,
     # so BLOCKS' own order does not survive the trip to the browser)
     "order": ["hero", "rich_text", "cards", "columns", "spacer", "divider", "cta", "faq", "stats",
-              "testimonial", "points", "spec_table", "definitions", "image", "gallery", "pdf",
+              "testimonial", "people", "points", "spec_table", "definitions", "image", "gallery", "pdf",
               "post_list", "contact_form",
               "warranty_check", "embed_html"],
     # the visual inserter: icon, plain-English name, one line on what the visitor sees
@@ -120,6 +125,7 @@ EDITOR = {
         "faq": ("\u2753", "Questions & answers", "Questions that open to reveal the answer. Google shows these too."),
         "stats": ("\U0001F4CA", "Numbers", "A row of big figures with a label under each one."),
         "testimonial": ("\U0001F4AC", "Customer quote", "Something a customer said, with their name and company."),
+        "people": ("\U0001F464", "People", "A row of people: a photo, a name and a job title under it."),
         "spec_table": ("\U0001F4CB", "Specification table", "A two-column table of labels and values."),
         "image": ("\U0001F5BC", "Picture", "One picture across the page, with an optional caption."),
         "gallery": ("\U0001F5C2", "Picture grid", "Several pictures laid out in a grid."),
@@ -149,6 +155,10 @@ EDITOR = {
                             {"value": "24\u00D77", "label": "support"}]},
         "testimonial": {"quote": "What a customer said about working with you.", "author": "Their name",
                         "role": "Job title", "company": "Company"},
+        # no media_id: a person with no photo gets the design's hatched circle, which is what About Us
+        # has always shown, so the section is complete without a trip to the media library.
+        "people": {"items": [{"name": "Their name", "role": "What they do"},
+                             {"name": "Somebody else", "role": "What they do"}]},
         "spec_table": {"heading": "Specifications", "rows": [{"k": "Capacity", "v": "Up to 5 PB"}, {"k": "Interface", "v": "NFS, SMB, S3"}]},
         "definitions": {"heading": "In plain terms", "rows": [{"k": "First term", "v": "What it means, in a sentence."},
                                                               {"k": "Second term", "v": "What it means, in a sentence."}]},
@@ -192,7 +202,7 @@ _NON_TEXT_KEYS = {"url", "cta_url", "cta2_url", "button_url", "link_url", "icon"
                   "tone", "fx", "count_up", "height", "per_row", "list_style", "open_tone", "_id", "_rich"}
 EDITOR["scalars"] = sorted(_NON_TEXT_KEYS)
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
-_TEXT_ORDER = ("eyebrow", "heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "role", "company",
+_TEXT_ORDER = ("eyebrow", "heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "name", "role", "company",
                "value", "label", "k", "v", "caption", "alt", "cta_label", "cta2_label", "button_label", "link_label",
                "items", "images", "rows", "cols")
 _RANK = {k: i for i, k in enumerate(_TEXT_ORDER)}
@@ -568,6 +578,9 @@ def blocks_md(blocks, h1=True):
         elif t == "testimonial":
             who = ", ".join(x for x in (d.get("author"), d.get("role"), d.get("company")) if x)
             out.append(f"> {d.get('quote', '')}" + (f"\n>\n> — {who}" if who else ""))
+        elif t == "people":
+            out += [head, "\n".join(f"- **{i.get('name', '')}**" + (f" \u2014 {i['role']}" if i.get("role") else "")
+                                    for i in d.get("items") or [] if isinstance(i, dict))]
         elif t == "definitions":
             # Markdown has no definition list, and the regex converter has no <dt>/<dd> case either --
             # which is why these ran together as prose in the .md twins for as long as they were HTML.

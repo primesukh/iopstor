@@ -251,9 +251,11 @@ BLOCKS = {  # type: (required fields, optional fields)
 }
 ```
 
-Twenty types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `embed_html`, `post_list`, `spec_table`, `definitions`, `points`, `contact_form`, `warranty_check`, `spacer`, `divider`.
+Twenty-one types ship: `hero`, `rich_text`, `image`, `gallery`, `pdf`, `cards`, `columns`, `cta`, `faq`, `stats`, `testimonial`, `people`, `embed_html`, `post_list`, `spec_table`, `definitions`, `points`, `contact_form`, `warranty_check`, `spacer`, `divider`.
 
 **`points` and `definitions` exist because the design draws sections that are not prose.** A heading, an intro, a dashed list and a button down one side of a band; a term-and-description list. Both were written as `rich_text` blocks carrying their own classes (`eyebrow`, `section-title`, `lead`, `dash`, `zfs`) — which Quill drops, so those sections could never join the shared document (§12.3). Measured against the vendored build: `Parchment.ClassAttributor(attrName, keyName)` matches classes shaped `keyName-value`, which is how `ql-align-center` works, and every class here is a bare boolean — so teaching Quill them needs a custom Blot and a clipboard matcher per class. They are block types instead, every field is an existing key, and `site.css` names the new blocks in the same rules it already had, so both pages render unchanged. `migrations/0011_sections_that_were_layout.sql` moves the two live pages across.
+
+**`people` is the third of those, and the one that proves the rule was not finished.** `site.css` had carried a comment since the design landed saying three shapes the design draws *inside prose* needed no block of their own, and the About Us founder pair was one of them: `<div class="founders"><div><span class="ava"></span><b>name</b><i>job title</i></div>…</div>`, written into a `rich_text`'s HTML by the seed. Bare classes again, so the block was one of the editor's named Quill refusals — and being a string inside one page, it had no Name field, no Job title field, no way to add a third person, no way to attach a photograph and no way to put the same shape on a second page. It is `items: [{name, role, media_id}]` plus an optional `heading` now; `media_id` is optional and `.ava` draws the design's hatched circle when there is none, which is what the page has always shown. `blocks/people.html` puts `data-f="name"`/`data-f="role"` inside the `data-r="items"` row, so both are typed on the canvas and `dataFor()` resolves them to the right person; the picture is the ⚙ panel's, like every other media field. `site.css` names it in the founders' own rules (`.rich-text .founders,.people`), so the page renders unchanged — measured at 1440: the gap under the last paragraph is 24.0px before and after. **That parity needed one more rule.** As markup inside the prose, the last `<p>`'s `margin-bottom:1rem` collapsed into `.founders`' `margin-top:24px`; as its own section it escapes the section box (`.column>.section{padding:0}`, `.column .wrap{padding:0}`) and stacks on top of `.column>.section+.section`'s 24px padding, which measured 40.0px. `.column .rich-text>*:last-child{margin-bottom:0}` is the fix and it is scoped to a column on purpose — the same leak was already there: the NAS configuration card was 28px of padding at the top and 44 at the bottom (556.0 → 540.0px tall), and Contact Us's details sat 40px above the map instead of 24. `migrations/0017_the_founders_are_a_section.sql` moves the live page across. `test_people_block_draws_a_face_or_the_placeholder` guards both avatar shapes and the `.md` line.
 
 `hero` takes either one picture or several. `image` is the single one; `images` is a repeater of
 `{media_id, alt}` and, from two rows up, becomes the design's rotator — the pictures take turns on
@@ -987,6 +989,24 @@ the delete can only touch rows the update actually changed; re-matching on `bloc
 catch a page that was already empty and has a draft with real work in it. Same reason `0014` sets `state = ''` and
 `--reset-content` calls `db.clear_draft()`: a draft left behind puts the old version straight back.
 
+`0017_the_founders_are_a_section.sql` is the shape to copy for **a content migration that splits one block into
+two.** `0011` replaced a whole `rich_text` with a block type; here the founder chips sat at the *end* of a
+`rich_text` that also held a heading and two paragraphs, so per match it `jsonb_set`s that block's `html` to the
+prose with the chips cut out and `jsonb_insert`s a `people` block immediately after it in the same column. Four
+rules it is built on. (1) **Bound the regex to the element** — `'<div class="founders">.*?</div></div>'`, never
+`.*$`: cutting to end-of-string would delete anything an editor had typed below the chips in that one-piece legacy
+block. (2) **The rows are parsed out of the markup being removed**, not written as a literal in the file, so a
+database where somebody has already retyped a name keeps their words; markup it cannot read leaves the page alone.
+(3) **`_rich` comes off the rewritten block only.** `0011` swept every block on the database and said in its own
+header that it was free *that* time because nothing carried a verdict yet — measured before writing this one,
+`posts` still carries none but the drafts do, so the sweep would now throw away a neighbour's correct verdict for
+nothing. The one that must go is the rewritten block's: once the div is out the markup is `<h2>` + `<p>`, which
+Quill holds, and `mountQuill()` reads the stored verdict and never recomputes. (4) **Both loops run
+`order by b.ord desc, c.ord desc, n.ord desc`**, because `jsonb_insert` shifts every index after it and a second
+grid higher up the same column would otherwise land one slot out. Proved before hand-over by running the file
+against a throwaway Postgres loaded with the real About Us rows: one match per table, the result passes
+`validate_blocks()`, the neighbour keeps its `_rich: true`, and a second run matches nothing.
+
 **A hand-applied file does not bump the cache epoch.** `flask migrate` calls the `apply_migration` RPC, not
 `db.insert()/update()`, so nothing calls `bump_epoch()` — a server that is already running keeps serving its cached
 `post_types()` and its cached rendering of the page until it restarts or somebody saves something in the admin
@@ -1629,7 +1649,7 @@ Blocks live in **containers**: `#main`, or one `[data-col]` of a columns block (
 
 The `⚙` panel for a Columns block manages the column *list* — `repeater()` gained two optional hooks (a row factory, a cell renderer) because a column row is an array of blocks rather than a row of fields, which is cheaper than a second ↑ ↓ ✕ splice loop. Removing a column that holds sections asks first. The sections themselves are edited on the page, like everything else.
 
-**A page is a document, not a stack.** Prose lives in `rich_text` blocks; the other nineteen types
+**A page is a document, not a stack.** Prose lives in `rich_text` blocks; the other twenty types
 are the designed bands. Nothing about the storage changed — `posts.blocks` is the same JSONB —
 but the editing surface leads with writing:
 
@@ -1862,10 +1882,10 @@ transported. **Nothing in this section is collaborative yet**; it is the surface
 has no blot for. On this site's own content that was **7 of 24** `rich_text` blocks: `<dl>` on NAS
 and Contact Us, `<div>`/`<span>` on About Us, `<table>` on NAS and Testing — and the Home page, which
 loses six **classes** and not one tag, so a tag-based check waves it through and the first save strips
-the page's styling. **Two of those seven are block types now** — `points` and `definitions`, §6 — which
-is the only real cure: the answer to a section Quill cannot hold is usually that it was never prose.
-Five refusals are left and all five are deliberate (Contact Us, NAS's spec panel, the About Us founders
-grid, two junk tables on a page called *Testing*). So `quillKeeps()` pastes the block into a throwaway Quill in the canvas document,
+the page's styling. **Three of those seven are block types now** — `points` and `definitions` (0011),
+then the About Us founder pair as `people` (0017), §6 — which is the only real cure: the answer to a
+section Quill cannot hold is usually that it was never prose. Four refusals are left and all four are
+deliberate (Contact Us, NAS's spec panel, two junk tables on a page called *Testing*). So `quillKeeps()` pastes the block into a throwaway Quill in the canvas document,
 reads `semantic()` back, and refuses if any tag or class went missing. It is a **no-loss** test rather
 than equality: Quill wrapping a bare text node in `<p>` is fine, losing `class="eyebrow"` is not.
 `<b>`/`<strong>` and `<i>`/`<em>` are aliased, because `_html_md()` renders them identically
@@ -2618,10 +2638,13 @@ Shared editing (§12.3), all of them named in `admin.js`:
   `head`. All three are Debian-essential and were confirmed present in `python:3.13-slim`
   (`docker run --rm python:3.13-slim bash -c 'which bash grep head'`); re-check it if the base image
   ever changes, because the failure mode is a container that reports itself unhealthy forever.
-- **Seven blocks are not on the new editing surface**, and on this content they are the Home page,
-  NAS, Contact Us and About Us. They keep the original `contenteditable`, which also means the next
-  PR's co-editing will not reach them. The long-term fix is not a bigger Quill: that markup is layout
-  smuggled into prose (a spec table, a definition list, a founders grid) and belongs in block types.
+- **Four blocks are not on the new editing surface** — seven when this was written, and on this
+  content they are now NAS's spec panel, Contact Us and two junk tables on a page called *Testing*.
+  They keep the original `contenteditable`, which also means co-editing does not reach them. The
+  long-term fix is not a bigger Quill: that markup is layout smuggled into prose, and a dashed list
+  (0011 → `points`), a definition list (0011 → `definitions`) and the About Us founder pair
+  (0017 → `people`) have each become a block type instead. Contact Us is waiting on a
+  Settings-backed block rather than a section type.
 - **Quill normalises on load, so the first save of a Quill block rewrites it** even if nobody typed —
   attribute order, whitespace — and the Activity diff reports it. Once per block, harmless, and the
   gate guarantees no tag or class moves.

@@ -430,6 +430,28 @@ def test_pdf_block_renders_the_browser_viewer(app, monkeypatch):
     assert validate_blocks([{"type": "pdf", "data": {"heading": "no file"}}]) == ["blocks[0].file_media_id required"]
 
 
+def test_people_block_draws_a_face_or_the_placeholder(app, monkeypatch):
+    """The founders were markup inside a rich_text until 0017, so the section has to render both
+    shapes that markup had — a photo, and the design's hatched circle when there is none — and name
+    the person in the .md twin, which the old <b>/<i> pair ran together into one unreadable word."""
+    from iopstor import db
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    monkeypatch.setattr(db, "get_media", lambda pk: {"url": "/media/2026/09/g.jpg", "alt": "the library's alt"})
+
+    block = {"type": "people", "data": {"items": [{"name": "Gulbirr Bhatia", "role": "Co-founder", "media_id": 7},
+                                                  {"name": "Noshir Dalal", "role": ""}]}}
+    html = render_blocks([block])
+    assert '<img class="ava" src="/media/2026/09/g.jpg" alt="Gulbirr Bhatia"' in html   # the name IS the alt
+    assert '<span class="ava" aria-hidden="true"></span><b>Noshir Dalal</b>' in html
+    assert validate_blocks([block]) == []          # a person needs no picture
+
+    md = blocks_md([block]).strip()
+    assert "- **Gulbirr Bhatia** \u2014 Co-founder" in md
+    assert md.endswith("- **Noshir Dalal**")       # no dangling dash when the job title is empty
+
+
 def test_edit_markers_only_in_edit_mode(app, monkeypatch):
     from iopstor import db
 

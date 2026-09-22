@@ -1605,13 +1605,15 @@
      real text CRDT fixes that. Quill is the binding a CRDT needs.
 
      It does NOT take every block, and the rule is measured rather than guessed. Quill silently drops
-     what it has no blot for, and on this site's own content that is 7 of 24 rich_text blocks:
+     what it has no blot for, and on this site's own content that was 7 of 24 rich_text blocks:
      <dl>/<dt>/<dd> on NAS and Contact Us, <div>/<span> on About Us, <table> on NAS and Testing, and
      -- the dangerous one -- the Home page, which loses six CLASSES and not a single tag, so a
      "does it contain a table?" check would wave it straight through and the first save would strip
      the page's styling. So the gate is per block and empirical: paste it into a throwaway Quill,
      read it back, and refuse if any tag or class went missing. Those blocks keep the editor they
-     have always had. */
+     have always had -- except where the section was never prose at all, which is the real cure and
+     has now happened three times: 0011 made Home's panel `points` and NAS's feature list
+     `definitions`, and 0017 made the About Us founder pair `people`. Four refusals are left. */
   var QUILL_FORMATS = ["bold", "italic", "underline", "strike", "link", "header", "list",
                        "blockquote", "align", "color", "background", "image", "size"];
 
