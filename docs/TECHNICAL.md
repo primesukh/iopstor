@@ -1997,9 +1997,15 @@ deliberate:
   late-binding shape `syncBar()` and `paintPeers()` use, because `markDirty()` can run before there is
   anywhere to save to — and on `/posts/new` there is no row yet, so autosave stays off until the post
   has been created once.
-- **It serialises `prune(MODEL)`**, the serialiser the form *submit* uses, not the shallower
-  `MODEL.filter(written)` that Preview sends. The draft has to be the same bytes Publish would store,
-  or publishing would change the page by itself.
+- **It serialises `MODEL` whole and is deliberately *not* pruned** (`saveable()`). This paragraph
+  used to say the opposite — that the draft is `prune(MODEL)`, "the same bytes Publish would store" —
+  and the shared document made that false: `prune()` drops an empty paragraph and rebuilds a
+  `columns` block as a fresh object, so a section an editor still has the caret in loses its `_id`,
+  every section after it answers to a different one, and a remote edit would land on the wrong
+  section after the next load. **The draft is the live document, empty paragraphs and all; Publish
+  still prunes**, because that is the only place "an empty paragraph is the caret waiting for you,
+  not content" is true. Preview sends the shallower `MODEL.filter(written)`. The comment above
+  `saveable()` says all of this at the call site.
 - **The button says `Publish` only when the page's status is `published`**, and `Save` otherwise —
   pressing it on a Draft-status page publishes nothing to anybody. It is server-rendered from
   `p.status` and relabelled by a `change` listener on the status `<select>`, so it does not start
