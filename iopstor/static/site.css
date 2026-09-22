@@ -570,7 +570,7 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .t-dark .rich-text .foot{margin:14px 0 0;font-size:12px;color:var(--muted-dark-2)}
 .t-dark .rich-text dl.zfs>div,.t-dark .definitions dl>div{border-top-color:var(--line-dark)}
 .t-dark .rich-text dl.zfs dt,.t-dark .definitions dl dt{color:var(--white)}
-.t-dark .rich-text dl.zfs dd,.t-dark .definitions dl dd,.t-dark .rich-text .founders i{color:var(--muted-dark)}
+.t-dark .rich-text dl.zfs dd,.t-dark .definitions dl dd,.t-dark .rich-text .founders i,.t-dark .people i{color:var(--muted-dark)}
 .t-dark .points ul.dash{color:var(--muted-dark)}
 /* A rich_text block can carry a whole section: its eyebrow, its heading, its list and its button.
    Each needs to out-specify the element rules above -- `.rich-text h2` is (0,1,1) and would beat a
@@ -588,14 +588,19 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .points,.definitions{--w-def:var(--reading);max-width:var(--w,var(--reading))}
 .points>*:first-child,.definitions>*:first-child{margin-top:0}
 .points .points-go{margin:0}
-/* Three more shapes the design draws inside prose, so they need no block of their own: the founder
-   pair on About, the labelled contact list, and the striped box standing in for the map until an
-   embed_html replaces it. Same trusted-staff HTML the dash list uses. */
-.rich-text .founders{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:24px 0 0}
-.rich-text .founders>div{background:var(--grey);border-radius:10px;padding:20px}
-.rich-text .founders .ava{display:block;width:56px;height:56px;border-radius:999px;margin-bottom:12px;background:repeating-linear-gradient(135deg,#dfe4ea 0 6px,#eef1f5 6px 12px)}
-.rich-text .founders b{display:block;font-weight:700;color:var(--black)}
-.rich-text .founders i{display:block;font-style:normal;font-size:14px;color:var(--muted)}
+/* Two more shapes the design draws inside prose, so they need no block of their own: the labelled
+   contact list, and the striped box standing in for the map until an embed_html replaces it. Same
+   trusted-staff HTML the dash list uses.
+   The third was the founder pair on About, which is the `people` block now (0017) -- the same rules,
+   one more selector, so the page renders as it always did. .founders stays until every database has
+   run that migration. The 24px above the chips is the prose version's only difference: as its own
+   section the gap is .column>.section+.section's padding instead. */
+.rich-text .founders,.people{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.rich-text .founders{margin:24px 0 0}
+.rich-text .founders>div,.people>div{background:var(--grey);border-radius:10px;padding:20px}
+.rich-text .founders .ava,.people .ava{display:block;width:56px;height:56px;border-radius:999px;margin-bottom:12px;object-fit:cover;background:repeating-linear-gradient(135deg,#dfe4ea 0 6px,#eef1f5 6px 12px)}
+.rich-text .founders b,.people b{display:block;font-weight:700;color:var(--black)}
+.rich-text .founders i,.people i{display:block;font-style:normal;font-size:14px;color:var(--muted)}
 /* the design's "ZFS features, in plain terms": term and description on one ruled row */
 .rich-text dl.zfs,.definitions dl{margin:0;display:grid}
 .rich-text dl.zfs>div,.definitions dl>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:16px;padding:16px 0;border-top:1px solid var(--line)}
@@ -606,6 +611,12 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .rich-text dl.contact-dl dd{margin:4px 0 0;color:var(--ink-2);line-height:1.5}
 .rich-text .map-ph{aspect-ratio:16/9;border-radius:12px;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;font:12px/1.5 var(--mono);color:var(--muted);background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)}
 .rich-text>*:first-child{margin-top:0}
+/* Inside a column, .column>.section+.section already sets the 24px between two stacked
+   sections, so a trailing paragraph margin is added on top of it: the founder chips measured
+   40px below the prose where the design draws 24 (2026-09-22, the `people` block). Scoped to a
+   column -- on a full-width page the section's own padding is the gap and prose keeps its
+   trailing margin. */
+.column .rich-text>*:last-child{margin-bottom:0}
 
 /* image / gallery */
 figure{margin:0}figure img{display:block;width:100%;border-radius:12px}

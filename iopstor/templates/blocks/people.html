@@ -1,0 +1,8 @@
+{# The founder pair on About Us: a picture, a name and a job title, repeated. It lived inside a
+   rich_text as a <div class="founders"> until 0017 -- bare classes Quill drops, so it could never be
+   co-edited or added to a second page (12.3). site.css names this block in the founders' own rules,
+   so the page renders exactly as it did. No picture chosen = the design's hatched circle. #}
+<section class="section{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
+  {% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}
+  <div class="people">{% for p in data['items'] %}<div{{ fe('items', loop.index0) }}>{% if p.media_id %}<img class="ava" src="{{ media_url(p.media_id) }}" alt="{{ p.name }}" loading="lazy">{% else %}<span class="ava" aria-hidden="true"></span>{% endif %}<b{{ fe('name') }}>{{ p.name }}</b><i{{ fe('role') }}>{{ p.role }}</i></div>{% endfor %}</div>
+</div></section>

@@ -401,11 +401,12 @@ def run_seed():
         {"type": "columns", "data": {"cols": [
             [{"type": "rich_text", "data": {"html":
                 '<h2>What we build</h2>' + "".join(f"<p>{p}</p>" for p in ABOUT_BUILD.split("\n\n"))}}],
+            # The founders are their own section, not markup at the end of the paragraph above: as a
+            # string they could not be edited field by field and could not be put on a second page
+            # (migration 0017).
             [{"type": "rich_text", "data": {"html":
-                '<h2>Who we are</h2>' + "".join(f"<p>{p}</p>" for p in ABOUT_WHO.split("\n\n"))
-                + '<div class="founders">'
-                + "".join(f'<div><span class="ava"></span><b>{n}</b><i>{r}</i></div>' for n, r in FOUNDERS)
-                + '</div>'}}]]}}])
+                '<h2>Who we are</h2>' + "".join(f"<p>{p}</p>" for p in ABOUT_WHO.split("\n\n"))}},
+             {"type": "people", "data": {"items": [{"name": n, "role": r} for n, r in FOUNDERS]}}]]}}])
     _post(page, "Warranty Check", slug="warranty-check", excerpt="Check what cover your appliance still has.", blocks=[
         {"type": "hero", "data": {"dark": True, "eyebrow": "Support", "heading": "Check your warranty",
                                   "subheading": "Every IOPStor appliance ships with a three-year hardware warranty, and unlimited telephone "
