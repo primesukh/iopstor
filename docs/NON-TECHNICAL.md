@@ -492,6 +492,11 @@ One thing this costs: Ctrl-clicking a file no longer opens it in a new browser t
 
 **Putting a PDF on a page.** Press `/` on an empty line and choose **PDF**. The section drops in; hover it, press **⚙**, and pick the PDF from the list — or press **Choose file** to upload one on the spot. Only PDFs are offered there, so you cannot pick a photo by mistake. Visitors then read it without leaving the page — scrolling, zooming and printing with their browser's own controls — and there is a **Download the PDF** button under it, which saves the file to their computer under the name it was uploaded with. That button is also how people on a phone read it: phone browsers usually will not show a PDF inside a page, so they download it and open it from there. Give the section a heading by typing straight onto the page above the viewer.
 
+**A picture saved with the wrong ending still shows.** A logo saved from another company's website often keeps
+an ending that does not match what is inside it — a file called *nvidia.svg* that is really a different kind
+of picture, say. The site now looks inside the file rather than at its name, so it stores and shows it as what
+it really is, in every browser. You do not need to do anything; the file keeps the name you gave it.
+
 **The website hands out the pictures itself.** Every picture and PDF is now delivered by the website
 rather than by the storage system behind it, so the file store can be shut away where only the website
 can reach it. You will not notice a difference while working — files are uploaded, picked and shown
@@ -772,6 +777,12 @@ paragraph, the way Google Docs does (§4).
 ---
 
 ## 15. Quick answers
+
+**A logo shows in Firefox but not in Chrome.** The file's name did not match what was inside it — the Nvidia logo
+was called *.svg* but was really a different kind of picture, and Chrome believes the name where Firefox looks
+inside. Once this update is live the site sends every picture as what it really is, so it shows in Chrome too. If
+Chrome still shows the name instead of the logo, press **Ctrl + Shift + R** on the page once: it had kept the
+broken copy. Uploading the logo again also works, and from now on a new upload is always stored correctly.
 
 **I cannot change the background of the About Us hero — is it hardcoded?** It is not, and now you can.
 That black band is an ordinary **Hero** section: click it, open its **⚙**, and **Background** offers
