@@ -813,7 +813,9 @@ section's heading, the other services at the foot of a service page, the sub-ser
 in the footer and in the Services menu, and the two links on the Warranty check page. The arrows that are left
 are the ones that tell you something: the one beside the number of services on the home page, which flips when
 a line opens, the small triangle beside *Services* and *Company* in the menu, and the ‹ › buttons on the
-testimonials. An arrow you type into a page yourself stays exactly where you put it.
+testimonials. An arrow you type into a page yourself stays exactly where you put it. A long heading that has a
+link beside it, like *All services*, now keeps a clear space from that link, so it breaks into two even lines
+instead of running right up to it.
 
 **The Services menu looks different.** It does. Instead of a list of the five group names that you
 had to point at one by one, it now opens as five columns with every service on show at once, each

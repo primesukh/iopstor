@@ -1046,6 +1046,18 @@ The glyphs that show a *state* rather than decorate a link stay: the accordion c
 the menu's caret and the testimonial row's `&lsaquo;` `&rsaquo;` buttons. An arrow an editor types into a page's own
 text is theirs; the test reads templates, not content, and all 63 served pages were checked by hand on the day.
 
+**The arrow was holding long titles off the link, so `.sec-head`'s column gap is 48px** (client, same day: *"one
+stack" is too close to All services*). `.sec-link` lost about 16px with its `→`, and that was what had been wrapping
+the home page's services title at 1440; unwrapped, the title's last word ended **25.7px** from *All services*
+(38.7px for *All case studies*), and at 24px the two read as one line. The title's box is `flex:1`, so the column gap
+*is* the closest they can ever sit, and 48px is the floor now. Widening it makes those two titles wrap, and plain
+wrapping stranded "stack" and "logistics" alone on a second line, so `.sec-head .section-title` also carries
+`text-wrap:balance`: at 1440 and 1600 the services title is "Storage, virtualisation and / cloud, delivered as one
+stack" with its end **536px** from the link, 317px at 834. At 390 the link already sits on its own row and nothing
+moves; the row gap stays 24px. A browser without `balance` (Firefox before 121, Safari before 17.5) wraps plainly,
+which is the lone-word version and nothing worse. Measured with `Range.getClientRects()` on the title's last line
+against the link's box, before and after in one document.
+
 **Tokens.** `:root` holds the palette the design ships with — `--black`/`--black-2`/`--black-3` and `--line-dark`/`--line-dark-2` for the dark bands, `--blue` (`#3573b9`, the brand blue — the fill inside the client's logo artwork) with `--blue-hover` `#29588e`, `--blue-tint` `#e5eef8` and `--blue-light` `#78a6d8` — the same hue and saturation at three other lightnesses, so a change to the brand blue is four values, not one, plus **eight** `rgba(53,115,185,alpha)` literals on seven declarations (`site.css:370` carries two) that no token could carry — tinted tiles, the hero glow, the sweep gradient, and `admin.css`'s media-picker selection ring — `--white`/`--grey`/`--line`/`--line-2` for the light ones, `--ink` (`#2e3133`, the Deep Charcoal of the logo's *STOR* — headings and body, never a fill)/`--ink-2`/`--muted`/`--muted-dark`/`--muted-dark-2` for text, `--green`/`--red` (plus `-bg`) for status, `--wrap` (1200px) and `--reading` (760px) for measure, and `--head`/`--body`/`--mono` for the three type stacks. Headings are Manrope 800, body is IBM Plex Sans.
 
 A second, shorter line under them maps the *old* token names (`--navy`, `--accent`, `--accent-2`, `--text`, `--card`, `--radius`) onto the new palette. `admin.css` and `canvas.css` still reference those in ~90 places; the aliases keep the admin rendering while it is restyled in its own PR, and are marked `ponytail:` for deletion once nothing uses them.
