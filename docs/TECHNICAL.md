@@ -357,7 +357,7 @@ heading, "All services →") and the `rail-nav` foot are shared by both branches
 the data is identical, so every `.md` twin is byte-for-byte what it was. §12's *The services accordion* has the
 markup contract and the CSS. Three ways it departs from the prototype on purpose: the row heading stays a real
 `<h3>` (a `<label>` may not contain heading content, so the `<h3>` wraps the label), the group's own page keeps a
-link (`All Storage →` — the card used to be that link), and every child is listed rather than `_card.html`'s
+link (`All Storage` — the card used to be that link), and every child is listed rather than `_card.html`'s
 four-then-`+N more`, because handling any number of services is the design's stated point.
 
 When `top_level` is set on a hierarchical type, `_post_list()` also hangs each parent's live children off `p["children"]` for the chips under the card, reusing `db.tree()` — already memoised for the request by the header's services panel, so on most pages it costs nothing.
@@ -1249,7 +1249,10 @@ The other three shapes size from `auto` tracks that stay inside a 390px card (da
 
 The home page's "What we do" section, from the client's design option 1a (2026-09-21, `requirements.md`). One row
 per top-level service, **one open at a time**, hover or tap; the open row goes to `--black` with white heading, the
-group's blurb in `--muted-dark` and its sub-services as outlined pills. `blocks._acc()` decides which lists get it
+group's blurb in `--muted-dark` and its sub-services as outlined pills. **Neither the pills nor the group's *All
+Storage* link carry a `→`** (client, 2026-09-23): the count's `&darr;`, turned to ↑ by `--chev` on the open row,
+is the only arrow inside the accordion, and `test_the_services_accordion_renders_one_openable_row_per_group` pins
+that. The heading's *All services →* is `.sec-link`, shared with every automatic list, and keeps its arrow. `blocks._acc()` decides which lists get it
 (§6); everything below is `site.css`, and **there is no script** — this is not a second use of `site.js`.
 
 **The open row's palette is six custom properties on `.acc`**, not colours written into the open rule: `--o-bg`,

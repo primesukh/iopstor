@@ -803,7 +803,9 @@ there. Write an Excerpt and it will read properly. Nothing is broken; there is s
 service per line, and pointing at a line — or tapping it on a phone — slides that one open to show its
 description and all of its sub-services, closing whichever was open before. They all start closed,
 so what you see on arriving is a tidy list of five lines. Nothing had to be re-typed and nothing was lost: it is the same five services, from the
-same Services pages, and the *All services →* link is still on the right of the heading. If you prefer
+same Services pages, and the *All services →* link is still on the right of the heading. Inside an open line
+the sub-service buttons and the *All Storage*-style link have no arrow after them — the small arrow beside
+the count, which points down when a line is shut and up when it is open, is the only one. If you prefer
 the cards back, open the section's **⚙** and set **List style** to *Cards*.
 
 **The Services menu looks different.** It does. Instead of a list of the five group names that you
