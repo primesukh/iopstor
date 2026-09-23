@@ -101,6 +101,25 @@
     </div>{% endfor %}
     {% endif %}
 
+    {#- The band a service page ends on -- "Storage solutions" on a group, "Other Storage services" on
+        one of its services (client, 2026-09-23). public.related_for() reads these; _form_body() saves
+        them only when related_form comes back, so a save that never drew them leaves them alone.
+        The services are checkboxes, ticked = listed; related_all says which ones were offered, so
+        an unticked one is the one left out and a service added later is listed without asking. -#}
+    {% if pt.hierarchical %}
+    <h3>Related services</h3>
+    <input type="hidden" name="related_form" value="1">
+    <label class="inline"><input type="checkbox" name="related_show" value="1" {{ '' if related.hide else 'checked' }}> Show the related services at the bottom of this page</label>
+    <label>Heading <input type="text" name="related_heading" maxlength="200" value="{{ related.heading or '' }}" placeholder="{{ related_auto }}"></label>
+    <small>Leave it empty and the heading is written for you{% if related_auto %}: <em>{{ related_auto }}</em>{% endif %}.</small>
+    <label>Text under the heading <textarea name="related_text" maxlength="500" rows="2">{{ related.text or '' }}</textarea></label>
+    <label>Background <select name="related_tone">{% for value, label in related_tones %}<option value="{{ value }}" {{ 'selected' if (related.tone or 'grey') == value }}>{{ label }}</option>{% endfor %}</select></label>
+    <input type="hidden" name="related_all" value="{{ related_list|map(attribute='id')|join(' ') }}">
+    <label>Services it lists</label>
+    {% for c in related_list %}<div><label class="inline"><input type="checkbox" name="related_pages" value="{{ c.id }}" {{ '' if c.id in (related.skip or []) else 'checked' }}> {{ c.title }}</label></div>
+    {% else %}<small>No other services to list yet. Publish some under the same group, or save this page first.</small>{% endfor %}
+    {% endif %}
+
     {% if pt.field_schema %}
     <h3>Details</h3>
     {% for f in pt.field_schema %}

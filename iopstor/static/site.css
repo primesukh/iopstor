@@ -306,6 +306,11 @@ main{min-height:60vh}
    heading vanished. Nothing hit it before an editor could put this tone on any section: cta.html is
    the only other blue band and it draws no eyebrow. */
 .t-blue .eyebrow{color:var(--white)}
+/* The same gap one line down: .lead is var(--muted), a dark grey that all but disappears on the blue
+   band. Found on a service page's closing band once its Background became a setting (2026-09-23),
+   and it was true of a Points section's subheading on Blue as well. The dark band never had it --
+   `.t-dark p` whitens every paragraph -- and a Hero draws its own (.hero-lit .lead, later, wins). */
+.t-blue .lead{color:var(--blue-tint)}
 .t-dark{background:var(--black);color:var(--muted-dark)}
 .t-dark h1,.t-dark h2,.t-dark h3{color:var(--white)}
 .t-dark .card{background:var(--black-3);border-color:var(--line-dark)}
