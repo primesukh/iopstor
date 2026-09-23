@@ -5,7 +5,7 @@ description: Use when a change touches site.css, admin.css, canvas.css, a block 
 
 # Look at it before you say it works
 
-The public site ships one small script (`static/site.js`, the sliding testimonial row) and the theme is one stylesheet, so a CSS change is invisible to pytest. The check is a screenshot at the three widths the editor's Preview uses — 1440, 834, 390 — read back with the Read tool, against the client's mock. Which browsers exist on this machine, at what version, is a per-machine fact kept in Claude's memory; the procedure below holds for any of them.
+The public site ships one small script (`static/site.js`, the sliding row) and the theme is one stylesheet, so a CSS change is invisible to pytest. The check is a screenshot at the three widths the editor's Preview uses — 1440, 834, 390 — read back with the Read tool, against the client's mock. Which browsers exist on this machine, at what version, is a per-machine fact kept in Claude's memory; the procedure below holds for any of them.
 
 No browser extension is connected. Firefox headless is the default. Every command under *Run* is on the `settings.json` allow list as written — keep them one per Bash call, no loops, no `&&` chains, or they prompt. `ss` is allowed too; `python3 -m http.server` and `kill` in the two sections after the page table are not, and prompt once each.
 
