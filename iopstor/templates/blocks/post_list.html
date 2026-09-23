@@ -26,8 +26,8 @@
     </div>
     <div class="acc-body"><div><div class="acc-in">
       <div class="acc-blurb">{% if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}
-        {%- if p.path %}<a class="acc-all" href="{{ p.path }}">All {{ p.title }} &rarr;</a>{% endif %}</div>
-      {%- if p.children %}<div class="acc-kids">{% for c in p.children %}<a href="{{ c.path }}">{{ c.title }} &rarr;</a>{% endfor %}</div>{% endif %}
+        {%- if p.path %}<a class="acc-all" href="{{ p.path }}">All {{ p.title }}</a>{% endif %}</div>
+      {%- if p.children %}<div class="acc-kids">{% for c in p.children %}<a href="{{ c.path }}">{{ c.title }}</a>{% endfor %}</div>{% endif %}
     </div></div></div>
   </div>{% else %}<p class="lead">Coming soon.</p>{% endfor %}</div>
   {%- else %}<div class="cards">{% for p in posts %}{{ card(p, loop.index) }}{% else %}<p class="lead">Coming soon.</p>{% endfor %}</div>{% endif %}
