@@ -3968,14 +3968,25 @@ def test_the_services_accordion_renders_one_openable_row_per_group(app, monkeypa
     # would be a regression, not a design choice
     assert 'href="/services/storage">All Storage' in html
     assert 'href="/services/storage/child-0">Child 0' in html
-    # the count's chevron is the only arrow inside a row: the pills and the group link lost their
-    # "→" (client, 2026-09-23). Scoped to .acc so the header's "All services →" can keep its own.
-    acc = html.split('class="acc', 1)[1]
-    assert "&rarr;" not in acc and "&darr;" in acc
+    # the count's chevron is the only arrow in a row; every "→" is off the site (client, 2026-09-23,
+    # test_the_public_site_draws_no_right_arrows)
+    assert "&rarr;" not in html and "&darr;" in html
     # every child, not _card.html's four-then-"+N more": handling any number is the design's point
     assert "chip-more" not in html and "+1 more" not in html
     # the count agrees with itself in both numbers
     assert ">2 services<" in html and ">1 service<" in html
+
+
+def test_the_public_site_draws_no_right_arrows():
+    """The client took every "→" off the site on 2026-09-23 -- links, tiles, pills, the footer -- while
+    the mock still draws fifteen, so a template copied from it would quietly bring one back. The
+    chevrons that show a state (the accordion count's &darr;, the menu's caret, the testimonial row's
+    &lsaquo; &rsaquo;) are not this glyph and stay. The admin is out of scope."""
+    root = pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "templates"
+    for f in root.rglob("*.html"):
+        if "admin" not in f.relative_to(root).parts:
+            s = f.read_text()
+            assert "&rarr;" not in s and "→" not in s, f"{f.relative_to(root)} draws a right arrow"
 
 
 def test_the_accordion_borrows_nothing_from_the_card_vocabulary(app, monkeypatch):

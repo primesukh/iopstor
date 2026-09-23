@@ -89,7 +89,7 @@
             <div class="mega-cats">{% for g in svc.groups %}<div class="mega-col">
               <input type="checkbox" id="mg-{{ loop.index }}" class="mg-toggle"><label class="mg-row" for="mg-{{ loop.index }}">{{ g.title }}<span class="mg-chev" aria-hidden="true">&#9662;</span></label><a class="mega-g" href="{{ g.path }}"><svg class="mg-ic" aria-hidden="true"><use href="#svc-{{ g.icon }}"></use></svg>{{ g.title }}</a><div class="mega-pane"><div class="mega-tiles">{% for c in g.children %}<a href="{{ c.path }}"><span class="mt-ic" aria-hidden="true"><svg><use href="#svc-{{ c.icon }}"></use></svg></span><span>{{ c.title }}</span></a>{% endfor %}</div></div>
             </div>{% endfor %}</div>
-            <div class="mega-foot"><a class="q" href="{{ i.url }}">All services &rarr;</a><a href="/contact-us">Not sure which fits? Request a quote &rarr;</a></div>
+            <div class="mega-foot"><a class="q" href="{{ i.url }}">All services</a><a href="/contact-us">Not sure which fits? Request a quote</a></div>
           </div></div>
           {%- elif i.children %}<ul class="sub">{% for c in i.children %}<li><a href="{{ c.url }}">{{ c.label }}</a></li>{% endfor %}</ul>{% endif %}</li>{% endfor %}
         <li class="nav-cta"><a href="/contact-us">Contact us</a></li>
@@ -127,7 +127,7 @@
         {% if site.email %}<li><a href="mailto:{{ site.email }}">{{ site.email }}</a></li>{% endif %}
         <li><a href="/datasheets">Datasheets</a></li>
         <li><a href="/warranty-check">Warranty check</a></li>
-        <li><a class="q" href="/contact-us">Request a quote &rarr;</a></li>
+        <li><a class="q" href="/contact-us">Request a quote</a></li>
       </ul></div>
     </div>
     <div class="legal"><span>&copy; {{ year }} {{ site.name }}. All rights reserved.</span><span><a href="/sitemap">Sitemap</a> &middot; <a href="/feed">RSS</a> &middot; <a href="/llms.txt">llms.txt</a></span></div>

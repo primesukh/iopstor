@@ -26,7 +26,7 @@
         {% if found.email %}<div><dt>Registered email</dt><dd>{{ found.email }}</dd></div>{% endif %}
       </dl>
       {% if found.remarks_public and found.remarks %}<p class="warranty-remarks">{{ found.remarks }}</p>{% endif %}
-      <p class="warranty-foot"><a href="/contact-us">Raise a support request &rarr;</a><a href="/contact-us">Ask about an AMC &rarr;</a></p>
+      <p class="warranty-foot"><a href="/contact-us">Raise a support request</a><a href="/contact-us">Ask about an AMC</a></p>
     </div>
     {% else %}<div class="warranty-result none">
       <h3>No record found for “{{ request.args.get('sn', '') }}”</h3>

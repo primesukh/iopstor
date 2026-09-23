@@ -33,7 +33,7 @@ BLOCKS = {  # type: (required fields, optional fields)
     # exist (section 12.3). The picture is optional: with none, .ava draws the design's hatched circle.
     "people": (["items"], ["heading"]),  # items: [{name, role, media_id}]
     "embed_html": (["html"], []),
-    # link_label/link_url are the "All services →" link in the section header.
+    # link_label/link_url are the "All services" link in the section header.
     "post_list": (["post_type"], ["heading", "eyebrow", "term", "limit", "top_level",
                                   "link_label", "link_url", "per_row", "list_style", "open_tone"]),  # queried at render time; top_level=true → parents only
     "spec_table": (["rows"], ["heading"]),  # rows: [{k, v}]

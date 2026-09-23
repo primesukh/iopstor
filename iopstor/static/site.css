@@ -244,8 +244,7 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
   .mega-tiles a{background:transparent;color:var(--muted);padding:10px 16px;margin:0}
   .mega-tiles a:hover{background:transparent;color:var(--blue)}
   .mt-ic{display:none}   /* a 32px tile per row turns the phone sheet into a wall of squares */
-  /* two links of this length do not fit 390 side by side; unwrapped, the arrow drops to a
-     line of its own and reads as a broken link */
+  /* two links of this length do not fit 390 side by side, so they wrap onto lines of their own */
   .mega-foot{display:flex;flex-wrap:wrap;gap:10px 24px;border-top:1px solid var(--line);padding:12px 0 0;margin-top:0}
   .mega-foot a{color:var(--ink)}
 }
@@ -315,10 +314,12 @@ main{min-height:60vh}
 .t-dark .chip-industry{background:rgba(53,115,185,.15);color:var(--blue-light)}
 .t-dark a.card:hover{border-color:var(--blue)}
 .section-title{font-size:clamp(28px,3.5vw,40px);margin:0 0 24px}
-/* the row above a grid: eyebrow and title left, "All services →" right */
-.sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin:0 0 28px}
+/* the row above a grid: eyebrow and title left, "All services" right. The title's last line can run
+   right up to the link, so the column gap is the whole distance between them: 24px read as touching
+   (client, 2026-09-23). The row gap is for a phone, where the link wraps under the title. */
+.sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px 48px;flex-wrap:wrap;margin:0 0 28px}
 .sec-head>div{flex:1 1 320px;min-width:0}   /* or a long title's max-content basis wraps the link onto its own row */
-.sec-head .section-title{margin:0}
+.sec-head .section-title{margin:0;text-wrap:balance}   /* the gap above makes a long title wrap; this stops it stranding one word */
 .sec-head .eyebrow{margin:0 0 10px}
 .sec-link{font:600 15px/1 var(--body);color:var(--black);text-decoration:none;white-space:nowrap}
 .sec-link:hover{color:var(--blue)}
