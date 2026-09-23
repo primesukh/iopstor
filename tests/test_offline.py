@@ -3113,6 +3113,20 @@ def test_a_short_testimonial_does_not_pad_out_with_dead_air():
     assert "align-content:start" not in card
 
 
+def test_a_service_card_shows_the_picture_it_was_given():
+    """"Featured image is not being shown in the services page" (2026-09-23). The <img> was always in
+    the HTML: a bare .pl hides every .card-img and each .pl-<type> puts its own back, and services
+    never did, because the mock's services list has no pictures. The empty placeholder stays hidden,
+    so a service with no picture keeps the card it had. On /services the picture is one more row in
+    the words column, and the child tiles beside them must span every row the card defines or they
+    stop short of the bottom."""
+    css = _site_css()
+    assert "display:block" in css.split(".pl-service .card-img:not(.card-img-empty){")[1].split("}")[0]
+    rows = css.split(".arch-body.pl-service .card{")[1].split("grid-template-rows:")[1].split(";")[0]
+    kids = css.split(".arch-body.pl-service .chips-kids{")[1].split("grid-row:")[1].split(";")[0]
+    assert kids == f"1 / span {len(rows.split())}"
+
+
 def test_the_mega_menu_keeps_the_order_both_layouts_depend_on():
     """One markup order serves two behaviours, and swapping it breaks both silently. The desktop
     panel opens a pane with `.mega-g:hover+.mega-pane`, which needs the link IMMEDIATELY before its
