@@ -107,9 +107,11 @@ EDITOR = {
                 "per_row": [["", "As many as fit the width"],
                             ["even", "Even rows, in as few lines as it can"]]
                            + [[str(n), f"{n} per row"] for n in range(2, 9)],
-                # "" is not "cards": it is the shape _acc() picks for the type, which is the
-                # accordion for a top-level services list and cards for everything else.
-                "list_style": [["", "Automatic"], ["cards", "Cards"], ["accordion", "Accordion"]],
+                # "" is not "cards": it is the shape _acc() and _rail() pick for the type -- the
+                # accordion for a top-level services list, a sliding row for testimonials and
+                # products, cards for everything else.
+                "list_style": [["", "Automatic"], ["cards", "Cards"], ["accordion", "Accordion"],
+                               ["rail", "Sliding row"]],
                 # the accordion's open row. Compared against these literals in the template, never
                 # interpolated -- the same rule hero.arrange follows.
                 "open_tone": [["", "Black"], ["blue", "Blue"], ["light", "Light grey"]]},
@@ -454,12 +456,9 @@ def render_blocks(blocks, edit=False, path="0", h1=True):
                 # pt_slug comes from the DB lookup, never from b["data"], so the class it becomes in
                 # the template cannot be anything an editor typed.
                 posts, pt_slug = _post_list(b["data"])
-                # cols is computed here, never taken from the data, so the class is ours
-                # rail is decided here for the same reason cols is: it depends on pt_slug, which came
-                # from the row rather than the data. ponytail: one type is named. Make it a "Sliding
-                # row" checkbox on the block when a second type wants one.
+                # cols, rail and acc are computed here, never taken from the data, so the classes are ours
                 extra = {"posts": posts, "pt_slug": pt_slug, "cols": _cols(b["data"], len(posts)),
-                         "rail": pt_slug == "testimonial", "acc": _acc(b["data"], pt_slug)}
+                         "rail": _rail(b["data"], pt_slug), "acc": _acc(b["data"], pt_slug)}
             elif b["type"] == "warranty_check":
                 extra = {"found": None if edit else _warranty()}  # the admin canvas gets the bare form, never a lookup
             elif b["type"] == "columns":
@@ -659,6 +658,14 @@ def _acc(data, pt_slug):
     pt_slug comes from the resolved post_types row, so nothing an editor typed reaches the markup."""
     v = (data.get("list_style") or "").strip()
     return v == "accordion" or (v == "" and pt_slug == "service" and bool(data.get("top_level")))
+
+
+def _rail(data, pt_slug):
+    """Is this list the sliding row? The same shape as _acc(): an editor's List style wins, and ""
+    (Automatic) is the row for testimonials (2026-09-16) and products (client, 2026-09-23: "the
+    appliances should be limited and should be scrollable just like testimonials")."""
+    v = (data.get("list_style") or "").strip()
+    return v == "rail" or (v == "" and pt_slug in ("testimonial", "product"))
 
 
 def _post_list(data):
