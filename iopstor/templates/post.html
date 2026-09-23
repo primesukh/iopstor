@@ -107,7 +107,7 @@
   {% if children %}
   <section class="section t-grey siblings"><div class="wrap">
     <h2 class="section-title">{% if siblings %}Other {{ crumbs[-2][0] }} services{% else %}{{ post.title }} solutions{% endif %}</h2>
-    <div class="tiles">{% for c in children %}<a href="{{ c.path }}">{{ c.title }} <i aria-hidden="true">&rarr;</i></a>{% endfor %}</div>
+    <div class="tiles">{% for c in children %}<a href="{{ c.path }}">{{ c.title }}</a>{% endfor %}</div>
   </div></section>
   {% endif %}
 </article>

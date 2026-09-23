@@ -6,7 +6,7 @@
 <section class="section pl pl-{{ pt_slug }}{% if rail %} pl-rail{% endif %}{% if cols %} pl-cols-{{ cols }}{% endif %}{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
   {% if data.heading or data.eyebrow or data.link_url or edit %}<div class="sec-head">
     <div>{% if data.eyebrow or edit %}<p class="eyebrow"{{ fe('eyebrow') }}>{{ data.eyebrow }}</p>{% endif %}{% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}</div>
-    {% if data.link_url %}<a class="sec-link" href="{{ data.link_url }}"{{ fe('link_label') }}>{{ data.link_label or 'See all' }} &rarr;</a>{% endif %}
+    {% if data.link_url %}<a class="sec-link" href="{{ data.link_url }}"{{ fe('link_label') }}>{{ data.link_label or 'See all' }}</a>{% endif %}
   </div>{% endif %}
   {#- The accordion (List style, and the default for a top-level services list — blocks._acc()).
       One open at a time with no script: the rows are radio buttons of one name, so the browser
