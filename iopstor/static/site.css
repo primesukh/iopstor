@@ -826,23 +826,27 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
   font:800 110px/1 var(--head);color:var(--grey);pointer-events:none}
 .pl-testimonial .card>*{position:relative;z-index:1}
 
-/* The row itself, and never on the archive -- /testimonials is the full list, so it stays a grid.
-   The same :not(.arch-body) split .pl-partner makes.
+/* The sliding row: testimonials, and product lists since 2026-09-23 -- `pl-rail` is set by blocks._rail()
+   and only ever by post_list, so an archive (/testimonials, /products: the full lists) stays a grid.
+   The centred heading is the testimonials' own look and is keyed to them, not to the row.
    .cards stops being a grid and becomes the scroll container: that one line is what gives the wheel,
    a trackpad and a finger on a phone real control of the row with no script involved. site.js only
    adds the arrows, the dots and the drift on top of it. The scrollbar is hidden because the dots say
    the same thing; the scrolling itself is untouched. */
 .pl-testimonial:not(.arch-body) .sec-head{justify-content:center;text-align:center}
 .pl-testimonial:not(.arch-body) .sec-head .eyebrow{margin:0}
+/* padding-top + the matching negative margin: a product card is a link, and a.card:hover lifts it 2px,
+   which a scroll container clips. The pair leaves the row exactly where it was. */
+.pl-rail .cards{display:flex;grid-template-columns:none;gap:20px;
+  overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding:4px 0;margin-top:-4px}
 /* `safe center` and not plain `center`: two published quotes do not fill the row, and left-aligned
    under a centred heading they read as a layout that broke. Plain `center` would fix that and break
    the overflowing case instead -- a centred flex line puts its overflow on BOTH sides and the first
    card becomes unreachable, because a scroll container cannot scroll to a negative offset. `safe`
    is the keyword for exactly this: centre while it fits, fall back to flex-start the moment it does
    not. Measured both ways below. */
-.pl-testimonial:not(.arch-body) .cards{display:flex;grid-template-columns:none;gap:20px;justify-content:safe center;
-  overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:4px}
-.pl-testimonial:not(.arch-body) .cards::-webkit-scrollbar{display:none}
+.pl-testimonial.pl-rail .cards{justify-content:safe center}
+.pl-rail .cards::-webkit-scrollbar{display:none}
 /* A phone shows one card and a slice of the next, and the slice is what says "there are more" before
    anybody has touched it -- so it is the SLICE that is held constant, not the card. `100%` on a
    flex-basis resolves against the rail's inner width, so the card takes everything except a fixed
@@ -851,7 +855,11 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
    with the viewport, so the peek fell away exactly when it was needed most -- measured 41px at 390,
    34px at 360, 23px at 320. Now it is 48px at all three.
    Not `100vw`: that includes the scrollbar, and would put back the very overflow `.hero` fixes. */
-.pl-testimonial:not(.arch-body) .card{flex:0 0 min(340px, 100% - 68px);scroll-snap-align:start}
+.pl-rail .card{flex:0 0 min(340px, 100% - 68px);scroll-snap-align:start}
+/* The first card sits flush with the scroller's left edge, and a scroller clips whatever is outside
+   it -- so the browser's own focus ring, drawn just outside the card, lost its left side. Inside the
+   edge instead, the same ring the accordion's rows use. Only a link card can take focus at all. */
+.pl-rail a.card:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
 .rail-nav{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:28px}
 /* This line is load-bearing, not tidiness. The nav is served with `hidden` so a blocked script
    leaves no dead buttons, and site.js also re-hides it when the row has nothing to scroll (two

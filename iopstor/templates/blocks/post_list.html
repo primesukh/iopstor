@@ -38,9 +38,9 @@
       .rail-dots is left empty on purpose. One dot per card would be wrong: at 1440 the row shows
       about three at a time, so the last few would all point at the same end position. How many stops
       there really are depends on measured widths, which only the browser knows. #}
-  {%- if rail %}<div class="rail-nav" hidden>
-    <button type="button" class="rail-arrow" data-rail="-1" aria-label="Previous testimonials">&lsaquo;</button>
+  {%- if rail %}{% set noun = {'testimonial': 'testimonials', 'product': 'products'}.get(pt_slug, 'items') %}<div class="rail-nav" hidden data-noun="{{ noun }}">
+    <button type="button" class="rail-arrow" data-rail="-1" aria-label="Previous {{ noun }}">&lsaquo;</button>
     <span class="rail-dots"></span>
-    <button type="button" class="rail-arrow" data-rail="1" aria-label="More testimonials">&rsaquo;</button>
+    <button type="button" class="rail-arrow" data-rail="1" aria-label="More {{ noun }}">&rsaquo;</button>
   </div>{% endif %}
 </div></section>

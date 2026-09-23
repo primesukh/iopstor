@@ -334,20 +334,22 @@ editor it is a section nobody can see to hover, drag or delete.
 
 `post_list` gained `eyebrow`, `link_label` and `link_url` (the "All services" link in a section header), and **`per_row`** (2026-09-16), and `render_blocks()` hands its template a **`pt_slug`** extra alongside `posts` and **`cols`**. `per_row` is a `choice`: empty keeps the width-driven `auto-fit` every list had before, `even` asks `even_cols()` to work the count out from `len(posts)`, and `2`–`8` pin it. `even_cols()` sorts the counts 4–8 by **rows first** (2026-09-21), then by the fullest last row, then widest: 15 → 8 (8 + 7 in two lines) rather than the exact divisor 5 (5 + 5 + 5 in three), 20 → 7 (7 + 7 + 6) rather than 5×4. An exact divisor still wins whenever it costs no extra row — 14 is 7 + 7 and 16 is 8 + 8, unchanged — and fewer items than a row holds are one row of themselves. **Rows used to be the last consideration rather than the first**, which is what made a fifteenth partner turn a two-line logo strip into three (measured at 1440: the grid went 140px → 216px and every mark grew, 103×28 → 159×44, the opposite of a quiet strip). The trade is deliberate and reverses the 2026-09-16 *“all line should have same number of partners”*: a last line one short beats a whole extra line. `test_even_rows_take_the_fewest_rows_then_the_fullest_last_row` pins the ordering across 9–59 and `test_a_fifteenth_partner_puts_the_logo_strip_on_two_lines` pins the whole chain, fifteen posts in to `pl-cols-8` on the section. The number reaches the template as `cols` and becomes `pl-cols-<n>` on the section — **computed in `_cols()`, never read from the block's data**, which is why it is safe in a class name, the same rule `pt_slug` follows. `per_row` is in `_NON_TEXT_KEYS`, so it neither leaks into `llms-full.txt` nor gets co-edited as prose. The CSS applies the fixed track count only above **760px** and never inside a `.column`: a fixed count in half the width squashes the tracks, and a phone has to wrap by width. That becomes `pl-<slug>` on the section, and `site.css` styles one card per post type from it — the number for services, the logo for partners, the 16:9 picture and date for blog posts, the industry/solution chips for case studies. One template, the variants in CSS. `pt_slug` comes from the resolved `post_types` row, never from the block's own data, so it is safe in a class name.
 
-**`rail` (2026-09-16) is the third computed extra**, and it is `pt_slug == "testimonial"` — a `post_list` of
-testimonials renders as a sliding row rather than a grid. It is decided in `render_blocks()` beside `cols` and for
-the same reason: it depends on the resolved type, so it can never be something an editor typed. It adds `pl-rail`
-to the section and a `.rail-nav` after the cards, and `§12`'s *The sliding row* has the mechanism. There is
-deliberately **no "Sliding row" checkbox** on the block — one content type wants this, and a field nobody sets is
-a field that still has to be validated, seeded, labelled and tested (`# ponytail:` in `blocks.py` names the
-upgrade path).
+**`rail` (2026-09-16) is the third computed extra**: a `post_list` that renders as a sliding row rather than a
+grid. `_rail(data, pt_slug)` answers it, beside `_acc()` and in the same shape — the editor's `list_style` wins
+(`rail`, *Sliding row*, works on any type; `cards` turns it off), and `""` (Automatic) is the row for
+**testimonials** (2026-09-16) and **products** (client, 2026-09-23: *"the appliances should be limited and should
+be scrollable just like testimonials"*). It began as `pt_slug == "testimonial"` with no control and a `# ponytail:`
+naming a *Sliding row* control as the upgrade once a second type wanted it; products were that type, and the control
+is a List style choice rather than a checkbox because a list is exactly one shape at a time. It adds `pl-rail` to the
+section and a `.rail-nav` after the cards, carrying `data-noun` (*testimonials*, *products*, else *items*) for the
+arrows' and dots' labels, and `§12`'s *The sliding row* has the mechanism.
 
 **`acc` (2026-09-21) is the fourth computed extra**, and it is the second type of list this block can draw: the
 **services accordion**, the client's design option 1a. `_acc(data, pt_slug)` answers it, beside `_cols()` and for
-the same reason — the resolved type is part of the answer, so it cannot be something an editor typed. Unlike
-`rail` there *is* a control, because the client asked for one: `list_style`, a `choice` of `""` / `cards` /
-`accordion`. **`""` is Automatic, not "cards"** — it means *the accordion for a top-level services list and cards
-for everything else*, which is the whole reason the home page changed shape with no migration and no edit to the
+the same reason — the resolved type is part of the answer, so it cannot be something an editor typed. The control
+is `list_style`, which the client asked for: a `choice` of `""` / `cards` / `accordion` / `rail` (*Sliding row*,
+2026-09-23). **`""` is Automatic, not "cards"** — it means *the accordion for a top-level services list, the sliding
+row for testimonials and products, and cards for everything else*, which is the whole reason the home page changed shape with no migration and no edit to the
 row. `list_style` is in `_NON_TEXT_KEYS` beside `per_row`, so it neither reaches `llms-full.txt` nor gets
 co-edited as prose. **`open_tone` is the second control** (same day, *"also give option to change the inside color
 as well (black)"*): a `choice` of `""` / `blue` / `light` that `post_list.html` **compares** against those two
@@ -1363,11 +1365,12 @@ The transitions are in the `prefers-reduced-motion` block at the end of the file
 ### The sliding row
 
 `static/site.js` is the public site's only first-party script, it is ~5 KB unminified, it is `defer`-loaded from
-`base.html`, and it touches nothing but `.pl-rail` sections. It exists because the client asked for testimonials
+`base.html`, and it touches nothing but `.pl-rail` sections — testimonials, and since 2026-09-23 product lists (the
+home page's appliances): the same row reused, not a second feature. It exists because the client asked for testimonials
 that scroll on their own *and* that a visitor can drive — arrows and dots, which nothing in CSS can do (2026-09-16,
 `requirements.md`).
 
-**The row works without it, and that is the design.** `.pl-testimonial:not(.arch-body) .cards` is
+**The row works without it, and that is the design.** `.pl-rail .cards` is
 `display:flex; overflow-x:auto; scroll-snap-type:x mandatory` — a native scroll container. The wheel, a trackpad and
 a finger on a phone all move it on a page served with scripts blocked, and the snap settles it on a card. What the
 script adds on top is the drift, the arrows, the dots and click-drag. `post_list.html` therefore renders `.rail-nav`
@@ -1429,6 +1432,21 @@ Click-drag sets `scroll-snap-type:none` and `user-select:none` for the duration 
 and sits out `pointerType === 'touch'` entirely — the browser's own touch scrolling is better than anything this
 would do. `admin/canvas.html` does not extend `base.html`, so **the editor canvas gets the row as a plain scroller**
 with no arrows and no drift, which is deliberate: autoplay under somebody's caret is hostile.
+
+**A product card is a link, and a testimonial never was** (2026-09-23), which the drag had never been tested
+against. Three things in `site.js` follow from it, and `test_the_row_drags_without_breaking_a_card_that_is_a_link`
+greps for each. **The pointer is captured only after 6px of movement**, never on `pointerdown`: with capture set,
+the click that follows is targeted at the capturing element (the row), not the card under the pointer, so a plain
+click would have stopped opening the product in Chrome. **The click that ends a real drag is swallowed** by a
+capture-phase listener on the row, and `dragging` is cleared on the next tick, after that click. **`dragstart` is
+refused**, because links and pictures are natively draggable and the browser's own drag would take the gesture over
+a few pixels in. Measured in Firefox 140 headless with synthetic pointer events on the served home page: a plain
+click reaches the page unprevented, a click after a 60px drag is swallowed, `dragstart` on a card picture is
+prevented. **Not measured: a real mouse in Chrome** — the Playwright Chromium here segfaults inside the command
+sandbox. Two CSS consequences as well: `a.card:hover` lifts a card 2px, which a scroll container clips, so the row is
+`padding:4px 0; margin-top:-4px` (a net zero the testimonials measured identical under, 28.0px below the heading at
+1440 both ways); and the browser's focus ring, drawn just outside the card, lost the first card's left side to the
+same clipping, so `.pl-rail a.card:focus-visible` draws the accordion's inset ring instead.
 
 ### The testimonial card
 
@@ -2231,8 +2249,8 @@ up a real `logo_url` from a previous test and the suite failed only when run who
 **The testimonial row has four offline tests**, all monkeypatching `blocks._post_list` so no Supabase is needed:
 `test_a_rating_is_clamped_to_five_stars_and_absent_when_unset` (9 → five marks, −3 → none, and no rating renders no
 `.stars` at all), `test_a_testimonial_card_with_only_a_name_renders_nothing_else` (every other field blank leaves no
-empty `<p>` and no stray comma), `test_only_a_testimonial_list_becomes_a_sliding_row` (`pl-rail` and the `hidden`
-nav, and a `partner` list getting neither — it asserts the dots box ships **empty**, since the browser builds them),
+empty `<p>` and no stray comma), `test_testimonials_and_products_slide_and_the_editor_can_say_otherwise` (the `_rail()` truth table, `pl-rail` and
+the `hidden` nav with its `data-noun` for both types, and a `partner` list getting neither — it asserts the dots box ships **empty**, since the browser builds them),
 and `test_a_post_with_no_page_still_reaches_the_md_twin`. What none of them can cover is the drift, hover-pause,
 click-drag, the wheel and a real finger: those are measured in a browser (§12 *The sliding row*) and listed as
 user-only in the PR, the way `/collab-check` does it.
@@ -2628,9 +2646,8 @@ Marked in code with `# ponytail:` comments.
 - **A hard-deleted post loses its type on the screen** and falls back to "page or post" — `_post_context()` resolves the type from the row. Production never hard-deletes a post (deleting trashes it), so this only shows for rows the test cleanup removes.
 - **A restore is not pre-checked against what it references.** Putting back a version whose featured image or parent page has since been deleted fails on the foreign key and surfaces through `_pg_error` as a 502 page rather than a sentence.
 - **`/admin/audit` pages with offset/limit** like every other admin list. Deep pages get slower; keyset pagination if that day comes.
-- **The sliding row is hard-coded to one content type.** `render_blocks()` sets `rail = pt_slug == "testimonial"`; nothing else can ask for it. A "Sliding row" checkbox on the `post_list` block is the upgrade, and it is deliberately not built yet — a field costs validation, a seed entry, a label, an `EDITOR["widgets"]` line and a test, and exactly one type wants this.
 - **The feed over-fetches 2× rather than paging.** `feed()` asks for `FEED_MAX * 2` rows and slices to `FEED_MAX` after `_indexable()`, because filtering a list that was already truncated is what let one `noindex` post shorten the feed. `FEED_MAX` consecutive `noindex` posts would still come up short; page the query if that ever happens.
-- **`site.js` has no error boundary and no feature detection.** It is 45 lines against `scrollTo`, pointer events and `matchMedia`, all of which every browser the client's visitors use has had for years; if any of it throws, the row silently stays a plain native scroller, which is the state the page is served in anyway. That is the whole reason the controls ship `hidden` and the script unhides them.
+- **`site.js` has no error boundary and no feature detection.** It is ~150 lines against `scrollTo`, pointer events and `matchMedia`, all of which every browser the client's visitors use has had for years; if any of it throws, the row silently stays a plain native scroller, which is the state the page is served in anyway. That is the whole reason the controls ship `hidden` and the script unhides them.
 
 Shared editing (§12.3), all of them named in `admin.js`:
 

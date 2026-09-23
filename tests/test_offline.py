@@ -3037,21 +3037,46 @@ def test_a_testimonial_card_with_only_a_name_renders_nothing_else(app, monkeypat
     assert ">Acme<" in html and ", " not in html.split('card-where">')[1].split("<")[0]
 
 
-def test_only_a_testimonial_list_becomes_a_sliding_row(app, monkeypatch):
+def test_testimonials_and_products_slide_and_the_editor_can_say_otherwise(app, monkeypatch):
     """pl-rail and the arrows are what site.js looks for. They are decided in blocks.py from the
-    resolved post type, never from block data, and no other type gets them."""
+    resolved post type and the editor's List style, never from free text: testimonials slide
+    (2026-09-16), products since the client asked for the home page's appliances to (2026-09-23)."""
+    from iopstor.blocks import _rail
+    assert _rail({}, "testimonial") is True and _rail({}, "product") is True   # Automatic
+    assert _rail({}, "partner") is False and _rail({}, "service") is False
+    assert _rail({"list_style": "cards"}, "product") is False                  # the editor can say no...
+    assert _rail({"list_style": " rail "}, "case_study") is True               # ...or yes, on any type
+    assert _rail({"list_style": "accordion"}, "testimonial") is False
+
     html = _render_testimonials(app, monkeypatch, [_testimonial()])
     assert "pl-rail" in html and 'class="rail-nav" hidden' in html and 'data-rail="1"' in html
+    assert 'aria-label="More testimonials"' in html
     # the dots are built by the browser from measured widths, so the server sends the box empty
     assert '<span class="rail-dots"></span>' in html
 
     from iopstor import db
     monkeypatch.setattr(db, "settings", lambda: {})
     monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    monkeypatch.setattr(blocks, "_post_list", lambda data: ([], "product"))
+    with app.test_request_context():
+        html = render_blocks([{"type": "post_list", "data": {"post_type": "product"}}])
+    assert "pl-product pl-rail" in html and 'data-noun="products"' in html and 'aria-label="Previous products"' in html
     monkeypatch.setattr(blocks, "_post_list", lambda data: ([], "partner"))
     with app.test_request_context():
         html = render_blocks([{"type": "post_list", "data": {"post_type": "partner"}}])
     assert "pl-rail" not in html and "rail-nav" not in html
+
+
+def test_the_row_drags_without_breaking_a_card_that_is_a_link():
+    """A product card is a link and a testimonial never was. Two lines in site.js are what keep a
+    click opening the product and a drag not: the pointer is captured only once the hand has moved
+    (capture on pointerdown sends the plain click to the row, not the card), and the browser's own
+    drag of a link or a picture is refused, or it takes the gesture over after a few pixels."""
+    js = (pathlib.Path(__file__).parent.parent / "iopstor" / "static" / "site.js").read_text()
+    down = js[js.index("addEventListener('pointerdown'"):js.index("addEventListener('pointermove'")]
+    assert "setPointerCapture" not in down
+    assert "addEventListener('dragstart', function (e) { e.preventDefault(); })" in js
+    assert "if (dragging) { e.preventDefault(); e.stopPropagation(); }" in js   # the click after a drag
 
 
 def test_the_rail_controls_stay_hidden_without_the_script():
