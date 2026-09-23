@@ -19,7 +19,7 @@ from werkzeug.exceptions import HTTPException
 from . import db, display_name, seo, stress
 from .admin_api import apply_post
 from .auth import ROLES, _session_token, create_auth_user, current_user, delete_auth_user, login, set_password
-from .blocks import BLOCKS, EDITOR, LAYOUTS, OWN_HEAD_BLOCKS, _NON_TEXT_KEYS, at_path, blocks_text, owns_head, render_blocks, validate_blocks, warranty_active
+from .blocks import BLOCKS, EDITOR, LAYOUTS, OWN_HEAD_BLOCKS, TONES, _NON_TEXT_KEYS, at_path, blocks_text, owns_head, render_blocks, validate_blocks, warranty_active
 from .throttle import clear as throttle_clear, client_ip, connection, from_office, record_failure, retry_after, wait_text
 from .storage import delete_media, save_upload
 
@@ -291,6 +291,18 @@ def _form_body(pt, existing):
     # (a type with no long field never renders it); this one renders on every type, beside the
     # Featured image box every type has, so absence really is unticked.
     meta["_head_banner"] = "1" if f.get("head_banner") else ""
+    # The third, the band a service page ends on (public.related_for). Guarded like _details_at,
+    # because the group is drawn only for a type with parents -- but on a hidden marker, never on
+    # "Show", since an unticked box posts nothing and would read as "the form had no such control".
+    # `related_all` is every service the checkboxes offered, so what was unticked is what is left
+    # out; ids only, and the tone is kept only if it is one section_class() knows.
+    if "related_form" in f:
+        shown = set(f.getlist("related_pages"))
+        meta["_related"] = {"hide": not f.get("related_show"),   # a bool, so Activity reads Yes / No
+                            "heading": f.get("related_heading", "").strip()[:200],
+                            "text": f.get("related_text", "").strip()[:500],
+                            "tone": f.get("related_tone") if f.get("related_tone") in TONES else "",
+                            "skip": [int(x) for x in f.get("related_all", "").split() if x.isdigit() and x not in shown]}
     for field in pt.get("field_schema") or []:
         raw = f.get(f"meta_{field['key']}", "")
         if field.get("type") == "kv":
@@ -399,11 +411,22 @@ def _form_context(pt, post, errors=None, conflict=None):
         details_spots += [(str(i), f"After section {i} \u2014 {(EDITOR['names'].get(b.get('type')) or ('', b.get('type')))[1]}")
                           for i, b in enumerate(content, 1)]
         details_spots.append(("end", "At the very end"))
+    # The band a service page ends on: the services it could list and the heading it reads when the
+    # box is empty, from the same function the page draws with, so the checkboxes are exactly what a
+    # visitor would get. A new page has no id and so nothing to offer yet.
+    # ponytail: rendered once, with the page, like leads_with_own_head -- changing Parent above does
+    # not refresh the list until the next load.
+    related_list, related_auto = [], ""
+    if pt["hierarchical"] and post and post.get("title"):
+        from .public import related_pages  # local import: keeps admin_ui out of public.py's import graph
+        related_list, related_auto = related_pages({**post, "post_type": pt})
     return dict(pt=pt, post=post, errors=errors or {}, conflict=conflict, taxonomies=taxonomies, rt=_rt(pk),
                 has_draft=bool(draft), doc_state=(draft or {}).get("state") or "",
                 leads_with_own_head=leads_with_own_head, details_spots=details_spots,
                 details_at=str((post or {}).get("meta", {}).get("_details_at") or ""),
                 head_banner=bool((post or {}).get("meta", {}).get("_head_banner")),
+                related=(post or {}).get("meta", {}).get("_related") or {}, related_list=related_list,
+                related_auto=related_auto, related_tones=RELATED_TONES,
                 parents=[p for p in siblings if p["id"] != pk] if pt["hierarchical"] else [],
                 taken_slugs=[s["slug"] for s in siblings if s["id"] != pk],
                 media=media, term_ids=term_ids, blocks=BLOCKS, blocks_ui=EDITOR, layouts=list(LAYOUTS.items()), blocks_json=json.dumps(content, indent=2, ensure_ascii=False),
@@ -769,7 +792,7 @@ def preview():
     from the form as it stands, so a draft or an unsaved edit can be checked before saving. The public
     route cannot do this: db.live() gates every lookup on status='published' with no bypass.
     ?part=card returns just the search/social card from the same data."""
-    from .public import crumbs_for  # local import: keeps admin_ui out of public.py's import graph
+    from .public import crumbs_for, related_for  # local import: keeps admin_ui out of public.py's import graph
 
     pt = db.post_type(slug=request.args.get("type", "page")) or abort(404)
     pk = request.args.get("pk", type=int)
@@ -779,10 +802,10 @@ def preview():
     meta = {**seo.build_meta(post), "robots": "noindex,nofollow"}  # a preview must never be indexable
     if request.args.get("part") == "card":
         return render_template("admin/seo_card.html", meta=meta, site=seo.site())
-    children = (db.with_paths(db.rows(db.live(db.select_posts()).eq("parent_id", pk).order("menu_order").order("published_at", desc=True)))
-                if pk and pt["hierarchical"] else [])
     try:
-        return render_template("post.html", post=post, children=children, crumbs=crumbs, meta=meta,
+        # related_for(), not a copy: this used to build only a group's own services, so a leaf
+        # service -- NAS, "Other Storage services" -- previewed without the band its page ends on.
+        return render_template("post.html", post=post, related=related_for(post, pk), crumbs=crumbs, meta=meta,
                                jsonld=seo.jsonld(post, crumbs), preview=True)
     except Exception as e:
         # render_blocks(edit=False) re-raises by design. On the public site that is honest; here it
@@ -1113,6 +1136,10 @@ POST_KIND = {"page": "page", "post": "blog post", "service": "service", "case_st
              "event": "event", "partner": "technology partner", "datasheet": "datasheet",
              "product": "product", "testimonial": "testimonial"}
 
+# The closing band's Background, in the words a section's own Background control uses (admin.js
+# TONES). "grey" first because it is what the band has always been.
+RELATED_TONES = [("grey", "Light grey"), ("page", "Page background"), ("dark", "Dark"), ("blue", "Blue")]
+
 # column -> the label the editor already sees for it elsewhere in the admin
 FIELD = {"blocks": "The writing on the page", "title": "Title", "slug": "Web address",
          "status": "Status", "published_at": "Publish date", "excerpt": "Summary",
@@ -1127,7 +1154,11 @@ FIELD = {"blocks": "The writing on the page", "title": "Title", "slug": "Web add
          "remarks_public": "Show the remarks to the customer", "from_path": "Old address",
          "to_url": "Goes to", "code": "Redirect type", "hits": "Times followed",
          "url_prefix": "Address starts with", "field_schema": "Its own fields",
-         "has_pages": "Gets pages of its own", "in_sitemap": "Offered to search engines", "in_feed": "Included in the RSS feed"}
+         "has_pages": "Gets pages of its own", "in_sitemap": "Offered to search engines", "in_feed": "Included in the RSS feed",
+         # meta's reserved keys, which are not fields and so have no field_schema label to borrow
+         "_head_banner": "Title on the picture", "_details_at": "Where the long details go",
+         "_related": "Related services at the bottom", "hide": "Hidden", "heading": "Heading",
+         "text": "Text under the heading", "tone": "Background", "skip": "Services left out"}
 
 # post statuses and lead statuses both live in a `status` column, and the words are the ones the
 # Posts and Leads screens already use -- an editor should never meet "in_progress" here either
@@ -1376,7 +1407,11 @@ def _value(key, v, labels=None):
     if key.endswith("_media_id") or key == "featured_media_id":
         return escape((db.get_media(v) or {}).get("filename") or f"picture {v}")
     if key == "terms" and isinstance(v, list):
-        return escape(", ".join(_term_names(v)) or "none")
+        return escape(", ".join(_names(v)) or "none")
+    if key == "skip" and isinstance(v, list):
+        return escape(", ".join(_names(v, "posts", "title")) or "none")
+    if key == "tone":
+        return escape(dict(RELATED_TONES).get(v, v))
     if key == "items" and isinstance(v, list):
         return escape(", ".join(str(i.get("label") or "") for i in v if isinstance(i, dict)) or "none")
     if isinstance(v, dict):
@@ -1390,13 +1425,14 @@ def _value(key, v, labels=None):
     return escape(v)
 
 
-def _term_names(ids):
-    """Ids to names in one query, memoised for the page. Ids can outlive their terms -- deleting a
-    taxonomy cascades its terms away -- so an unresolved one keeps its number rather than vanishing."""
+def _names(ids, table="terms", col="name"):
+    """Ids to names in one query, memoised for the page -- a post's terms, or the services a page's
+    closing band leaves out. Ids can outlive their rows -- deleting a taxonomy cascades its terms
+    away -- so an unresolved one keeps its number rather than vanishing."""
     if not ids:
         return []
-    found = db._cached(f"audit_terms_{','.join(map(str, sorted(ids)))}",
-                       lambda: {r["id"]: r["name"] for r in db.rows(db.table("terms").select("id,name").in_("id", ids))})
+    found = db._cached(f"audit_{table}_{','.join(map(str, sorted(ids)))}",
+                       lambda: {r["id"]: r[col] for r in db.rows(db.table(table).select(f"id,{col}").in_("id", ids))})
     return [found.get(i, f"#{i}") for i in ids]
 
 

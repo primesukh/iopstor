@@ -104,10 +104,14 @@
     {%- elif meta_[f.key] is not string %}{% for r in meta_[f.key] %}<tr><th>{{ r.k }}</th><td>{{ r.v }}</td></tr>{% endfor %}{% endif %}
   </tbody></table></div></div>
   {% endfor %}
-  {% if children %}
-  <section class="section t-grey siblings"><div class="wrap">
-    <h2 class="section-title">{% if siblings %}Other {{ crumbs[-2][0] }} services{% else %}{{ post.title }} solutions{% endif %}</h2>
-    <div class="tiles">{% for c in children %}<a href="{{ c.path }}">{{ c.title }}</a>{% endfor %}</div>
+  {#- The band a service ends on. Whether it shows, its heading, its line of text, its background and
+      which services it lists are all public.related_for()'s answer, from the editor's settings --
+      this only draws it. `cls` arrives already through section_class()'s whitelist. -#}
+  {% if related %}
+  <section class="section{{ related.cls }} siblings"><div class="wrap">
+    <h2 class="section-title">{{ related.heading }}</h2>
+    {% if related.text %}<p class="lead">{{ related.text }}</p>{% endif %}
+    <div class="tiles">{% for c in related.pages %}<a href="{{ c.path }}">{{ c.title }}</a>{% endfor %}</div>
   </div></section>
   {% endif %}
 </article>

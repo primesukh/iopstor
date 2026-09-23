@@ -3357,7 +3357,7 @@ def test_a_row_of_figures_reads_on_the_light_band_and_on_a_dark_one():
     assert ".t-dark .stats li>span,.band-dark .stats li>span{color:var(--muted-dark)}" in css
 
 
-def _render_post(app, monkeypatch, post):
+def _render_post(app, monkeypatch, post, related=None):
     """post.html through base.html, which is the only way the page head is exercised at all. The
     three patches are exactly what public.py's app-wide context processor reaches for."""
     from flask import render_template
@@ -3366,7 +3366,7 @@ def _render_post(app, monkeypatch, post):
     monkeypatch.setattr(db, "get_menu", lambda slug: [])        # the header and footer menus
     monkeypatch.setattr(public, "_service_nav", lambda: None)   # the mega panel's own posts query
     with app.test_request_context("/case-studies/klpl"):
-        return render_template("post.html", post=post, children=[], siblings=False, meta={}, jsonld=[],
+        return render_template("post.html", post=post, related=related, meta={}, jsonld=[],
                                crumbs=[("Home", "/"), ("Case Studies", "/case-studies"), ("KLPL", "/case-studies/klpl")])
 
 
@@ -3481,6 +3481,77 @@ def test_unticking_the_banner_box_is_saved_as_false_not_as_missing(app):
         assert _form_body(pt, post)["meta"]["_head_banner"] == "1"
     with app.test_request_context("/admin/posts/7", method="POST", data=base):
         assert _form_body(pt, post)["meta"]["_head_banner"] == ""     # cleared, not left as it was
+
+
+def _kid(i, title):
+    return {"id": i, "title": title, "path": "/services/storage/" + title.lower()}
+
+
+def test_the_related_band_follows_the_page_settings(monkeypatch):
+    """"Add an option if we want to show this Storage solutions / other storage solutions section or
+    not and ability to customize this as well" (2026-09-23). One function answers for post.html, the
+    .md twin and the editor's Preview -- the rule owns_head() exists for. Preview had its own copy
+    that built only the group case, so on a leaf service it never showed the band the page ends on."""
+    from iopstor import db, public
+    kids = {1: [_kid(2, "NAS"), _kid(3, "DAS"), _kid(4, "SAS")]}
+    monkeypatch.setattr(public, "_kids", lambda pid: kids.get(pid, []))
+    monkeypatch.setattr(db, "ancestors", lambda post: [("Storage", "/services/storage")])
+    svc = {"slug": "service", "hierarchical": True}
+    group = {"id": 1, "title": "Storage", "parent_id": None, "post_type": svc, "meta": {}}
+    leaf = {"id": 2, "title": "NAS", "parent_id": 1, "post_type": svc, "meta": {}}
+
+    r = public.related_for(group)
+    assert r["heading"] == "Storage solutions" and [p["id"] for p in r["pages"]] == [2, 3, 4]
+    assert (r["cls"], r["text"]) == (" t-grey", "")           # with no settings, the band it always was
+    r = public.related_for(leaf)
+    assert r["heading"] == "Other Storage services" and [p["id"] for p in r["pages"]] == [3, 4]
+    # the Preview's post carries no id -- an unsaved page has none -- so the id comes in beside it
+    assert [p["id"] for p in public.related_for(dict(leaf, id=None), pk=2)["pages"]] == [3, 4]
+
+    def set_(**s):
+        return public.related_for(dict(leaf, meta={"_related": s}))
+    assert set_(hide=True) is None
+    assert [p["id"] for p in set_(skip=[3])["pages"]] == [4]
+    assert set_(skip=[3, 4]) is None                           # nothing left, so no empty grey strip
+    r = set_(heading="More from us", text="Pick one.", tone="dark")
+    assert (r["heading"], r["text"], r["cls"]) == ("More from us", "Pick one.", " t-dark")
+    assert set_(tone='grey" onclick="x')["cls"] == " t-grey"  # compared against the whitelist, never written
+    assert public.related_for(dict(group, post_type={"slug": "page", "hierarchical": False})) is None
+
+
+def test_the_post_form_saves_the_related_band(app):
+    """Written only when the form carried the group, and the marker says so rather than the checkbox:
+    an unticked box posts nothing, and the JSON API posts no form at all -- so without the marker
+    either would blank the settings on every save. `skip` holds the services left OUT, which is what
+    lets a service added to the group later show up on every sibling page without editing them."""
+    from iopstor.admin_ui import _form_body
+    svc = {"slug": "service", "hierarchical": True, "field_schema": []}
+    post = {"meta": {"_related": {"heading": "Kept"}}}
+    base = {"title": "T", "slug": "t", "status": "published"}
+    form = dict(base, related_form="1", related_heading=" More from us ", related_text="Pick one.",
+                related_tone="blue", related_all="2 3 4")
+    with app.test_request_context("/admin/posts/7", method="POST",
+                                  data=dict(form, related_show="1", related_pages=["2", "4"])):
+        assert _form_body(svc, post)["meta"]["_related"] == {
+            "hide": False, "heading": "More from us", "text": "Pick one.", "tone": "blue", "skip": [3]}
+    with app.test_request_context("/admin/posts/7", method="POST", data=dict(form, related_tone="junk")):
+        r = _form_body(svc, post)["meta"]["_related"]
+        assert (r["hide"], r["tone"], r["skip"]) == (True, "", [2, 3, 4])   # unticked Show, junk tone
+    with app.test_request_context("/admin/posts/7", method="POST", data=base):
+        assert _form_body(svc, post)["meta"]["_related"] == {"heading": "Kept"}   # untouched, not blanked
+        assert "_related" not in _form_body({"slug": "page", "field_schema": []}, None)["meta"]
+
+
+def test_the_related_band_draws_what_related_for_returns(app, monkeypatch):
+    """post.html only draws; every decision is related_for()'s. The class arrives already
+    whitelisted and the words are autoescaped like every other field an editor types."""
+    band = {"heading": "More <b>from</b> us", "text": "Pick one.", "cls": " t-dark",
+            "pages": [{"title": "DAS", "path": "/services/storage/das"}]}
+    html = _render_post(app, monkeypatch, _service(), related=band)
+    assert '<section class="section t-dark siblings">' in html
+    assert ">More &lt;b&gt;from&lt;/b&gt; us</h2>" in html
+    assert '<p class="lead">Pick one.</p>' in html and 'href="/services/storage/das"' in html
+    assert "siblings" not in _render_post(app, monkeypatch, _service())
 
 
 def test_owns_head_is_the_one_answer_three_callers_share():
@@ -4201,7 +4272,7 @@ def _render_menu(app, monkeypatch):
         return render_template("post.html", post={"title": "x", "blocks": [], "meta": {}, "terms": [],
                                                   "post_type": {"slug": "page", "name": "Pages"},
                                                   "featured_media": None, "excerpt": "", "published_at": None},
-                               children=[], siblings=False, meta={}, jsonld=[], crumbs=[("Home", "/")])
+                               related=None, meta={}, jsonld=[], crumbs=[("Home", "/")])
 
 
 def test_the_services_panel_is_one_column_per_group_with_every_service_showing(app, monkeypatch):
