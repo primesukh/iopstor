@@ -842,7 +842,8 @@ def test_media_is_served_by_the_app_not_the_storage_gateway(app, client, monkeyp
     monkeypatch.setattr(db, "get_menu", lambda slug: [])
     monkeypatch.setattr(db, "post_type", lambda **kw: None)
     monkeypatch.setattr(db, "table", lambda *a, **k: 1 / 0)  # a media request must not query PostgREST
-    monkeypatch.setattr(storage, "fetch", lambda key: b"\x89PNG" + key.encode())
+    heads = {".png": b"\x89PNG", ".pdf": b"%PDF-1.4 ", ".svg": b'<svg xmlns="http://www.w3.org/2000/svg">'}
+    monkeypatch.setattr(storage, "fetch", lambda key: heads[key[key.rindex("."):]] + key.encode())
 
     r = client.get("/media/2026/09/abc.png")
     assert r.status_code == 200 and r.data == b"\x89PNG2026/09/abc.png"
@@ -864,6 +865,45 @@ def test_media_is_served_by_the_app_not_the_storage_gateway(app, client, monkeyp
     monkeypatch.setattr(storage, "fetch", lambda key: 1 / 0)  # reaching Storage for these is a bug
     assert client.get("/media/2026/09/notes.txt").status_code == 404      # not an allowed type
     assert client.get("/media/%2e%2e/%2e%2e/etc/passwd.png").status_code == 404  # nothing climbs out of the bucket
+
+
+def test_a_picture_is_the_type_its_bytes_say_not_its_name(app, client, monkeypatch):
+    """The Nvidia partner logo was WebP bytes uploaded as nvidia.svg, stored under .svg and served as
+    image/svg+xml. Firefox sniffed it and drew it; Chrome reads an SVG type as a drawing and nothing else,
+    and showed the alt text. The name still decides what may be uploaded and what is servable; the bytes
+    decide the stored ending, the recorded type and the header."""
+    from werkzeug.datastructures import FileStorage
+    from iopstor import db, storage
+
+    webp = b"RIFF\x50\x00\x01\x00WEBPVP8L" + b"\x00" * 32
+    assert storage.sniff(webp) == "image/webp"
+    assert storage.sniff(b"\x89PNG\r\n\x1a\n") == "image/png"
+    assert storage.sniff(b"\xff\xd8\xff\xe0\x00\x10JFIF") == "image/jpeg"
+    assert storage.sniff(b"GIF89a") == "image/gif" and storage.sniff(b"%PDF-1.3") == "application/pdf"
+    assert storage.sniff(b'<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"/>') == "image/svg+xml"
+    assert storage.sniff(b"\x00\x00\x00 ftypavif<svg") is None   # binary with "<svg" in it is not an SVG
+    assert storage.sniff(b"hello") is None                          # nothing known: the name's type stands
+
+    # served: the header follows the bytes, and the SVG sandbox goes with the SVG type, not the name
+    monkeypatch.setattr(storage, "fetch", lambda key: webp)
+    r = client.get("/media/2026/09/nvidia.svg")
+    assert r.status_code == 200 and r.mimetype == "image/webp"
+    assert "Content-Security-Policy" not in r.headers
+    monkeypatch.setattr(storage, "fetch", lambda key: b'<svg xmlns="http://www.w3.org/2000/svg"/>')
+    r = client.get("/media/2026/09/logo.png")
+    assert r.mimetype == "image/svg+xml" and r.headers["Content-Security-Policy"] == "default-src 'none'; sandbox"
+
+    # uploaded: stored under the ending its bytes have, and the editor's file name is kept
+    put = {}
+    class Bucket:
+        def upload(self, key, data, opts):
+            put.update(key=key, type=opts["content-type"])
+    monkeypatch.setattr(storage, "_bucket", lambda: Bucket())
+    monkeypatch.setattr(db, "insert", lambda table, row: row)
+    with app.test_request_context():
+        row = storage.save_upload(FileStorage(io.BytesIO(webp), filename="nvidia.svg"))
+    assert put["key"].endswith(".webp") and put["type"] == "image/webp"
+    assert row["mime"] == "image/webp" and row["url"].endswith(".webp") and row["filename"] == "nvidia.svg"
 
 
 def test_media_public_address_is_one_url_whichever_shape_the_row_is_in(app, client, monkeypatch):

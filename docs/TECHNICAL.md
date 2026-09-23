@@ -34,7 +34,7 @@ iopstor/__init__.py   create_app(), /healthz, blueprint + CLI registration, Jinj
 iopstor/config.py     env → Flask config. A plain module, not a class.
 iopstor/db.py         supabase-py clients + every query helper. The single data-access seam.
 iopstor/auth.py       GoTrue login/refresh/logout, verify_jwt(), require_role(), create_auth_user()
-iopstor/storage.py    save_upload() / delete_media() → Supabase Storage bucket + media table.
+iopstor/storage.py    save_upload() / delete_media() → Supabase Storage bucket + media table; sniff() = the type the bytes are.
                       public_path() is the address the site serves an object at, fetch() reads the bytes back.
 iopstor/blocks.py     BLOCKS registry, validate_blocks(), render_blocks(), blocks_text(), blocks_md()
 iopstor/seo.py        site(), build_meta(), jsonld(), md_url()
@@ -657,6 +657,26 @@ The extension is looked up in `storage.EXT` (the reverse of `ALLOWED`), which bo
 and whitelists what is servable: anything else 404s before Storage is touched, as does a key containing
 `..`. Only `StorageApiError` becomes a 404 — a gateway that is down must still be a 500, not a lie about a
 missing file.
+
+**The extension is the gate; the bytes are the `Content-Type`.** `media_file()` sends `storage.sniff(data) or`
+the extension's type, and uploads go the same way (`save_upload()` and `flask import-media`: the name must be an
+allowed type, then `sniff()` picks the stored ending and the recorded `mime`, while `filename` keeps what the
+editor chose). Reported 2026-09-23 as *"in chrome nvidia image is not visible … but in firefox … its visible"*:
+the Nvidia partner logo was WebP bytes (`RIFF…WEBPVP8L`) uploaded as `nvidia.svg`, so it was keyed `.svg` and
+served `image/svg+xml`. **For a raster a wrong label costs nothing** — a browser picks the decoder from the bytes,
+which is why a JPEG and an AVIF sitting under `.png` keys on the same deployment show everywhere — **but an
+`+xml` type is never sniffed** (WHATWG MIME Sniffing: an XML type is the computed type as supplied), so Chrome
+handed the WebP to its SVG parser and drew the alt text, while Firefox's image loader sniffs regardless. The
+SVG `sandbox` CSP below had nothing to do with it; it never applies to `<img>`. `sniff()` checks PNG, JPEG,
+GIF, WebP and PDF by signature first and SVG last — `<svg` in the first 4 KB, and only when that head has no
+NUL byte, so a binary that happens to contain the string is not read as a drawing. It returns `None` for
+anything else (AVIF, an Illustrator SVG whose DOCTYPE runs past 4 KB), and the extension's type stands, which
+is exactly the old behaviour. The CSP follows the *served* type, so an SVG hiding under `.png` is sandboxed too.
+`test_a_picture_is_the_type_its_bytes_say_not_its_name` pins the signatures, the header and the stored key.
+**Serving has to sniff as well as uploading**, because the file that was reported is already in the bucket
+under `.svg`; the upload half is what makes the key and `media.mime` honest for every file after it. A copy
+cached before the fix keeps its old type for its year (`immutable`), in a browser and at a Cloudflare edge —
+re-uploading is the way round that, since a new upload is a new key.
 
 Because a key carries a uuid, the bytes behind a URL never change, so `send_file()` is handed
 `max_age=31536000` + `immutable` and the key as the ETag: a repeat view costs a 304 and no Storage round

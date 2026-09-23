@@ -29,7 +29,7 @@ iopstor/db.py            supabase-py clients + query helpers: table(), one(), ro
                          _proc_cached() + content_epoch()/bump_epoch() (the cross-request cache; every write invalidates every worker through one /dev/shm file),
                          with_paths()/ancestors()/hydrate() (hierarchical URLs, has_pages), unique_slug(), ensure_term(), paginate(), admin_counts(), post_types()/settings() caches
 iopstor/auth.py          login/refresh/logout via GoTrue, verify_jwt() (local HS256), require_role(), create_auth_user()
-iopstor/storage.py       save_upload()/delete_media() → Supabase Storage bucket + media table; public_path() (= media.url), fetch() (the bytes back)
+iopstor/storage.py       save_upload()/delete_media() → Supabase Storage bucket + media table; public_path() (= media.url), fetch() (the bytes back), sniff() (the type the bytes are: the name gates an upload, the bytes type the key and the header)
 iopstor/blocks.py        BLOCKS + EDITOR + LAYOUTS + NEVER_NESTED + ARTICLE_TYPES/OWN_HEAD_BLOCKS, validate_blocks(), section_class()/section_style(), render_blocks(), owns_head() (does the page draw its own title, or does a leading section stand in), details_at() (where a type's long fields sit among the sections), blocks_text(), blocks_md()
 iopstor/seo.py           site(), build_meta(), jsonld(), md_url()
 iopstor/payments.py      PaymentGateway, DummyGateway, GATEWAYS

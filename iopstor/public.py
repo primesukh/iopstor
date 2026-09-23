@@ -514,6 +514,9 @@ def media_file(key):
         data = storage.fetch(key)
     except StorageApiError:  # the API answered and said no; a gateway that is down still raises a 500
         abort(404)
+    # the extension only decides what is servable; the header says what the bytes are, so a file stored
+    # under the wrong name before storage.sniff() existed still shows in Chrome
+    mime = storage.sniff(data) or mime
     # the name the file saves under. A newline would split the header; werkzeug quotes everything else,
     # and the name has to survive intact — "flash array.pdf" is what the editor uploaded.
     name = "".join(c for c in request.args.get("download", "") if c not in "\r\n")[:300]
