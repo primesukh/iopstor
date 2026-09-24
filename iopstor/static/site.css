@@ -929,8 +929,9 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
       keys walk a radio group and check as they go, which opens each row in turn -- and
       display:none takes it out of the tab order. The header's .mg-toggle may be display:none
       because it is pointer-only and its label is the whole control.
-   2. :focus-within opens a row. A closed body is 0fr + overflow:hidden, which hides the child
-      links without removing them from the tab order -- the same pairing the mega panel uses.
+   2. Keyboard focus opens a row (:focus-visible inside it; on a phone, any focus). A closed body is
+      0fr + overflow:hidden, which hides the child links without removing them from the tab order
+      -- the same pairing the mega panel uses.
    3. The hover rule sits in @media(hover:hover). A touch browser leaves :hover on the last thing
       tapped, and a stuck hover on one row would keep every other row shut.
    4. There is no "close the others" rule, on purpose: the checked row's own selector is guarded
@@ -977,18 +978,28 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .acc-kids{display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start}
 .acc-kids a{position:relative;padding:10px 14px;border:1px solid var(--o-kln);border-radius:8px;color:var(--o-kid);font:500 14px/1.3 var(--body);white-space:nowrap;text-decoration:none;transition:border-color .15s,color .15s}
 .acc-kids a:hover{border-color:var(--o-lnk);color:var(--o-lnk)}
-/* Open: the checked row while nothing is hovered, and any row the keyboard is inside. Nothing else
+/* Open: the checked row, and the row the keyboard is in, while nothing is hovered. Nothing else
    -- no row is checked in the markup, so the section loads with every row shut and opens only under
    a pointer or a tap (client, 2026-09-21: "first section should be closed as well if the mouse is
    not over any services"). That also makes two accordions on one page a non-event: they share a
-   radio name, so clicking in one unchecks the other, and all-shut is now the ordinary state. */
+   radio name, so clicking in one unchecks the other, and all-shut is now the ordinary state.
+   Keyboard focus is :focus-visible and not :focus-within, and it gives way to the pointer like the
+   checked row does (user, 2026-09-24, two rows open at once). A mouse click on the row's link
+   focuses it too, so with :focus-within the clicked row stayed open -- through the wait for the next
+   page, after Back, after a ctrl-click -- and hovering another opened a second one. */
 .acc:not(:has(.acc-row:hover)) .acc-row:has(.acc-t:checked),
-.acc-row:focus-within{--rows:1fr;--bg:var(--o-bg);--nm:var(--o-nm);--mt:var(--o-mt);--chev:rotate(180deg)}
+.acc:not(:has(.acc-row:hover)) .acc-row:has(:focus-visible){--rows:1fr;--bg:var(--o-bg);--nm:var(--o-nm);--mt:var(--o-mt);--chev:rotate(180deg)}
 @media(hover:hover){
   .acc-row:hover{--rows:1fr;--bg:var(--o-bg);--nm:var(--o-nm);--mt:var(--o-mt);--chev:rotate(180deg)}
   /* mouse only: the heading and the count join the link. Never outside this block -- on a phone the
      row-sized hit area would cover a shut row's header, and the first tap would leave the page */
   .acc-row{position:relative}.acc-body{position:static}
+}
+/* a phone keeps what it had: a tap on the header focuses the radio, and its stuck :hover is on the
+   tapped row, which is exactly what switches the checked rule above off -- so there the focus is
+   what holds the row open, and :focus-visible does not match a tap */
+@media(hover:none){
+  .acc-row:focus-within{--rows:1fr;--bg:var(--o-bg);--nm:var(--o-nm);--mt:var(--o-mt);--chev:rotate(180deg)}
 }
 .acc-row:has(.acc-t:focus-visible){outline:2px solid var(--blue);outline-offset:-2px}
 @media(max-width:700px){

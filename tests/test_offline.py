@@ -563,6 +563,10 @@ def test_stylesheets_are_balanced():
     for name in ("site.css", "admin.css", "canvas.css"):
         css = Path("iopstor/static", name).read_text()
         css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)   # a brace inside a comment is not a brace
+        # a */ left over closed a comment that was already closed: the prose after the first one
+        # became the start of the next selector and the whole rule was dropped, braces balanced
+        # (2026-09-24, the accordion's open rule -- caught by measuring, not by this test)
+        assert "*/" not in css, f"{name}: a */ with no /* before it"
         depth = 0
         for i, line in enumerate(css.split("\n"), 1):
             for ch in line:
@@ -4169,7 +4173,13 @@ def test_the_accordions_sibling_order_is_what_the_css_matches(app, monkeypatch):
     assert ".acc-hd::after{content:\"\";position:absolute;inset:0}" in css
     # the radio is the keyboard control: arrows walk the group and open each row as they go
     assert ".acc-t{position:absolute;opacity:0;" in css and ".acc-t{display:none" not in css
-    assert ".acc-row:focus-within{" in css
+    # keyboard focus opens a row, a mouse click's focus must not (2026-09-24: the clicked row stayed
+    # open and hovering another opened a second): :focus-visible, guarded by the pointer like the
+    # checked row, and the unguarded :focus-within only where there is no mouse -- a phone's tap
+    opens_ = css[css.index(".acc:not(:has(.acc-row:hover)) .acc-row:has(.acc-t:checked)"):]
+    assert ".acc:not(:has(.acc-row:hover)) .acc-row:has(:focus-visible){" in opens_[:opens_.index("}") + 1]
+    assert css.count(".acc-row:focus-within{") == 1
+    assert "@media(hover:none){\n  .acc-row:focus-within{" in css
     # nothing may open a row before the pointer arrives -- a :first-child fallback in this group is
     # exactly the rule the client asked to be gone, and the markup's missing `checked` is only half
     opens = css[css.index(".acc:not(:has(.acc-row:hover))"):]
