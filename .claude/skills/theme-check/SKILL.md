@@ -105,6 +105,8 @@ Two traps, both of which produced a confident wrong reading before they were und
 - **Remove the real `<link>`.** Leave it and its own unmodified `:not(:has(… :hover))` guards keep answering "nothing is hovered", so the rule you are testing is overruled by the file you are testing.
 - **Read the custom property, not the resolved value.** Sampled synchronously after forcing layout, a property that is mid-transition still reports its **start** frame — `grid-template-rows` read `0px` on a row that had just been told to open, which looks exactly like a rule that did not apply. `getComputedStyle(el).getPropertyValue('--rows')` gives the answer the cascade actually produced.
 
+**Focus is the same story** (2026-09-24): a `--screenshot` Firefox never focuses its document, so `el.focus()` changes nothing and every `:focus`, `:focus-within` and `:focus-visible` rule reads as not applying — every accordion row stayed `0fr` whatever was "focused". Stand classes in for them in the same copied stylesheet (`css.replace(":focus-within", ".fw").replace(":focus-visible", ".fv")`): a mouse click's focus is `.fw` on the container alone, a keyboard focus is `.fw` plus `.fv` on the element. And a probe where **every** state reads closed — including one that worked before the edit — means the rule was dropped (a leftover `*/` did it), not that the logic is wrong.
+
 **Whether a transition is running at all** is `el.getAnimations().map(a => a.transitionProperty)`, synchronously after the state change and a forced reflow. That is the only way to prove a value delivered through `var()` still animates, which is worth proving whenever the open/closed look is carried by custom properties rather than written per selector.
 
 ## A moving thing, at a chosen moment
