@@ -434,7 +434,7 @@ def details_at(post):
     return min(int(at), len(blocks)) if at.isdigit() else 0
 
 
-def render_blocks(blocks, edit=False, path="0", h1=True):
+def render_blocks(blocks, edit=False, path="0", h1=True, crumbs=None):
     """`path` is the data-b path of the FIRST block; its siblings increment the last part. The page
     itself starts at "0"; column 1 of block 2 renders with path "2.1.0".
 
@@ -445,7 +445,12 @@ def render_blocks(blocks, edit=False, path="0", h1=True):
     details_at(), and when the placement is the default the FIRST call is empty and the second one
     holds block 0. Both pass the same flag and the path decides, so neither call has to know about
     the other. It is also what stops a hero further down the page emitting a second <h1>, which it
-    did on every page that had one."""
+    did on every page that had one.
+
+    `crumbs` rides the same gate: the breadcrumb trail, given only when block 0 is the first thing
+    on the page (post.html's `lead_hero`), and handed only to the block at path "0" -- a hero draws
+    it as the first row of its band, where the mock puts it, instead of post.html leaving it in a
+    white strip above. The canvas passes none, so the editor never draws one."""
     head, _, first = path.rpartition(".")
     out = []
     for i, b in enumerate(blocks):
@@ -470,7 +475,8 @@ def render_blocks(blocks, edit=False, path="0", h1=True):
                          "widths": col_widths(b["data"])}
             out.append(render_template(f"blocks/{b['type']}.html", data=b["data"], edit=edit,
                                        cls=section_class(b["data"]), sty=section_style(b["data"]),
-                                       fe=_fe(p) if edit else _no_fe, h1=h1 and p == "0", **extra))
+                                       fe=_fe(p) if edit else _no_fe, h1=h1 and p == "0",
+                                       crumbs=crumbs if p == "0" else None, **extra))
         except Exception as e:
             if not edit:
                 raise  # a public page that cannot render should fail loudly, not hide it

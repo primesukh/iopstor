@@ -3424,16 +3424,60 @@ def test_a_hero_still_replaces_the_page_head_for_every_other_page(app, monkeypat
     assert html.count("<h1") == 1
 
 
-def test_a_hero_led_page_gives_its_breadcrumb_room_under_the_header(app, monkeypatch):
-    """The hero branch draws the breadcrumb on its own, and .wrap is the side gutter and nothing
-    else -- so it sat 10px under the header rule (measured at 1440: text top y=75 against y=123
-    on a page with a .page-head). .crumb-bar carries the 48px that .page-head already had, which
-    is why the class belongs on that branch only: adding it to both would double the gap."""
-    hero = _render_post(app, monkeypatch, _service(HERO))
-    assert '<div class="wrap crumb-bar">' in hero
-    assert "crumb-bar" not in _render_post(app, monkeypatch, _service())
+def test_a_page_led_by_columns_gives_its_breadcrumb_room_under_the_header(app, monkeypatch):
+    """With no page head and no hero to carry it, the breadcrumb is drawn on its own, and .wrap is
+    the side gutter and nothing else -- so it sat 10px under the header rule (measured at 1440: text
+    top y=75 against y=123 on a page with a .page-head). .crumb-bar carries the 48px that .page-head
+    already had, which is why the class belongs on that branch only: adding it to both would double
+    the gap. Until 2026-09-24 a hero-led page took this branch too; see the test below."""
+    cols = _render_post(app, monkeypatch, _service([{"type": "columns", "data": {"cols": [[], []]}}]))
+    assert '<div class="wrap crumb-bar">' in cols and "hero-crumb" not in cols
+    plain = _render_post(app, monkeypatch, _service())
+    assert "crumb-bar" not in plain and "hero-crumb" not in plain   # the page head draws it
     css = (pathlib.Path(__file__).resolve().parents[1] / "iopstor/static/site.css").read_text()
     assert ".crumb-bar{padding-block:48px 0}" in css
+
+
+def test_a_page_that_opens_with_a_hero_carries_its_breadcrumb_in_the_band(app, monkeypatch):
+    """The white strip .crumb-bar left above a dark band read as detached (user, 2026-09-24, on
+    Storage and NAS), and the mock draws the crumb inside every band. So when a hero is the first
+    thing on the page, the crumb is its first row -- once, and not also in a bar above it."""
+    html = _render_post(app, monkeypatch, _service(HERO))
+    assert html.count('aria-label="Breadcrumb"') == 1
+    assert '<div class="wrap hero-crumb"><nav class="breadcrumb" aria-label="Breadcrumb">' in html
+    assert html.index('<section class="hero') < html.index("hero-crumb")
+    assert "crumb-bar" not in html
+    # ...but only when it IS the first thing: the short-field strip, or the long fields in their
+    # default place, sit between the head and the hero, and a crumb inside the hero would then be
+    # halfway down the page
+    for kind in ("text", "textarea"):
+        post = _service(HERO)
+        post["post_type"] = {**post["post_type"], "field_schema": [{"key": "client", "label": "Client", "type": kind}]}
+        html = _render_post(app, monkeypatch, post)
+        assert '<div class="wrap crumb-bar">' in html and "hero-crumb" not in html, kind
+        assert html.count('aria-label="Breadcrumb"') == 1, kind
+    # the long fields moved below the first section put the hero first again
+    post["meta"] = {**post["meta"], "_details_at": "1"}
+    assert "hero-crumb" in _render_post(app, monkeypatch, post)
+    css = (pathlib.Path(__file__).resolve().parents[1] / "iopstor/static/site.css").read_text()
+    # its own row, not a grid item: a split hero is auto-fit, and an item spanning 1/-1 keeps the
+    # empty third track alive at 1440
+    assert ".hero>.hero-crumb{display:block;margin-bottom:16px}" in css
+    # on a lit band it reads the band's own light text; --muted-dark is about 2.4:1 on --blue
+    lit = css[css.index(".hero-lit .breadcrumb,"):]
+    assert "muted-dark" not in lit[:lit.index("\n", lit.index(".hero-lit .breadcrumb li:last-child"))]
+
+
+def test_only_the_first_section_is_handed_the_breadcrumb(app):
+    """render_blocks() gates `crumbs` on path "0" the way it gates h1, so a hero further down the
+    page never draws a second trail, and the canvas -- which passes none -- never draws one."""
+    trail = [("Home", "/"), ("Services", "/services"), ("Storage", "/services/storage")]
+    with app.test_request_context():
+        two = str(render_blocks(HERO + HERO, crumbs=trail))
+        first, second = two.split("<section")[1:]
+        assert "hero-crumb" in first and "hero-crumb" not in second
+        assert "hero-crumb" not in str(render_blocks(HERO))
+        assert "hero-crumb" not in str(render_blocks(HERO, edit=True))
 
 
 def test_the_title_can_sit_on_the_featured_picture(app, monkeypatch):

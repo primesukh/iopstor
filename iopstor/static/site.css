@@ -552,6 +552,16 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .hero-noglow .hero-media::before{display:none}
 .hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.18}
 .hero-dark>.wrap{position:relative}
+/* The page's breadcrumb, when the hero is the first thing on the page (user, 2026-09-24: the white
+   strip .crumb-bar left above a dark band read as detached, and the mock draws the crumb inside
+   every band). Its own row above the grid: display:block beats .hero>.wrap's grid -- same
+   specificity, later here -- and the rule above keeps it over .hero-bg. 16px is .page-head
+   .breadcrumb's gap, so a dark hero and a head-banner put the crumb in the same place. On a lit
+   band it takes the band's own light text, not .band-dark's --muted-dark, which is about 2.4:1 on
+   --blue; the page you are on is white, as in the mock. */
+.hero>.hero-crumb{display:block;margin-bottom:16px}
+.hero-lit .breadcrumb,.hero-lit .breadcrumb a,.hero-lit .breadcrumb li+li::before{color:inherit}
+.hero-lit .breadcrumb li:last-child,.hero-lit .breadcrumb a:hover{color:var(--white)}
 /* The hero is the ONE block that draws its own band, and .hero/.hero-dark sit here, 180 lines after
    the tone group at the top of this file -- same specificity, later in the source, so a tone an
    editor picked lost to them and the section's own "Background" dropdown did nothing on a hero
@@ -1206,12 +1216,14 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .page-head-text{min-width:0}
 .page-head .breadcrumb{margin:0 0 16px}
 .page-head .chips{margin:0 0 20px}
-/* A page that leads with a hero or a columns section has no .page-head, so post.html draws the
-   breadcrumb on its own in a bare .wrap -- and .wrap is the side gutter and nothing else, which
-   left the crumb 10px under the header rule on every service, About, Careers and Contact page, and
-   on any case study whose first section is a hero. 48px is .page-head's own top padding, so the
-   crumb sits at the same height whichever of the two branches drew it. Nothing below: what follows
-   always brings its own top gap (.meta-strip 32px, the hero's padding, a .section for details). */
+/* A page that leads with a hero or a columns section has no .page-head. When a hero is the first
+   thing on it, the crumb is the hero's own first row (.hero-crumb, 2026-09-24); otherwise -- a
+   columns section, or the short-field strip or long fields drawn above the hero -- post.html draws
+   it on its own in a bare .wrap, and .wrap is the side gutter and nothing else, which left the crumb
+   10px under the header rule (2026-09-19, when every service, About, Careers and Contact page took
+   this branch). 48px is .page-head's own top padding, so the crumb sits at the same height
+   whichever of the two branches drew it. Nothing below: what follows always brings its own top
+   gap (.meta-strip 32px, the hero's padding, a .section for details). */
 .crumb-bar{padding-block:48px 0}
 .page-media img{max-width:440px;margin-inline:auto}
 /* An article stacks: title, date, then the picture across the whole column, then the rule that

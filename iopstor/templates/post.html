@@ -30,6 +30,29 @@
 {# The eyebrow above the title is where you already are: the parent for a nested page, the content
    type otherwise. crumbs already holds that chain, so nothing new is looked up. #}
 {% set eyebrow = crumbs[-2][0] if crumbs|length > 2 else (pt.name if pt.url_prefix else '') %}
+{# The type's own fields, split by shape rather than by type name: short ones are the meta strip,
+   long ones read as the article. That is what gives a case study its Challenge / Solution /
+   Results sections without post.html knowing what a case study is. #}
+{# A key an editor has cleared is still a key: meta_ keeps "client": "" long after the box was
+   emptied, and every section below used to draw its container first and find nothing to put in
+   it -- a grey band 32px tall with an empty <dl> inside. Filtering once here rather than
+   repeating the condition inside each loop means the band, the prose section and the spec table
+   all disappear together when there is nothing to say. 0 is a value and survives. #}
+{% set filled = meta_|dictsort|rejectattr(1, 'in', [none, '', [], {}])|map(attribute=0)|list %}
+{% set fields = (pt.field_schema or [])|selectattr('key', 'in', filled)|list %}
+{# price is not a fact about the product like SKU is, it is the ask: it rides on the Buy button
+   in the head, the way _card.html pairs the two on an archive tile. #}
+{% set tiles = fields|rejectattr('type', 'in', ['json', 'kv', 'textarea'])|rejectattr('key', 'equalto', 'price')|list %}
+{% set prose = fields|selectattr('type', 'equalto', 'textarea')|list %}
+{% set blocks_ = post.blocks or [] %}
+{% set cut = details_at(post) %}{% set n = cut if cut > 0 else 0 %}
+{#- Where the breadcrumb goes. The head draws it when there is one; otherwise it is the first row of
+    a hero that is the first thing on the page, because a white strip above a dark band read as
+    detached (user, 2026-09-24) and the mock draws it inside every band. "First thing" is the whole
+    condition: the long fields (cut <= 0) and the short-field strip are drawn between the head and
+    block 0, and a hero below either would carry the crumb halfway down the page -- so then it stays
+    in .crumb-bar. Only post.html asks this: the canvas never drew a crumb and the .md twin has none. -#}
+{% set lead_hero = not own_head and blocks_ and blocks_[0].type == 'hero' and not tiles and not (prose and cut <= 0) %}
 <article class="pt-{{ pt.slug }}">
   {% if own_head %}
   <div class="page-head{{ ' has-media' if post.featured_media and not article and not head_banner }}{{ ' band-dark head-banner' if head_banner }}">
@@ -54,21 +77,7 @@
         rule from the other side -- there the picture IS the head, so it must not also sit in it. -#}
     {% if post.featured_media and not has_hero and not head_banner %}<div class="page-media"><img class="featured" src="{{ post.featured_media.url }}" alt="{{ post.featured_media.alt or post.title }}"></div>{% endif %}
   </div></div>
-  {% elif crumbs|length > 1 %}<div class="wrap crumb-bar"><nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav></div>{% endif %}
-  {# The type's own fields, split by shape rather than by type name: short ones are the meta strip,
-     long ones read as the article. That is what gives a case study its Challenge / Solution /
-     Results sections without post.html knowing what a case study is. #}
-  {# A key an editor has cleared is still a key: meta_ keeps "client": "" long after the box was
-     emptied, and every section below used to draw its container first and find nothing to put in
-     it -- a grey band 32px tall with an empty <dl> inside. Filtering once here rather than
-     repeating the condition inside each loop means the band, the prose section and the spec table
-     all disappear together when there is nothing to say. 0 is a value and survives. #}
-  {% set filled = meta_|dictsort|rejectattr(1, 'in', [none, '', [], {}])|map(attribute=0)|list %}
-  {% set fields = (pt.field_schema or [])|selectattr('key', 'in', filled)|list %}
-  {# price is not a fact about the product like SKU is, it is the ask: it rides on the Buy button
-     above, the way _card.html pairs the two on an archive tile. #}
-  {% set tiles = fields|rejectattr('type', 'in', ['json', 'kv', 'textarea'])|rejectattr('key', 'equalto', 'price')|list %}
-  {% set prose = fields|selectattr('type', 'equalto', 'textarea')|list %}
+  {% elif crumbs|length > 1 and not lead_hero %}<div class="wrap crumb-bar"><nav class="breadcrumb" aria-label="Breadcrumb"><ol>{% for name, url in crumbs %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol></nav></div>{% endif %}
   {#- The long fields are the only page content an editor cannot drag, because they are the type's
       own boxes rather than sections of the page. So where they land is a setting: `details_at()`
       reads the reserved `meta._details_at` and answers -1 (above the short-field strip), 0 (straight
@@ -80,8 +89,6 @@
   {% macro details(prose, meta_) %}{% if prose %}<div class="section"><div class="wrap"><div class="meta-prose">{% for f in prose %}
     <section><h2>{{ f.label }}</h2><p>{{ meta_[f.key] }}</p></section>
   {% endfor %}</div></div></div>{% endif %}{% endmacro %}
-  {% set blocks_ = post.blocks or [] %}
-  {% set cut = details_at(post) %}{% set n = cut if cut > 0 else 0 %}
   {% if cut < 0 %}{{ details(prose, meta_) }}{% endif %}
   {% if tiles %}<div class="meta-strip"><div class="wrap"><dl class="details">{% for f in tiles %}
     <div><dt>{{ f.label }}</dt><dd>{% if f.type == 'media' %}<a href="{{ media_url(meta_[f.key]) }}" target="_blank" rel="noopener">Download</a>{% elif f.type == 'url' %}<a href="{{ meta_[f.key] }}" rel="noopener">{{ meta_[f.key] }}</a>{% elif f.key == 'price' %}{{ rupees(meta_[f.key]) }}{% else %}{{ meta_[f.key] }}{% endif %}</dd></div>
@@ -90,11 +97,11 @@
   {#- h1=not own_head: when the head above drew the title, a hero here is a section, not the
      page's heading. Both calls pass the same flag and render_blocks() gives it only to the block at
      path "0", so neither call has to know which of the two holds it. -#}
-  {{ render_blocks(blocks_[:n], h1=not own_head) }}
+  {{ render_blocks(blocks_[:n], h1=not own_head, crumbs=crumbs if lead_hero else none) }}
   {% if cut > 0 %}{{ details(prose, meta_) }}{% endif %}
   {#- `path` continues rather than restarting: the markers it feeds are edit-only and post.html
       never renders with edit=True, but a path that lies is true only until somebody reuses this. -#}
-  {{ render_blocks(blocks_[n:], path=n|string, h1=not own_head) }}
+  {{ render_blocks(blocks_[n:], path=n|string, h1=not own_head, crumbs=crumbs if lead_hero else none) }}
   {# A kv field is a list of rows and keeps the order it was typed in; a json one is an object, whose
      key order jsonb does not keep. Both draw the same table. A json field holding the raw text of a
      mistyped value is neither, and draws nothing, as it did before. #}
