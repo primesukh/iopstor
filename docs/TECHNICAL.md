@@ -1328,17 +1328,38 @@ Six things are load-bearing, and a test pins the shape:
   the arrow keys walk a radio group and check as they go, which opens each row in turn — and `display:none` takes
   it out of the tab order entirely. The header's `.mg-toggle` may be `display:none` because it is pointer-only and
   its `<label>` is the whole control.
-- **`:focus-within` is in the open selector list.** A closed body is `grid-template-rows:0fr` over an
-  `overflow:hidden` child, which hides the child links *without* removing them from the tab order — the same
-  pairing `.mega-pane` uses.
+- **Keyboard focus opens a row, and a mouse click's focus does not.** A closed body is `grid-template-rows:0fr`
+  over an `overflow:hidden` child, which hides the child links *without* removing them from the tab order — the
+  same pairing `.mega-pane` uses — so focus inside a row must open it. It is
+  `.acc:not(:has(.acc-row:hover)) .acc-row:has(:focus-visible)`, guarded by the pointer exactly like the checked
+  row. **It was a bare `.acc-row:focus-within` until 2026-09-24**, and that broke as soon as the open row became a
+  link: a mouse click focuses the link, so the clicked row stayed open — while the next page loaded, after Back,
+  after a ctrl-click — and hovering another opened a second (reported with a screenshot of *Storage* and *Cloud*
+  both open). `:focus-visible` is the browser's own "this focus came from a keyboard" test. The bare
+  `:focus-within` survives **only in `@media(hover:none)`**: on a phone the tapped row carries a stuck `:hover`,
+  which switches the checked rule off, so the focus the tap gives the radio is what holds the row open, and
+  `:focus-visible` does not match a tap. Measured with classes standing in for `:hover`, `:focus-within` and
+  `:focus-visible` (headless Firefox never focuses its document, so a real `focus()` matches nothing — every row
+  read `0fr` whatever was focused): before, a clicked *Cloud* plus a hovered *Storage* read `1fr` / `1fr`; after,
+  `0fr` / `1fr`; a keyboard-focused row `1fr`, giving way to a hovered one; the phone readings unchanged.
 - **There is no "close the others" rule, on purpose.** The checked row's selector is guarded with
   `.acc:not(:has(.acc-row:hover))`, so while a pointer is anywhere in the accordion it simply stops matching and
   the row falls back to the closed default. A close-all rule would be `.acc:has(.acc-row:hover) .acc-row` at
   (0,4,0) and would out-specify `.acc-row:hover` at (0,2,0) — the row under the pointer would never open.
 - **The hover rule sits in `@media(hover:hover)`.** A touch browser leaves `:hover` on the last thing tapped, and
   a stuck hover would hold every other row shut.
-- **The hit area is `::after{inset:0}` on the label inside `.acc-hr`, not on `.acc-row`.** Against the row it
-  would lie over the open body and swallow the child links, which are the one thing there you are meant to click.
+- **A shut row's header is the toggle; an open row is one link to the group's page** (user, 2026-09-24: *"make
+  this clickable link the sections as a whole because right now i need to click the small button"*). Two hit
+  areas, both `::after{inset:0}`: the label's, scoped to `.acc-hr`, opens a shut row, and the group link's
+  (`.acc-all::after`) covers the open one. The second needs no open/shut switch of its own because of **where it is
+  anchored**: `.acc-body{position:relative}` everywhere — `0fr`, so 0px tall while the row is shut, and a phone's
+  first tap still lands on the label — and `.acc-row{position:relative}.acc-body{position:static}` **only inside
+  `@media(hover:hover)`**, where the heading and the count join the link, because a mouse cannot click a row it is
+  not hovering and hovering opens it. `.acc-body>div{overflow:hidden}` does not clip it: its containing block is
+  outside that child. The pills stay clickable by being **`position:relative` and later in the tree**, which paints
+  them above it with no `z-index`. This bullet used to say the opposite — "against the row it would swallow the
+  child links" — which was true of pills that were not raised. Moving the row anchor out of the hover block puts a
+  row-sized link over every shut header on a phone, and the first tap leaves the page instead of opening the row.
 - **No row is `checked` in the markup and nothing opens one by position** (client, 2026-09-21: *"first section
   should be closed as well if the mouse is not over any services"*). The first pass pre-opened row 1 and backed it
   with a `.acc:not(:has(.acc-t:checked)) .acc-row:first-child` fallback for the case where two accordions on one
@@ -1371,6 +1392,19 @@ class stand-in above is the only way to see it, and a plain shot of the page alw
 
 The transitions are in the `prefers-reduced-motion` block at the end of the file, which had only ever stood down
 `animation`; these are transitions, so the row still opens and closes, it just arrives.
+
+The click targets (2026-09-24) were measured the same way, with `document.elementFromPoint()` on the served home
+page, transitions off, and the row opened by the class stand-in (a mouse) or by checking its radio (a phone):
+
+| point | before, mouse / 390 | after, mouse | after, 390 |
+|---|---|---|---|
+| open row: heading, count | label / label | `a.acc-all` | label (the toggle) |
+| open row: description, blank right side | nothing / nothing | `a.acc-all` | `a.acc-all` |
+| open row: a pill | the pill | the pill | the pill |
+| shut row: header | label | its own `a.acc-all`, which a real pointer has already opened | label |
+
+Unhovered, the page is pixel-identical before and after at 1440, 834 and 390 (`compare -metric AE` 0). A real
+phone's tap sequence is the one thing not measured here.
 
 ### The sliding row
 
@@ -2273,7 +2307,9 @@ both its singular and plural form), `test_the_accordion_borrows_nothing_from_the
 `card-img`, `card-n` or `cards` class can appear on a section that is still `pl pl-service`),
 `test_the_accordions_sibling_order_is_what_the_css_matches` (the input inside its label, `.acc-hr` before
 `.acc-body`, the `overflow:hidden` child, and the CSS pins: no `display:none` on the radio, the `hover:hover`
-guard, `.acc-body` named in the reduced-motion block), and
+guard, `.acc-body` named in the reduced-motion block, and since 2026-09-24 the open row's link: `.acc-all::after`,
+the pills' `position:relative`, and the row anchor inside the hover block and nowhere else; the guarded
+`:has(:focus-visible)` in the open group and the one bare `:focus-within` inside `@media(hover:none)`), and
 `test_every_other_list_still_renders_the_deck_of_cards` and
 `test_the_open_rows_colour_is_a_choice_and_only_its_own_literals_reach_the_class` (the two literals, a hostile
 value falling back to the default, and the palette staying on `.acc`). What they cannot cover is the pointer: the hover cascade

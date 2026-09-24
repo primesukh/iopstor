@@ -563,6 +563,10 @@ def test_stylesheets_are_balanced():
     for name in ("site.css", "admin.css", "canvas.css"):
         css = Path("iopstor/static", name).read_text()
         css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)   # a brace inside a comment is not a brace
+        # a */ left over closed a comment that was already closed: the prose after the first one
+        # became the start of the next selector and the whole rule was dropped, braces balanced
+        # (2026-09-24, the accordion's open rule -- caught by measuring, not by this test)
+        assert "*/" not in css, f"{name}: a */ with no /* before it"
         depth = 0
         for i, line in enumerate(css.split("\n"), 1):
             for ch in line:
@@ -4151,9 +4155,10 @@ def test_the_accordion_borrows_nothing_from_the_card_vocabulary(app, monkeypatch
 
 def test_the_accordions_sibling_order_is_what_the_css_matches(app, monkeypatch):
     """Three dependencies in one shape: the radio sits INSIDE its label (so no ids are needed and
-    two accordions cannot steal each other's), the header strip precedes the body (the hit area is
-    ::after on the label, scoped to .acc-hr), and the body wraps an overflow:hidden child that the
-    0fr/1fr grid row collapses. Reorder any of them and the section opens nothing."""
+    two accordions cannot steal each other's), the header strip precedes the body (a shut row's hit
+    area is ::after on the label, scoped to .acc-hr; an open row's is ::after on the group link),
+    and the body wraps an overflow:hidden child that the 0fr/1fr grid row collapses. Reorder any of
+    them and the section opens nothing."""
     html = _render_list(app, monkeypatch, [_svc_group()], "service", top_level=True)
     row = html.split('class="acc-row"')[1]
     assert row.index('class="acc-hr"') < row.index('class="acc-body"')
@@ -4168,13 +4173,32 @@ def test_the_accordions_sibling_order_is_what_the_css_matches(app, monkeypatch):
     assert ".acc-hd::after{content:\"\";position:absolute;inset:0}" in css
     # the radio is the keyboard control: arrows walk the group and open each row as they go
     assert ".acc-t{position:absolute;opacity:0;" in css and ".acc-t{display:none" not in css
-    assert ".acc-row:focus-within{" in css
+    # keyboard focus opens a row, a mouse click's focus must not (2026-09-24: the clicked row stayed
+    # open and hovering another opened a second): :focus-visible, guarded by the pointer like the
+    # checked row, and the unguarded :focus-within only where there is no mouse -- a phone's tap
+    opens_ = css[css.index(".acc:not(:has(.acc-row:hover)) .acc-row:has(.acc-t:checked)"):]
+    assert ".acc:not(:has(.acc-row:hover)) .acc-row:has(:focus-visible){" in opens_[:opens_.index("}") + 1]
+    assert css.count(".acc-row:focus-within{") == 1
+    assert "@media(hover:none){\n  .acc-row:focus-within{" in css
     # nothing may open a row before the pointer arrives -- a :first-child fallback in this group is
     # exactly the rule the client asked to be gone, and the markup's missing `checked` is only half
     opens = css[css.index(".acc:not(:has(.acc-row:hover))"):]
     assert "first-child" not in opens[:opens.index("}") + 1]
     # a touch browser leaves :hover on the last thing tapped, which would jam every other row shut
     assert "@media(hover:hover){\n  .acc-row:hover{" in css
+    # the open row is one link to the group's page (2026-09-24): the group link's ::after is the hit
+    # area, and the pills sit above it only because they are positioned -- without that, every pill
+    # opens the group instead of itself
+    assert ".acc-all::after{content:\"\";position:absolute;inset:0}" in css
+    assert ".acc-kids a{position:relative;" in css
+    # anchored to the body (0px while shut) everywhere, and to the whole row only for a mouse. A
+    # row-sized hit area on a phone would lie over a shut row's header, and the first tap would
+    # leave the page instead of opening the row
+    assert "position:relative}" in css[css.index(".acc-body{display:grid"):].split("\n")[0]
+    hover = css[css.index("@media(hover:hover){\n  .acc-row:hover{"):]
+    assert ".acc-row{position:relative}.acc-body{position:static}" in hover[:hover.index("\n}")]
+    base_row = css[css.index(".acc-row{--rows:0fr"):]
+    assert "position" not in base_row[:base_row.index("}")]
     # transitions, not keyframes -- the reduced-motion block had only ever stood down animations,
     # and it is the last block in the file for the reason design.md gives
     still = css[css.rindex("@media(prefers-reduced-motion"):]
