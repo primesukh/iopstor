@@ -478,6 +478,16 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .stats li.fx-count .cr{counter-reset:cv calc(var(--to) * var(--cv));animation:cv 2s ease-out both}
 .stats li.fx-count .cr::before{content:counter(cv)}
 .stats li.fx-count .cv{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+/* "Start counting when it scrolls into view" (blocks.py count_in_view). site.js puts .fx-wait on a
+   figure that is off screen and takes it off once half of the figure is showing; .fx-view, which
+   stats.html writes, only says which figures to watch.
+   The script adds the class and the template never does, so a page whose script is blocked or fails
+   to load simply counts as it opens, as before -- it cannot sit at a wrong 0.
+   animation:none rather than paused: the figure may be a few frames into the count by the time the
+   deferred script reaches it, and none resets that to 0 while it is off screen, so taking the class
+   off starts a fresh count from zero. Preview's #main swap brings in figures with no .fx-wait, so
+   there they count on arrival, like every other effect replays on a swap. */
+.stats li.fx-count.fx-wait .cr{animation:none}
 
 /* --- blocks ---------------------------------------------------------------------------------
    One rule-group per type, in the order they appear in BLOCKS. */
