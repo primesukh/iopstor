@@ -26,7 +26,7 @@ BLOCKS = {  # type: (required fields, optional fields)
     "columns": (["cols"], ["heading", "widths"]),  # widths: "50/25/25", blank = equal
     "cta": (["heading", "button_label", "button_url"], ["text"]),
     "faq": (["items"], ["heading"]),  # items: [{q, a}] → also emits FAQPage JSON-LD
-    "stats": (["items"], ["count_up", "fx"]),  # items: [{value, label, fx, count_up}] — a figure can override the section
+    "stats": (["items"], ["count_up", "count_in_view", "fx"]),  # items: [{value, label, fx, count_up}] — a figure can override the section; count_in_view is the band's alone
     "testimonial": (["quote", "author"], ["role", "company", "dark"]),
     # The founder pair on About Us: a picture, a name and a job title, repeated. It was written as a
     # rich_text carrying its own classes, which Quill drops -- the same reason points and definitions
@@ -69,7 +69,7 @@ EDITOR = {
                 "url": "url", "cta_url": "url", "button_url": "url", "limit": "number",
                 "top_level": "checkbox", "post_type": "post_type", "kind": "kind",
                 "cta2_url": "url", "link_url": "url", "dark": "checkbox", "still": "checkbox", "arrange": "choice", "noglow": "checkbox",
-                "count_up": "checkbox", "fx": "choice", "height": "choice", "per_row": "choice",
+                "count_up": "checkbox", "count_in_view": "checkbox", "fx": "choice", "height": "choice", "per_row": "choice",
                 "list_style": "choice", "open_tone": "choice"},
     # repeater fields (items/images/rows/cols) -> the subfields of one row; [] = rows are not field rows
     "items": {"cards": ["title", "text", "icon", "url"], "faq": ["q", "a"], "stats": ["value", "label", "fx", "count_up"],
@@ -93,7 +93,8 @@ EDITOR = {
                "hero.dark": "Full-width band, picture behind the words",
                "still": "Hold the picture still", "arrange": "Where the picture goes",
                "noglow": "Hide the glow behind the picture",
-               "count_up": "Count up from zero", "fx": "Effect", "per_row": "Items per row",
+               "count_up": "Count up from zero", "count_in_view": "Start counting when it scrolls into view",
+               "fx": "Effect", "per_row": "Items per row",
                "list_style": "List style", "open_tone": "Colour when open"},
     "kinds": ["contact", "quote", "career"],
     # options for the "choice" widget, keyed by field: [value, label] pairs, so the empty one can
@@ -207,7 +208,7 @@ def layout(name):
 # verdict, stored rather than recomputed so every editor of a page agrees about it.
 _NON_TEXT_KEYS = {"url", "cta_url", "cta2_url", "button_url", "link_url", "icon", "image", "media_id", "file_media_id",
                   "post_type", "term", "limit", "kind", "top_level", "dark", "still", "arrange", "noglow", "pad", "type", "widths", "align", "align_box", "width",
-                  "tone", "fx", "count_up", "height", "per_row", "list_style", "open_tone", "_id", "_rich"}
+                  "tone", "fx", "count_up", "count_in_view", "height", "per_row", "list_style", "open_tone", "_id", "_rich"}
 EDITOR["scalars"] = sorted(_NON_TEXT_KEYS)
 # JSONB does not keep key order, so text extraction walks fields in this reading order (unknown keys follow, alphabetically)
 _TEXT_ORDER = ("eyebrow", "heading", "subheading", "title", "q", "a", "text", "html", "quote", "author", "name", "role", "company",

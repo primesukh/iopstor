@@ -425,13 +425,15 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .column{--w:initial}   /* a section inside a column keeps its own measure, not the grid's */
 
 /* Section effects, set per section under ⚙ (blocks.py FX + count_up; keyframes at the top of this
-   file). Four classes, all CSS: the site's one script drives the sliding row and nothing else. Effects compose — a
+   file). Four classes, all CSS; the site's one script touches them only to hold a counting figure at
+   zero until it is scrolled to (fx-wait, below the count). Effects compose — a
    Numbers band can count up AND fade in — so each one is its own class. A Numbers figure carries
    the same classes on its own <li> (stats.html), which is what lets one figure differ from the
    band it sits in; that is why every rule below names both the section and the figure.
 
    Every effect runs on the document timeline and plays once as the page loads — the same thing
-   .hero-text has always done, and the same thing in every browser.
+   .hero-text has always done, and the same thing in every browser. The one exception is a Numbers
+   band ticked "Start counting when it scrolls into view", whose START site.js decides (fx-wait).
 
    Do not re-time them against the scroll with animation-timeline: view(). That was tried, and a
    scroll timeline pins the animation to where the reader is rather than to a clock: a section
@@ -439,7 +441,9 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
    it loads part-way through its animation. The Numbers band under the hero painted 270 for a figure
    the editor had typed as 300 — a wrong number on the client's home page, in every browser that
    resolves view(). It looked healthy here only because the Firefox on this machine is 140 ESR,
-   which cannot resolve view() and so fell back to the document timeline these rules now use. */
+   which cannot resolve view() and so fell back to the document timeline these rules now use.
+   Waiting until a figure is seen is therefore a start signal from an IntersectionObserver, never a
+   scroll timeline. */
 
 /* fx-gradient and fx-sweep are two values of one select, so they never meet: both paint the
    section's big text — every heading, plus a Numbers figure, which is a <strong> and not a heading
@@ -478,6 +482,16 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .stats li.fx-count .cr{counter-reset:cv calc(var(--to) * var(--cv));animation:cv 2s ease-out both}
 .stats li.fx-count .cr::before{content:counter(cv)}
 .stats li.fx-count .cv{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+/* "Start counting when it scrolls into view" (blocks.py count_in_view). site.js puts .fx-wait on a
+   figure that is off screen and takes it off once half of the figure is showing; .fx-view, which
+   stats.html writes, only says which figures to watch.
+   The script adds the class and the template never does, so a page whose script is blocked or fails
+   to load simply counts as it opens, as before -- it cannot sit at a wrong 0.
+   animation:none rather than paused: the figure may be a few frames into the count by the time the
+   deferred script reaches it, and none resets that to 0 while it is off screen, so taking the class
+   off starts a fresh count from zero. Preview's #main swap brings in figures with no .fx-wait, so
+   there they count on arrival, like every other effect replays on a swap. */
+.stats li.fx-count.fx-wait .cr{animation:none}
 
 /* --- blocks ---------------------------------------------------------------------------------
    One rule-group per type, in the order they appear in BLOCKS. */

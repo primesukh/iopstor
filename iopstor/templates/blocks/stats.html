@@ -6,11 +6,13 @@
    HTML inside .cv (search engines, copy-paste, a browser without scroll timelines and the canvas's
    own contenteditable all read them), and site.css hides that and rolls the counter into the empty
    .cr beside it — in place, so "Up to 5 PB" keeps its "Up to" and its "PB" still.
+   count_in_view is the band's alone: fx-view only marks a counting figure for site.js to watch, and
+   the class that actually holds it at zero (fx-wait) is the script's to add, never this template's.
    section_class() does the whitelisting for a figure's own effect, as it does for the section. #}
 <section class="section stats-band{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap"><ul class="stats">
 {%- for s in data['items'] %}
 {%- set c = count_up(s.value) if s.count_up or data.count_up else None %}
-{%- set icls = (section_class({'fx': s.fx or data.fx}) ~ (' fx-count' if c else '')).strip() %}
+{%- set icls = (section_class({'fx': s.fx or data.fx}) ~ (' fx-count' if c else '') ~ (' fx-view' if c and data.count_in_view else '')).strip() %}
 <li{% if icls %} class="{{ icls }}"{% endif %}{{ fe('items', loop.index0) }}><strong{{ fe('value') }}{% if c %} style="--to:{{ c[0] }}"{% endif %}>{% if c %}{{ c[1] }}<span class="cv">{{ c[2] }}</span><span class="cr"></span>{{ c[3] }}{% else %}{{ s.value }}{% endif %}</strong> <span{{ fe('label') }}>{{ s.label }}</span></li>
 {%- endfor %}
 </ul></div></section>

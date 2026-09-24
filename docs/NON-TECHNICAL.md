@@ -370,6 +370,13 @@ in the strip climbs as the page opens — 0 to 300 for *300+*, 0 to 25 for *25+ 
 the number moves: words you put around it stay where they are, so *Up to 5 PB* keeps its "Up to" and
 its "PB" still and only the 5 climbs. A figure with no number in it, like *Always on*, simply sits there.
 
+Below it is a second tick, **Start counting when it scrolls into view**. Without it, the figures count
+as the page opens — which is right for a strip near the top, but one further down the page has
+finished long before anyone scrolls to it. Tick it and each figure waits at 0 until it comes into
+view, then counts. A strip that is already on screen when the page opens counts straight away, as
+before. On a phone, where the figures sit one above another, each one starts as it scrolls in. This
+tick is for the whole strip; there is no separate one per figure.
+
 **Setting an effect on one figure instead of the whole strip.** Under **Items** in a Numbers section,
 each row now has its own **Effect** box and its own **Count up from zero** tick, next to the value and
 the label. Leave them alone and that figure does whatever the whole section is set to; set them and
@@ -1102,10 +1109,16 @@ places, a little faster on a repeat visit.
 *1,200 TB*, also stays still: the counter cannot draw the comma, and a figure that ended up reading
 *1200 TB* would not be the one you typed. Write it as *1200 TB* and it counts.
 
+**My numbers have finished counting before anyone scrolls down to them.** Open the Numbers section's
+**⚙** and tick **Start counting when it scrolls into view**. Each figure then waits at 0 until it
+is on the screen, and counts from there. In the editor itself the figures never count — you always
+see the numbers you typed — so look at it in **Preview**, or on the live page, to see it happen.
+
 **Do the effects work in my browser?** Yes, in every one, and they all do the same thing: the effect
 plays once as the page opens. A section far down a long page will therefore have finished before you
-scroll to it. If you have asked your computer to reduce motion, nothing animates at all and every
-figure and heading simply sits there in full, which is deliberate.
+scroll to it — except a Numbers section with **Start counting when it scrolls into view** ticked, which
+waits for you (see the answer above). If you have asked your computer to reduce motion, nothing
+animates at all and every figure and heading simply sits there in full, which is deliberate.
 
 **There is too much space around my Divider.** That is the design's usual spacing, and every
 section has it. Open the Divider's **⚙** and set **Spacing** to *Small* or *None* — then do the

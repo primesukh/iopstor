@@ -1,6 +1,7 @@
-/* The public site's only script, and it exists for exactly one thing: the sliding row -- the
-   testimonials, and since 2026-09-23 the home page's appliances (blocks._rail() decides which lists).
-   Everything else on this site is server-rendered HTML and CSS, and stays that way.
+/* The public site's only script, and it exists for two things: the sliding row -- the testimonials,
+   and since 2026-09-23 the home page's appliances (blocks._rail() decides which lists) -- and, since
+   2026-09-24, holding a counting figure at zero until the reader scrolls to it (the bottom of this
+   file). Everything else on this site is server-rendered HTML and CSS, and stays that way.
 
    The row already works without this file. `.pl-rail .cards` is a native scroll container with
    scroll-snap (site.css), so the wheel, a trackpad and a finger on a phone all move it on a page
@@ -145,4 +146,20 @@
     addEventListener('resize', buildDots);
     buildDots();
   });
+
+  // --- figures that count when they are seen ------------------------------------------------------
+  // A Numbers band ticked "Start counting when it scrolls into view" marks each counting figure
+  // .fx-view (stats.html); .fx-wait holds it at zero (site.css). Nothing gets .fx-wait up front: the
+  // observer's first report, which arrives once for every figure, is what decides. A figure already on
+  // screen is never touched and counts from load as it always did -- adding the class to everything and
+  // taking it off again would snap it back to 0 mid-count, since this deferred file runs a few frames
+  // in. Only a figure off screen is reset, where nobody can see it. Each figure is watched on its own,
+  // so a band stacked down a phone counts one figure at a time as they arrive.
+  var io = new IntersectionObserver(function (seen) {
+    seen.forEach(function (e) {
+      if (e.isIntersecting) { e.target.classList.remove('fx-wait'); io.unobserve(e.target); }
+      else e.target.classList.add('fx-wait');
+    });
+  }, { threshold: 0.5 });
+  document.querySelectorAll('.fx-view').forEach(function (li) { io.observe(li); });
 })();

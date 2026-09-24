@@ -46,7 +46,7 @@ iopstor/stress.py     the owner-only load simulator behind /admin/stress: fires 
                       a target, progress in a sqlite file on /dev/shm. Stdlib only (urllib, threading). §12
 iopstor/cli.py        flask migrate | seed | import-media | create-admin
 iopstor/templates/    base/post/archive/404, blocks/<type>.html, admin/*.html
-iopstor/static/       site.css (the whole public theme) + site.js (the sliding row, and nothing else)
+iopstor/static/       site.css (the whole public theme) + site.js (the sliding row, and a counting figure's start; nothing else)
                       + admin.css (admin extras, layered on top)
                       + canvas.css (editor chrome), favicon.svg, vendor/sortable.min.js
 migrations/           0000_bootstrap.sql (run once by hand) + NNNN_name.sql applied by `flask migrate`
@@ -231,7 +231,7 @@ would be unreachable, and so would a hierarchical page whose top-level slug is `
 
 ### 5.1 Checkout
 
-The design's Buy flow is a modal. The public site's one script (`site.js`) drives the sliding row and nothing else, so checkout is a page instead — which the handoff offers as the alternative. It is handled **inside the catch-all**, not as its own rule: a rule shaped `/<a>/<b>/checkout` would have to out-rank `/<path:path>`, and reading the last segment where the resolver already has the post type is six lines. A trailing `checkout` under a type's prefix resolves the segment before it, and 404s unless that post is live, sits at that exact path, and has a `meta.price`.
+The design's Buy flow is a modal. The public site's one script (`site.js`) drives the sliding row and when a counting figure starts, and nothing else, so checkout is a page instead — which the handoff offers as the alternative. It is handled **inside the catch-all**, not as its own rule: a rule shaped `/<a>/<b>/checkout` would have to out-rank `/<path:path>`, and reading the last segment where the resolver already has the post type is six lines. A trailing `checkout` under a type's prefix resolves the segment before it, and 404s unless that post is live, sits at that exact path, and has a `meta.price`.
 
 `POST /api/v1/payments/checkout` answers both callers: a JSON body still gets JSON and a `201`, and a plain form post gets a `303` to the gateway's `redirect_url` — the same `request.is_json` split `/api/v1/leads` already uses for `_form_redirect()`.
 
@@ -464,6 +464,8 @@ All of them are in `_NON_TEXT_KEYS`, so "center", "950" and "rise" never reach `
 A Numbers *figure* can also override its band. `EDITOR["items"]["stats"]` is `["value", "label", "fx", "count_up"]`, so every row in the repeater carries the same two settings, and `stats.html` resolves each `<li>` as `item.fx or section.fx` — a row that sets nothing inherits, a row that sets something wins. The per-item value goes through **`section_class()` itself**, called from the template as a Jinja global: one whitelist, not a second one to keep in step.
 
 `count_up()` (`blocks.py`) is the only real logic. It finds the first whole number in a figure and splits the words off either side, so `"Up to 5 PB"` becomes `(5, "Up to ", "5", " PB")` and only the digits move. `stats.html` renders that as `Up to <span class="cv">5</span><span class="cr"></span> PB`: the digits an editor typed stay in the HTML inside `.cv`, and `.cr` is the empty span the CSS counter rolls into. That split is deliberate — the number has to survive for crawlers, for copy-paste, for a browser without scroll timelines, and for the canvas's own `contenteditable`, whose `textContent` still reads back `"Up to 5 PB"` unchanged. Two lookarounds in the regex refuse a grouped `"1,200"`: `counter()` cannot render a thousands separator, so it would settle on a figure spelled differently from the one the editor wrote. `test_count_up_splits_a_figure` and `test_one_figure_can_differ_from_its_band` guard both.
+
+**`count_in_view`** is a third checkbox, on the band only — it is not in `EDITOR["items"]["stats"]`, because the ask was "when the reader reaches that section". It adds a literal `fx-view` to each `<li>` that counts, and `site.js` holds that figure at zero until half of it is on screen (§12 *Figures that count when they are seen*). Unticked, or ticked on a band where nothing counts, the HTML is byte-identical to what it was before the key existed; `test_a_band_can_wait_to_be_seen_before_it_counts` guards both.
 
 The CSS is §12. Nothing here is JavaScript.
 
@@ -1191,7 +1193,7 @@ Its data comes from `service_nav()` (`public.py`), a template global over `db.tr
 
 **Long words wrap.** `body` carries `overflow-wrap:break-word`, so an unbroken string (a pasted URL, a hash) breaks instead of running off the right of its section and giving the page a horizontal scrollbar — and it is inherited, so the editor canvas gets it too. `break-word` only wraps *inside* a box, and a grid track or a table column is sized from min-content, which a 300-character word still blows out; the boxes that size to their content (`.card`, `.column`, `.stats li`, table cells) get `overflow-wrap:anywhere`, which counts in that size. Not on `body`: `anywhere` would let the header nav break mid-word.
 
-No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS, and the section effects and the counting figures are `@property` + `counter()` on the document timeline. The public site ships **one** first-party script, `static/site.js` (2026-09-16) — see *The sliding row* below for what it does and what it deliberately does not. Everything else on the site is still server-rendered HTML and CSS.
+No CSS framework, no build step, no JavaScript framework. Mobile navigation is a checkbox-driven CSS menu with no JS, and the section effects and the counting figures are `@property` + `counter()` on the document timeline. The public site ships **one** first-party script, `static/site.js` (2026-09-16) — see *The sliding row* and *Figures that count when they are seen* below for what it does and what it deliberately does not; holding a counting figure at zero until it is on screen is the one place it touches an effect. Everything else on the site is still server-rendered HTML and CSS.
 
 **A blog post reads down, not across.** Every other type puts its featured picture beside the words (`.page-head.has-media`, two columns); an article stacks — title, date, the picture **at its own size**, then the rule that divides the head from the writing. `.featured` is a banner crop (`width:100%`, a 440px ceiling, `object-fit:cover`), which is right for a card or a product shot and wrong inside an article: a small picture was blown up to 1200 wide and then cut off top and bottom. `.pt-post .page-media img` hands the sizing back to the browser and only shrinks a picture wider than the column. The rule is `.pt-post .page-head`'s own bottom border, the same way the hero and an archive head draw theirs, so it spans the page rather than the 1200px column. The article also drops the eyebrow, which only repeated the breadcrumb's last link.
 
@@ -1308,7 +1310,7 @@ per top-level service, **one open at a time**, hover or tap; the open row goes t
 group's blurb in `--muted-dark` and its sub-services as outlined pills. **Nothing in it carries a `→`** (no public
 link does, since 2026-09-23 -- the start of this §), so the count's `&darr;`, turned to ↑ by `--chev` on the open
 row, is the only arrow in the section. `blocks._acc()` decides which lists get it
-(§6); everything below is `site.css`, and **there is no script** — this is not a second use of `site.js`.
+(§6); everything below is `site.css`, and **there is no script** — this is not another use of `site.js`.
 
 **The open row's palette is six custom properties on `.acc`**, not colours written into the open rule: `--o-bg`,
 `--o-nm`, `--o-mt`, `--o-kid`, `--o-kln`, `--o-lnk`. That is what makes *Colour when open* three declarations
@@ -1414,7 +1416,8 @@ phone's tap sequence is the one thing not measured here.
 
 `static/site.js` is the public site's only first-party script, it is ~5 KB unminified, it is `defer`-loaded from
 `base.html`, and it touches nothing but `.pl-rail` sections — testimonials, and since 2026-09-23 product lists (the
-home page's appliances): the same row reused, not a second feature. It exists because the client asked for testimonials
+home page's appliances): the same row reused, not a second feature — and, since 2026-09-24, the start of a counting
+figure (*Figures that count when they are seen*, below), which is its second feature and was written down as one. It exists because the client asked for testimonials
 that scroll on their own *and* that a visitor can drive — arrows and dots, which nothing in CSS can do (2026-09-16,
 `requirements.md`).
 
@@ -1495,6 +1498,54 @@ sandbox. Two CSS consequences as well: `a.card:hover` lifts a card 2px, which a 
 `padding:4px 0; margin-top:-4px` (a net zero the testimonials measured identical under, 28.0px below the heading at
 1440 both ways); and the browser's focus ring, drawn just outside the card, lost the first card's left side to the
 same clipping, so `.pl-rail a.card:focus-visible` draws the accordion's inset ring instead.
+
+### Figures that count when they are seen
+
+A Numbers band ticked **Start counting when it scrolls into view** (`count_in_view`, 2026-09-24) holds each counting
+figure at 0 until half of it is on screen, and only then counts. The count itself is unchanged — `@property --cv`
+animated by `@keyframes cv` on `.cr` — and only its *start* comes from the script. `stats.html` writes `fx-view` on a
+figure's `<li>` when the figure counts (`count_up()` found a number) and the band is ticked; the block after the rail
+loop in `site.js` observes every `.fx-view` with an `IntersectionObserver` at `threshold: 0.5`; and `site.css` holds
+`.stats li.fx-count.fx-wait .cr{animation:none}` right after the `fx-count` group, at (0,4,1) over the count's (0,3,1).
+
+**Why a script at all.** `animation-timeline: view()` was tried for every effect and taken out (the comment above the
+section effects in `site.css`): a scroll timeline pins the animation to where the reader is, so a band in the first
+viewport loaded part-way through and showed **270 for a figure typed as 300**. What is wanted is a *start signal*,
+not a timeline, and CSS has no "has this been on screen" state.
+
+**The script adds `fx-wait`; the template never does.** A blocked, failed or throwing script leaves nothing waiting,
+and the figure counts at load exactly as before — it can never sit at a wrong 0. That is the property
+`test_a_band_can_wait_to_be_seen_before_it_counts` guards, by asserting `fx-wait` is absent from the rendered HTML.
+
+**Nothing gets `fx-wait` up front.** The observer's first report arrives once for every target with its current
+state, and that report is what decides: on screen → leave it alone and stop watching, off screen → add `fx-wait`.
+The obvious version — add the class to every figure, let the observer take it off the visible ones — snaps a figure
+already on screen back to 0 mid-count, because a `defer` script runs a few frames into the animation: 0 → 40 → 0 →
+300 under the hero. The test asserts `classList.add('fx-wait')` sits inside the observer callback.
+`isIntersecting` in that first report means *any* part is on screen, not the 0.5 threshold, so a figure straddling
+the fold at load is left alone and counts from load. That is the safe direction; checking `intersectionRatio`
+instead would reset it mid-count, the same flash.
+
+**`animation:none`, not `animation-play-state:paused`.** An off-screen figure may already be a few frames in when
+the script reaches it; `none` resets that to 0 while nobody can see it, and removing the class starts a fresh
+animation from 0 rather than resuming from 4 %.
+
+**Each figure is observed, not the section.** At 1440 the row crosses the threshold together and the figures start
+together; at 390 `.stats` (`minmax(200px,1fr)`) stacks them in one column and each counts as it arrives, so none
+finishes before it is seen. A ~90px figure can always reach `threshold: 0.5`; a stacked section taller than two
+viewports never could.
+
+**What needed nothing.** Preview's `#main` swap (§12.2) imports fresh figures that carry no `fx-wait`, so there they
+count on arrival, as every other effect replays on a swap. The editor canvas (`canvas.css`) and reduced motion
+(`site.css`'s `prefers-reduced-motion` block) both stand the count down and show the typed digits, so there is
+nothing to hold.
+
+Measured in Firefox 140 ESR headless at 1440×900, on a harness serving the real `render_blocks()`, `site.css` and
+`site.js`: a ticked band on screen climbed `--cv` 0.042, 0.095, 0.173, 0.248, 0.456, 0.693 over its first second and
+read 1.000 at 3 s, never decreasing; a ticked band 4000px down read 0.000 with `animation-name: none` at 3 s, 0.390
+800 ms after scrolling to it and 1.000 at +2.6 s; an unticked band at the same depth had already read 1.000 at 3 s
+(the behaviour this replaces); and the same page without `site.js` read 1.000 for the ticked band at 3 s. **Not
+measured:** Safari, and a real phone's scroll.
 
 ### The testimonial card
 
@@ -2779,7 +2830,7 @@ Marked in code with `# ponytail:` comments.
 - **A restore is not pre-checked against what it references.** Putting back a version whose featured image or parent page has since been deleted fails on the foreign key and surfaces through `_pg_error` as a 502 page rather than a sentence.
 - **`/admin/audit` pages with offset/limit** like every other admin list. Deep pages get slower; keyset pagination if that day comes.
 - **The feed over-fetches 2× rather than paging.** `feed()` asks for `FEED_MAX * 2` rows and slices to `FEED_MAX` after `_indexable()`, because filtering a list that was already truncated is what let one `noindex` post shorten the feed. `FEED_MAX` consecutive `noindex` posts would still come up short; page the query if that ever happens.
-- **`site.js` has no error boundary and no feature detection.** It is ~150 lines against `scrollTo`, pointer events and `matchMedia`, all of which every browser the client's visitors use has had for years; if any of it throws, the row silently stays a plain native scroller, which is the state the page is served in anyway. That is the whole reason the controls ship `hidden` and the script unhides them.
+- **`site.js` has no error boundary and no feature detection.** It is ~165 lines against `scrollTo`, pointer events, `matchMedia` and `IntersectionObserver`, all of which every browser the client's visitors use has had for years; if any of it throws, the row silently stays a plain native scroller, which is the state the page is served in anyway. That is the whole reason the controls ship `hidden` and the script unhides them. The counting figures fail the same way: the observer is the last thing in the file, so a throw anywhere above it leaves no figure holding at zero and a ticked band simply counts as the page opens.
 
 Shared editing (§12.3), all of them named in `admin.js`:
 
@@ -2810,7 +2861,7 @@ Shared editing (§12.3), all of them named in `admin.js`:
 - Inline editing is opt-in per element. Anything without an `fe()` marker — `post_list`'s titles and excerpts, which belong to *other* posts — simply is not editable, which is the point.
 - The hero rotator has a keyframe set per picture count, and two are written (2 and 3). A fourth picture needs a fourth set.
 - A counted figure rolls the **first whole number** in it and only that: `"99.999%"` counts 0→99 and holds `".999%"`, because a CSS counter is an integer. A grouped `"1,200"` is refused outright and stays plain text — `counter()` has no thousands separator, so it would settle on `1200` under a figure the editor wrote as `1,200`. Both are in `count_up()`.
-- A section effect plays once as the page loads, not when the reader scrolls to it, so on a long page it has finished before they arrive. Deliberate: the scroll-timeline version left a section in the first viewport part-way through its own animation, which showed a *wrong figure* under the hero — see §12.
+- A section effect plays once as the page loads, not when the reader scrolls to it, so on a long page it has finished before they arrive. Deliberate: the scroll-timeline version left a section in the first viewport part-way through its own animation, which showed a *wrong figure* under the hero — see §12. **The count is the exception since 2026-09-24:** a Numbers band ticked *Start counting when it scrolls into view* waits (`site.js`, §12 *Figures that count when they are seen*). Rise, sweep and the gradient still play at load; they would need `animation-play-state:paused` rather than the count's `animation:none`, because they are `both`-filled from `opacity:0` and `none` would flash them in and out.
 - The counting figure needs `@property` (Chrome 85+, Safari 16.4+, Firefox 128+) for `--cv` to interpolate at all. Below that floor a counted figure reads `0`; untick *Count up from zero* for it. The floor is older than the `:has()` the mega panel already depends on, so nothing that can open the menu is caught by it.
 - A page whose **first** section is a `hero` or a `columns` writes its own opening, so `post.html` draws no page head for it. That is what lets the Contact screen put its H1 beside the form — and it means a page an editor starts with a Columns section shows no title until they type one into it.
 - `--w` is one measure per section, so a hero's headline and its paragraph (820px and 720px by default) take the same custom width. Per-element widths would need a key per element, which no editor has asked for.

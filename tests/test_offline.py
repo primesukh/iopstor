@@ -638,6 +638,30 @@ def test_one_figure_can_differ_from_its_band(app, monkeypatch):
         {"value": "1", "label": "x", "fx": "rise;}"}]}}])
 
 
+def test_a_band_can_wait_to_be_seen_before_it_counts(app, monkeypatch):
+    """count_in_view marks each COUNTING figure .fx-view for site.js to watch. The class that holds a
+    figure at zero, .fx-wait, is the script's alone: if the template wrote it, a page whose script
+    never ran would show 0 for a figure the editor typed as 300."""
+    from iopstor import db
+
+    monkeypatch.setattr(db, "settings", lambda: {})
+    monkeypatch.setattr(db, "get_menu", lambda slug: [])
+
+    items = [{"value": "300+", "label": "customers"}, {"value": "Always on", "label": "support"}]
+    html = render_blocks([{"type": "stats", "data": {"count_up": True, "count_in_view": True, "items": items}}])
+    assert html.count('<li class="fx-count fx-view"') == 1     # only the figure that counts is watched
+    assert '<li><strong>Always on</strong>' in html
+    assert "fx-wait" not in html
+    # unticked, the band is exactly what it was before the tick existed
+    assert "fx-view" not in render_blocks([{"type": "stats", "data": {"count_up": True, "items": items}}])
+    # ticked with nothing counting, there is nothing to wait for
+    assert "fx-view" not in render_blocks([{"type": "stats", "data": {"count_in_view": True, "items": items}}])
+    js = (pathlib.Path(__file__).parent.parent / "iopstor" / "static" / "site.js").read_text()
+    assert "IntersectionObserver" in js and "document.querySelectorAll('.fx-view')" in js
+    # nothing gets .fx-wait up front: a figure already on screen would snap back to 0 mid-count
+    assert "classList.add('fx-wait')" in js[js.index("new IntersectionObserver"):js.index("document.querySelectorAll('.fx-view')")]
+
+
 def test_edit_mode_survives_a_half_finished_block(app, monkeypatch):
     from iopstor import db
 
