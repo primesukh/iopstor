@@ -1522,6 +1522,9 @@ state, and that report is what decides: on screen → leave it alone and stop wa
 The obvious version — add the class to every figure, let the observer take it off the visible ones — snaps a figure
 already on screen back to 0 mid-count, because a `defer` script runs a few frames into the animation: 0 → 40 → 0 →
 300 under the hero. The test asserts `classList.add('fx-wait')` sits inside the observer callback.
+`isIntersecting` in that first report means *any* part is on screen, not the 0.5 threshold, so a figure straddling
+the fold at load is left alone and counts from load. That is the safe direction; checking `intersectionRatio`
+instead would reset it mid-count, the same flash.
 
 **`animation:none`, not `animation-play-state:paused`.** An off-screen figure may already be a few frames in when
 the script reaches it; `none` resets that to 0 while nobody can see it, and removing the class starts a fresh
