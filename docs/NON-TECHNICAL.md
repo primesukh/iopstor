@@ -240,7 +240,7 @@ on the right included — so you can never fill in a picture or a table box and 
 
 ### Adding a section
 
-**Press `/` on an empty line.** A short list appears under the cursor. Type a few letters to narrow it — “num” finds Numbers, “quo” finds Customer quote — and press Enter. The section drops in right there, already filled with stand-in wording, and the cursor lands on a fresh line underneath so you can carry on writing.
+**Press `/` on an empty line.** A short list appears under the cursor. Type a few letters to narrow it — “num” finds Numbers, “quo” finds Customer quote — then use **↑** and **↓** if you want one further down, and press Enter. The section drops in right there, already filled with stand-in wording, **in place of the empty line you typed `/` on** — and the cursor lands in the section's own heading, so the first thing you type is the title of what you just added. Nothing else is added: no blank line underneath. If there were words above or below the line you typed `/` on, they stay where they were — what was above keeps its own block, and what was below becomes a paragraph under the new section. To write under the section, click the *“Type here, or press / for a section”* line that appears between any two sections, including under the last one.
 
 You can also use **+ Section** on the toolbar, which opens the same list with a description of each one. The same menu has *“Start from a layout…”* if you would rather begin from a ready-made Product, Service or Landing page and replace the wording.
 
@@ -778,6 +778,32 @@ paragraph, the way Google Docs does (§4).
 ---
 
 ## 15. Quick answers
+
+**A new blank line appears but I cannot type in it — I have to click it first.** Fixed. Clicking one
+of the *“Type here, or press / for a section”* strips, and opening a page that has nothing on it yet,
+both put the cursor straight into the new line, so you can start typing immediately. It had stopped
+working when the writing area was rebuilt for two-people-at-once editing, and it only ever affected
+the newer writing areas — which is most of them.
+
+**Adding a section leaves an empty gap underneath it.** Not any more. Every section you added with
+`/` used to come with a blank paragraph under it, back when the cursor landed there. It never showed
+on the website — an empty paragraph is dropped when you publish — but it left a band of white space
+in the editor. Now only your own words follow a section: if you press `/` in the middle of a
+paragraph, whatever was below the line carries on underneath, and if there was nothing below it,
+nothing is added. The *“Type here, or press / for a section”* line between sections is how you write
+under one.
+
+**I add a Divider and the page jumps to the top.** Fixed. Adding or removing a section redraws the
+whole page, and the redraw used to start at the top — for most sections you never saw it, because the
+cursor landed in the new section and the page followed it back down. A Divider, a Spacer and an
+Embed have nothing to type in, so there was nothing to follow and you were left at the top. The page
+now stays where you were looking, whatever you add.
+
+**I press `/`, pick a section, and it appears *underneath* an empty line instead of replacing it.**
+Fixed. The empty line you typed `/` on is now the line the section takes the place of, so you no
+longer have to go back and delete it. Pressing Enter in that list also used to add a blank line to
+your paragraph on its way past; it does not any more. And **↑** and **↓** now move through the list,
+so Enter takes whichever one is highlighted rather than always the first.
 
 **The appliances on the home page slide now.** As asked (23 September), they sit on one line like the
 testimonials: the line moves along on its own, the arrows and dots underneath move it by hand, and on a phone

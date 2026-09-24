@@ -1764,7 +1764,7 @@ Blocks live in **containers**: `#main`, or one `[data-col]` of a columns block (
 
 - **`renumber()` recurses.** Document order over one flat `querySelectorAll("[data-b]")` would number a column's children into their parent's sequence and corrupt the whole mapping, so it walks container by container.
 - **`bars()` and Sortable run per container.** Every column gets its own click-to-type strips, so an empty column is a place to type rather than a dead box — and because an empty column contains nothing *but* that strip, `.column>.iop-add:only-child` drops the hover-to-reveal and draws it as a dashed drop target, or the column reads as exactly the dead box it is not; every column gets its own `Sortable` in the shared `group: "iop"`, so a section drags between the page and any column. The group's `put` refuses `NEVER_NESTED` types, and `onEnd` reads the source path off the item (before `renumber()` rewrites it) and the destination out of `blocksIn(e.to)` — `oldIndex`/`newIndex` count the `.iop-add` strips too.
-- **`splitAt()` adds no trailing paragraph inside a column.** On the page, `/` inserts the chosen section *and* an empty `rich_text` under it, because a page is a document you keep writing down. A column is a slot you place things in, so there the paragraph goes in only when the split left real text behind, and the caret lands on the section itself.
+- **`splitAt()` adds a paragraph only when the split left words behind** (client, 2026-09-22), in a column and on a full-width page alike — `if (tail)`, where it used to be `if (tail || !isNested(path))`. Those words are the editor's and have to go somewhere; an empty one does not. The page used to get one regardless, as "somewhere you carry on writing", which was true while the caret landed in it. Three things had made it dead weight: the caret goes into the section now (below), `prune()` drops an empty `rich_text` again on Publish so it was never content, and `bars()` already draws a click-to-type strip in **every** gap including the one under the last section — so there was never nowhere to type. It was a band of whitespace under everything you inserted. **The caret lands on the section** whichever branch runs, so neither `focusOnLoad` depends on how long `ins` is.
 - **Wiring is scoped to the owning block.** `wireBlock()` binds only fields where `f.closest("[data-b]") === node` and guards its `mousedown` the same way, or a Columns block would claim its children's fields and clicks. `wireTree()` is `wireBlock` plus every nested block and a `sortable()` for every new `[data-col]`, and is what a replaced fragment goes through.
 
 The `⚙` panel for a Columns block manages the column *list* — `repeater()` gained two optional hooks (a row factory, a cell renderer) because a column row is an array of blocks rather than a row of fields, which is cheaper than a second ↑ ↓ ✕ splice loop. Removing a column that holds sections asks first. The sections themselves are edited on the page, like everything else.
@@ -1778,6 +1778,31 @@ but the editing surface leads with writing:
 - The gaps between sections are **click-to-type**: clicking one splices in an empty `rich_text`
   and focuses it. One mechanic instead of a separate "+" affordance, and it means there is never
   nowhere to put the caret.
+- **A full repaint puts the page back where you were looking** (client, 2026-09-22). `canvasFull()`
+  replaces `srcdoc`, and a fresh document is scrolled to the top — so every structural change threw
+  the editor there: inserting a section, deleting one, a peer's edit. It went unreported for months
+  because it is invisible on a block *with* a field: `focusBlock()` focuses one and the browser
+  scrolls it into view on the way. **`divider`, `spacer` and `embed_html` have no `[data-f]` of their
+  own** (the three templates with no `fe('…')` call), so there was nothing to focus and nothing to
+  scroll, and adding a divider halfway down a page jumped to the top of it. `canvasFull()` now reads
+  `cdoc().defaultView.scrollY` **before** the swap — by `onload` the old document is gone — and
+  restores it in `onload` *before* `focusBlock()`, so a caret that is still off screen scrolls itself
+  in and wins. Only when the frame is holding the edit canvas: `pvUp` is that question and
+  `renderPreview()` already asks it, because a preview is a different page with a header above the
+  body and its offset means nothing here. Measured on an eight-paragraph page: 1694 → 0 before,
+  1694 → 1718 after, and a Hero inserted at 890 comes back at 976 with the caret in its first field.
+  `test_a_full_repaint_puts_the_page_back_where_the_editor_was_looking` pins it, and asserts the
+  three fieldless types by reading the templates, so a fourth one cannot arrive unnoticed.
+- **`focusBlock()` asks who owns the field before it places that caret** (client, 2026-09-22). Quill
+  mounts `div.ql-editor` *inside* `[data-f]` and `bindField()` returns before `setEditable()`, so the
+  field itself is never `contenteditable` and never focusable: `f.focus()` was a no-op and a range at
+  `(f, 0)` sat outside the editable. Quill's own selection stayed `null` and **nothing could be typed
+  until the paragraph was clicked with a mouse** — on a new paragraph, on a blank page, and after
+  every `/`. The fix is `quillOf(f)` first, then `q.focus(); q.setSelection(0, 0)`; the legacy branch
+  is unchanged, which is why a `data-legacy` block never had the fault. `canvas.css` had already
+  written the shape down (*"Focus lands on `.ql-editor` inside the field"*), and one helper covers all
+  three callers. A block with no field of its own — a divider, a fresh `columns` — now still gets
+  `select(path)` rather than nothing.
 - **Every section carries the hover toolbar, `rich_text` included** (name, drag, ↑ ↓, duplicate,
   settings, remove). Typed sections were exempt at first, to protect the document feel — but the
   bar is one per block of writing, not one per paragraph, and it is the only way to reach a typed
@@ -1924,11 +1949,60 @@ trusted-staff-only on the server. It replaced the old handler that forced every 
 `insertText`, which threw away exactly the headings and lists an editor had drafted elsewhere.
 
 **`/` inserts a section at the caret.** Typing `/` on an otherwise empty line opens a filtered
-list positioned under the caret; typing filters, Enter takes the first, Escape cancels. `splitAt()`
-does the surgery at the HTML level rather than with Range extraction: the children of the field
-before the `/` line stay in this block, the chosen section goes next, and the children after it
-become a second `rich_text`. If the `/` line *was* the whole paragraph, the block is replaced
-outright rather than leaving an empty one behind.
+list positioned under the caret; typing filters, ↑/↓ move the highlight, Enter takes the lit row,
+Escape cancels. `splitAt()` splits the paragraph: what is before the `/` line stays in this block,
+the chosen section goes next, and what is after it becomes a second `rich_text` — **only if there was
+anything after it**; nothing is added to an insert at the end of a paragraph (above). If the `/` line
+*was* the whole paragraph, the block is replaced outright rather than leaving an empty one behind.
+
+**Three things about that surgery, all of which were wrong while Quill owned the field**
+(client, 2026-09-22).
+
+*The menu has to see Enter before Quill does.* Quill's Keyboard module listens on its own
+`quill.root`, which is closer to the target than the canvas document — so in the bubble phase
+`handleEnter` had already inserted a newline by the time the menu's `preventDefault()` ran, the `/`
+line was no longer the whole paragraph, and Enter split rather than chose. The listener is registered
+**capture-phase** and calls `preventDefault()` + `stopPropagation()` on the four keys the menu owns
+(Enter, Escape, ↑, ↓); every other key still falls through, which is what types the filter. Capture
+alone would have been enough — Quill's dispatcher opens with `if (evt.defaultPrevented) return` — but
+stopping the event outright does not depend on reading a vendored bundle correctly. **The legacy path
+never had this fault**, because a plain `contenteditable` has no element-level handler and the
+document listener was early enough to cancel the browser's own newline.
+
+*The split cannot walk the field's children.* `f.childNodes` on a Quill field is
+`[div.ql-editor]`; the `/` line is a `<p>` one level further down and was never found, so `seen`
+stayed false, `head` came out as the **whole cloned editor** — `<div class="ql-editor"
+contenteditable="true">…` written into `data.html` — and the insert-after branch always ran. That is
+the reported symptom: the empty paragraph stayed and the section landed under it. The Quill branch
+asks Quill instead: the line's blot (from `q.getSelection()`, falling back to `Quill.find(line)`),
+`q.getIndex()` for where it starts, `blot.length()` for where it ends.
+
+*And the head has to leave through Quill, not through `data.html`.* Walking `line.parentNode`
+would have published Quill's editing markup — `root.innerHTML` renders every bulleted list numbered
+and carries `<span class="ql-ui">`, which is the whole reason `semantic()` exists — so the tail is
+`semanticPart(q, end, …)`, the range form of that same one expression. And writing `data.html` on a
+prose block is thrown away twice over: `yData()` refuses the key outright (`if (k === "html") return`,
+because the `Y.Text` holds a delta), and on the repaint `QuillBinding`'s constructor ends in
+`setContents(type.toDelta())`, so the pre-split text wins — for a colleague *and* for the person who
+typed it. `q.deleteText(at, …, "api")` travels: through the binding into the `Y.Text`, and back into
+`MODEL` by `mountQuill`'s own `text-change` mirror, which writes `MODEL` *before* it looks at the
+source. `"api"` rather than `"user"` on purpose, so the early return there keeps our own delete from
+re-opening the menu; `splitAt` already calls `touched()` and `markStep()` itself.
+
+Measured in a real browser before and after (`/collab-check` §6), on the same page:
+`/` + Enter on an empty paragraph gave `rich_text, rich_text, hero, rich_text` with
+`"<div class=\"ql-editor\" contenteditable=\"true\"><p><br></p><p>/</p></div>"` in the stranded
+paragraph, and gives `rich_text, hero, rich_text` with `null`; a split under `hello` leaves exactly
+`<p>hello</p>` and a split between two lines leaves exactly `<p>above</p>` and `<p>below</p>`.
+Pinned by shape in `test_the_slash_menu_sees_enter_before_quill_does` and
+`test_the_half_of_a_paragraph_that_stays_leaves_through_quill`.
+
+**↑/↓ reuse the terms picker's `move()`.** That picker (`initTerms`) already drew `.iop-slash` rows
+and already arrowed through them, so its closure is hoisted to a module-level `moveRow(list, step)`
+and both menus call it. It selects `.iop-slash-row` rather than `list.children` because the `/` menu
+can also be holding a *"Nothing matches."* paragraph; in the picker every child is a row, so nothing
+there changes. Enter now clicks `.iop-slash-row.on` instead of taking `shown[0]`, which is what makes
+the arrows mean anything.
 
 **Link, picture, table and embed are dialogs.** All four used to be a `prompt()`: unstyled,
 single-line (so an embed snippet was unreadable), impossible to validate, and on Firefox carrying a
@@ -2030,7 +2104,9 @@ switched **off** in a Quill field rather than inserting something the next keyst
 picture, table, embed, divider and the `rem` size dropdown — which is the same rule the gate applies,
 enforced at insert time: those are precisely the markup Quill has no blot for. Sections that need a
 table keep the original editor and keep the buttons. The `/` inserter is hooked from Quill's
-`text-change` instead of `bindSlash()`'s `keyup`, because Quill owns the keyboard.
+`text-change` instead of `bindSlash()`'s `keyup`, because Quill owns the keyboard — and for the same
+reason the menu's own keys are taken in the **capture** phase, ahead of Quill's listener on
+`quill.root` (above).
 
 **The page saves itself, and the button publishes.** `initAutosave()` (`admin.js`) writes the whole
 document to `POST /admin/posts/<id>/draft` 1.5 s after any change, and the big button copies that draft
@@ -2042,9 +2118,15 @@ deliberate:
   late-binding shape `syncBar()` and `paintPeers()` use, because `markDirty()` can run before there is
   anywhere to save to — and on `/posts/new` there is no row yet, so autosave stays off until the post
   has been created once.
-- **It serialises `prune(MODEL)`**, the serialiser the form *submit* uses, not the shallower
-  `MODEL.filter(written)` that Preview sends. The draft has to be the same bytes Publish would store,
-  or publishing would change the page by itself.
+- **It serialises `MODEL` whole and is deliberately *not* pruned** (`saveable()`). This paragraph
+  used to say the opposite — that the draft is `prune(MODEL)`, "the same bytes Publish would store" —
+  and the shared document made that false: `prune()` drops an empty paragraph and rebuilds a
+  `columns` block as a fresh object, so a section an editor still has the caret in loses its `_id`,
+  every section after it answers to a different one, and a remote edit would land on the wrong
+  section after the next load. **The draft is the live document, empty paragraphs and all; Publish
+  still prunes**, because that is the only place "an empty paragraph is the caret waiting for you,
+  not content" is true. Preview sends the shallower `MODEL.filter(written)`. The comment above
+  `saveable()` says all of this at the call site.
 - **The button says `Publish` only when the page's status is `published`**, and `Save` otherwise —
   pressing it on a Draft-status page publishes nothing to anybody. It is server-rendered from
   `p.status` and relabelled by a `change` listener on the status `<select>`, so it does not start
