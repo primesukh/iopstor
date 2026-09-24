@@ -830,6 +830,8 @@ link to that group's page, so there is no need to aim for the small *All Hyper C
 phone the first tap only opens the line, so a visitor can see what is in it; a tap on the description then goes to
 the page.
 
+**The "Home / Services / Storage" line moved into the picture band.** On a page that opens with a big Hero, that line — which shows where the page sits on the site — used to sit in a thin white strip above the band, which looked detached from it. It is now the first line inside the Hero, just above the heading, in light grey with the page you are on in white (on a white Hero it stays grey, as elsewhere). Nothing needs editing. A page that opens with something other than a Hero keeps the line where it was.
+
 **The little arrows after links have gone.** On purpose — they were asked to be taken off (23 September). Every
 link, button and tile on the site now ends in its own words: *All services* and *All appliances* beside a
 section's heading, the other services at the foot of a service page, the sub-service buttons, *Request a quote*
