@@ -418,8 +418,11 @@
     var n = SPEC && SPEC.ui.names && SPEC.ui.names[type];
     return (n && n[1]) || BLOCK_NAMES[type] || (type.charAt(0).toUpperCase() + type.slice(1)).replace(/_/g, " ");
   }
-  function labelFor(field) {
-    return SPEC.ui.labels[field] || (field.charAt(0).toUpperCase() + field.slice(1)).replace(/_/g, " ");
+  // "<block>.<field>" beats the bare key, exactly as widgetFor() above: `dark` is a field on both
+  // hero and testimonial and means something different on each.
+  function labelFor(type, field) {
+    return SPEC.ui.labels[type + "." + field] || SPEC.ui.labels[field] ||
+           (field.charAt(0).toUpperCase() + field.slice(1)).replace(/_/g, " ");
   }
   var REPEATERS = ["items", "images", "rows", "cols"];   // blocks.py REPEATERS
   function fieldsOf(type) {
@@ -483,7 +486,7 @@
     function draw() {
       list.innerHTML = "";
       data[key].forEach(function (row, i) {
-        var cells_ = cells ? cells(row, i) : subs.map(function (s) { return labelled(labelFor(s), false, fieldInput(type, s, row)); });
+        var cells_ = cells ? cells(row, i) : subs.map(function (s) { return labelled(labelFor(type, s), false, fieldInput(type, s, row)); });
         var controls = el("span", { "class": "rep-controls" }, [
           btn("↑", "Move up", function () { if (i) { data[key].splice(i - 1, 0, data[key].splice(i, 1)[0]); draw(); } }),
           btn("↓", "Move down", function () { if (i < data[key].length - 1) { data[key].splice(i + 1, 0, data[key].splice(i, 1)[0]); draw(); } }),
@@ -496,7 +499,7 @@
         ]);
         list.appendChild(el("div", { "class": "rep-row" }, cells_.concat([controls])));
       });
-      list.appendChild(btn("+ Add " + labelFor(key).toLowerCase().replace(/s$/, ""), "Add a row", function () {
+      list.appendChild(btn("+ Add " + labelFor(type, key).toLowerCase().replace(/s$/, ""), "Add a row", function () {
         var row = {};
         subs.forEach(function (s) { row[s] = ""; });
         data[key].push(make ? make() : row);
@@ -504,7 +507,7 @@
       }));
     }
     draw();
-    return el("div", {}, [el("strong", { text: labelFor(key) }), list]);
+    return el("div", {}, [el("strong", { text: labelFor(type, key) }), list]);
   }
 
   /* Alignment belongs to every section, so it is not a field in BLOCKS: one control here covers all
@@ -532,7 +535,7 @@
 
   /* The band a section sits on. Same shape as alignPick: picking the blank option deletes the key,
      so an untouched section stays byte-identical in the saved JSON. */
-  var TONES = [["", "Page background"], ["grey", "Light grey"], ["dark", "Dark"], ["blue", "Blue"]];
+  var TONES = [["page", "Page background"], ["grey", "Light grey"], ["dark", "Dark"], ["blue", "Blue"]];
 
   /* How much air the section keeps, and only ever less than the design's own -- adding space is a
      Spacer, which is a thing you can drag. Same shape as tonePick: the blank option deletes the key.
@@ -547,13 +550,17 @@
     });
     return labelled("Spacing", false, sel);
   }
-  function tonePick(data) {
-    var sel = el("select");
+  function tonePick(block) {
+    var sel = el("select"), data = block.data;
     TONES.forEach(function (t) { sel.appendChild(el("option", {value: t[0], text: t[1]})); });
-    sel.value = data.tone || "";
-    sel.addEventListener("change", function () {
-      if (sel.value) data.tone = sel.value; else delete data.tone;
-    });
+    /* "Page background" is stored, not the absence of a value (blocks.py TONES), so picking it can
+       overrule a band the block draws itself -- which a hero with the tick on does. An absent tone
+       still means "leave that band alone", so it shows as whatever the block is ALREADY on rather
+       than claiming white: that is only ever the ticked hero, every other block with no tone is on
+       the page background and says so. ponytail: the tick is read when the panel is built, so
+       toggling it with the panel open leaves the shown value a beat behind until it is reopened. */
+    sel.value = data.tone || ((block.type === "hero" && data.dark) ? "dark" : "page");
+    sel.addEventListener("change", function () { data.tone = sel.value; });
     return labelled("Background", false, sel);
   }
 
@@ -587,7 +594,7 @@
     } else {
       body.appendChild(alignPick("Align the content", "align", block.data));
       body.appendChild(alignPick("Align the section", "align_box", block.data));
-      body.appendChild(tonePick(block.data));
+      body.appendChild(tonePick(block));
       body.appendChild(widthPick(block.data));
       // not on a spacer: its Height is its spacing, and two controls on one gap is the trap
       if (block.type !== "spacer") body.appendChild(padPick(block.data));
@@ -606,7 +613,7 @@
         } else if (SPEC.ui.items[block.type] && (f.key === "items" || f.key === "images" || f.key === "rows")) {
           body.appendChild(repeater(block.type, f.key, block.data));
         } else {
-          body.appendChild(labelled(labelFor(f.key), f.required, fieldInput(block.type, f.key, block.data)));
+          body.appendChild(labelled(labelFor(block.type, f.key), f.required, fieldInput(block.type, f.key, block.data)));
         }
       });
     }

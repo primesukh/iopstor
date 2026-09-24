@@ -33,7 +33,7 @@ BLOCKS = {  # type: (required fields, optional fields)
     # exist (section 12.3). The picture is optional: with none, .ava draws the design's hatched circle.
     "people": (["items"], ["heading"]),  # items: [{name, role, media_id}]
     "embed_html": (["html"], []),
-    # link_label/link_url are the "All services →" link in the section header.
+    # link_label/link_url are the "All services" link in the section header.
     "post_list": (["post_type"], ["heading", "eyebrow", "term", "limit", "top_level",
                                   "link_label", "link_url", "per_row", "list_style", "open_tone"]),  # queried at render time; top_level=true → parents only
     "spec_table": (["rows"], ["heading"]),  # rows: [{k, v}]
@@ -85,7 +85,13 @@ EDITOR = {
                "term": "Term slug", "eyebrow": "Small label above the heading",
                "cta2_label": "Second button text", "cta2_url": "Second button link",
                "link_label": "Header link text", "link_url": "Header link",
-               "dark": "Dark background", "still": "Hold the picture still", "arrange": "Where the picture goes",
+               "dark": "Dark background",
+               # "<block>.<field>" beats the bare key, like "widgets" above. On a hero the tick is
+               # the LAYOUT -- the full-width band, the picture as a backdrop -- and the section's
+               # own Background dropdown decides the colour; on a testimonial it really is just the
+               # colour, so the bare label stays right there.
+               "hero.dark": "Full-width band, picture behind the words",
+               "still": "Hold the picture still", "arrange": "Where the picture goes",
                "noglow": "Hide the glow behind the picture",
                "count_up": "Count up from zero", "fx": "Effect", "per_row": "Items per row",
                "list_style": "List style", "open_tone": "Colour when open"},
@@ -101,9 +107,11 @@ EDITOR = {
                 "per_row": [["", "As many as fit the width"],
                             ["even", "Even rows, in as few lines as it can"]]
                            + [[str(n), f"{n} per row"] for n in range(2, 9)],
-                # "" is not "cards": it is the shape _acc() picks for the type, which is the
-                # accordion for a top-level services list and cards for everything else.
-                "list_style": [["", "Automatic"], ["cards", "Cards"], ["accordion", "Accordion"]],
+                # "" is not "cards": it is the shape _acc() and _rail() pick for the type -- the
+                # accordion for a top-level services list, a sliding row for testimonials and
+                # products, cards for everything else.
+                "list_style": [["", "Automatic"], ["cards", "Cards"], ["accordion", "Accordion"],
+                               ["rail", "Sliding row"]],
                 # the accordion's open row. Compared against these literals in the template, never
                 # interpolated -- the same rule hero.arrange follows.
                 "open_tone": [["", "Black"], ["blue", "Blue"], ["light", "Light grey"]]},
@@ -279,7 +287,12 @@ def count_up(value):
     return int(m.group(1)), v[:m.start()], m.group(1), v[m.end():]
 
 
-TONES = ("grey", "dark", "blue")   # the bands a section can sit on; absent = the page's own white
+# The bands a section can sit on. `absent` means "nothing chosen, so the block's own default" --
+# which for most blocks IS the page's white, but for a hero with the band tick it is black. "page"
+# is therefore a VALUE and not the empty string: it is an editor saying "the page background",
+# which is a different statement from never having touched the control, and only an explicit one
+# can overrule the block's own band (client, 2026-09-22).
+TONES = ("page", "grey", "dark", "blue")
 ALIGNS = ("left", "center", "right")
 WIDTHS = {"wide": "w-wide", "full": "w-full"}   # "width" also takes a number of pixels; see section_style()
 FX = ("rise", "gradient", "sweep")   # the motion an editor can put on a section; counting figures up is its own checkbox
@@ -421,7 +434,7 @@ def details_at(post):
     return min(int(at), len(blocks)) if at.isdigit() else 0
 
 
-def render_blocks(blocks, edit=False, path="0", h1=True):
+def render_blocks(blocks, edit=False, path="0", h1=True, crumbs=None):
     """`path` is the data-b path of the FIRST block; its siblings increment the last part. The page
     itself starts at "0"; column 1 of block 2 renders with path "2.1.0".
 
@@ -432,7 +445,12 @@ def render_blocks(blocks, edit=False, path="0", h1=True):
     details_at(), and when the placement is the default the FIRST call is empty and the second one
     holds block 0. Both pass the same flag and the path decides, so neither call has to know about
     the other. It is also what stops a hero further down the page emitting a second <h1>, which it
-    did on every page that had one."""
+    did on every page that had one.
+
+    `crumbs` rides the same gate: the breadcrumb trail, given only when block 0 is the first thing
+    on the page (post.html's `lead_hero`), and handed only to the block at path "0" -- a hero draws
+    it as the first row of its band, where the mock puts it, instead of post.html leaving it in a
+    white strip above. The canvas passes none, so the editor never draws one."""
     head, _, first = path.rpartition(".")
     out = []
     for i, b in enumerate(blocks):
@@ -443,12 +461,9 @@ def render_blocks(blocks, edit=False, path="0", h1=True):
                 # pt_slug comes from the DB lookup, never from b["data"], so the class it becomes in
                 # the template cannot be anything an editor typed.
                 posts, pt_slug = _post_list(b["data"])
-                # cols is computed here, never taken from the data, so the class is ours
-                # rail is decided here for the same reason cols is: it depends on pt_slug, which came
-                # from the row rather than the data. ponytail: one type is named. Make it a "Sliding
-                # row" checkbox on the block when a second type wants one.
+                # cols, rail and acc are computed here, never taken from the data, so the classes are ours
                 extra = {"posts": posts, "pt_slug": pt_slug, "cols": _cols(b["data"], len(posts)),
-                         "rail": pt_slug == "testimonial", "acc": _acc(b["data"], pt_slug)}
+                         "rail": _rail(b["data"], pt_slug), "acc": _acc(b["data"], pt_slug)}
             elif b["type"] == "warranty_check":
                 extra = {"found": None if edit else _warranty()}  # the admin canvas gets the bare form, never a lookup
             elif b["type"] == "columns":
@@ -460,7 +475,8 @@ def render_blocks(blocks, edit=False, path="0", h1=True):
                          "widths": col_widths(b["data"])}
             out.append(render_template(f"blocks/{b['type']}.html", data=b["data"], edit=edit,
                                        cls=section_class(b["data"]), sty=section_style(b["data"]),
-                                       fe=_fe(p) if edit else _no_fe, h1=h1 and p == "0", **extra))
+                                       fe=_fe(p) if edit else _no_fe, h1=h1 and p == "0",
+                                       crumbs=crumbs if p == "0" else None, **extra))
         except Exception as e:
             if not edit:
                 raise  # a public page that cannot render should fail loudly, not hide it
@@ -648,6 +664,14 @@ def _acc(data, pt_slug):
     pt_slug comes from the resolved post_types row, so nothing an editor typed reaches the markup."""
     v = (data.get("list_style") or "").strip()
     return v == "accordion" or (v == "" and pt_slug == "service" and bool(data.get("top_level")))
+
+
+def _rail(data, pt_slug):
+    """Is this list the sliding row? The same shape as _acc(): an editor's List style wins, and ""
+    (Automatic) is the row for testimonials (2026-09-16) and products (client, 2026-09-23: "the
+    appliances should be limited and should be scrollable just like testimonials")."""
+    v = (data.get("list_style") or "").strip()
+    return v == "rail" or (v == "" and pt_slug in ("testimonial", "product"))
 
 
 def _post_list(data):

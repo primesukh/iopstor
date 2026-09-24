@@ -34,7 +34,7 @@ iopstor/__init__.py   create_app(), /healthz, blueprint + CLI registration, Jinj
 iopstor/config.py     env → Flask config. A plain module, not a class.
 iopstor/db.py         supabase-py clients + every query helper. The single data-access seam.
 iopstor/auth.py       GoTrue login/refresh/logout, verify_jwt(), require_role(), create_auth_user()
-iopstor/storage.py    save_upload() / delete_media() → Supabase Storage bucket + media table.
+iopstor/storage.py    save_upload() / delete_media() → Supabase Storage bucket + media table; sniff() = the type the bytes are.
                       public_path() is the address the site serves an object at, fetch() reads the bytes back.
 iopstor/blocks.py     BLOCKS registry, validate_blocks(), render_blocks(), blocks_text(), blocks_md()
 iopstor/seo.py        site(), build_meta(), jsonld(), md_url()
@@ -296,7 +296,7 @@ which posts no form at all, can never blank it by omission.
 
 **Two keys in `data` are not fields and are not typed by anybody.** `_id` names a section for as long as it exists, and `_rich` records whether Quill can hold that section's markup without losing any of it (§12.1). They are written by the editor, travel with the block through `posts.blocks` and `post_drafts.blocks`, and exist so two browsers can agree about which section is which and about how it is edited (§12.3). `validate_blocks()` ignores extra `data` keys — it checks required fields and the type name, never an allow-list — and both are in `_NON_TEXT_KEYS` so `blocks_text()` skips them.
 
-Variant switches never take free text, and there are two shapes of them. **Checkboxes**, which is most: `hero.dark` (the full-bleed band, where `image` becomes a faded backdrop instead of the art beside the words), `hero.still`, `hero.noglow`, `testimonial.dark`, `stats.count_up`. And a **fixed `choice` compared against literals in the template**, which `hero.arrange` is — a value the editor never picked falls through to the default rather than reaching the class. Then `contact_form`'s existing `kind`. The template tests them against fixed values (`{{ ' hero-dark' if data.dark }}`, `{{ ' cf-grey' if data.kind in ('quote', 'career') }}`), so nothing an editor types can reach a class attribute — which is the same reason `section_class()` is a whitelist.
+Variant switches never take free text, and there are two shapes of them. **Checkboxes**, which is most: `hero.dark` (the full-bleed band, where `image` becomes a faded backdrop instead of the art beside the words), `hero.still`, `hero.noglow`, `testimonial.dark`, `stats.count_up`. A checkbox can also be **read alongside something else** rather than written straight out: `hero-lit` is `data.dark` *and* `data.tone` compared against literals (§6, the tone paragraph), which is the same rule — a bool and a whitelisted choice can only ever produce a fixed class name. And a **fixed `choice` compared against literals in the template**, which `hero.arrange` is — a value the editor never picked falls through to the default rather than reaching the class. Then `contact_form`'s existing `kind`. The template tests them against fixed values (`{{ ' hero-dark' if data.dark }}`, `{{ ' cf-grey' if data.kind in ('quote', 'career') }}`), so nothing an editor types can reach a class attribute — which is the same reason `section_class()` is a whitelist.
 
 `spacer` and `divider` are the two types that are not content, and both are shaped by what they do
 *not* carry. `spacer` declares one field, `height`, a **whitelist** (`HEIGHTS = ("small", "medium",
@@ -332,32 +332,34 @@ proposing exactly that on `pdf`) and `sp-*` is emitted for whoever declares it. 
 `.iop-canvas .spacer` a faint dashed outline: on the page a blank section is the point, in the
 editor it is a section nobody can see to hover, drag or delete.
 
-`post_list` gained `eyebrow`, `link_label` and `link_url` (the "All services →" link in a section header), and **`per_row`** (2026-09-16), and `render_blocks()` hands its template a **`pt_slug`** extra alongside `posts` and **`cols`**. `per_row` is a `choice`: empty keeps the width-driven `auto-fit` every list had before, `even` asks `even_cols()` to work the count out from `len(posts)`, and `2`–`8` pin it. `even_cols()` sorts the counts 4–8 by **rows first** (2026-09-21), then by the fullest last row, then widest: 15 → 8 (8 + 7 in two lines) rather than the exact divisor 5 (5 + 5 + 5 in three), 20 → 7 (7 + 7 + 6) rather than 5×4. An exact divisor still wins whenever it costs no extra row — 14 is 7 + 7 and 16 is 8 + 8, unchanged — and fewer items than a row holds are one row of themselves. **Rows used to be the last consideration rather than the first**, which is what made a fifteenth partner turn a two-line logo strip into three (measured at 1440: the grid went 140px → 216px and every mark grew, 103×28 → 159×44, the opposite of a quiet strip). The trade is deliberate and reverses the 2026-09-16 *“all line should have same number of partners”*: a last line one short beats a whole extra line. `test_even_rows_take_the_fewest_rows_then_the_fullest_last_row` pins the ordering across 9–59 and `test_a_fifteenth_partner_puts_the_logo_strip_on_two_lines` pins the whole chain, fifteen posts in to `pl-cols-8` on the section. The number reaches the template as `cols` and becomes `pl-cols-<n>` on the section — **computed in `_cols()`, never read from the block's data**, which is why it is safe in a class name, the same rule `pt_slug` follows. `per_row` is in `_NON_TEXT_KEYS`, so it neither leaks into `llms-full.txt` nor gets co-edited as prose. The CSS applies the fixed track count only above **760px** and never inside a `.column`: a fixed count in half the width squashes the tracks, and a phone has to wrap by width. That becomes `pl-<slug>` on the section, and `site.css` styles one card per post type from it — the number for services, the logo for partners, the 16:9 picture and date for blog posts, the industry/solution chips for case studies. One template, the variants in CSS. `pt_slug` comes from the resolved `post_types` row, never from the block's own data, so it is safe in a class name.
+`post_list` gained `eyebrow`, `link_label` and `link_url` (the "All services" link in a section header), and **`per_row`** (2026-09-16), and `render_blocks()` hands its template a **`pt_slug`** extra alongside `posts` and **`cols`**. `per_row` is a `choice`: empty keeps the width-driven `auto-fit` every list had before, `even` asks `even_cols()` to work the count out from `len(posts)`, and `2`–`8` pin it. `even_cols()` sorts the counts 4–8 by **rows first** (2026-09-21), then by the fullest last row, then widest: 15 → 8 (8 + 7 in two lines) rather than the exact divisor 5 (5 + 5 + 5 in three), 20 → 7 (7 + 7 + 6) rather than 5×4. An exact divisor still wins whenever it costs no extra row — 14 is 7 + 7 and 16 is 8 + 8, unchanged — and fewer items than a row holds are one row of themselves. **Rows used to be the last consideration rather than the first**, which is what made a fifteenth partner turn a two-line logo strip into three (measured at 1440: the grid went 140px → 216px and every mark grew, 103×28 → 159×44, the opposite of a quiet strip). The trade is deliberate and reverses the 2026-09-16 *“all line should have same number of partners”*: a last line one short beats a whole extra line. `test_even_rows_take_the_fewest_rows_then_the_fullest_last_row` pins the ordering across 9–59 and `test_a_fifteenth_partner_puts_the_logo_strip_on_two_lines` pins the whole chain, fifteen posts in to `pl-cols-8` on the section. The number reaches the template as `cols` and becomes `pl-cols-<n>` on the section — **computed in `_cols()`, never read from the block's data**, which is why it is safe in a class name, the same rule `pt_slug` follows. `per_row` is in `_NON_TEXT_KEYS`, so it neither leaks into `llms-full.txt` nor gets co-edited as prose. The CSS applies the fixed track count only above **760px** and never inside a `.column`: a fixed count in half the width squashes the tracks, and a phone has to wrap by width. That becomes `pl-<slug>` on the section, and `site.css` styles one card per post type from it — the number for services, the logo for partners, the 16:9 picture and date for blog posts, the industry/solution chips for case studies. One template, the variants in CSS. `pt_slug` comes from the resolved `post_types` row, never from the block's own data, so it is safe in a class name.
 
-**`rail` (2026-09-16) is the third computed extra**, and it is `pt_slug == "testimonial"` — a `post_list` of
-testimonials renders as a sliding row rather than a grid. It is decided in `render_blocks()` beside `cols` and for
-the same reason: it depends on the resolved type, so it can never be something an editor typed. It adds `pl-rail`
-to the section and a `.rail-nav` after the cards, and `§12`'s *The sliding row* has the mechanism. There is
-deliberately **no "Sliding row" checkbox** on the block — one content type wants this, and a field nobody sets is
-a field that still has to be validated, seeded, labelled and tested (`# ponytail:` in `blocks.py` names the
-upgrade path).
+**`rail` (2026-09-16) is the third computed extra**: a `post_list` that renders as a sliding row rather than a
+grid. `_rail(data, pt_slug)` answers it, beside `_acc()` and in the same shape — the editor's `list_style` wins
+(`rail`, *Sliding row*, works on any type; `cards` turns it off), and `""` (Automatic) is the row for
+**testimonials** (2026-09-16) and **products** (client, 2026-09-23: *"the appliances should be limited and should
+be scrollable just like testimonials"*). It began as `pt_slug == "testimonial"` with no control and a `# ponytail:`
+naming a *Sliding row* control as the upgrade once a second type wanted it; products were that type, and the control
+is a List style choice rather than a checkbox because a list is exactly one shape at a time. It adds `pl-rail` to the
+section and a `.rail-nav` after the cards, carrying `data-noun` (*testimonials*, *products*, else *items*) for the
+arrows' and dots' labels, and `§12`'s *The sliding row* has the mechanism.
 
 **`acc` (2026-09-21) is the fourth computed extra**, and it is the second type of list this block can draw: the
 **services accordion**, the client's design option 1a. `_acc(data, pt_slug)` answers it, beside `_cols()` and for
-the same reason — the resolved type is part of the answer, so it cannot be something an editor typed. Unlike
-`rail` there *is* a control, because the client asked for one: `list_style`, a `choice` of `""` / `cards` /
-`accordion`. **`""` is Automatic, not "cards"** — it means *the accordion for a top-level services list and cards
-for everything else*, which is the whole reason the home page changed shape with no migration and no edit to the
+the same reason — the resolved type is part of the answer, so it cannot be something an editor typed. The control
+is `list_style`, which the client asked for: a `choice` of `""` / `cards` / `accordion` / `rail` (*Sliding row*,
+2026-09-23). **`""` is Automatic, not "cards"** — it means *the accordion for a top-level services list, the sliding
+row for testimonials and products, and cards for everything else*, which is the whole reason the home page changed shape with no migration and no edit to the
 row. `list_style` is in `_NON_TEXT_KEYS` beside `per_row`, so it neither reaches `llms-full.txt` nor gets
 co-edited as prose. **`open_tone` is the second control** (same day, *"also give option to change the inside color
 as well (black)"*): a `choice` of `""` / `blue` / `light` that `post_list.html` **compares** against those two
 literals rather than interpolating — `hero.arrange`'s rule — so only `acc-blue` and `acc-light` can reach the
 class attribute. Also in `_NON_TEXT_KEYS`. `post_list.html` branches on `acc` and emits `.acc` instead of `.cards`; `.sec-head` (eyebrow,
-heading, "All services →") and the `rail-nav` foot are shared by both branches, and `blocks_md()` is untouched —
+heading, "All services") and the `rail-nav` foot are shared by both branches, and `blocks_md()` is untouched —
 the data is identical, so every `.md` twin is byte-for-byte what it was. §12's *The services accordion* has the
 markup contract and the CSS. Three ways it departs from the prototype on purpose: the row heading stays a real
 `<h3>` (a `<label>` may not contain heading content, so the `<h3>` wraps the label), the group's own page keeps a
-link (`All Storage →` — the card used to be that link), and every child is listed rather than `_card.html`'s
+link (`All Storage` — the card used to be that link), and every child is listed rather than `_card.html`'s
 four-then-`+N more`, because handling any number of services is the design's stated point.
 
 When `top_level` is set on a hierarchical type, `_post_list()` also hangs each parent's live children off `p["children"]` for the chips under the card, reusing `db.tree()` — already memoised for the request by the header's services panel, so on most pages it costs nothing.
@@ -390,7 +392,9 @@ outline mark).
 `render_archive()` hangs children off each row for a **hierarchical** type, the same `db.tree()` lookup
 `_post_list()` uses, so the services archive can draw its child tiles. `render_post()` does the mirror
 of it: a page with no children of its own but a parent gets its **siblings** instead, which is the
-"Other Storage services" row the design ends a service page on (`siblings=True` only changes the heading).
+"Other Storage services" row the design ends a service page on. That band is `public.related_for()` since
+2026-09-23 — one function for `post.html`, the `.md` twin and the admin Preview, and an editor's setting
+since then (§12, *The band a service page ends on*).
 
 The seed's pictures are looked up **by filename** through `cli.media_id()`, which returns `None` when the library is empty. That is why `home_blocks()` is a function rather than a constant, and why `_clean()` drops keys whose value is `None`: a seed run before `flask import-media` must still produce a valid page, and it must not leave `"image": null` in the saved JSON. The pairing is `Untitled-4.png` → the home hero, `banner-homepage-96tb.png` → the ZFS section and IOPStor Edge, `DSC_0305n.png` → IOPStor Classic, all three of them → the home hero's rotator in that order, `background1.jpg` → the About Us backdrop, `iopstor_logo-png1.png` → `settings.logo_url`, and `partners/*` → the fourteen partner posts' `logo_media_id`.
 
@@ -405,7 +409,7 @@ The seed's pictures are looked up **by filename** through `cli.media_id()`, whic
 | `width` | `wide` \| `full` \| a number of px | the section's content measure; `full` also breaks it out of the page column |
 | `fx` | `rise` \| `gradient` \| `sweep` | the section's motion, `FX` in the same file — see *Section effects* below |
 | `height` | `small` \| `medium` \| `large` \| `huge` | how tall a `spacer` stands, `HEIGHTS` in the same file; the pixels are in `site.css` |
-| `tone` | `grey` \| `dark` \| `blue` | the band the section sits on — see the paragraph below, which this table used to leave out |
+| `tone` | `page` \| `grey` \| `dark` \| `blue` | the band the section sits on — see the paragraph below, which this table used to leave out |
 | `pad` | `none` \| `small` \| `medium` | how much air it keeps above and below, `PADS` in the same file; **never more than the default** |
 
 Two functions carry them onto the root `<section>`, both **whitelists** rather than passthroughs, because the values land in attributes — the same reason `col_widths()` is strict:
@@ -416,6 +420,16 @@ Two functions carry them onto the root `<section>`, both **whitelists** rather t
 `--w` *is* the content measure: `site.css` writes every relevant `max-width` as `var(--w, <the theme's own value>)`, so an unset section renders exactly as designed, a number narrows or widens it, and `.w-wide` / `.w-full` set `--w:100%` from CSS. `.column{--w:initial}` stops a width set on a Columns section leaking into the sections inside it.
 
 ****`tone`** is the band a section sits on — `grey`, `dark` or `blue`, absent means the page's own white. The design alternates white and grey down the home page for rhythm and drops case studies onto black, and that is a per-section decision an editor makes, not something baked into a block type. Like `align` and `width` it is a **whitelist** in `section_class()`, because the value lands in a class attribute. Its rules sit *after* `.band-*` in `site.css`, so a tone an editor picks beats a block's own default (`stats` is dark, `cta` is blue) on source order rather than needing `!important`.
+
+**The hero was the one block that broke that contract, and the control was dead on it for months** (client, 2026-09-22: *"the about us page hero section is hardcoded i think im not able to change the BG of the hero section"*). It is not hardcoded — About Us is an ordinary `hero` block with `dark: true` — but the hero is the only block whose band is declared in the *blocks* group rather than the bands group: `.hero` (`background:var(--white)`) and `.hero-dark` (`var(--black)`) re-declare `background` about 180 lines **after** `.t-grey`/`.t-blue`/`.t-dark`, at the same (0,1,0) specificity. The class was always emitted — `<section class="hero hero-dark t-grey">` renders today — and always lost. Sweeping `site.css` for section-level `background` after the tone group finds these two and nothing else (`.card`, `.testimonial`, `.acc`, `.lead-form` are children *inside* a band; `.arch-*` and `.error-page` are not blocks), so the repair is three rules at the end of the hero group — `.hero.t-grey|t-blue|t-dark{background:…}` — and not a move of the tone group.
+
+**The tick and the dropdown answer different questions now, and a third one is computed.** `hero.dark` is the *layout* — the full-width band, no bottom border, the picture as a backdrop — and the tone is the *colour*. Whether the text has to be light is neither, so `hero.html` works it out once (`lit = data.tone in ('dark','blue') or (data.dark and data.tone != 'grey')`) and writes `hero-lit`, which carries the three colour declarations that used to hang off `.hero-dark`. The **second button reads the same flag** (`ghost-dark if lit else ghost`). Reading it off the tick instead is what made a ticked hero set to *Light grey* keep a white heading and a white-on-white outline button, and an unticked one set to *Dark* keep black text and a black-on-black one — both visible in the eight-state screenshot the change was measured with. One flag, two consumers, no `.hero-dark.t-grey`-style combination rules at all.
+
+**Two more things could not be read on the blue band**, and neither had ever been hit because `cta.html` is the only other blue band and it draws no eyebrow and hardcodes `btn dark`: `.eyebrow` is `var(--blue)` (invisible on blue) and so is `.btn`. `.t-blue .eyebrow{color:var(--white)}` and `.t-blue .btn{background:var(--black)}` fix them **for every block**, not just the hero, and the second sits *before* `.btn.ghost` on purpose — equal specificity, so a ghost button keeps its transparent fill. `.t-blue` also gained `h1`: it listed `h2,h3` only, and a hero's heading is exactly the `h1` case.
+
+**"Page background" is a stored value, not an empty one** (client, 2026-09-22: *"it should have been page background"*). `TONES` gained `"page"` as its first member, and `tonePick()` writes it rather than deleting the key. The distinction is load-bearing: an absent `tone` has to go on meaning *"nothing chosen, so leave the block's own band alone"*, or every hero saved before today would turn white the moment this deployed — while an editor who picks *Page background* is saying something, and only that can overrule a band the block draws itself. `.hero.t-page{background:var(--white)}` is the fourth rule, and `lit` lists `page` beside `grey` so the white band gets dark text and the `ghost` outline button. **Scoped to `.hero` deliberately**: a CTA or a Numbers strip set to *Page background* keeps the band its own template writes, exactly as today — widening it to a bare `.t-page` would change both, and `test_the_tone_group_beats_the_hero_and_the_blue_band_is_usable` asserts it has not been. The dropdown shows an untouched ticked hero as **Dark**, the band it is really on, rather than claiming white.
+
+Guarded by `test_a_hero_that_is_lit_follows_the_band_not_the_tick` (the eight-row truth table, and that the outline button agrees) and `test_the_tone_group_beats_the_hero_and_the_blue_band_is_usable` (the rules exist *and* sit in the right order). Measured in Firefox: About Us at 1440 is **0 pixels different** before and after, because no stored block carries a hero tone — 5 of 60 posts carry a `tone` at all, none blue, none a hero.
 
 `--w-def` is what makes that sentence true.** The shared rule is `.section>.wrap>*{max-width:var(--w,var(--w-def,none))}`, and it is (0,2,0); every block's own rule (`.rich-text`, `.testimonial`, `.specs`, `.faq details`, `.lead-form`) is (0,1,0) or (0,1,1) and loses to it. So the fallback `none` used to win outright and the designed measures never applied at all — a section was only ever as wide as `--w` said, and unset meant full width. Each of those blocks now declares its measure as `--w-def` on itself, which the shared rule reads *inside* the fallback. `--w` stays the override it is documented to be, and `--w:initial` in a column still falls through to the block's own measure.
 
@@ -455,7 +469,7 @@ The CSS is §12. Nothing here is JavaScript.
 
 Two behaviours worth knowing:
 
-- **`hero` is the only block that renders its own top-level heading — and only when nothing above it did.** `render_blocks(blocks, edit, path, h1=True)` passes `h1 and p == "0"` down to each block, so only the section that *opens* the page can be its `<h1>`; anywhere else the hero draws an `<h2>`, and `.hero :is(h1,h2)` makes the two identical to look at, so the demotion is a change of rank and nothing else. The parameter is `blocks_md()`'s — copied name and meaning. The Markdown renderer has had it since it was written and the HTML one had no equivalent, which is why a hero at any index but the first emitted a second `<h1>` under the page's own, on every type.
+- **`hero` is the only block that renders its own top-level heading — and only when nothing above it did.** `render_blocks(blocks, edit, path, h1=True)` passes `h1 and p == "0"` down to each block, so only the section that *opens* the page can be its `<h1>`; anywhere else the hero draws an `<h2>`, and `.hero :is(h1,h2)` makes the two identical to look at, so the demotion is a change of rank and nothing else. The parameter is `blocks_md()`'s — copied name and meaning. The Markdown renderer has had it since it was written and the HTML one had no equivalent, which is why a hero at any index but the first emitted a second `<h1>` under the page's own, on every type. **`crumbs` rides the same gate** (2026-09-24): `render_blocks(..., crumbs=)` hands the breadcrumb trail to the block at path `"0"` only, so a hero that is the first thing on a page draws it as its first row (§12) and a hero further down never draws a second. The canvas passes none.
   Whether the page drew a heading above it is **`blocks.owns_head(pt_slug, blocks)`**: an article (`ARTICLE_TYPES` = `post`, `case_study`) always draws its own head, everything else lets a leading `hero` or `columns` stand in for the whole of it. The asymmetry is a property of the markup, not a preference — a hero draws a heading and a picture, but it has no date and no term chips and *cannot* render them, because `hero.html` receives `data`/`cls`/`sty`/`edit`/`fe()` and never `post`. So on the two types that have a date and chips, gating those on the hero lost them with nothing standing in (reported 2026-09-19: two case studies side by side, one with a title, date and categories, one with only the client name). On a service or a page nothing is lost and a head above the banner is simply two headings. It is one function because three callers must agree — `post.html`, `public._md_post()` and `admin_ui.canvas()` — and they had already drifted: the twin tested `hero` and left `columns` out.
   **The featured picture is the one part still behind the old condition** (`post.html`: `post.featured_media and not has_hero`). A hero draws `data.image` itself, and two pictures on one page is what design.md §9 forbids by name. `leads_with_own_head` (`admin_ui.py`), which drives the caveat under *Featured image*, is therefore a **picture** flag and deliberately not `owns_head()`.
   Guarded by `test_owns_head_is_the_one_answer_three_callers_share`, `test_a_case_study_keeps_its_title_date_and_categories_when_a_hero_opens_it` and `test_a_hero_that_is_not_the_pages_heading_is_demoted_rather_than_hidden`.
@@ -647,6 +661,26 @@ The extension is looked up in `storage.EXT` (the reverse of `ALLOWED`), which bo
 and whitelists what is servable: anything else 404s before Storage is touched, as does a key containing
 `..`. Only `StorageApiError` becomes a 404 — a gateway that is down must still be a 500, not a lie about a
 missing file.
+
+**The extension is the gate; the bytes are the `Content-Type`.** `media_file()` sends `storage.sniff(data) or`
+the extension's type, and uploads go the same way (`save_upload()` and `flask import-media`: the name must be an
+allowed type, then `sniff()` picks the stored ending and the recorded `mime`, while `filename` keeps what the
+editor chose). Reported 2026-09-23 as *"in chrome nvidia image is not visible … but in firefox … its visible"*:
+the Nvidia partner logo was WebP bytes (`RIFF…WEBPVP8L`) uploaded as `nvidia.svg`, so it was keyed `.svg` and
+served `image/svg+xml`. **For a raster a wrong label costs nothing** — a browser picks the decoder from the bytes,
+which is why a JPEG and an AVIF sitting under `.png` keys on the same deployment show everywhere — **but an
+`+xml` type is never sniffed** (WHATWG MIME Sniffing: an XML type is the computed type as supplied), so Chrome
+handed the WebP to its SVG parser and drew the alt text, while Firefox's image loader sniffs regardless. The
+SVG `sandbox` CSP below had nothing to do with it; it never applies to `<img>`. `sniff()` checks PNG, JPEG,
+GIF, WebP and PDF by signature first and SVG last — `<svg` in the first 4 KB, and only when that head has no
+NUL byte, so a binary that happens to contain the string is not read as a drawing. It returns `None` for
+anything else (AVIF, an Illustrator SVG whose DOCTYPE runs past 4 KB), and the extension's type stands, which
+is exactly the old behaviour. The CSP follows the *served* type, so an SVG hiding under `.png` is sandboxed too.
+`test_a_picture_is_the_type_its_bytes_say_not_its_name` pins the signatures, the header and the stored key.
+**Serving has to sniff as well as uploading**, because the file that was reported is already in the bucket
+under `.svg`; the upload half is what makes the key and `media.mime` honest for every file after it. A copy
+cached before the fix keeps its old type for its year (`immutable`), in a browser and at a Cloudflare edge —
+re-uploading is the way round that, since a new upload is a new key.
 
 Because a key carries a uuid, the bytes behind a URL never change, so `send_file()` is handed
 `max_age=31536000` + `immutable` and the key as the ETag: a repeat view costs a 304 and no Storage round
@@ -1026,6 +1060,28 @@ One stylesheet, `static/site.css`, with the design tokens at the top, then heade
 
 **`site.css` is shared three ways** — the public site, `body.admin` (through `templates/admin/base.html`) and the editor canvas iframe (`templates/admin/canvas.html` loads it, then `canvas.css`). A change to `.card`, `.btn`, `.specs` or `.lead-form` shows up in all three, which is the point: the canvas is a real render of the real theme.
 
+**No `→` anywhere on the public site** (client, 2026-09-23). A link, a tile or a pill ends in its own words: the
+section heading's `.sec-link`, the sibling `.tiles` at the foot of a service page, `_card.html`'s sub-service chips,
+the accordion's pills and group link, the Services menu's `.mega-foot`, the footer's *Request a quote* and the
+Warranty check's two links all lost theirs in one pass. The client's mock still draws fifteen, so this is one of the
+places the mock is overruled, and **`test_the_public_site_draws_no_right_arrows`** reads every non-admin template
+for `&rarr;` or `→` instead of rendering pages -- a template copied from the mock fails it before anyone has to look.
+The glyphs that show a *state* rather than decorate a link stay: the accordion count's `&darr;` (turned by `--chev`),
+the menu's caret and the testimonial row's `&lsaquo;` `&rsaquo;` buttons. An arrow an editor types into a page's own
+text is theirs; the test reads templates, not content, and all 63 served pages were checked by hand on the day.
+
+**The arrow was holding long titles off the link, so `.sec-head`'s column gap is 48px** (client, same day: *"one
+stack" is too close to All services*). `.sec-link` lost about 16px with its `→`, and that was what had been wrapping
+the home page's services title at 1440; unwrapped, the title's last word ended **25.7px** from *All services*
+(38.7px for *All case studies*), and at 24px the two read as one line. The title's box is `flex:1`, so the column gap
+*is* the closest they can ever sit, and 48px is the floor now. Widening it makes those two titles wrap, and plain
+wrapping stranded "stack" and "logistics" alone on a second line, so `.sec-head .section-title` also carries
+`text-wrap:balance`: at 1440 and 1600 the services title is "Storage, virtualisation and / cloud, delivered as one
+stack" with its end **536px** from the link, 317px at 834. At 390 the link already sits on its own row and nothing
+moves; the row gap stays 24px. A browser without `balance` (Firefox before 121, Safari before 17.5) wraps plainly,
+which is the lone-word version and nothing worse. Measured with `Range.getClientRects()` on the title's last line
+against the link's box, before and after in one document.
+
 **Tokens.** `:root` holds the palette the design ships with — `--black`/`--black-2`/`--black-3` and `--line-dark`/`--line-dark-2` for the dark bands, `--blue` (`#3573b9`, the brand blue — the fill inside the client's logo artwork) with `--blue-hover` `#29588e`, `--blue-tint` `#e5eef8` and `--blue-light` `#78a6d8` — the same hue and saturation at three other lightnesses, so a change to the brand blue is four values, not one, plus **eight** `rgba(53,115,185,alpha)` literals on seven declarations (`site.css:370` carries two) that no token could carry — tinted tiles, the hero glow, the sweep gradient, and `admin.css`'s media-picker selection ring — `--white`/`--grey`/`--line`/`--line-2` for the light ones, `--ink` (`#2e3133`, the Deep Charcoal of the logo's *STOR* — headings and body, never a fill)/`--ink-2`/`--muted`/`--muted-dark`/`--muted-dark-2` for text, `--green`/`--red` (plus `-bg`) for status, `--wrap` (1200px) and `--reading` (760px) for measure, and `--head`/`--body`/`--mono` for the three type stacks. Headings are Manrope 800, body is IBM Plex Sans.
 
 A second, shorter line under them maps the *old* token names (`--navy`, `--accent`, `--accent-2`, `--text`, `--card`, `--radius`) onto the new palette. `admin.css` and `canvas.css` still reference those in ~90 places; the aliases keep the admin rendering while it is restyled in its own PR, and are marked `ponytail:` for deletion once nothing uses them.
@@ -1113,7 +1169,7 @@ Three things about that group are not obvious:
 
 **The panel's shadow is pulled down by a negative spread, and that is a fix, not a taste** (client, 2026-09-21: the open panel *"doesn't feel the part of the header ... maybe its because of drop shadhows"*). At `0 30px 60px` with no spread, the shadow rectangle starts 30px below the panel's top edge and the 60px blur carries it back up 30 — **onto the bar**. Measured at 1440, x=900: the last ten rows of the header washed 250 → 246 grey, which is what made the two read as separate surfaces; at `0 24px 48px -16px` the same rows read 255 → 253. The header's own hairline is **not** part of this and needs no rule: an absolutely positioned `top:100%` resolves against the *padding* box, so the open panel already covers the border. A `border-bottom-color:transparent` written here first turned out to change nothing at all, and only sampling the pixels on both sides showed which of the two was the cause.
 
-**The foot leads with the blue link** — *All services →* in `--blue`, *Not sure which fits? Request a quote →* in `--black` going blue on hover. That is the opposite way round from the first build of this bar, and it is the design's.
+**The foot leads with the blue link** — *All services* in `--blue`, *Not sure which fits? Request a quote* in `--black` going blue on hover. That is the opposite way round from the first build of this bar, and it is the design's.
 
 **The phone disclosure is the same trick the burger itself uses** — a `display:none` checkbox driven by its `<label>`, no script — and the ordering of the four parts is the whole design:
 
@@ -1172,7 +1228,9 @@ It is only `pl-product` that had this. The other picture types already pin a dim
 
 **And neither does a case study or an event** (2026-09-19). The same trap caught them, because `cli.py`'s `_post()` used to default `blocks` to a hero holding nothing but the title, and those were the only two seed entries that passed no `blocks=` of their own. Every case study therefore shipped with the gate already closed: not just the picture but the excerpt, the Industry/Solution chips and the `h1` itself were swallowed, and the empty hero replaced none of them — the page was a breadcrumb, a `CLIENT` band and a bare title over half a screen of white. **The default is gone from `_post()` rather than worked around at each call**, so a type added to the seed later cannot inherit it a third time; `test_the_seed_does_not_invent_a_hero_for_a_type_that_asked_for_no_blocks` pins that. `0015` clears the rows that already exist, matching only the bare shape — one block, type `hero`, no data key but `heading` — so a hero anyone has since filled in is left alone.
 
-**A hero-led page's breadcrumb needs its own room** (client, 2026-09-19). When the page head is skipped the breadcrumb is drawn on its own, in a bare `<div class="wrap">` — and `.wrap` is the side gutter and nothing else, so it sat **10px** under the header rule while a page with a `.page-head` put it at 48px (measured at 1440 with the crumb's text top: `y=75` against `y=123`). This is not a case-study bug: it is every service, About, Careers and Contact page. (Later the same day it stopped being a case-study case at all — an article now draws its own head whatever opens it, `blocks.owns_head()` in §6, so the bare-breadcrumb branch is reached only by the types that let a leading section stand in for their head.) The fix is a `.crumb-bar` class on that one `<div>` and `.crumb-bar{padding-block:48px 0}` beside the `.page-head` group, so the crumb lands at the same height whichever of the two branches drew it — 123 on both, measured. **`padding-block`, never the `padding` shorthand**, or the 20px page gutter goes with it; and the class belongs to the hero branch only, since adding it to `.page-head` as well would double the gap. Nothing below it: what follows always brings its own top padding (`.meta-strip` 32px, the hero's own, a `.section` for the long fields). `test_a_hero_led_page_gives_its_breadcrumb_room_under_the_header` pins the class on one branch, its absence on the other, and the rule — on a **service**, since a case study no longer takes that branch.
+**A hero-led page's breadcrumb needs its own room** (client, 2026-09-19). When the page head is skipped the breadcrumb is drawn on its own, in a bare `<div class="wrap">` — and `.wrap` is the side gutter and nothing else, so it sat **10px** under the header rule while a page with a `.page-head` put it at 48px (measured at 1440 with the crumb's text top: `y=75` against `y=123`). This is not a case-study bug: it is every service, About, Careers and Contact page. (Later the same day it stopped being a case-study case at all — an article now draws its own head whatever opens it, `blocks.owns_head()` in §6, so the bare-breadcrumb branch is reached only by the types that let a leading section stand in for their head.) The fix is a `.crumb-bar` class on that one `<div>` and `.crumb-bar{padding-block:48px 0}` beside the `.page-head` group, so the crumb lands at the same height whichever of the two branches drew it — 123 on both, measured. **`padding-block`, never the `padding` shorthand**, or the 20px page gutter goes with it; and the class belongs to the hero branch only, since adding it to `.page-head` as well would double the gap. Nothing below it: what follows always brings its own top padding (`.meta-strip` 32px, the hero's own, a `.section` for the long fields). `test_a_page_led_by_columns_gives_its_breadcrumb_room_under_the_header` pins the class on one branch, its absence on the other, and the rule — on a **service** led by a `columns` section, since from 2026-09-24 a hero-led one no longer takes that branch either (next paragraph).
+
+**A page that opens with a hero carries its breadcrumb in the hero** (user, 2026-09-24, with screenshots of *Storage* and *NAS*: *"breadcrum here doesn't it look weird?"*). `.crumb-bar` was 48px of white above the crumb and nothing below it, so on a dark hero it became a thin white strip sitting on the band. The mock never draws that: every dark band in it (the Services archive, Case Studies, Warranty) has the crumb inside, and the light service head has it on its own row above the words-and-picture grid. So `post.html` works out **`lead_hero`** — no page head, block 0 is a hero, and nothing drawn between them: no short-field strip, and no long fields in their default or top place (`prose and cut <= 0`) — and when it holds, skips `.crumb-bar` and passes `crumbs` to `render_blocks()`, which gives them to block `"0"` only. The `set`s that answer it (`tiles`, `prose`, `cut`, `blocks_`) moved above `<article>` for that; the `details` macro did not move, since Jinja binds a macro where it is written. `hero.html` draws **`<div class="wrap hero-crumb">`** between the backdrop and the grid — its own row, not a grid item: `.hero-split>.wrap` is `repeat(auto-fit,minmax(300px,1fr))`, three tracks at a 1200px wrap, and an item spanning `1/-1` keeps the empty third alive. As a row it also sits above the picture on *Picture above*, with no `order` trick. `.hero>.hero-crumb{display:block;margin-bottom:16px}` — `display:block` beats `.hero>.wrap`'s grid on source order, and 16px is `.page-head .breadcrumb`'s gap, so a dark hero and a head-banner (both 96px down the band) put the crumb in the same place. `.hero-dark>.wrap{position:relative}` already lifts it over `.hero-bg`. On a **lit** band it takes the band's own light text (`color:inherit`, `#d1d6de`) with the current page white, **not** `.band-dark`'s `--muted-dark`, which is about 2.4:1 on `--blue` — the problem `cab9478` fixed for `.lead`. Every hero, not only dark ones: deciding "is this a band" in `post.html` would copy `hero.html`'s `lit` logic, and the mock draws the crumb inside the light head as well. Measured at 1440 on the served Storage page with its hero patched in memory (nothing written): crumb text top **96px** into a dark band, **72px** into a blue or white one, **16px** to the heading below it; a split hero's text and picture **560 / 560px** in the 1200px wrap (no third column); crumb `rgb(209,214,222)`, current page `rgb(255,255,255)` on a lit band. At 390 the crumb sits 64px into the dark band. A case study, *Contact Us* (led by columns, still `.crumb-bar`) and the home page are pixel-identical to `main` (`compare -metric AE` 0; the home page with its animations stood down, since two shots of the same file already differ by ~198k). `test_a_page_that_opens_with_a_hero_carries_its_breadcrumb_in_the_band` pins one crumb, inside the hero, and the strip / long-field cases falling back to the bar; `test_only_the_first_section_is_handed_the_breadcrumb` pins the path gate and the canvas.
 
 **The page title can sit on its picture** (client, 2026-09-19). *"Put the image in the title just like hero section."* `meta._head_banner` — the second reserved underscored key, after `_details_at` — puts `band-dark head-banner` on `.page-head` and renders the Featured image as `<img class="hero-bg">` behind it. **Almost nothing is new, and that is the design:** `.band-dark` already turns a head's `h1`, breadcrumb and `.lead` light (it is what `archive.html` has always used for the catalogue archives), and `.hero-bg` is reused exactly as `hero.html` uses it — `position:absolute;inset:0;object-fit:cover;opacity:.18` — so the two bands match without one measurement being copied between them. Only four rules are new: `position:relative` and the hero's padding on the head, `position:relative` on its `>.wrap` (or the backdrop paints over the words — there is no `z-index` anywhere in this mechanism), and `.post-meta` and `.chip` in light, the two things `.band-dark` does **not** cover (it has no `.post-meta` rule at all, and its only chip rule is `.band-dark .filters .chip`, the archive's filter row).
 
@@ -1182,7 +1240,13 @@ It is only `pl-product` that had this. The other picture types already pin a dim
 
 **The key is written on every save, unlike `_details_at`.** That one is guarded by `if "details_at" in f:` because its control renders only for a type with a long field. This control renders on every type, and it has to be written unguarded because **an unchecked checkbox posts nothing** — the checkbox's own name could never mean "the form carried the control". `test_unticking_the_banner_box_is_saved_as_false_not_as_missing` pins it, because the failure mode is ticking that sticks and unticking that silently does nothing.
 
-**`.hero :is(h1,h2)`, not `.hero h1`** (2026-09-19). A hero that is not the page's heading renders an `<h2>` (§6), and its two rules — the size at `.hero :is(h1,h2)` and the white on `.hero-dark :is(h1,h2)` — have to reach both tags or the demoted heading silently shrinks to body-copy size on exactly the pages this was built for. `:is()` takes the specificity of its most specific argument and `h1` and `h2` are both (0,0,1), so nothing moves on source order. Measured in Firefox with `getComputedStyle` on both ranks in one render: `font-size:60px`, `color:rgb(255,255,255)`, `margin:0 0 20px`, `line-height:63px`, `max-width:820px` — identical, only the tag differs. The generic `h1,h2` typography, `.band-dark h1,h2,h3` and the `.fx-*` `:is(h1,h2,h3)` rules already covered an `h2`; these two did not.
+**The band a service page ends on is a setting** (client, 2026-09-23). *"Add an option if we want to show this Storage solutions / other storage solutions section or not and ability to customize this as well."* `meta._related` — the third reserved key — holds `hide` (a bool, so Activity reads *Yes*/*No*), `heading`, `text`, `tone` and `skip`, all optional; absent is exactly the band it always was. **`public.related_for(post, pk=None)` is the only reader**, and it has three callers that must agree: `render_post()` for the page, `_md_post()` for the twin (which now writes the same heading and line instead of `## Related pages`, and nothing when the band is hidden) and `admin_ui.preview()`. `related_pages()` underneath it is the unfiltered list and the automatic heading — a group's own services and "*Storage* solutions", or the rest of the group and "Other *Storage* services" — and it is what the form offers as checkboxes, so they are exactly what a visitor gets. **`skip` is the ids left out, not the ones kept**: a service added to the group later is listed on every sibling page without anyone editing them, and an id that has since been unpublished or deleted simply never matches, because `_kids()` is live-only. If every service is left out the band is not drawn at all rather than drawn empty. The tone goes through `section_class()`'s whitelist and falls back to `t-grey` when that returns nothing — a junk value is the band's own default, never an unstyled one.
+
+**Saved on a hidden marker, not on the checkbox.** `_form_body()` writes `_related` only when `related_form` comes back — the `_details_at` guard, because the group renders only for a hierarchical type — and it cannot guard on *Show*, which is ticked by default: unticked, it posts nothing, and "the form carried no such control" and "the editor hid it" would be the same request. `related_all` is every id the checkboxes offered; `skip` is that minus the ticked ones, integers only. The heading is capped at 200 characters and the text at 500, and `post.html` autoescapes both. `test_the_related_band_follows_the_page_settings`, `test_the_post_form_saves_the_related_band` and `test_the_related_band_draws_what_related_for_returns` pin the three halves. Measured: `main`'s `post.html` and this one render **byte-identical HTML** (whitespace-normalised) for Storage, NAS, SAP and On-prem AI Servers with no setting; the six variants shot at 1440/834/390 in one document; and the preview route body run on NAS's form gives the grey band, the blue one with SAS left out, and none with *Show* unticked.
+
+**`.t-blue .lead` is `--blue-tint`.** Found here — the band's line of text is a `.lead`, `var(--muted)`, which all but disappears on the blue band — and true of a Points section's subheading on Blue as well; the dark band never had it, because `.t-dark p` whitens every paragraph, and a hero's own `.hero-lit .lead` comes later and still wins. No dev page had a lead-drawing section on Blue, so nothing live moved.
+
+**`.hero :is(h1,h2)`, not `.hero h1`** (2026-09-19). A hero that is not the page's heading renders an `<h2>` (§6), and its two rules — the size at `.hero :is(h1,h2)` and the white on `.hero-lit :is(h1,h2)` (`.hero-dark` until 2026-09-22, §6) — have to reach both tags or the demoted heading silently shrinks to body-copy size on exactly the pages this was built for. `:is()` takes the specificity of its most specific argument and `h1` and `h2` are both (0,0,1), so nothing moves on source order. Measured in Firefox with `getComputedStyle` on both ranks in one render: `font-size:60px`, `color:rgb(255,255,255)`, `margin:0 0 20px`, `line-height:63px`, `max-width:820px` — identical, only the tag differs. The generic `h1,h2` typography, `.band-dark h1,h2,h3` and the `.fx-*` `:is(h1,h2,h3)` rules already covered an `h2`; these two did not.
 
 **A field the editor cleared takes its whole section with it** (client, 2026-09-19). Emptying a box does not remove the key: `meta` keeps `"client": ""`, and `post.html` used to draw each container before looking at what went in it, so a cleared field left a 32px band with an empty `<dl>` inside and a cleared long field an empty section under it. One filter now does it for all of them — `filled` rejects `none`/`''`/`[]`/`{}` from `meta` and `fields` is built from that, so the meta strip, the prose sections and the spec tables disappear together. `0` survives, because a rating of zero is a value. Doing it per loop instead is what the code used to do, and it only ever hid the row, never the container.
 
@@ -1210,7 +1274,9 @@ exactly as before against a database where `0005` has not been applied yet.
 
 **A deck caps its child chips, an archive does not.** `_card.html` shows `CHIP_CAP` (4) children and then a `.chip-more` counting the rest; the archive, which *is* the full list, shows every child as a tile you can click. Grid cards in a row are all as tall as the tallest, so Cloud's seven sub-services were padding four cards out with empty space.
 
-**Four archive shapes**, each scoped to `.arch-body` so the same list inside a page stays the card deck the home page wants: `pl-product` (a taller picture area, the price and Buy in a footer row), `pl-service` (one full-width row per group, the words in column one and the child tiles in column two — the card's children are a flat list, so each names its own grid column rather than being wrapped in a div for it), `pl-event` (a row led by an 84px dark date tile) and `pl-datasheet` (a row with the outline PDF mark and its own Download button).
+**Four archive shapes**, each scoped to `.arch-body` so the same list inside a page stays the card deck the home page wants: `pl-product` (a taller picture area, the price and Buy in a footer row), `pl-service` (one full-width row per group, the words in column one and the child tiles in column two — the card's children are a flat list, so each names its own grid column rather than being wrapped in a div for it; a Featured image, when the service has one, is a fifth part stacked above the number in column one), `pl-event` (a row led by an 84px dark date tile) and `pl-datasheet` (a row with the outline PDF mark and its own Download button).
+
+**A service card shows its Featured image; an empty one stays hidden** (client, 2026-09-23). `.pl .card-img` is `display:none` for every list and each `.pl-<type>` switches its own back on; `pl-service` never did, because the mock's services list has no pictures, so a picture an editor chose was in the HTML (`_card.html` always emits it) and invisible. `.pl-service .card-img:not(.card-img-empty)` is the case-study crop — 160px, `object-fit:cover`, 10px corners — and the `:not()` is the point: a service without a picture keeps exactly the card it had, with no hatched placeholder. Written on `.pl-service`, not `.arch-body`, so a service list set to *Cards* on a page gets it too; the home page's stack is `acc-*` throughout and is untouched. On `/services` the picture is one more `auto` row in column one (`grid-template-rows:auto auto auto auto 1fr`, empty and 0px tall on a card without one), and the child tiles' `grid-row:1 / span 5` must count every row the card defines or they stop short of the bottom — `test_a_service_card_shows_the_picture_it_was_given` holds the two together. Measured at 1440 with one card given a picture in a saved page: the other four cards 0px different from before, shifted down by exactly the 176px the picture and its margin add.
 
 **A pinned grid column has to be unpinned to stack.** `pl-service` is the one archive shape that had to
 grow a breakpoint. Its card is `repeat(auto-fit,minmax(260px,1fr))` and its child tiles name
@@ -1239,7 +1305,9 @@ The other three shapes size from `auto` tracks that stay inside a 390px card (da
 
 The home page's "What we do" section, from the client's design option 1a (2026-09-21, `requirements.md`). One row
 per top-level service, **one open at a time**, hover or tap; the open row goes to `--black` with white heading, the
-group's blurb in `--muted-dark` and its sub-services as outlined pills. `blocks._acc()` decides which lists get it
+group's blurb in `--muted-dark` and its sub-services as outlined pills. **Nothing in it carries a `→`** (no public
+link does, since 2026-09-23 -- the start of this §), so the count's `&darr;`, turned to ↑ by `--chev` on the open
+row, is the only arrow in the section. `blocks._acc()` decides which lists get it
 (§6); everything below is `site.css`, and **there is no script** — this is not a second use of `site.js`.
 
 **The open row's palette is six custom properties on `.acc`**, not colours written into the open rule: `--o-bg`,
@@ -1262,17 +1330,38 @@ Six things are load-bearing, and a test pins the shape:
   the arrow keys walk a radio group and check as they go, which opens each row in turn — and `display:none` takes
   it out of the tab order entirely. The header's `.mg-toggle` may be `display:none` because it is pointer-only and
   its `<label>` is the whole control.
-- **`:focus-within` is in the open selector list.** A closed body is `grid-template-rows:0fr` over an
-  `overflow:hidden` child, which hides the child links *without* removing them from the tab order — the same
-  pairing `.mega-pane` uses.
+- **Keyboard focus opens a row, and a mouse click's focus does not.** A closed body is `grid-template-rows:0fr`
+  over an `overflow:hidden` child, which hides the child links *without* removing them from the tab order — the
+  same pairing `.mega-pane` uses — so focus inside a row must open it. It is
+  `.acc:not(:has(.acc-row:hover)) .acc-row:has(:focus-visible)`, guarded by the pointer exactly like the checked
+  row. **It was a bare `.acc-row:focus-within` until 2026-09-24**, and that broke as soon as the open row became a
+  link: a mouse click focuses the link, so the clicked row stayed open — while the next page loaded, after Back,
+  after a ctrl-click — and hovering another opened a second (reported with a screenshot of *Storage* and *Cloud*
+  both open). `:focus-visible` is the browser's own "this focus came from a keyboard" test. The bare
+  `:focus-within` survives **only in `@media(hover:none)`**: on a phone the tapped row carries a stuck `:hover`,
+  which switches the checked rule off, so the focus the tap gives the radio is what holds the row open, and
+  `:focus-visible` does not match a tap. Measured with classes standing in for `:hover`, `:focus-within` and
+  `:focus-visible` (headless Firefox never focuses its document, so a real `focus()` matches nothing — every row
+  read `0fr` whatever was focused): before, a clicked *Cloud* plus a hovered *Storage* read `1fr` / `1fr`; after,
+  `0fr` / `1fr`; a keyboard-focused row `1fr`, giving way to a hovered one; the phone readings unchanged.
 - **There is no "close the others" rule, on purpose.** The checked row's selector is guarded with
   `.acc:not(:has(.acc-row:hover))`, so while a pointer is anywhere in the accordion it simply stops matching and
   the row falls back to the closed default. A close-all rule would be `.acc:has(.acc-row:hover) .acc-row` at
   (0,4,0) and would out-specify `.acc-row:hover` at (0,2,0) — the row under the pointer would never open.
 - **The hover rule sits in `@media(hover:hover)`.** A touch browser leaves `:hover` on the last thing tapped, and
   a stuck hover would hold every other row shut.
-- **The hit area is `::after{inset:0}` on the label inside `.acc-hr`, not on `.acc-row`.** Against the row it
-  would lie over the open body and swallow the child links, which are the one thing there you are meant to click.
+- **A shut row's header is the toggle; an open row is one link to the group's page** (user, 2026-09-24: *"make
+  this clickable link the sections as a whole because right now i need to click the small button"*). Two hit
+  areas, both `::after{inset:0}`: the label's, scoped to `.acc-hr`, opens a shut row, and the group link's
+  (`.acc-all::after`) covers the open one. The second needs no open/shut switch of its own because of **where it is
+  anchored**: `.acc-body{position:relative}` everywhere — `0fr`, so 0px tall while the row is shut, and a phone's
+  first tap still lands on the label — and `.acc-row{position:relative}.acc-body{position:static}` **only inside
+  `@media(hover:hover)`**, where the heading and the count join the link, because a mouse cannot click a row it is
+  not hovering and hovering opens it. `.acc-body>div{overflow:hidden}` does not clip it: its containing block is
+  outside that child. The pills stay clickable by being **`position:relative` and later in the tree**, which paints
+  them above it with no `z-index`. This bullet used to say the opposite — "against the row it would swallow the
+  child links" — which was true of pills that were not raised. Moving the row anchor out of the hover block puts a
+  row-sized link over every shut header on a phone, and the first tap leaves the page instead of opening the row.
 - **No row is `checked` in the markup and nothing opens one by position** (client, 2026-09-21: *"first section
   should be closed as well if the mouse is not over any services"*). The first pass pre-opened row 1 and backed it
   with a `.acc:not(:has(.acc-t:checked)) .acc-row:first-child` fallback for the case where two accordions on one
@@ -1280,6 +1369,8 @@ Six things are load-bearing, and a test pins the shape:
   that collision a non-event instead of something to rule around. The markup's missing `checked` is only half of
   it — a `:first-child` back in the open group would restore the behaviour silently, so a test reads that group
   and refuses the word.
+
+Two consequences of the open row being one link, written here late (they were only in PR #124's body): the *All …* words' hover colour, `.acc-all:hover{color:var(--nm)}`, now shows whenever the pointer is on the open row and not on a pill — the "this goes there" cue — so under a mouse the black tone draws them white instead of `--blue-light` and the light-grey tone black instead of `--blue` (on Blue both are white). And **a tap exactly on the count's ↓ may do nothing on a phone**: the chevron is `display:inline-block` with a `transform`, which paints it above the label's `::after` hit area, so a point on the glyph returns the `<i>`, not the label (measured with `elementFromPoint()`, before and after #124). Known and left alone; `pointer-events:none` on `.acc-n i` is the fix if it is ever reported.
 
 The accordion **borrows nothing from the card vocabulary**. `.pl .card-img,.pl .card-n,.pl .chips,.card-foot` are
 `display:none` under a bare `.pl` and each `.pl-<slug>` rule is what puts its own back — the section is still
@@ -1306,14 +1397,28 @@ class stand-in above is the only way to see it, and a plain shot of the page alw
 The transitions are in the `prefers-reduced-motion` block at the end of the file, which had only ever stood down
 `animation`; these are transitions, so the row still opens and closes, it just arrives.
 
+The click targets (2026-09-24) were measured the same way, with `document.elementFromPoint()` on the served home
+page, transitions off, and the row opened by the class stand-in (a mouse) or by checking its radio (a phone):
+
+| point | before, mouse / 390 | after, mouse | after, 390 |
+|---|---|---|---|
+| open row: heading, count | label / label | `a.acc-all` | label (the toggle) |
+| open row: description, blank right side | nothing / nothing | `a.acc-all` | `a.acc-all` |
+| open row: a pill | the pill | the pill | the pill |
+| shut row: header | label | its own `a.acc-all`, which a real pointer has already opened | label |
+
+Unhovered, the page is pixel-identical before and after at 1440, 834 and 390 (`compare -metric AE` 0). A real
+phone's tap sequence is the one thing not measured here.
+
 ### The sliding row
 
 `static/site.js` is the public site's only first-party script, it is ~5 KB unminified, it is `defer`-loaded from
-`base.html`, and it touches nothing but `.pl-rail` sections. It exists because the client asked for testimonials
+`base.html`, and it touches nothing but `.pl-rail` sections — testimonials, and since 2026-09-23 product lists (the
+home page's appliances): the same row reused, not a second feature. It exists because the client asked for testimonials
 that scroll on their own *and* that a visitor can drive — arrows and dots, which nothing in CSS can do (2026-09-16,
 `requirements.md`).
 
-**The row works without it, and that is the design.** `.pl-testimonial:not(.arch-body) .cards` is
+**The row works without it, and that is the design.** `.pl-rail .cards` is
 `display:flex; overflow-x:auto; scroll-snap-type:x mandatory` — a native scroll container. The wheel, a trackpad and
 a finger on a phone all move it on a page served with scripts blocked, and the snap settles it on a card. What the
 script adds on top is the drift, the arrows, the dots and click-drag. `post_list.html` therefore renders `.rail-nav`
@@ -1375,6 +1480,21 @@ Click-drag sets `scroll-snap-type:none` and `user-select:none` for the duration 
 and sits out `pointerType === 'touch'` entirely — the browser's own touch scrolling is better than anything this
 would do. `admin/canvas.html` does not extend `base.html`, so **the editor canvas gets the row as a plain scroller**
 with no arrows and no drift, which is deliberate: autoplay under somebody's caret is hostile.
+
+**A product card is a link, and a testimonial never was** (2026-09-23), which the drag had never been tested
+against. Three things in `site.js` follow from it, and `test_the_row_drags_without_breaking_a_card_that_is_a_link`
+greps for each. **The pointer is captured only after 6px of movement**, never on `pointerdown`: with capture set,
+the click that follows is targeted at the capturing element (the row), not the card under the pointer, so a plain
+click would have stopped opening the product in Chrome. **The click that ends a real drag is swallowed** by a
+capture-phase listener on the row, and `dragging` is cleared on the next tick, after that click. **`dragstart` is
+refused**, because links and pictures are natively draggable and the browser's own drag would take the gesture over
+a few pixels in. Measured in Firefox 140 headless with synthetic pointer events on the served home page: a plain
+click reaches the page unprevented, a click after a 60px drag is swallowed, `dragstart` on a card picture is
+prevented. **Not measured: a real mouse in Chrome** — the Playwright Chromium here segfaults inside the command
+sandbox. Two CSS consequences as well: `a.card:hover` lifts a card 2px, which a scroll container clips, so the row is
+`padding:4px 0; margin-top:-4px` (a net zero the testimonials measured identical under, 28.0px below the heading at
+1440 both ways); and the browser's focus ring, drawn just outside the card, lost the first card's left side to the
+same clipping, so `.pl-rail a.card:focus-visible` draws the accordion's inset ring instead.
 
 ### The testimonial card
 
@@ -2063,7 +2183,7 @@ Three things it must get right, all of them latent traps:
 |---|---|
 | **Analytics** | `base.html`'s gate was `{% if site.ga_id %}` alone, so every preview refresh would have sent a real gtag pageview to production, attributed to a URL that does not exist. It is now `{% if site.ga_id and not preview %}` — `preview` is undefined on public pages, so it stays falsy there. |
 | **`published_at`** | `apply_post()` (`admin_api.py:211`) stores a `datetime`, but `post.html:11` does `published_at[:10]` and `seo.jsonld()` hands it to `\|tojson`. The preview dict keeps the form's **string**; both problems go at once. Covered by a test. |
-| **`post["id"]`** | `render_post()` (`public.py:43`) queries children by id. The preview builds its own context and only queries children when there actually is a saved id. |
+| **`post["id"]`** | `related_for()` queries a page's children by id, and the preview's post carries none, so `preview()` hands it `pk` beside the post — `related_for(post, pk)`. Before 2026-09-23 the preview built its own children list and knew only the group case: a leaf service (NAS) previewed without the "Other Storage services" band its page ends on. |
 
 `meta.robots` is forced to `noindex,nofollow` after `build_meta()` — the default is `index,follow`
 (`seo.py:25`) and a post's own SEO override would otherwise win.
@@ -2259,8 +2379,8 @@ up a real `logo_url` from a previous test and the suite failed only when run who
 **The testimonial row has four offline tests**, all monkeypatching `blocks._post_list` so no Supabase is needed:
 `test_a_rating_is_clamped_to_five_stars_and_absent_when_unset` (9 → five marks, −3 → none, and no rating renders no
 `.stars` at all), `test_a_testimonial_card_with_only_a_name_renders_nothing_else` (every other field blank leaves no
-empty `<p>` and no stray comma), `test_only_a_testimonial_list_becomes_a_sliding_row` (`pl-rail` and the `hidden`
-nav, and a `partner` list getting neither — it asserts the dots box ships **empty**, since the browser builds them),
+empty `<p>` and no stray comma), `test_testimonials_and_products_slide_and_the_editor_can_say_otherwise` (the `_rail()` truth table, `pl-rail` and
+the `hidden` nav with its `data-noun` for both types, and a `partner` list getting neither — it asserts the dots box ships **empty**, since the browser builds them),
 and `test_a_post_with_no_page_still_reaches_the_md_twin`. What none of them can cover is the drift, hover-pause,
 click-drag, the wheel and a real finger: those are measured in a browser (§12 *The sliding row*) and listed as
 user-only in the PR, the way `/collab-check` does it.
@@ -2273,7 +2393,9 @@ both its singular and plural form), `test_the_accordion_borrows_nothing_from_the
 `card-img`, `card-n` or `cards` class can appear on a section that is still `pl pl-service`),
 `test_the_accordions_sibling_order_is_what_the_css_matches` (the input inside its label, `.acc-hr` before
 `.acc-body`, the `overflow:hidden` child, and the CSS pins: no `display:none` on the radio, the `hover:hover`
-guard, `.acc-body` named in the reduced-motion block), and
+guard, `.acc-body` named in the reduced-motion block, and since 2026-09-24 the open row's link: `.acc-all::after`,
+the pills' `position:relative`, and the row anchor inside the hover block and nowhere else; the guarded
+`:has(:focus-visible)` in the open group and the one bare `:focus-within` inside `@media(hover:none)`), and
 `test_every_other_list_still_renders_the_deck_of_cards` and
 `test_the_open_rows_colour_is_a_choice_and_only_its_own_literals_reach_the_class` (the two literals, a hostile
 value falling back to the default, and the palette staying on `.acc`). What they cannot cover is the pointer: the hover cascade
@@ -2656,9 +2778,8 @@ Marked in code with `# ponytail:` comments.
 - **A hard-deleted post loses its type on the screen** and falls back to "page or post" — `_post_context()` resolves the type from the row. Production never hard-deletes a post (deleting trashes it), so this only shows for rows the test cleanup removes.
 - **A restore is not pre-checked against what it references.** Putting back a version whose featured image or parent page has since been deleted fails on the foreign key and surfaces through `_pg_error` as a 502 page rather than a sentence.
 - **`/admin/audit` pages with offset/limit** like every other admin list. Deep pages get slower; keyset pagination if that day comes.
-- **The sliding row is hard-coded to one content type.** `render_blocks()` sets `rail = pt_slug == "testimonial"`; nothing else can ask for it. A "Sliding row" checkbox on the `post_list` block is the upgrade, and it is deliberately not built yet — a field costs validation, a seed entry, a label, an `EDITOR["widgets"]` line and a test, and exactly one type wants this.
 - **The feed over-fetches 2× rather than paging.** `feed()` asks for `FEED_MAX * 2` rows and slices to `FEED_MAX` after `_indexable()`, because filtering a list that was already truncated is what let one `noindex` post shorten the feed. `FEED_MAX` consecutive `noindex` posts would still come up short; page the query if that ever happens.
-- **`site.js` has no error boundary and no feature detection.** It is 45 lines against `scrollTo`, pointer events and `matchMedia`, all of which every browser the client's visitors use has had for years; if any of it throws, the row silently stays a plain native scroller, which is the state the page is served in anyway. That is the whole reason the controls ship `hidden` and the script unhides them.
+- **`site.js` has no error boundary and no feature detection.** It is ~150 lines against `scrollTo`, pointer events and `matchMedia`, all of which every browser the client's visitors use has had for years; if any of it throws, the row silently stays a plain native scroller, which is the state the page is served in anyway. That is the whole reason the controls ship `hidden` and the script unhides them.
 
 Shared editing (§12.3), all of them named in `admin.js`:
 

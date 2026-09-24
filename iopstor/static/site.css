@@ -244,8 +244,7 @@ h1,h2{letter-spacing:-.02em;line-height:1.1}
   .mega-tiles a{background:transparent;color:var(--muted);padding:10px 16px;margin:0}
   .mega-tiles a:hover{background:transparent;color:var(--blue)}
   .mt-ic{display:none}   /* a 32px tile per row turns the phone sheet into a wall of squares */
-  /* two links of this length do not fit 390 side by side; unwrapped, the arrow drops to a
-     line of its own and reads as a broken link */
+  /* two links of this length do not fit 390 side by side, so they wrap onto lines of their own */
   .mega-foot{display:flex;flex-wrap:wrap;gap:10px 24px;border-top:1px solid var(--line);padding:12px 0 0;margin-top:0}
   .mega-foot a{color:var(--ink)}
 }
@@ -302,7 +301,16 @@ main{min-height:60vh}
    page for rhythm, which is why this is a setting and not baked into each block. */
 .t-grey{background:var(--grey)}
 .t-blue{background:var(--blue);color:var(--white)}
-.t-blue h2,.t-blue h3{color:var(--white)}
+.t-blue h1,.t-blue h2,.t-blue h3{color:var(--white)}
+/* .eyebrow is var(--blue) -- on the blue band that is the band itself, so the little label above a
+   heading vanished. Nothing hit it before an editor could put this tone on any section: cta.html is
+   the only other blue band and it draws no eyebrow. */
+.t-blue .eyebrow{color:var(--white)}
+/* The same gap one line down: .lead is var(--muted), a dark grey that all but disappears on the blue
+   band. Found on a service page's closing band once its Background became a setting (2026-09-23),
+   and it was true of a Points section's subheading on Blue as well. The dark band never had it --
+   `.t-dark p` whitens every paragraph -- and a Hero draws its own (.hero-lit .lead, later, wins). */
+.t-blue .lead{color:var(--blue-tint)}
 .t-dark{background:var(--black);color:var(--muted-dark)}
 .t-dark h1,.t-dark h2,.t-dark h3{color:var(--white)}
 .t-dark .card{background:var(--black-3);border-color:var(--line-dark)}
@@ -311,10 +319,12 @@ main{min-height:60vh}
 .t-dark .chip-industry{background:rgba(53,115,185,.15);color:var(--blue-light)}
 .t-dark a.card:hover{border-color:var(--blue)}
 .section-title{font-size:clamp(28px,3.5vw,40px);margin:0 0 24px}
-/* the row above a grid: eyebrow and title left, "All services →" right */
-.sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin:0 0 28px}
+/* the row above a grid: eyebrow and title left, "All services" right. The title's last line can run
+   right up to the link, so the column gap is the whole distance between them: 24px read as touching
+   (client, 2026-09-23). The row gap is for a phone, where the link wraps under the title. */
+.sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px 48px;flex-wrap:wrap;margin:0 0 28px}
 .sec-head>div{flex:1 1 320px;min-width:0}   /* or a long title's max-content basis wraps the link onto its own row */
-.sec-head .section-title{margin:0}
+.sec-head .section-title{margin:0;text-wrap:balance}   /* the gap above makes a long title wrap; this stops it stranding one word */
 .sec-head .eyebrow{margin:0 0 10px}
 .sec-link{font:600 15px/1 var(--body);color:var(--black);text-decoration:none;white-space:nowrap}
 .sec-link:hover{color:var(--blue)}
@@ -359,6 +369,10 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .btn:hover{background:var(--blue-hover);color:var(--white)}
 .btn.dark{background:var(--black)}
 .btn.dark:hover{background:var(--blue)}
+/* Same story as .eyebrow above: cta.html hardcodes `btn dark` on its blue band, so a plain .btn
+   never met one until the Background dropdown could put t-blue on any section. BEFORE .btn.ghost on
+   purpose -- equal specificity, so a ghost button keeps its transparent fill on the blue band. */
+.t-blue .btn{background:var(--black)}
 /* on the blue band the generic dark-button hover IS the background, so the button vanishes under
    the pointer. There it goes the other way, which is what the design does. */
 .band-blue .btn.dark:hover,.t-blue .btn.dark:hover{background:var(--white);color:var(--black)}
@@ -515,9 +529,15 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .hero-dots span{height:4px;width:14px;border-radius:999px;background-color:var(--line);background-image:linear-gradient(var(--blue),var(--blue));background-repeat:no-repeat;background-size:0 100%;
   animation:dot3 calc(var(--n) * 4.5s) linear calc(var(--i) * 4.5s) infinite}
 .hero-dots[style*="--n:2"] span{animation-name:dot2}
-.hero-dark{background:var(--black);color:#d1d6de;border-bottom:0;padding:96px 0 80px;overflow:hidden}
-.hero-dark :is(h1,h2){color:var(--white)}
-.hero-dark .lead{color:#d1d6de;max-width:640px}
+.hero-dark{background:var(--black);border-bottom:0;padding:96px 0 80px;overflow:hidden}
+.hero-dark .lead{max-width:640px}
+/* Light text, on whichever band is dark. This used to hang off .hero-dark -- the tick -- which made
+   the tick answer two questions at once: how the section is laid out, and what colour it is. The
+   Background dropdown can now overrule the second, so hero.html works out `lit` from the tick AND
+   the tone and writes this class; see the comment on the tone rules below. */
+.hero-lit{color:#d1d6de}
+.hero-lit :is(h1,h2){color:var(--white)}
+.hero-lit .lead{color:#d1d6de}
 /* "Hold the picture still": the two perpetual loops stop, the one-shot entrance does not. The
    picture still arrives the way the design draws it and then sits, which is what was asked for --
    so this names the two elements that carry `float` and the ::before that carries `glow`, and
@@ -532,6 +552,36 @@ a.card:hover{border-color:var(--blue);transform:translateY(-2px)}
 .hero-noglow .hero-media::before{display:none}
 .hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.18}
 .hero-dark>.wrap{position:relative}
+/* The page's breadcrumb, when the hero is the first thing on the page (user, 2026-09-24: the white
+   strip .crumb-bar left above a dark band read as detached, and the mock draws the crumb inside
+   every band). Its own row above the grid: display:block beats .hero>.wrap's grid -- same
+   specificity, later here -- and the rule above keeps it over .hero-bg. 16px is .page-head
+   .breadcrumb's gap, so a dark hero and a head-banner put the crumb in the same place. On a lit
+   band it takes the band's own light text, not .band-dark's --muted-dark, which is about 2.4:1 on
+   --blue; the page you are on is white, as in the mock. */
+.hero>.hero-crumb{display:block;margin-bottom:16px}
+.hero-lit .breadcrumb,.hero-lit .breadcrumb a,.hero-lit .breadcrumb li+li::before{color:inherit}
+.hero-lit .breadcrumb li:last-child,.hero-lit .breadcrumb a:hover{color:var(--white)}
+/* The hero is the ONE block that draws its own band, and .hero/.hero-dark sit here, 180 lines after
+   the tone group at the top of this file -- same specificity, later in the source, so a tone an
+   editor picked lost to them and the section's own "Background" dropdown did nothing on a hero
+   (client, 2026-09-22). These put back the rule that group's comment states. Do not move a hero
+   background above them, and do not "tidy" them away as duplicates of .t-*: they are the same
+   colours at (0,2,0) precisely so the dropdown wins. The `dark` tick owns the LAYOUT -- the
+   full-width band, no bottom border, the picture as a backdrop -- and the dropdown owns the colour,
+   which is what makes a banded hero in grey or blue possible at all.
+   Background only, and that is the point of the split above: the *colour* of the text follows
+   .hero-lit, which the template computes from the tick and the tone together, so no combination of
+   the two needs a rule of its own here.
+   t-page is the fourth, and it is why "Page background" is a stored value rather than an empty one
+   (blocks.py TONES): the tick blacks the band out on its own, so only an explicit pick can put the
+   page's white back, and an absent tone has to go on meaning "leave the block's own band alone" or
+   every hero saved before today would turn white. It is scoped to .hero deliberately -- a CTA or a
+   Numbers strip set to Page background keeps the band its own template writes, exactly as now. */
+.hero.t-page{background:var(--white)}
+.hero.t-grey{background:var(--grey)}
+.hero.t-blue{background:var(--blue)}
+.hero.t-dark{background:var(--black)}
 @media(max-width:700px){.hero{padding:48px 0 40px}.hero-dark{padding:64px 0 56px}}
 
 /* Prose typed in the admin's document editor. Everything an editor can produce with the
@@ -684,6 +734,11 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .card-img-empty{background:repeating-linear-gradient(135deg,#e9edf2 0 10px,#f4f6f9 10px 20px)}
 .pl-service .card-n{display:block;margin:0 0 14px;font:700 12px/1 var(--mono);color:var(--blue)}
 .pl-service .chips-kids{display:flex}
+/* The mock draws no picture on a service card, so none was ever switched back on -- and a Featured
+   image an editor set was in the HTML and invisible (2026-09-23). The empty placeholder stays off:
+   a service with no picture keeps exactly the card it had. Same crop as a case-study card. */
+.pl-service .card-img:not(.card-img-empty){display:block;margin:0 0 16px;border-radius:10px;overflow:hidden}
+.pl-service .card-img img{height:160px;object-fit:cover}
 .pl-product .card{padding:0;overflow:hidden}
 /* The picture area is a FIXED height, not a minimum, and that is the whole point of these two rules.
    A product photo's aspect ratio is whatever the client sent: the tower is 600x375, the rack unit
@@ -791,23 +846,27 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
   font:800 110px/1 var(--head);color:var(--grey);pointer-events:none}
 .pl-testimonial .card>*{position:relative;z-index:1}
 
-/* The row itself, and never on the archive -- /testimonials is the full list, so it stays a grid.
-   The same :not(.arch-body) split .pl-partner makes.
+/* The sliding row: testimonials, and product lists since 2026-09-23 -- `pl-rail` is set by blocks._rail()
+   and only ever by post_list, so an archive (/testimonials, /products: the full lists) stays a grid.
+   The centred heading is the testimonials' own look and is keyed to them, not to the row.
    .cards stops being a grid and becomes the scroll container: that one line is what gives the wheel,
    a trackpad and a finger on a phone real control of the row with no script involved. site.js only
    adds the arrows, the dots and the drift on top of it. The scrollbar is hidden because the dots say
    the same thing; the scrolling itself is untouched. */
 .pl-testimonial:not(.arch-body) .sec-head{justify-content:center;text-align:center}
 .pl-testimonial:not(.arch-body) .sec-head .eyebrow{margin:0}
+/* padding-top + the matching negative margin: a product card is a link, and a.card:hover lifts it 2px,
+   which a scroll container clips. The pair leaves the row exactly where it was. */
+.pl-rail .cards{display:flex;grid-template-columns:none;gap:20px;
+  overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding:4px 0;margin-top:-4px}
 /* `safe center` and not plain `center`: two published quotes do not fill the row, and left-aligned
    under a centred heading they read as a layout that broke. Plain `center` would fix that and break
    the overflowing case instead -- a centred flex line puts its overflow on BOTH sides and the first
    card becomes unreachable, because a scroll container cannot scroll to a negative offset. `safe`
    is the keyword for exactly this: centre while it fits, fall back to flex-start the moment it does
    not. Measured both ways below. */
-.pl-testimonial:not(.arch-body) .cards{display:flex;grid-template-columns:none;gap:20px;justify-content:safe center;
-  overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:4px}
-.pl-testimonial:not(.arch-body) .cards::-webkit-scrollbar{display:none}
+.pl-testimonial.pl-rail .cards{justify-content:safe center}
+.pl-rail .cards::-webkit-scrollbar{display:none}
 /* A phone shows one card and a slice of the next, and the slice is what says "there are more" before
    anybody has touched it -- so it is the SLICE that is held constant, not the card. `100%` on a
    flex-basis resolves against the rail's inner width, so the card takes everything except a fixed
@@ -816,7 +875,11 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
    with the viewport, so the peek fell away exactly when it was needed most -- measured 41px at 390,
    34px at 360, 23px at 320. Now it is 48px at all three.
    Not `100vw`: that includes the scrollbar, and would put back the very overflow `.hero` fixes. */
-.pl-testimonial:not(.arch-body) .card{flex:0 0 min(340px, 100% - 68px);scroll-snap-align:start}
+.pl-rail .card{flex:0 0 min(340px, 100% - 68px);scroll-snap-align:start}
+/* The first card sits flush with the scroller's left edge, and a scroller clips whatever is outside
+   it -- so the browser's own focus ring, drawn just outside the card, lost its left side. Inside the
+   edge instead, the same ring the accordion's rows use. Only a link card can take focus at all. */
+.pl-rail a.card:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
 .rail-nav{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:28px}
 /* This line is load-bearing, not tidiness. The nav is served with `hidden` so a blocked script
    leaves no dead buttons, and site.js also re-hides it when the row has nothing to scroll (two
@@ -876,8 +939,9 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
       keys walk a radio group and check as they go, which opens each row in turn -- and
       display:none takes it out of the tab order. The header's .mg-toggle may be display:none
       because it is pointer-only and its label is the whole control.
-   2. :focus-within opens a row. A closed body is 0fr + overflow:hidden, which hides the child
-      links without removing them from the tab order -- the same pairing the mega panel uses.
+   2. Keyboard focus opens a row (:focus-visible inside it; on a phone, any focus). A closed body is
+      0fr + overflow:hidden, which hides the child links without removing them from the tab order
+      -- the same pairing the mega panel uses.
    3. The hover rule sits in @media(hover:hover). A touch browser leaves :hover on the last thing
       tapped, and a stuck hover on one row would keep every other row shut.
    4. There is no "close the others" rule, on purpose: the checked row's own selector is guarded
@@ -899,32 +963,53 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .acc-t{position:absolute;opacity:0;pointer-events:none;margin:0}
 .acc-hr{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:22px 28px}
 .acc-hr h3{margin:0;font:800 clamp(20px,2.4vw,26px)/1.2 var(--head);color:var(--nm);transition:color .3s}
-/* the label holds the name, and its ::after is the hit area -- the whole header strip and only the
-   header strip. inset:0 against the row instead would lie over the open body and swallow the
-   child links, which are the one thing on the row you are meant to be able to click. */
+/* the label holds the name, and its ::after is the header strip's hit area: the control that opens a
+   shut row. An OPEN row is a link to the group's page instead -- .acc-all::after, below. */
 .acc-hd{cursor:pointer}
 .acc-hd::after{content:"";position:absolute;inset:0}
 .acc-n{font:400 13px/1 var(--body);color:var(--mt);white-space:nowrap;transition:color .3s}
 .acc-n i{display:inline-block;margin-left:10px;font-style:normal;transform:var(--chev);transition:transform .3s}
-.acc-body{display:grid;grid-template-rows:var(--rows);transition:grid-template-rows .35s cubic-bezier(.2,.7,.2,1)}
+.acc-body{display:grid;grid-template-rows:var(--rows);transition:grid-template-rows .35s cubic-bezier(.2,.7,.2,1);position:relative}
 .acc-body>div{overflow:hidden}
 .acc-in{padding:0 28px 26px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;align-items:start}
 .acc-blurb{display:flex;flex-direction:column;align-items:flex-start;gap:12px;max-width:480px}
 .acc-blurb p{margin:0;font:400 16px/1.6 var(--body);color:var(--mt)}
 .acc-all{font:600 14px/1 var(--body);color:var(--o-lnk);text-decoration:none}
 .acc-all:hover{color:var(--nm)}
+/* The open row is one link to the group's page (user, 2026-09-24: "make this clickable ... the
+   sections as a whole"). This ::after is its hit area, and it needs no open/shut switch of its own:
+   on a phone it is anchored to .acc-body, which is 0px tall while the row is shut, so the first tap
+   still lands on the label and opens it; with a mouse (the hover block below) it is anchored to the
+   whole row, which is only ever clickable while the pointer is on it, i.e. while it is open. The
+   overflow:hidden child does not clip it, because its containing block is outside that child.
+   The pills stay clickable because they come later in the tree and are position:relative, which
+   paints them above this without a z-index -- drop that and every pill opens the group instead. */
+.acc-all::after{content:"";position:absolute;inset:0}
 .acc-kids{display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start}
-.acc-kids a{padding:10px 14px;border:1px solid var(--o-kln);border-radius:8px;color:var(--o-kid);font:500 14px/1.3 var(--body);white-space:nowrap;text-decoration:none;transition:border-color .15s,color .15s}
+.acc-kids a{position:relative;padding:10px 14px;border:1px solid var(--o-kln);border-radius:8px;color:var(--o-kid);font:500 14px/1.3 var(--body);white-space:nowrap;text-decoration:none;transition:border-color .15s,color .15s}
 .acc-kids a:hover{border-color:var(--o-lnk);color:var(--o-lnk)}
-/* Open: the checked row while nothing is hovered, and any row the keyboard is inside. Nothing else
+/* Open: the checked row, and the row the keyboard is in, while nothing is hovered. Nothing else
    -- no row is checked in the markup, so the section loads with every row shut and opens only under
    a pointer or a tap (client, 2026-09-21: "first section should be closed as well if the mouse is
    not over any services"). That also makes two accordions on one page a non-event: they share a
-   radio name, so clicking in one unchecks the other, and all-shut is now the ordinary state. */
+   radio name, so clicking in one unchecks the other, and all-shut is now the ordinary state.
+   Keyboard focus is :focus-visible and not :focus-within, and it gives way to the pointer like the
+   checked row does (user, 2026-09-24, two rows open at once). A mouse click on the row's link
+   focuses it too, so with :focus-within the clicked row stayed open -- through the wait for the next
+   page, after Back, after a ctrl-click -- and hovering another opened a second one. */
 .acc:not(:has(.acc-row:hover)) .acc-row:has(.acc-t:checked),
-.acc-row:focus-within{--rows:1fr;--bg:var(--o-bg);--nm:var(--o-nm);--mt:var(--o-mt);--chev:rotate(180deg)}
+.acc:not(:has(.acc-row:hover)) .acc-row:has(:focus-visible){--rows:1fr;--bg:var(--o-bg);--nm:var(--o-nm);--mt:var(--o-mt);--chev:rotate(180deg)}
 @media(hover:hover){
   .acc-row:hover{--rows:1fr;--bg:var(--o-bg);--nm:var(--o-nm);--mt:var(--o-mt);--chev:rotate(180deg)}
+  /* mouse only: the heading and the count join the link. Never outside this block -- on a phone the
+     row-sized hit area would cover a shut row's header, and the first tap would leave the page */
+  .acc-row{position:relative}.acc-body{position:static}
+}
+/* a phone keeps what it had: a tap on the header focuses the radio, and its stuck :hover is on the
+   tapped row, which is exactly what switches the checked rule above off -- so there the focus is
+   what holds the row open, and :focus-visible does not match a tap */
+@media(hover:none){
+  .acc-row:focus-within{--rows:1fr;--bg:var(--o-bg);--nm:var(--o-nm);--mt:var(--o-mt);--chev:rotate(180deg)}
 }
 .acc-row:has(.acc-t:focus-visible){outline:2px solid var(--blue);outline-offset:-2px}
 @media(max-width:700px){
@@ -957,14 +1042,17 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 /* services: one full-width row per group, its children as tiles you can click */
 .arch-body.pl-service .cards{grid-template-columns:1fr;gap:20px}
 /* the words in the first column, the child tiles in the second: the card's children are a flat list,
-   so each one names the column it belongs to rather than being wrapped in a div for it */
-.arch-body.pl-service .card{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));grid-template-rows:auto auto auto 1fr;column-gap:24px;padding:32px}
-.arch-body.pl-service .card-n,.arch-body.pl-service .card h3,.arch-body.pl-service .card p{grid-column:1}
+   so each one names the column it belongs to rather than being wrapped in a div for it. Four
+   `auto` rows for picture, number, title and blurb -- a card with no picture leaves the first one
+   0px tall -- then the 1fr that takes the slack when the tiles run longer. The tiles' span below
+   counts these rows, and the two change together. */
+.arch-body.pl-service .card{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));grid-template-rows:auto auto auto auto 1fr;column-gap:24px;padding:32px}
+.arch-body.pl-service .card-img,.arch-body.pl-service .card-n,.arch-body.pl-service .card h3,.arch-body.pl-service .card p{grid-column:1}
 .arch-body.pl-service .card h3{margin:0 0 10px;font-size:26px}
 .arch-body.pl-service .card h3 a{color:inherit;text-decoration:none}
 .arch-body.pl-service .card h3 a:hover{color:var(--blue)}
 .arch-body.pl-service .card p{margin:0}
-.arch-body.pl-service .chips-kids{display:grid;grid-column:2;grid-row:1 / span 4;align-content:start;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin:0}
+.arch-body.pl-service .chips-kids{display:grid;grid-column:2;grid-row:1 / span 5;align-content:start;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin:0}
 .arch-body.pl-service .chips-kids .chip{display:flex;justify-content:space-between;gap:8px;padding:12px 14px;border-radius:8px;font:500 15px/1.3 var(--body);color:var(--ink);text-decoration:none;transition:border-color .15s,color .15s}
 .arch-body.pl-service .chips-kids .chip:hover{border-color:var(--blue);color:var(--blue)}
 /* Under 700px auto-fit drops the card to one track, but .chips-kids is still pinned to column 2 --
@@ -1128,12 +1216,14 @@ figcaption{color:var(--muted);font-size:13.5px;margin-top:10px}
 .page-head-text{min-width:0}
 .page-head .breadcrumb{margin:0 0 16px}
 .page-head .chips{margin:0 0 20px}
-/* A page that leads with a hero or a columns section has no .page-head, so post.html draws the
-   breadcrumb on its own in a bare .wrap -- and .wrap is the side gutter and nothing else, which
-   left the crumb 10px under the header rule on every service, About, Careers and Contact page, and
-   on any case study whose first section is a hero. 48px is .page-head's own top padding, so the
-   crumb sits at the same height whichever of the two branches drew it. Nothing below: what follows
-   always brings its own top gap (.meta-strip 32px, the hero's padding, a .section for details). */
+/* A page that leads with a hero or a columns section has no .page-head. When a hero is the first
+   thing on it, the crumb is the hero's own first row (.hero-crumb, 2026-09-24); otherwise -- a
+   columns section, or the short-field strip or long fields drawn above the hero -- post.html draws
+   it on its own in a bare .wrap, and .wrap is the side gutter and nothing else, which left the crumb
+   10px under the header rule (2026-09-19, when every service, About, Careers and Contact page took
+   this branch). 48px is .page-head's own top padding, so the crumb sits at the same height
+   whichever of the two branches drew it. Nothing below: what follows always brings its own top
+   gap (.meta-strip 32px, the hero's padding, a .section for details). */
 .crumb-bar{padding-block:48px 0}
 .page-media img{max-width:440px;margin-inline:auto}
 /* An article stacks: title, date, then the picture across the whole column, then the rule that

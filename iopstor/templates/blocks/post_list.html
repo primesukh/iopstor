@@ -6,7 +6,7 @@
 <section class="section pl pl-{{ pt_slug }}{% if rail %} pl-rail{% endif %}{% if cols %} pl-cols-{{ cols }}{% endif %}{{ cls }}"{{ sty }}{{ fe() }}><div class="wrap">
   {% if data.heading or data.eyebrow or data.link_url or edit %}<div class="sec-head">
     <div>{% if data.eyebrow or edit %}<p class="eyebrow"{{ fe('eyebrow') }}>{{ data.eyebrow }}</p>{% endif %}{% if data.heading or edit %}<h2 class="section-title"{{ fe('heading') }}>{{ data.heading }}</h2>{% endif %}</div>
-    {% if data.link_url %}<a class="sec-link" href="{{ data.link_url }}"{{ fe('link_label') }}>{{ data.link_label or 'See all' }} &rarr;</a>{% endif %}
+    {% if data.link_url %}<a class="sec-link" href="{{ data.link_url }}"{{ fe('link_label') }}>{{ data.link_label or 'See all' }}</a>{% endif %}
   </div>{% endif %}
   {#- The accordion (List style, and the default for a top-level services list — blocks._acc()).
       One open at a time with no script: the rows are radio buttons of one name, so the browser
@@ -26,8 +26,8 @@
     </div>
     <div class="acc-body"><div><div class="acc-in">
       <div class="acc-blurb">{% if p.excerpt %}<p>{{ p.excerpt }}</p>{% endif %}
-        {%- if p.path %}<a class="acc-all" href="{{ p.path }}">All {{ p.title }} &rarr;</a>{% endif %}</div>
-      {%- if p.children %}<div class="acc-kids">{% for c in p.children %}<a href="{{ c.path }}">{{ c.title }} &rarr;</a>{% endfor %}</div>{% endif %}
+        {%- if p.path %}<a class="acc-all" href="{{ p.path }}">All {{ p.title }}</a>{% endif %}</div>
+      {%- if p.children %}<div class="acc-kids">{% for c in p.children %}<a href="{{ c.path }}">{{ c.title }}</a>{% endfor %}</div>{% endif %}
     </div></div></div>
   </div>{% else %}<p class="lead">Coming soon.</p>{% endfor %}</div>
   {%- else %}<div class="cards">{% for p in posts %}{{ card(p, loop.index) }}{% else %}<p class="lead">Coming soon.</p>{% endfor %}</div>{% endif %}
@@ -38,9 +38,9 @@
       .rail-dots is left empty on purpose. One dot per card would be wrong: at 1440 the row shows
       about three at a time, so the last few would all point at the same end position. How many stops
       there really are depends on measured widths, which only the browser knows. #}
-  {%- if rail %}<div class="rail-nav" hidden>
-    <button type="button" class="rail-arrow" data-rail="-1" aria-label="Previous testimonials">&lsaquo;</button>
+  {%- if rail %}{% set noun = {'testimonial': 'testimonials', 'product': 'products'}.get(pt_slug, 'items') %}<div class="rail-nav" hidden data-noun="{{ noun }}">
+    <button type="button" class="rail-arrow" data-rail="-1" aria-label="Previous {{ noun }}">&lsaquo;</button>
     <span class="rail-dots"></span>
-    <button type="button" class="rail-arrow" data-rail="1" aria-label="More testimonials">&rsaquo;</button>
+    <button type="button" class="rail-arrow" data-rail="1" aria-label="More {{ noun }}">&rsaquo;</button>
   </div>{% endif %}
 </div></section>

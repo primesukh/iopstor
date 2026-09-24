@@ -478,10 +478,14 @@ def test_dark_is_a_checkbox_not_a_class_name(app, monkeypatch):
         plain = render_blocks([{"type": "hero", "data": {"heading": "Hi"}}])
         dark = render_blocks([{"type": "hero", "data": {"heading": "Hi", "dark": True}}])
         nasty = render_blocks([{"type": "hero", "data": {"heading": "Hi", "dark": '" onload="x'}}])
+        # `tone` decides the band's colour and so feeds `lit` too -- it is compared against
+        # literals, never interpolated, which is the rule every hero switch follows
+        toned = render_blocks([{"type": "hero", "data": {"heading": "Hi", "tone": '" onload="x'}}])
 
-    assert "hero-dark" not in plain
-    assert 'class="hero hero-dark"' in dark
-    assert 'class="hero hero-dark"' in nasty and "onload" not in nasty
+    assert "hero-dark" not in plain and "hero-lit" not in plain
+    assert 'class="hero hero-dark hero-lit"' in dark          # the tick with no tone IS a dark band
+    assert 'class="hero hero-dark hero-lit"' in nasty and "onload" not in nasty
+    assert 'class="hero"' in toned and "onload" not in toned and "hero-lit" not in toned
 
     # ...and neither the flag nor a URL is words on the page, so neither reaches llms-full.txt
     assert blocks_text([{"type": "hero", "data": {"eyebrow": "Label", "heading": "Hi",
@@ -559,6 +563,10 @@ def test_stylesheets_are_balanced():
     for name in ("site.css", "admin.css", "canvas.css"):
         css = Path("iopstor/static", name).read_text()
         css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)   # a brace inside a comment is not a brace
+        # a */ left over closed a comment that was already closed: the prose after the first one
+        # became the start of the next selector and the whole rule was dropped, braces balanced
+        # (2026-09-24, the accordion's open rule -- caught by measuring, not by this test)
+        assert "*/" not in css, f"{name}: a */ with no /* before it"
         depth = 0
         for i, line in enumerate(css.split("\n"), 1):
             for ch in line:
@@ -838,7 +846,8 @@ def test_media_is_served_by_the_app_not_the_storage_gateway(app, client, monkeyp
     monkeypatch.setattr(db, "get_menu", lambda slug: [])
     monkeypatch.setattr(db, "post_type", lambda **kw: None)
     monkeypatch.setattr(db, "table", lambda *a, **k: 1 / 0)  # a media request must not query PostgREST
-    monkeypatch.setattr(storage, "fetch", lambda key: b"\x89PNG" + key.encode())
+    heads = {".png": b"\x89PNG", ".pdf": b"%PDF-1.4 ", ".svg": b'<svg xmlns="http://www.w3.org/2000/svg">'}
+    monkeypatch.setattr(storage, "fetch", lambda key: heads[key[key.rindex("."):]] + key.encode())
 
     r = client.get("/media/2026/09/abc.png")
     assert r.status_code == 200 and r.data == b"\x89PNG2026/09/abc.png"
@@ -860,6 +869,45 @@ def test_media_is_served_by_the_app_not_the_storage_gateway(app, client, monkeyp
     monkeypatch.setattr(storage, "fetch", lambda key: 1 / 0)  # reaching Storage for these is a bug
     assert client.get("/media/2026/09/notes.txt").status_code == 404      # not an allowed type
     assert client.get("/media/%2e%2e/%2e%2e/etc/passwd.png").status_code == 404  # nothing climbs out of the bucket
+
+
+def test_a_picture_is_the_type_its_bytes_say_not_its_name(app, client, monkeypatch):
+    """The Nvidia partner logo was WebP bytes uploaded as nvidia.svg, stored under .svg and served as
+    image/svg+xml. Firefox sniffed it and drew it; Chrome reads an SVG type as a drawing and nothing else,
+    and showed the alt text. The name still decides what may be uploaded and what is servable; the bytes
+    decide the stored ending, the recorded type and the header."""
+    from werkzeug.datastructures import FileStorage
+    from iopstor import db, storage
+
+    webp = b"RIFF\x50\x00\x01\x00WEBPVP8L" + b"\x00" * 32
+    assert storage.sniff(webp) == "image/webp"
+    assert storage.sniff(b"\x89PNG\r\n\x1a\n") == "image/png"
+    assert storage.sniff(b"\xff\xd8\xff\xe0\x00\x10JFIF") == "image/jpeg"
+    assert storage.sniff(b"GIF89a") == "image/gif" and storage.sniff(b"%PDF-1.3") == "application/pdf"
+    assert storage.sniff(b'<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"/>') == "image/svg+xml"
+    assert storage.sniff(b"\x00\x00\x00 ftypavif<svg") is None   # binary with "<svg" in it is not an SVG
+    assert storage.sniff(b"hello") is None                          # nothing known: the name's type stands
+
+    # served: the header follows the bytes, and the SVG sandbox goes with the SVG type, not the name
+    monkeypatch.setattr(storage, "fetch", lambda key: webp)
+    r = client.get("/media/2026/09/nvidia.svg")
+    assert r.status_code == 200 and r.mimetype == "image/webp"
+    assert "Content-Security-Policy" not in r.headers
+    monkeypatch.setattr(storage, "fetch", lambda key: b'<svg xmlns="http://www.w3.org/2000/svg"/>')
+    r = client.get("/media/2026/09/logo.png")
+    assert r.mimetype == "image/svg+xml" and r.headers["Content-Security-Policy"] == "default-src 'none'; sandbox"
+
+    # uploaded: stored under the ending its bytes have, and the editor's file name is kept
+    put = {}
+    class Bucket:
+        def upload(self, key, data, opts):
+            put.update(key=key, type=opts["content-type"])
+    monkeypatch.setattr(storage, "_bucket", lambda: Bucket())
+    monkeypatch.setattr(db, "insert", lambda table, row: row)
+    with app.test_request_context():
+        row = storage.save_upload(FileStorage(io.BytesIO(webp), filename="nvidia.svg"))
+    assert put["key"].endswith(".webp") and put["type"] == "image/webp"
+    assert row["mime"] == "image/webp" and row["url"].endswith(".webp") and row["filename"] == "nvidia.svg"
 
 
 def test_media_public_address_is_one_url_whichever_shape_the_row_is_in(app, client, monkeypatch):
@@ -2997,21 +3045,46 @@ def test_a_testimonial_card_with_only_a_name_renders_nothing_else(app, monkeypat
     assert ">Acme<" in html and ", " not in html.split('card-where">')[1].split("<")[0]
 
 
-def test_only_a_testimonial_list_becomes_a_sliding_row(app, monkeypatch):
+def test_testimonials_and_products_slide_and_the_editor_can_say_otherwise(app, monkeypatch):
     """pl-rail and the arrows are what site.js looks for. They are decided in blocks.py from the
-    resolved post type, never from block data, and no other type gets them."""
+    resolved post type and the editor's List style, never from free text: testimonials slide
+    (2026-09-16), products since the client asked for the home page's appliances to (2026-09-23)."""
+    from iopstor.blocks import _rail
+    assert _rail({}, "testimonial") is True and _rail({}, "product") is True   # Automatic
+    assert _rail({}, "partner") is False and _rail({}, "service") is False
+    assert _rail({"list_style": "cards"}, "product") is False                  # the editor can say no...
+    assert _rail({"list_style": " rail "}, "case_study") is True               # ...or yes, on any type
+    assert _rail({"list_style": "accordion"}, "testimonial") is False
+
     html = _render_testimonials(app, monkeypatch, [_testimonial()])
     assert "pl-rail" in html and 'class="rail-nav" hidden' in html and 'data-rail="1"' in html
+    assert 'aria-label="More testimonials"' in html
     # the dots are built by the browser from measured widths, so the server sends the box empty
     assert '<span class="rail-dots"></span>' in html
 
     from iopstor import db
     monkeypatch.setattr(db, "settings", lambda: {})
     monkeypatch.setattr(db, "get_menu", lambda slug: [])
+    monkeypatch.setattr(blocks, "_post_list", lambda data: ([], "product"))
+    with app.test_request_context():
+        html = render_blocks([{"type": "post_list", "data": {"post_type": "product"}}])
+    assert "pl-product pl-rail" in html and 'data-noun="products"' in html and 'aria-label="Previous products"' in html
     monkeypatch.setattr(blocks, "_post_list", lambda data: ([], "partner"))
     with app.test_request_context():
         html = render_blocks([{"type": "post_list", "data": {"post_type": "partner"}}])
     assert "pl-rail" not in html and "rail-nav" not in html
+
+
+def test_the_row_drags_without_breaking_a_card_that_is_a_link():
+    """A product card is a link and a testimonial never was. Two lines in site.js are what keep a
+    click opening the product and a drag not: the pointer is captured only once the hand has moved
+    (capture on pointerdown sends the plain click to the row, not the card), and the browser's own
+    drag of a link or a picture is refused, or it takes the gesture over after a few pixels."""
+    js = (pathlib.Path(__file__).parent.parent / "iopstor" / "static" / "site.js").read_text()
+    down = js[js.index("addEventListener('pointerdown'"):js.index("addEventListener('pointermove'")]
+    assert "setPointerCapture" not in down
+    assert "addEventListener('dragstart', function (e) { e.preventDefault(); })" in js
+    assert "if (dragging) { e.preventDefault(); e.stopPropagation(); }" in js   # the click after a drag
 
 
 def test_the_rail_controls_stay_hidden_without_the_script():
@@ -3046,6 +3119,20 @@ def test_a_short_testimonial_does_not_pad_out_with_dead_air():
     card = _site_css().split(".pl-testimonial .card{")[1].split("}")[0]
     assert "grid-template-rows:auto 1fr auto auto" in card
     assert "align-content:start" not in card
+
+
+def test_a_service_card_shows_the_picture_it_was_given():
+    """"Featured image is not being shown in the services page" (2026-09-23). The <img> was always in
+    the HTML: a bare .pl hides every .card-img and each .pl-<type> puts its own back, and services
+    never did, because the mock's services list has no pictures. The empty placeholder stays hidden,
+    so a service with no picture keeps the card it had. On /services the picture is one more row in
+    the words column, and the child tiles beside them must span every row the card defines or they
+    stop short of the bottom."""
+    css = _site_css()
+    assert "display:block" in css.split(".pl-service .card-img:not(.card-img-empty){")[1].split("}")[0]
+    rows = css.split(".arch-body.pl-service .card{")[1].split("grid-template-rows:")[1].split(";")[0]
+    kids = css.split(".arch-body.pl-service .chips-kids{")[1].split("grid-row:")[1].split(";")[0]
+    assert kids == f"1 / span {len(rows.split())}"
 
 
 def test_the_mega_menu_keeps_the_order_both_layouts_depend_on():
@@ -3278,7 +3365,7 @@ def test_a_row_of_figures_reads_on_the_light_band_and_on_a_dark_one():
     assert ".t-dark .stats li>span,.band-dark .stats li>span{color:var(--muted-dark)}" in css
 
 
-def _render_post(app, monkeypatch, post):
+def _render_post(app, monkeypatch, post, related=None):
     """post.html through base.html, which is the only way the page head is exercised at all. The
     three patches are exactly what public.py's app-wide context processor reaches for."""
     from flask import render_template
@@ -3287,7 +3374,7 @@ def _render_post(app, monkeypatch, post):
     monkeypatch.setattr(db, "get_menu", lambda slug: [])        # the header and footer menus
     monkeypatch.setattr(public, "_service_nav", lambda: None)   # the mega panel's own posts query
     with app.test_request_context("/case-studies/klpl"):
-        return render_template("post.html", post=post, children=[], siblings=False, meta={}, jsonld=[],
+        return render_template("post.html", post=post, related=related, meta={}, jsonld=[],
                                crumbs=[("Home", "/"), ("Case Studies", "/case-studies"), ("KLPL", "/case-studies/klpl")])
 
 
@@ -3341,16 +3428,60 @@ def test_a_hero_still_replaces_the_page_head_for_every_other_page(app, monkeypat
     assert html.count("<h1") == 1
 
 
-def test_a_hero_led_page_gives_its_breadcrumb_room_under_the_header(app, monkeypatch):
-    """The hero branch draws the breadcrumb on its own, and .wrap is the side gutter and nothing
-    else -- so it sat 10px under the header rule (measured at 1440: text top y=75 against y=123
-    on a page with a .page-head). .crumb-bar carries the 48px that .page-head already had, which
-    is why the class belongs on that branch only: adding it to both would double the gap."""
-    hero = _render_post(app, monkeypatch, _service(HERO))
-    assert '<div class="wrap crumb-bar">' in hero
-    assert "crumb-bar" not in _render_post(app, monkeypatch, _service())
+def test_a_page_led_by_columns_gives_its_breadcrumb_room_under_the_header(app, monkeypatch):
+    """With no page head and no hero to carry it, the breadcrumb is drawn on its own, and .wrap is
+    the side gutter and nothing else -- so it sat 10px under the header rule (measured at 1440: text
+    top y=75 against y=123 on a page with a .page-head). .crumb-bar carries the 48px that .page-head
+    already had, which is why the class belongs on that branch only: adding it to both would double
+    the gap. Until 2026-09-24 a hero-led page took this branch too; see the test below."""
+    cols = _render_post(app, monkeypatch, _service([{"type": "columns", "data": {"cols": [[], []]}}]))
+    assert '<div class="wrap crumb-bar">' in cols and "hero-crumb" not in cols
+    plain = _render_post(app, monkeypatch, _service())
+    assert "crumb-bar" not in plain and "hero-crumb" not in plain   # the page head draws it
     css = (pathlib.Path(__file__).resolve().parents[1] / "iopstor/static/site.css").read_text()
     assert ".crumb-bar{padding-block:48px 0}" in css
+
+
+def test_a_page_that_opens_with_a_hero_carries_its_breadcrumb_in_the_band(app, monkeypatch):
+    """The white strip .crumb-bar left above a dark band read as detached (user, 2026-09-24, on
+    Storage and NAS), and the mock draws the crumb inside every band. So when a hero is the first
+    thing on the page, the crumb is its first row -- once, and not also in a bar above it."""
+    html = _render_post(app, monkeypatch, _service(HERO))
+    assert html.count('aria-label="Breadcrumb"') == 1
+    assert '<div class="wrap hero-crumb"><nav class="breadcrumb" aria-label="Breadcrumb">' in html
+    assert html.index('<section class="hero') < html.index("hero-crumb")
+    assert "crumb-bar" not in html
+    # ...but only when it IS the first thing: the short-field strip, or the long fields in their
+    # default place, sit between the head and the hero, and a crumb inside the hero would then be
+    # halfway down the page
+    for kind in ("text", "textarea"):
+        post = _service(HERO)
+        post["post_type"] = {**post["post_type"], "field_schema": [{"key": "client", "label": "Client", "type": kind}]}
+        html = _render_post(app, monkeypatch, post)
+        assert '<div class="wrap crumb-bar">' in html and "hero-crumb" not in html, kind
+        assert html.count('aria-label="Breadcrumb"') == 1, kind
+    # the long fields moved below the first section put the hero first again
+    post["meta"] = {**post["meta"], "_details_at": "1"}
+    assert "hero-crumb" in _render_post(app, monkeypatch, post)
+    css = (pathlib.Path(__file__).resolve().parents[1] / "iopstor/static/site.css").read_text()
+    # its own row, not a grid item: a split hero is auto-fit, and an item spanning 1/-1 keeps the
+    # empty third track alive at 1440
+    assert ".hero>.hero-crumb{display:block;margin-bottom:16px}" in css
+    # on a lit band it reads the band's own light text; --muted-dark is about 2.4:1 on --blue
+    lit = css[css.index(".hero-lit .breadcrumb,"):]
+    assert "muted-dark" not in lit[:lit.index("\n", lit.index(".hero-lit .breadcrumb li:last-child"))]
+
+
+def test_only_the_first_section_is_handed_the_breadcrumb(app):
+    """render_blocks() gates `crumbs` on path "0" the way it gates h1, so a hero further down the
+    page never draws a second trail, and the canvas -- which passes none -- never draws one."""
+    trail = [("Home", "/"), ("Services", "/services"), ("Storage", "/services/storage")]
+    with app.test_request_context():
+        two = str(render_blocks(HERO + HERO, crumbs=trail))
+        first, second = two.split("<section")[1:]
+        assert "hero-crumb" in first and "hero-crumb" not in second
+        assert "hero-crumb" not in str(render_blocks(HERO))
+        assert "hero-crumb" not in str(render_blocks(HERO, edit=True))
 
 
 def test_the_title_can_sit_on_the_featured_picture(app, monkeypatch):
@@ -3402,6 +3533,77 @@ def test_unticking_the_banner_box_is_saved_as_false_not_as_missing(app):
         assert _form_body(pt, post)["meta"]["_head_banner"] == "1"
     with app.test_request_context("/admin/posts/7", method="POST", data=base):
         assert _form_body(pt, post)["meta"]["_head_banner"] == ""     # cleared, not left as it was
+
+
+def _kid(i, title):
+    return {"id": i, "title": title, "path": "/services/storage/" + title.lower()}
+
+
+def test_the_related_band_follows_the_page_settings(monkeypatch):
+    """"Add an option if we want to show this Storage solutions / other storage solutions section or
+    not and ability to customize this as well" (2026-09-23). One function answers for post.html, the
+    .md twin and the editor's Preview -- the rule owns_head() exists for. Preview had its own copy
+    that built only the group case, so on a leaf service it never showed the band the page ends on."""
+    from iopstor import db, public
+    kids = {1: [_kid(2, "NAS"), _kid(3, "DAS"), _kid(4, "SAS")]}
+    monkeypatch.setattr(public, "_kids", lambda pid: kids.get(pid, []))
+    monkeypatch.setattr(db, "ancestors", lambda post: [("Storage", "/services/storage")])
+    svc = {"slug": "service", "hierarchical": True}
+    group = {"id": 1, "title": "Storage", "parent_id": None, "post_type": svc, "meta": {}}
+    leaf = {"id": 2, "title": "NAS", "parent_id": 1, "post_type": svc, "meta": {}}
+
+    r = public.related_for(group)
+    assert r["heading"] == "Storage solutions" and [p["id"] for p in r["pages"]] == [2, 3, 4]
+    assert (r["cls"], r["text"]) == (" t-grey", "")           # with no settings, the band it always was
+    r = public.related_for(leaf)
+    assert r["heading"] == "Other Storage services" and [p["id"] for p in r["pages"]] == [3, 4]
+    # the Preview's post carries no id -- an unsaved page has none -- so the id comes in beside it
+    assert [p["id"] for p in public.related_for(dict(leaf, id=None), pk=2)["pages"]] == [3, 4]
+
+    def set_(**s):
+        return public.related_for(dict(leaf, meta={"_related": s}))
+    assert set_(hide=True) is None
+    assert [p["id"] for p in set_(skip=[3])["pages"]] == [4]
+    assert set_(skip=[3, 4]) is None                           # nothing left, so no empty grey strip
+    r = set_(heading="More from us", text="Pick one.", tone="dark")
+    assert (r["heading"], r["text"], r["cls"]) == ("More from us", "Pick one.", " t-dark")
+    assert set_(tone='grey" onclick="x')["cls"] == " t-grey"  # compared against the whitelist, never written
+    assert public.related_for(dict(group, post_type={"slug": "page", "hierarchical": False})) is None
+
+
+def test_the_post_form_saves_the_related_band(app):
+    """Written only when the form carried the group, and the marker says so rather than the checkbox:
+    an unticked box posts nothing, and the JSON API posts no form at all -- so without the marker
+    either would blank the settings on every save. `skip` holds the services left OUT, which is what
+    lets a service added to the group later show up on every sibling page without editing them."""
+    from iopstor.admin_ui import _form_body
+    svc = {"slug": "service", "hierarchical": True, "field_schema": []}
+    post = {"meta": {"_related": {"heading": "Kept"}}}
+    base = {"title": "T", "slug": "t", "status": "published"}
+    form = dict(base, related_form="1", related_heading=" More from us ", related_text="Pick one.",
+                related_tone="blue", related_all="2 3 4")
+    with app.test_request_context("/admin/posts/7", method="POST",
+                                  data=dict(form, related_show="1", related_pages=["2", "4"])):
+        assert _form_body(svc, post)["meta"]["_related"] == {
+            "hide": False, "heading": "More from us", "text": "Pick one.", "tone": "blue", "skip": [3]}
+    with app.test_request_context("/admin/posts/7", method="POST", data=dict(form, related_tone="junk")):
+        r = _form_body(svc, post)["meta"]["_related"]
+        assert (r["hide"], r["tone"], r["skip"]) == (True, "", [2, 3, 4])   # unticked Show, junk tone
+    with app.test_request_context("/admin/posts/7", method="POST", data=base):
+        assert _form_body(svc, post)["meta"]["_related"] == {"heading": "Kept"}   # untouched, not blanked
+        assert "_related" not in _form_body({"slug": "page", "field_schema": []}, None)["meta"]
+
+
+def test_the_related_band_draws_what_related_for_returns(app, monkeypatch):
+    """post.html only draws; every decision is related_for()'s. The class arrives already
+    whitelisted and the words are autoescaped like every other field an editor types."""
+    band = {"heading": "More <b>from</b> us", "text": "Pick one.", "cls": " t-dark",
+            "pages": [{"title": "DAS", "path": "/services/storage/das"}]}
+    html = _render_post(app, monkeypatch, _service(), related=band)
+    assert '<section class="section t-dark siblings">' in html
+    assert ">More &lt;b&gt;from&lt;/b&gt; us</h2>" in html
+    assert '<p class="lead">Pick one.</p>' in html and 'href="/services/storage/das"' in html
+    assert "siblings" not in _render_post(app, monkeypatch, _service())
 
 
 def test_owns_head_is_the_one_answer_three_callers_share():
@@ -3459,7 +3661,7 @@ def test_a_hero_that_is_not_the_pages_heading_is_demoted_rather_than_hidden(app,
     assert mid.count("<h1") == 1                              # the page's own, not the hero's
     css = (pathlib.Path(__file__).resolve().parents[1] / "iopstor/static/site.css").read_text()
     assert ".hero :is(h1,h2){" in css                         # or the demoted heading loses its size
-    assert ".hero-dark :is(h1,h2){" in css                    # and its colour on a dark banner
+    assert ".hero-lit :is(h1,h2){" in css                     # and its colour on any dark band
 
 
 def test_the_editor_canvas_draws_the_title_where_the_page_draws_it(client, monkeypatch):
@@ -3588,8 +3790,9 @@ def test_the_hero_picture_can_sit_beside_above_or_below_the_words(app):
     for pos in ("above", "below"):                                      # an arrangement is not a split
         assert "hero-split" not in _hero_classes(_hero(arrange=pos))
 
-    # a dark hero has no arrangement -- its picture is the backdrop, not a column
-    assert _hero_classes(_hero(dark=True, arrange="above")) == ["hero", "hero-dark"]
+    # a dark hero has no arrangement -- its picture is the backdrop, not a column. hero-lit rides
+    # along because the tick with no tone IS a dark band; the band's colour is asserted below.
+    assert _hero_classes(_hero(dark=True, arrange="above")) == ["hero", "hero-dark", "hero-lit"]
     # and with no picture there is nothing to arrange
     assert _hero_classes(_hero(image=None, arrange="above")) == ["hero"]
 
@@ -3967,10 +4170,25 @@ def test_the_services_accordion_renders_one_openable_row_per_group(app, monkeypa
     # would be a regression, not a design choice
     assert 'href="/services/storage">All Storage' in html
     assert 'href="/services/storage/child-0">Child 0' in html
+    # the count's chevron is the only arrow in a row; every "→" is off the site (client, 2026-09-23,
+    # test_the_public_site_draws_no_right_arrows)
+    assert "&rarr;" not in html and "&darr;" in html
     # every child, not _card.html's four-then-"+N more": handling any number is the design's point
     assert "chip-more" not in html and "+1 more" not in html
     # the count agrees with itself in both numbers
     assert ">2 services<" in html and ">1 service<" in html
+
+
+def test_the_public_site_draws_no_right_arrows():
+    """The client took every "→" off the site on 2026-09-23 -- links, tiles, pills, the footer -- while
+    the mock still draws fifteen, so a template copied from it would quietly bring one back. The
+    chevrons that show a state (the accordion count's &darr;, the menu's caret, the testimonial row's
+    &lsaquo; &rsaquo;) are not this glyph and stay. The admin is out of scope."""
+    root = pathlib.Path(__file__).resolve().parent.parent / "iopstor" / "templates"
+    for f in root.rglob("*.html"):
+        if "admin" not in f.relative_to(root).parts:
+            s = f.read_text()
+            assert "&rarr;" not in s and "→" not in s, f"{f.relative_to(root)} draws a right arrow"
 
 
 def test_the_accordion_borrows_nothing_from_the_card_vocabulary(app, monkeypatch):
@@ -3985,9 +4203,10 @@ def test_the_accordion_borrows_nothing_from_the_card_vocabulary(app, monkeypatch
 
 def test_the_accordions_sibling_order_is_what_the_css_matches(app, monkeypatch):
     """Three dependencies in one shape: the radio sits INSIDE its label (so no ids are needed and
-    two accordions cannot steal each other's), the header strip precedes the body (the hit area is
-    ::after on the label, scoped to .acc-hr), and the body wraps an overflow:hidden child that the
-    0fr/1fr grid row collapses. Reorder any of them and the section opens nothing."""
+    two accordions cannot steal each other's), the header strip precedes the body (a shut row's hit
+    area is ::after on the label, scoped to .acc-hr; an open row's is ::after on the group link),
+    and the body wraps an overflow:hidden child that the 0fr/1fr grid row collapses. Reorder any of
+    them and the section opens nothing."""
     html = _render_list(app, monkeypatch, [_svc_group()], "service", top_level=True)
     row = html.split('class="acc-row"')[1]
     assert row.index('class="acc-hr"') < row.index('class="acc-body"')
@@ -4002,13 +4221,32 @@ def test_the_accordions_sibling_order_is_what_the_css_matches(app, monkeypatch):
     assert ".acc-hd::after{content:\"\";position:absolute;inset:0}" in css
     # the radio is the keyboard control: arrows walk the group and open each row as they go
     assert ".acc-t{position:absolute;opacity:0;" in css and ".acc-t{display:none" not in css
-    assert ".acc-row:focus-within{" in css
+    # keyboard focus opens a row, a mouse click's focus must not (2026-09-24: the clicked row stayed
+    # open and hovering another opened a second): :focus-visible, guarded by the pointer like the
+    # checked row, and the unguarded :focus-within only where there is no mouse -- a phone's tap
+    opens_ = css[css.index(".acc:not(:has(.acc-row:hover)) .acc-row:has(.acc-t:checked)"):]
+    assert ".acc:not(:has(.acc-row:hover)) .acc-row:has(:focus-visible){" in opens_[:opens_.index("}") + 1]
+    assert css.count(".acc-row:focus-within{") == 1
+    assert "@media(hover:none){\n  .acc-row:focus-within{" in css
     # nothing may open a row before the pointer arrives -- a :first-child fallback in this group is
     # exactly the rule the client asked to be gone, and the markup's missing `checked` is only half
     opens = css[css.index(".acc:not(:has(.acc-row:hover))"):]
     assert "first-child" not in opens[:opens.index("}") + 1]
     # a touch browser leaves :hover on the last thing tapped, which would jam every other row shut
     assert "@media(hover:hover){\n  .acc-row:hover{" in css
+    # the open row is one link to the group's page (2026-09-24): the group link's ::after is the hit
+    # area, and the pills sit above it only because they are positioned -- without that, every pill
+    # opens the group instead of itself
+    assert ".acc-all::after{content:\"\";position:absolute;inset:0}" in css
+    assert ".acc-kids a{position:relative;" in css
+    # anchored to the body (0px while shut) everywhere, and to the whole row only for a mouse. A
+    # row-sized hit area on a phone would lie over a shut row's header, and the first tap would
+    # leave the page instead of opening the row
+    assert "position:relative}" in css[css.index(".acc-body{display:grid"):].split("\n")[0]
+    hover = css[css.index("@media(hover:hover){\n  .acc-row:hover{"):]
+    assert ".acc-row{position:relative}.acc-body{position:static}" in hover[:hover.index("\n}")]
+    base_row = css[css.index(".acc-row{--rows:0fr"):]
+    assert "position" not in base_row[:base_row.index("}")]
     # transitions, not keyframes -- the reduced-motion block had only ever stood down animations,
     # and it is the last block in the file for the reason design.md gives
     still = css[css.rindex("@media(prefers-reduced-motion"):]
@@ -4106,7 +4344,7 @@ def _render_menu(app, monkeypatch):
         return render_template("post.html", post={"title": "x", "blocks": [], "meta": {}, "terms": [],
                                                   "post_type": {"slug": "page", "name": "Pages"},
                                                   "featured_media": None, "excerpt": "", "published_at": None},
-                               children=[], siblings=False, meta={}, jsonld=[], crumbs=[("Home", "/")])
+                               related=None, meta={}, jsonld=[], crumbs=[("Home", "/")])
 
 
 def test_the_services_panel_is_one_column_per_group_with_every_service_showing(app, monkeypatch):
@@ -4252,3 +4490,80 @@ def test_a_full_repaint_puts_the_page_back_where_the_editor_was_looking():
     bare = sorted(f.stem for f in tpl.glob("*.html") if "fe('" not in f.read_text())
     assert bare == ["divider", "embed_html", "spacer"], \
         f"a block type gained or lost its own editable field: {bare} -- focusBlock() has nothing to focus on these"
+
+
+# --- the hero's band answers to the Background dropdown --------------------------------------------
+# The ⚙ has a control literally labelled "Background" (admin.js tonePick) which writes data.tone and
+# reaches the class attribute through section_class() -- and on a hero it changed nothing, because
+# .hero/.hero-dark re-declare `background` ~180 lines after the .t-* group at the same specificity.
+# Measured in a browser before and after: About Us is 0 pixels different at 1440 (no page carries a
+# hero tone), and all eight tick x tone combinations are legible where two of them were not.
+
+def test_a_hero_that_is_lit_follows_the_band_not_the_tick(app):
+    """`dark` is the LAYOUT -- the full-width band, the picture as a backdrop -- and the tone is the
+    colour. Whether the text has to be light is a third question, and hero.html answers it once for
+    both the class and the second button's variant. Before this it was read off the tick, so a
+    ticked hero set to Light grey kept a white heading and a white-on-white outline button, and an
+    unticked one set to Dark kept black text and a black-on-black one."""
+    _hero.app = app
+    for dark, tone, lit in [(True, None, True), (True, "page", False), (True, "grey", False),
+                            (True, "dark", True), (True, "blue", True),
+                            (False, None, False), (False, "page", False), (False, "grey", False),
+                            (False, "dark", True), (False, "blue", True)]:
+        data = {"dark": dark, "cta2_url": "/x"}
+        if tone:
+            data["tone"] = tone
+        html = _hero(**data)
+        assert ("hero-lit" in _hero_classes(html)) is lit, f"dark={dark} tone={tone} should be lit={lit}"
+        # the outline button reads the same answer, or it is invisible on half of these
+        assert ("ghost-dark" in html) is lit, f"dark={dark} tone={tone}: the second button disagrees"
+    # the tone still reaches the attribute beside the layout class, which is what the CSS hooks
+    assert _hero_classes(_hero(dark=True, tone="grey")) == ["hero", "hero-dark", "t-grey"]
+
+
+def test_the_tone_group_beats_the_hero_and_the_blue_band_is_usable(app):
+    """The stylesheet says a tone an editor picked beats the block's own default "on source order".
+    The hero is the one block that broke that, because its band is declared in the blocks group
+    below. These four pin the repair; deleting them as duplicates puts the dead control back."""
+    css = _site_css()
+    for rule in (".hero.t-page{background:", ".hero.t-grey{background:",
+                 ".hero.t-blue{background:", ".hero.t-dark{background:"):
+        assert rule in css, f"the hero's band stopped answering to the tone: {rule}"
+        assert css.index(".hero-dark{") < css.index(rule), \
+            f"{rule} must come after .hero-dark or it loses at equal specificity"
+    assert ".hero-lit{" in css and ".hero-lit .lead{" in css
+    # nothing else on a blue band could be read: .eyebrow and .btn are both var(--blue)
+    assert ".t-blue h1," in css, "a hero's heading is an h1, and .t-blue only covered h2/h3"
+    assert ".t-blue .eyebrow{" in css
+    assert css.index(".t-blue .btn{") < css.index(".btn.ghost{"), \
+        "before .btn.ghost at equal specificity, or a ghost button is filled black on the blue band"
+    # scoped to the hero on purpose: a CTA or a Numbers strip set to Page background keeps the band
+    # its own template writes, which is what it does today
+    assert "\n.t-page{" not in css, "t-page must not reach every block -- see the comment on the rule"
+
+
+def test_page_background_is_a_value_and_not_the_absence_of_one(app):
+    """The tick blacks a hero's band out on its own, so "Page background" can only put the white
+    back if it is something the editor SAID -- an absent tone has to go on meaning "leave the
+    block's own band alone", or every hero saved before this turns white on deploy."""
+    from iopstor.blocks import TONES, section_class
+    assert TONES[0] == "page" and "" not in TONES
+    assert section_class({"tone": "page"}) == " t-page"
+    assert section_class({}) == "", "an absent tone still emits nothing"
+    js = _admin_js()
+    assert '[["page", "Page background"]' in js, "the dropdown has to store it, not clear the key"
+    assert "data.tone = sel.value;" in js and "delete data.tone" not in js
+    # an untouched ticked hero shows the band it is actually on, rather than claiming white
+    assert 'data.tone || ((block.type === "hero" && data.dark) ? "dark" : "page")' in js
+
+
+def test_a_field_on_two_block_types_can_be_labelled_for_each(app):
+    """`dark` is a field on hero and on testimonial, and it means something different on each: the
+    hero's is the layout, the testimonial's really is just the colour. EDITOR["widgets"] already had
+    the "<block>.<field>" convention; labels now take it too."""
+    from iopstor.blocks import EDITOR
+    assert EDITOR["labels"]["hero.dark"] != EDITOR["labels"]["dark"]
+    assert "dark" in EDITOR["labels"], "the bare key still answers for the testimonial"
+    js = _admin_js()
+    assert 'SPEC.ui.labels[type + "." + field] || SPEC.ui.labels[field]' in js
+    assert "function labelFor(field)" not in js, "a call site still passes no type"

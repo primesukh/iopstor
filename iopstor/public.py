@@ -17,7 +17,7 @@ from werkzeug.exceptions import HTTPException
 
 from . import db, seo, storage
 from .admin_api import _http_error, _pg_error, page_args
-from .blocks import ARTICLE_TYPES, OWN_HEAD_BLOCKS, blocks_md, blocks_text, details_at, owns_head, render_blocks
+from .blocks import ARTICLE_TYPES, OWN_HEAD_BLOCKS, blocks_md, blocks_text, details_at, owns_head, render_blocks, section_class
 from .payments import GATEWAYS, gateway
 from .seo import md_url
 
@@ -205,6 +205,42 @@ def _kids(parent_id):
                                  .order("menu_order").order("published_at", desc=True)))
 
 
+def related_pages(post, pk=None):
+    """The services a page's closing band CAN list, before the editor's settings, and the heading it
+    reads when nobody has typed one: a group lists its own services ("Storage solutions"), a leaf the
+    rest of its group ("Other Storage services"), which is what the design ends a service on. The
+    editor's form offers exactly this list as checkboxes. `pk` is for the Preview, whose post is
+    built from the form and carries no id."""
+    pk = pk or post.get("id")
+    if not post["post_type"].get("hierarchical"):
+        return [], ""
+    pages = _kids(pk) if pk else []
+    if pages or not post.get("parent_id"):
+        return pages, f"{post['title']} solutions"
+    return [c for c in _kids(post["parent_id"]) if c["id"] != pk], f"Other {db.ancestors(post)[-1][0]} services"
+
+
+def related_for(post, pk=None):
+    """The band a service page ends on, after the editor's settings in the reserved meta._related
+    (client, 2026-09-23), or None when there is nothing to draw. One answer for post.html, the .md
+    twin and the admin Preview -- the Preview had its own copy that knew only the group case, so on a
+    leaf it never showed the band at all.
+
+    Every key is optional and absent means what the band always was: shown, the automatic heading,
+    no text, light grey, every live service. `skip` is the ids left OUT rather than the ones kept, so
+    a service added to the group later appears on every sibling page without anyone editing them; an
+    id that has since been unpublished or deleted simply never matches, because _kids() is live-only.
+    The tone goes through section_class()'s whitelist, so nothing typed reaches the class attribute."""
+    r = (post.get("meta") or {}).get("_related") or {}
+    pages, heading = related_pages(post, pk)
+    skip = set(r.get("skip") or [])
+    pages = [c for c in pages if c["id"] not in skip]
+    if r.get("hide") or not pages:
+        return None
+    return {"heading": r.get("heading") or heading, "text": r.get("text") or "",
+            "cls": section_class({"tone": r.get("tone")}) or " t-grey", "pages": pages}
+
+
 # ---- Markdown twins --------------------------------------------------------
 # Every page also answers at its own path with ".md" on the end, so an AI crawler reads the
 # content instead of the theme. resolve() strips the suffix and resolves as usual; these build the
@@ -235,7 +271,7 @@ def _md_doc(front, parts):
 def _md_list(posts):
     """Live posts as one Markdown list, each line pointing at its own .md twin.
 
-    _indexable(), not just `path`: this renders an archive's twin AND the "Related pages" list inside a
+    _indexable(), not just `path`: this renders an archive's twin AND the related-services list inside a
     post's twin, both of which a crawler reads, so a noindex page linked from here would be handed the
     very address it asked to be left out of. The HTML page keeps listing it -- _kids() is untouched --
     because noindex means do not index, not do not link."""
@@ -277,7 +313,7 @@ def _md_fields(pt, meta):
     return (["\n".join(tiles)] if tiles else []) + out
 
 
-def _md_post(post, children):
+def _md_post(post, related):
     """One post as a Markdown document, with exactly one top-level `#` however the page is built.
 
     Two separate questions, and conflating them is the trap. `owns_head()` decides whether the HTML
@@ -292,8 +328,8 @@ def _md_post(post, children):
     hero_owns_h1 = not own_head and bool(blocks) and blocks[0].get("type") == "hero"
     parts = [] if hero_owns_h1 else [f"# {post['title']}", post.get("excerpt") or ""]
     parts += _md_fields(pt, post.get("meta") or {}) + [blocks_md(blocks, h1=not own_head)]
-    if children:
-        parts += ["## Related pages", _md_list(children)]
+    if related:
+        parts += [f"## {related['heading']}", related["text"], _md_list(related["pages"])]
     return _md_doc(_front(title=post["title"], url=seo.site()["url"] + post["path"], type=pt["name"],
                           published=(post.get("published_at") or "")[:10], updated=(post.get("updated_at") or "")[:10],
                           description=post.get("excerpt") or ""), parts)
@@ -301,19 +337,12 @@ def _md_post(post, children):
 
 def render_post(post):
     crumbs = crumbs_for(post)
-    children, siblings = [], False
-    if post["post_type"]["hierarchical"]:
-        children = _kids(post["id"])
-        # A leaf shows the rest of its group instead, which is what the design ends a service on:
-        # "Other Storage services". Same query, same list, one page up.
-        if not children and post["parent_id"]:
-            children = [c for c in _kids(post["parent_id"]) if c["id"] != post["id"]]
-            siblings = bool(children)
+    related = related_for(post)
     if _wants_md():
         if not _indexable(post):
             abort(404)      # the one test that keeps a page out of sitemap.xml and llms.txt keeps
-        return _md_post(post, children)     # it out of the Markdown too
-    return render_template("post.html", post=post, children=children, siblings=siblings, crumbs=crumbs,
+        return _md_post(post, related)     # it out of the Markdown too
+    return render_template("post.html", post=post, related=related, crumbs=crumbs,
                            meta=seo.build_meta(post), jsonld=seo.jsonld(post, crumbs))
 
 
@@ -514,6 +543,9 @@ def media_file(key):
         data = storage.fetch(key)
     except StorageApiError:  # the API answered and said no; a gateway that is down still raises a 500
         abort(404)
+    # the extension only decides what is servable; the header says what the bytes are, so a file stored
+    # under the wrong name before storage.sniff() existed still shows in Chrome
+    mime = storage.sniff(data) or mime
     # the name the file saves under. A newline would split the header; werkzeug quotes everything else,
     # and the name has to survive intact — "flash array.pdf" is what the editor uploaded.
     name = "".join(c for c in request.args.get("download", "") if c not in "\r\n")[:300]

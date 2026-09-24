@@ -1,5 +1,6 @@
-/* The public site's only script, and it exists for exactly one thing: the sliding row of
-   testimonials. Everything else on this site is server-rendered HTML and CSS, and stays that way.
+/* The public site's only script, and it exists for exactly one thing: the sliding row -- the
+   testimonials, and since 2026-09-23 the home page's appliances (blocks._rail() decides which lists).
+   Everything else on this site is server-rendered HTML and CSS, and stays that way.
 
    The row already works without this file. `.pl-rail .cards` is a native scroll container with
    scroll-snap (site.css), so the wheel, a trackpad and a finger on a phone all move it on a page
@@ -20,6 +21,8 @@
     var prev = sec.querySelector('[data-rail="-1"]');
     var next = sec.querySelector('[data-rail="1"]');
     if (!rail || !nav || !rail.firstElementChild) return;
+    var noun = nav.dataset.noun || 'items';
+    noun = noun.charAt(0).toUpperCase() + noun.slice(1);
 
     // Measured, never assumed: the card width comes from CSS (min(340px,82vw)) and the gap from the
     // flex gap, so both change with the viewport and neither is a number this file may hard-code.
@@ -48,7 +51,7 @@
           var b = document.createElement('button');
           b.type = 'button';
           b.className = 'rail-dot';
-          b.setAttribute('aria-label', 'Testimonials ' + (i + 1) + ' of ' + n);
+          b.setAttribute('aria-label', noun + ' ' + (i + 1) + ' of ' + n);
           dots.appendChild(b);
         }
       }
@@ -94,27 +97,43 @@
     // --- click-drag -----------------------------------------------------------------------------
     // Snap has to come off for the duration or the row fights the hand on every pixel, and goes
     // back on at the end so releasing settles onto a card.
-    var from = 0, left = 0, dragging = false;
+    // A product card is a link, which a testimonial never was, and that decides three things below.
+    // The pointer is captured only once the hand has MOVED: capturing on pointerdown sends the
+    // click that follows to the row instead of the card under it, so a plain click would stop
+    // opening the product. The click that ends a real drag is swallowed, or letting go over a card
+    // opens it. And the browser's own drag of a link or a picture is refused, or it takes the
+    // gesture over after a few pixels and the row stops following the hand.
+    var from = 0, left = 0, down = false, dragging = false;
     rail.addEventListener('pointerdown', function (e) {
       if (e.pointerType === 'touch') return;   // touch scrolling is the browser's job, and better
-      dragging = true; from = e.clientX; left = rail.scrollLeft;
-      rail.style.scrollSnapType = 'none';
-      // only while the hand is down: a testimonial is meant to be selectable and copyable, but a
-      // drag that paints the quote blue on the way past looks like something went wrong.
-      rail.style.userSelect = 'none';
-      rail.setPointerCapture(e.pointerId);
+      down = true; dragging = false; from = e.clientX; left = rail.scrollLeft;
     });
     rail.addEventListener('pointermove', function (e) {
+      if (!down) return;
+      if (!dragging && Math.abs(e.clientX - from) > 6) {
+        dragging = true;
+        rail.style.scrollSnapType = 'none';
+        // only while the hand is down: a testimonial is meant to be selectable and copyable, but a
+        // drag that paints the quote blue on the way past looks like something went wrong.
+        rail.style.userSelect = 'none';
+        rail.setPointerCapture(e.pointerId);
+      }
       if (dragging) { rail.scrollLeft = left - (e.clientX - from); }
     });
     ['pointerup', 'pointercancel'].forEach(function (ev) {
       rail.addEventListener(ev, function () {
+        down = false;
         if (!dragging) return;
-        dragging = false; hold();
+        hold();
         rail.style.scrollSnapType = '';
         rail.style.userSelect = '';
+        setTimeout(function () { dragging = false; });   // after the click this release is about to fire
       });
     });
+    rail.addEventListener('click', function (e) {
+      if (dragging) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
+    rail.addEventListener('dragstart', function (e) { e.preventDefault(); });
 
     // --- keeping the dots honest ------------------------------------------------------------
     var queued = false;
